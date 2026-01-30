@@ -117,19 +117,70 @@ A proposta deve ser formal, técnica e seguir o padrão de licitações pública
 
 # ==================== TOOLS ====================
 
-def tool_web_search(query: str, user_id: str) -> Dict[str, Any]:
+def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str, Any]:
     """
-    Busca informações na web.
+    Busca informações na web usando Serper API (Google Search).
     Retorna resultados de busca que podem conter links para PDFs/manuais.
     """
-    # Simulação de busca web - em produção, usar API de busca real
-    # Por enquanto, retorna instruções para o usuário
-    return {
-        "success": True,
-        "message": f"Busca por: {query}",
-        "instrucao": "Para baixar manuais, forneça a URL direta do PDF ou faça upload do arquivo.",
-        "sugestao": f"Tente buscar em: Google '{query} filetype:pdf' ou no site do fabricante"
-    }
+    from config import SERPER_API_KEY, SERPER_API_URL
+
+    try:
+        # Adicionar filetype:pdf para priorizar PDFs
+        search_query = f"{query} filetype:pdf"
+
+        response = requests.post(
+            SERPER_API_URL,
+            headers={
+                'X-API-KEY': SERPER_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            json={
+                'q': search_query,
+                'num': num_results,
+                'gl': 'br',  # Resultados do Brasil
+                'hl': 'pt'   # Interface em português
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # Extrair resultados orgânicos
+        resultados = []
+        for item in data.get('organic', []):
+            resultados.append({
+                'titulo': item.get('title', ''),
+                'link': item.get('link', ''),
+                'descricao': item.get('snippet', ''),
+                'posicao': item.get('position', 0)
+            })
+
+        # Filtrar apenas PDFs
+        pdfs = [r for r in resultados if '.pdf' in r['link'].lower()]
+        outros = [r for r in resultados if '.pdf' not in r['link'].lower()]
+
+        return {
+            "success": True,
+            "query": query,
+            "total_resultados": len(resultados),
+            "pdfs_encontrados": len(pdfs),
+            "resultados_pdf": pdfs[:5],  # Top 5 PDFs
+            "outros_resultados": outros[:3],  # Top 3 outros
+            "buscas_relacionadas": [s.get('query') for s in data.get('relatedSearches', [])][:5]
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Erro na busca: {str(e)}",
+            "query": query
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Erro inesperado: {str(e)}",
+            "query": query
+        }
 
 
 def tool_download_arquivo(url: str, user_id: str, nome_produto: str = None) -> Dict[str, Any]:

@@ -38,3 +38,7 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
 
 # PNCP API (Portal Nacional de Contratações Públicas)
 PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1"
+
+# Serper API (Google Search)
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "d46999449953645b87258a752ef428d98ae5970f")
+SERPER_API_URL = "https://google.serper.dev/search"

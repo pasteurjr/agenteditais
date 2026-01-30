@@ -570,7 +570,7 @@ def chat():
 
 def processar_buscar_web(message: str, user_id: str, intencao_resultado: dict):
     """
-    Processa ação: Buscar material/manuais/datasheets na web.
+    Processa ação: Buscar material/manuais/datasheets na web usando Serper API.
 
     Diferente de buscar_editais - aqui buscamos MANUAIS e ESPECIFICAÇÕES de produtos,
     não licitações/editais.
@@ -584,15 +584,37 @@ def processar_buscar_web(message: str, user_id: str, intencao_resultado: dict):
         response = f"""## 🔍 Busca de Material na Web
 
 **Termo pesquisado:** {termo}
+**Total de resultados:** {resultado.get('total_resultados', 0)}
+**PDFs encontrados:** {resultado.get('pdfs_encontrados', 0)}
 
-{resultado.get('instrucao', '')}
+"""
+        # Mostrar PDFs encontrados
+        pdfs = resultado.get('resultados_pdf', [])
+        if pdfs:
+            response += "### 📄 PDFs Encontrados\n\n"
+            for i, pdf in enumerate(pdfs, 1):
+                response += f"**{i}. {pdf['titulo']}**\n"
+                response += f"   {pdf['descricao'][:150]}...\n" if len(pdf.get('descricao', '')) > 150 else f"   {pdf.get('descricao', '')}\n"
+                response += f"   🔗 [Baixar PDF]({pdf['link']})\n\n"
 
-{resultado.get('sugestao', '')}
+        # Mostrar outros resultados
+        outros = resultado.get('outros_resultados', [])
+        if outros:
+            response += "### 🌐 Outros Resultados\n\n"
+            for i, item in enumerate(outros, 1):
+                response += f"**{i}. {item['titulo']}**\n"
+                response += f"   🔗 {item['link']}\n\n"
 
----
-**Próximos passos:**
-- Para baixar um PDF encontrado, envie: "Baixe o arquivo da URL: <url_do_pdf>"
-- Após baixar, o sistema extrairá as especificações e cadastrará como produto."""
+        response += """---
+### Próximos passos:
+Para baixar um PDF e cadastrar como produto, envie:
+`Baixe o arquivo da URL: <cole_a_url_do_pdf>`
+
+O sistema irá:
+1. Baixar o arquivo
+2. Extrair texto e especificações
+3. Cadastrar como produto no sistema"""
+
     else:
         response = f"❌ Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
 
