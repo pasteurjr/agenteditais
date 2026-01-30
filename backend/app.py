@@ -70,10 +70,20 @@ def detectar_intencao(message: str) -> str:
     if any(p in msg for p in ["gere proposta", "gerar proposta", "proposta técnica", "proposta tecnica", "elabore proposta", "crie proposta"]):
         return "gerar_proposta"
 
-    # Buscar editais (na web/PNCP) - detecção mais flexível
+    # Buscar editais (na web/PNCP) - detecção mais flexível e tolerante a erros
     busca_palavras = ["busque", "buscar", "procure", "procurar", "encontre", "encontrar", "pesquise", "pesquisar"]
-    edital_palavras = ["edital", "editais", "licitação", "licitações", "licitacao", "licitacoes", "pregão", "pregao"]
-    if any(b in msg for b in busca_palavras) and any(e in msg for e in edital_palavras):
+    edital_palavras = ["edital", "editais", "editasi", "ediatl", "edtais",  # com erros comuns
+                       "licitação", "licitações", "licitacao", "licitacoes",
+                       "pregão", "pregao", "pregões", "pregoes"]
+
+    # Detectar busca de editais
+    tem_busca = any(b in msg for b in busca_palavras)
+    tem_edital = any(e in msg for e in edital_palavras)
+
+    # Também detectar padrões como "editais na área de", "editais de tecnologia"
+    padrao_area = ("edital" in msg or "editai" in msg) and ("área" in msg or "area" in msg or " de " in msg)
+
+    if (tem_busca and tem_edital) or (tem_busca and padrao_area):
         return "buscar_editais"
 
     # Cadastrar fonte
