@@ -16,7 +16,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const { sessions, addSession, removeSession, updateSessionName, refreshSessions } = useSessions();
-  const { messages, isLoading: chatLoading, send, loadSession, clearMessages } = useChat();
+  const { messages, isLoading: chatLoading, loadingStatus, send, loadSession, clearMessages } = useChat();
 
   // Set token getter for API client
   useEffect(() => {
@@ -129,6 +129,7 @@ function AppContent() {
       <ChatArea
         messages={messages}
         isLoading={chatLoading}
+        loadingStatus={loadingStatus}
         onSend={handleSend}
         hasSession={true}
       />

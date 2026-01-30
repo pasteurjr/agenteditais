@@ -7,11 +7,12 @@ import { FileText } from "lucide-react";
 interface ChatAreaProps {
   messages: Message[];
   isLoading: boolean;
+  loadingStatus?: string;
   onSend: (message: string) => void;
   hasSession: boolean;
 }
 
-export function ChatArea({ messages, isLoading, onSend, hasSession }: ChatAreaProps) {
+export function ChatArea({ messages, isLoading, loadingStatus, onSend, hasSession }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,6 +47,9 @@ export function ChatArea({ messages, isLoading, onSend, hasSession }: ChatAreaPr
                 <span></span>
                 <span></span>
               </div>
+              {loadingStatus && (
+                <div className="loading-status">{loadingStatus}</div>
+              )}
             </div>
           </div>
         )}

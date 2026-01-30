@@ -490,24 +490,23 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     else:
                         modalidade_db = 'pregao_eletronico'  # default
 
-                    edital = Edital(
-                        user_id=user_id,
-                        numero=item.get('numeroCompra', 'N/A'),
-                        orgao=orgao_data.get('razaoSocial', 'N/A'),
-                        orgao_tipo='municipal' if orgao_data.get('esferaId') == 'M' else 'federal',
-                        uf=orgao_data.get('uf'),
-                        objeto=objeto[:500] if objeto else f"Contratação - {termo}",
-                        modalidade=modalidade_db,
-                        valor_referencia=item.get('valorTotalEstimado'),
-                        data_publicacao=item.get('dataPublicacaoPncp'),
-                        data_abertura=item.get('dataAberturaProposta'),
-                        fonte='PNCP',
-                        url=link,
-                        status='novo'
-                    )
-                    db.add(edital)
-                    editais_encontrados.append(edital)
-                    print(f"[TOOLS] + Edital: {edital.numero} - {edital.orgao[:30]}")
+                    # NÃO salvar - apenas criar dict com dados para retornar
+                    edital_data = {
+                        "numero": item.get('numeroCompra', 'N/A'),
+                        "orgao": orgao_data.get('razaoSocial', 'N/A'),
+                        "orgao_tipo": 'municipal' if orgao_data.get('esferaId') == 'M' else 'federal',
+                        "uf": orgao_data.get('uf'),
+                        "objeto": objeto[:500] if objeto else f"Contratação - {termo}",
+                        "modalidade": modalidade_db,
+                        "valor_referencia": item.get('valorTotalEstimado'),
+                        "data_publicacao": item.get('dataPublicacaoPncp'),
+                        "data_abertura": item.get('dataAberturaProposta'),
+                        "fonte": 'PNCP',
+                        "url": link,
+                        "numero_pncp": numero_pncp,  # Para deduplicação posterior
+                    }
+                    editais_encontrados.append(edital_data)
+                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]}")
 
                     if len(editais_encontrados) >= 10:
                         break
@@ -528,7 +527,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
             ).order_by(Edital.created_at.desc()).limit(10).all()
 
             if editais_db:
-                editais_encontrados = editais_db
+                editais_encontrados = [e.to_dict() for e in editais_db]
             else:
                 # Não criar fake - informar que não encontrou
                 return {
@@ -540,13 +539,12 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     "mensagem": f"Nenhum edital encontrado para '{termo}'. A API do PNCP pode estar indisponível ou não há editais recentes com esse termo."
                 }
 
-        db.commit()
-
+        # NÃO faz commit - não salvou nada no banco
         return {
             "success": True,
             "fonte": fonte_obj.nome,
             "termo": termo,
-            "editais": [e.to_dict() if hasattr(e, 'to_dict') else e for e in editais_encontrados],
+            "editais": editais_encontrados,  # Já são dicts, não precisa converter
             "total": len(editais_encontrados)
         }
 
@@ -969,3 +967,223 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "error": f"Parâmetros inválidos: {e}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# =============================================================================
+# NOVAS FUNÇÕES: Score de Aderência e Salvamento
+# =============================================================================
+
+PROMPT_CALCULAR_SCORE = """Você é um especialista em análise de licitações públicas.
+
+Analise a aderência entre os PRODUTOS do portfólio da empresa e o EDITAL de licitação.
+
+## PRODUTOS DO PORTFÓLIO:
+{produtos_json}
+
+## EDITAL:
+- Número: {numero}
+- Órgão: {orgao}
+- Objeto: {objeto}
+- Valor estimado: {valor}
+
+## TAREFA:
+Calcule o SCORE DE ADERÊNCIA TÉCNICA (0-100%) considerando:
+1. Quão bem os produtos atendem ao objeto do edital
+2. Compatibilidade técnica (especificações vs requisitos)
+3. Categoria dos produtos vs tipo de contratação
+
+## RESPOSTA (JSON):
+Retorne um JSON com:
+{{
+    "score_tecnico": <número 0-100>,
+    "recomendacao": "PARTICIPAR" | "AVALIAR" | "NÃO PARTICIPAR",
+    "produtos_aderentes": [
+        {{
+            "produto_id": "...",
+            "produto_nome": "...",
+            "aderencia": <número 0-100>,
+            "motivo": "explicação breve"
+        }}
+    ],
+    "justificativa": "Explicação detalhada de 2-3 parágrafos sobre os motivos do score, pontos fortes e fracos, riscos e oportunidades."
+}}
+
+Responda APENAS com o JSON, sem texto adicional."""
+
+
+def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str, Any]:
+    """
+    Calcula o score de aderência para uma lista de editais vs produtos do usuário.
+    Usa DeepSeek Reasoner para análise detalhada com justificativa.
+    """
+    db = get_db()
+    try:
+        # Buscar produtos do usuário
+        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+
+        if not produtos:
+            return {
+                "success": True,
+                "editais_com_score": editais,
+                "aviso": "Você não tem produtos cadastrados. Cadastre produtos para calcular aderência."
+            }
+
+        # Preparar dados dos produtos para o prompt
+        produtos_data = []
+        for p in produtos:
+            specs = db.query(ProdutoEspecificacao).filter(
+                ProdutoEspecificacao.produto_id == p.id
+            ).all()
+
+            produtos_data.append({
+                "id": p.id,
+                "nome": p.nome,
+                "categoria": p.categoria,
+                "fabricante": p.fabricante,
+                "modelo": p.modelo,
+                "descricao": p.descricao[:200] if p.descricao else None,
+                "especificacoes": [{"nome": s.nome_especificacao, "valor": s.valor} for s in specs[:10]]
+            })
+
+        produtos_json = json.dumps(produtos_data, ensure_ascii=False, indent=2)
+
+        # Calcular score para cada edital
+        editais_com_score = []
+        for edital in editais:
+            try:
+                prompt = PROMPT_CALCULAR_SCORE.format(
+                    produtos_json=produtos_json,
+                    numero=edital.get('numero', 'N/A'),
+                    orgao=edital.get('orgao', 'N/A'),
+                    objeto=edital.get('objeto', 'N/A')[:500],
+                    valor=f"R$ {edital.get('valor_referencia'):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if edital.get('valor_referencia') else 'Não informado'
+                )
+
+                # Usar DeepSeek Reasoner para análise detalhada
+                resposta = call_deepseek(
+                    [{"role": "user", "content": prompt}],
+                    max_tokens=2000
+                )
+
+                # Extrair JSON da resposta
+                json_match = re.search(r'\{[\s\S]*\}', resposta)
+                if json_match:
+                    score_data = json.loads(json_match.group())
+                    edital['score_tecnico'] = score_data.get('score_tecnico', 0)
+                    edital['recomendacao'] = score_data.get('recomendacao', 'AVALIAR')
+                    edital['produtos_aderentes'] = score_data.get('produtos_aderentes', [])
+                    edital['justificativa'] = score_data.get('justificativa', '')
+                else:
+                    edital['score_tecnico'] = 0
+                    edital['recomendacao'] = 'AVALIAR'
+                    edital['justificativa'] = 'Não foi possível calcular score automaticamente.'
+
+            except Exception as e:
+                print(f"[TOOLS] Erro ao calcular score para {edital.get('numero')}: {e}")
+                edital['score_tecnico'] = 0
+                edital['recomendacao'] = 'AVALIAR'
+                edital['justificativa'] = f'Erro no cálculo: {str(e)[:100]}'
+
+            editais_com_score.append(edital)
+
+        # Ordenar por score decrescente
+        editais_com_score.sort(key=lambda x: x.get('score_tecnico', 0), reverse=True)
+
+        return {
+            "success": True,
+            "editais_com_score": editais_com_score,
+            "total_produtos": len(produtos)
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[str, Any]:
+    """
+    Salva editais selecionados no banco, verificando duplicatas.
+    """
+    db = get_db()
+    try:
+        salvos = []
+        duplicados = []
+        erros = []
+
+        for edital_data in editais:
+            numero = edital_data.get('numero')
+            orgao = edital_data.get('orgao')
+            numero_pncp = edital_data.get('numero_pncp')
+
+            # Verificar se já existe
+            existe = db.query(Edital).filter(
+                Edital.user_id == user_id,
+                Edital.numero == numero,
+                Edital.orgao == orgao
+            ).first()
+
+            if existe:
+                duplicados.append(numero)
+                continue
+
+            try:
+                edital = Edital(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    numero=numero,
+                    orgao=orgao,
+                    orgao_tipo=edital_data.get('orgao_tipo', 'federal'),
+                    uf=edital_data.get('uf'),
+                    objeto=edital_data.get('objeto', ''),
+                    modalidade=edital_data.get('modalidade', 'pregao_eletronico'),
+                    valor_referencia=edital_data.get('valor_referencia'),
+                    data_publicacao=edital_data.get('data_publicacao'),
+                    data_abertura=edital_data.get('data_abertura'),
+                    fonte=edital_data.get('fonte', 'PNCP'),
+                    url=edital_data.get('url'),
+                    status='novo'
+                )
+                db.add(edital)
+                salvos.append(numero)
+
+                # Se tem score, salvar análise
+                if edital_data.get('score_tecnico') is not None:
+                    # Buscar primeiro produto aderente ou usar genérico
+                    produtos_aderentes = edital_data.get('produtos_aderentes', [])
+                    if produtos_aderentes:
+                        produto_id = produtos_aderentes[0].get('produto_id')
+                    else:
+                        # Pegar primeiro produto do usuário
+                        primeiro_produto = db.query(Produto).filter(Produto.user_id == user_id).first()
+                        produto_id = primeiro_produto.id if primeiro_produto else None
+
+                    if produto_id:
+                        analise = Analise(
+                            id=str(uuid.uuid4()),
+                            edital_id=edital.id,
+                            produto_id=produto_id,
+                            user_id=user_id,
+                            score_tecnico=edital_data.get('score_tecnico'),
+                            recomendacao=edital_data.get('justificativa', '')[:5000]
+                        )
+                        db.add(analise)
+
+            except Exception as e:
+                erros.append(f"{numero}: {str(e)[:50]}")
+
+        db.commit()
+
+        return {
+            "success": True,
+            "salvos": salvos,
+            "duplicados": duplicados,
+            "erros": erros,
+            "total_salvos": len(salvos)
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()

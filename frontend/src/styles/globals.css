@@ -352,13 +352,27 @@ body {
 /* Loading */
 .loading-bubble {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   padding: 16px 20px;
+  gap: 8px;
 }
 
 .typing-indicator {
   display: flex;
   gap: 4px;
+}
+
+.loading-status {
+  font-size: 0.85rem;
+  color: var(--primary-color);
+  font-style: italic;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .typing-indicator span {

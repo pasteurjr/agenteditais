@@ -13,6 +13,7 @@ from tools import (
     tool_extrair_especificacoes, tool_cadastrar_fonte, tool_listar_fontes,
     tool_buscar_editais_fonte, tool_extrair_requisitos, tool_listar_editais,
     tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
+    tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
     execute_tool
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
@@ -46,6 +47,11 @@ PROMPTS_PRONTOS = [
 def detectar_intencao(message: str) -> str:
     """Detecta automaticamente a intenção do usuário baseado na mensagem."""
     msg = message.lower()
+
+    # Salvar editais (deve vir antes de outras detecções)
+    if any(p in msg for p in ["salvar edital", "salvar editais", "salve edital", "salve editais",
+                              "guardar edital", "guardar editais", "salvar recomendados"]):
+        return "salvar_editais"
 
     # Listar produtos
     if any(p in msg for p in ["liste meus produtos", "listar produtos", "meus produtos", "produtos cadastrados", "quais produtos"]):
@@ -412,6 +418,9 @@ def chat():
         elif action_type == "gerar_proposta":
             response_text, resultado = processar_gerar_proposta(message, user_id)
 
+        elif action_type == "salvar_editais":
+            response_text, resultado = processar_salvar_editais(message, user_id, session_id, db)
+
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
 
@@ -523,7 +532,16 @@ Exemplo: "Cadastre a fonte BEC-SP, tipo scraper, URL https://bec.sp.gov.br" """
 
 
 def processar_buscar_editais(message: str, user_id: str):
-    """Processa ação: Buscar editais"""
+    """
+    Processa ação: Buscar editais
+
+    Novo fluxo:
+    1. Busca editais (sem salvar)
+    2. Calcula score de aderência para cada edital vs produtos do usuário
+    3. Ordena por score
+    4. Mostra recomendações (PARTICIPAR/AVALIAR/NÃO PARTICIPAR) com justificativas
+    5. Oferece opção de salvar os recomendados
+    """
     import json
     import re
 
@@ -576,44 +594,16 @@ JSON:"""
 
     print(f"DEBUG buscar_editais: termo='{termo}', fonte='{fonte}', uf='{uf}'")
 
-    # Fazer a busca
+    # ========== PASSO 1: Buscar editais (sem salvar) ==========
     resultado = tool_buscar_editais_fonte(fonte, termo, user_id, uf=uf)
 
-    if resultado.get("success"):
-        editais = resultado.get("editais", [])
-        response = f"""**Busca realizada:** {termo}
-**Fonte:** {fonte}
-**Resultados:** {len(editais)} edital(is) encontrado(s)
-
-"""
-        for i, ed in enumerate(editais[:10], 1):
-            numero = ed.get('numero', 'N/A')
-            orgao = ed.get('orgao', 'N/A')
-            uf_ed = ed.get('uf', '')
-            cidade = ed.get('cidade', '')
-            local = f"{cidade}/{uf_ed}" if cidade and uf_ed else (uf_ed or cidade or 'Brasil')
-            objeto = ed.get('objeto', '')[:200]
-            valor = ed.get('valor_referencia')
-            valor_str = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if valor else "Não informado"
-            data_abertura = ed.get('data_abertura', 'Não informada')
-            modalidade = ed.get('modalidade', 'N/A')
-            status = ed.get('status', 'novo')
-            url = ed.get('url', '')
-
-            response += f"---\n"
-            response += f"### {i}. {numero}\n"
-            response += f"**Órgão:** {orgao} ({local})\n"
-            response += f"**Modalidade:** {modalidade} | **Status:** {status}\n"
-            response += f"**Valor estimado:** {valor_str}\n"
-            response += f"**Data abertura:** {data_abertura}\n"
-            response += f"**Objeto:** {objeto}\n"
-            if url:
-                response += f"**🔗 Link:** [{url}]({url})\n"
-            response += "\n"
-
+    if not resultado.get("success"):
+        response = f"Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
         return response, resultado
-    elif resultado.get("success") and resultado.get("total", 0) == 0:
-        # Busca bem sucedida mas sem resultados
+
+    editais = resultado.get("editais", [])
+
+    if not editais:
         mensagem = resultado.get("mensagem", f"Nenhum edital encontrado para '{termo}'.")
         response = f"""**Busca realizada:** {termo}
 **Fonte:** {fonte}
@@ -626,9 +616,109 @@ JSON:"""
 - A API do PNCP pode estar temporariamente indisponível
 """
         return response, resultado
+
+    # ========== PASSO 2: Calcular score de aderência ==========
+    print(f"[APP] Calculando score de aderência para {len(editais)} editais...")
+    resultado_score = tool_calcular_score_aderencia(editais, user_id)
+
+    if resultado_score.get("success"):
+        editais_com_score = resultado_score.get("editais_com_score", editais)
+        aviso_produtos = resultado_score.get("aviso")
     else:
-        response = f"Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
-        return response, resultado
+        editais_com_score = editais
+        aviso_produtos = None
+
+    # ========== PASSO 3: Formatar resposta com scores ==========
+    response = f"""**Busca realizada:** {termo}
+**Fonte:** {fonte}
+**Resultados:** {len(editais_com_score)} edital(is) encontrado(s)
+
+"""
+
+    if aviso_produtos:
+        response += f"⚠️ {aviso_produtos}\n\n"
+
+    # Separar por recomendação
+    participar = [e for e in editais_com_score if e.get('recomendacao') == 'PARTICIPAR']
+    avaliar = [e for e in editais_com_score if e.get('recomendacao') == 'AVALIAR']
+    nao_participar = [e for e in editais_com_score if e.get('recomendacao') == 'NÃO PARTICIPAR']
+    sem_score = [e for e in editais_com_score if not e.get('recomendacao')]
+
+    def formatar_edital(ed, i):
+        """Formata um edital para exibição"""
+        numero = ed.get('numero', 'N/A')
+        orgao = ed.get('orgao', 'N/A')
+        uf_ed = ed.get('uf', '')
+        cidade = ed.get('cidade', '')
+        local = f"{cidade}/{uf_ed}" if cidade and uf_ed else (uf_ed or cidade or 'Brasil')
+        objeto = ed.get('objeto', '')[:200]
+        valor = ed.get('valor_referencia')
+        valor_str = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if valor else "Não informado"
+        data_abertura = ed.get('data_abertura', 'Não informada')
+        modalidade = ed.get('modalidade', 'N/A')
+        url = ed.get('url', '')
+        score = ed.get('score_tecnico')
+        justificativa = ed.get('justificativa', '')
+
+        texto = f"---\n"
+        texto += f"### {i}. {numero}"
+        if score is not None:
+            texto += f" | Score: **{score:.0f}%**"
+        texto += "\n"
+        texto += f"**Órgão:** {orgao} ({local})\n"
+        texto += f"**Modalidade:** {modalidade}\n"
+        texto += f"**Valor estimado:** {valor_str}\n"
+        texto += f"**Data abertura:** {data_abertura}\n"
+        texto += f"**Objeto:** {objeto}\n"
+        if justificativa:
+            texto += f"\n**Análise:** {justificativa[:500]}\n"
+        if url:
+            texto += f"\n🔗 [Acessar edital]({url})\n"
+        texto += "\n"
+        return texto
+
+    contador = 1
+
+    # Editais recomendados (PARTICIPAR)
+    if participar:
+        response += "## ✅ RECOMENDADOS PARA PARTICIPAR\n\n"
+        for ed in participar:
+            response += formatar_edital(ed, contador)
+            contador += 1
+
+    # Editais para avaliar
+    if avaliar:
+        response += "## ⚠️ AVALIAR PARTICIPAÇÃO\n\n"
+        for ed in avaliar:
+            response += formatar_edital(ed, contador)
+            contador += 1
+
+    # Editais não recomendados
+    if nao_participar:
+        response += "## ❌ NÃO RECOMENDADOS\n\n"
+        for ed in nao_participar:
+            response += formatar_edital(ed, contador)
+            contador += 1
+
+    # Sem score (sem produtos cadastrados)
+    if sem_score:
+        response += "## 📋 EDITAIS ENCONTRADOS\n\n"
+        for ed in sem_score:
+            response += formatar_edital(ed, contador)
+            contador += 1
+
+    # ========== PASSO 4: Oferecer salvamento ==========
+    qtd_recomendados = len(participar) + len(avaliar)
+    if qtd_recomendados > 0:
+        response += f"\n---\n"
+        response += f"**💾 {qtd_recomendados} edital(is) recomendado(s) para acompanhamento.**\n"
+        response += f"Para salvar, digite: **\"salvar editais recomendados\"** ou **\"salvar edital [número]\"**\n"
+
+    # Adicionar editais ao resultado para possível salvamento posterior
+    resultado["editais_com_score"] = editais_com_score
+    resultado["editais_recomendados"] = participar + avaliar
+
+    return response, resultado
 
 
 def processar_listar_produtos(message: str, user_id: str):
@@ -911,6 +1001,118 @@ A proposta completa foi salva. Use o endpoint /api/propostas/{resultado.get('pro
     response += "Exemplo: 'Gere proposta do Mindray BS-240 para edital PE-2024-001 com preço R$ 50.000'"
 
     return response, {"status": "aguardando_dados"}
+
+
+def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
+    """
+    Processa ação: Salvar editais
+
+    Busca no histórico da sessão os editais da última busca e salva os recomendados
+    ou os especificados pelo usuário.
+    """
+    import json
+    import re
+
+    msg_lower = message.lower()
+
+    # Verificar se quer salvar todos os recomendados ou um específico
+    salvar_todos = "recomendados" in msg_lower or "todos" in msg_lower
+
+    # Buscar última mensagem de busca no histórico
+    mensagens_anteriores = db.query(Message).filter(
+        Message.session_id == session_id,
+        Message.action_type == "buscar_editais",
+        Message.role == "assistant"
+    ).order_by(Message.created_at.desc()).first()
+
+    if not mensagens_anteriores:
+        return "Não encontrei uma busca de editais recente. Execute primeiro: **buscar editais de [tema]**", {"status": "sem_busca"}
+
+    # Tentar recuperar editais do contexto (resultado JSON salvo na mensagem)
+    # Como não temos isso armazenado, vamos fazer uma nova busca simplificada
+    # ou pedir para o usuário re-executar
+
+    # Buscar última mensagem do usuário com busca
+    ultima_busca_user = db.query(Message).filter(
+        Message.session_id == session_id,
+        Message.action_type == "buscar_editais",
+        Message.role == "user"
+    ).order_by(Message.created_at.desc()).first()
+
+    if ultima_busca_user:
+        # Re-executar a busca para obter os dados
+        print(f"[APP] Re-executando busca para salvar: {ultima_busca_user.content}")
+        _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id)
+
+        if not resultado_busca.get("success"):
+            return "Erro ao recuperar editais da busca anterior. Tente buscar novamente.", {"status": "erro_busca"}
+
+        editais_para_salvar = []
+
+        if salvar_todos:
+            # Salvar todos os recomendados (PARTICIPAR e AVALIAR)
+            editais_para_salvar = resultado_busca.get("editais_recomendados", [])
+            if not editais_para_salvar:
+                # Se não há recomendados, pegar os com score > 50
+                editais_com_score = resultado_busca.get("editais_com_score", [])
+                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
+        else:
+            # Tentar extrair número específico do edital
+            numero_match = re.search(r'edital\s+(\S+)', msg_lower)
+            if numero_match:
+                numero_busca = numero_match.group(1).upper()
+                editais_com_score = resultado_busca.get("editais_com_score", [])
+                for ed in editais_com_score:
+                    if numero_busca in ed.get("numero", "").upper():
+                        editais_para_salvar.append(ed)
+                        break
+
+        if not editais_para_salvar:
+            return """Não encontrei editais para salvar.
+
+**Opções:**
+- Digite: **salvar editais recomendados** para salvar todos os recomendados
+- Digite: **salvar edital [número]** para salvar um específico
+- Execute uma nova busca: **buscar editais de [tema]**
+""", {"status": "sem_editais"}
+
+        # Salvar os editais selecionados (com verificação de duplicatas)
+        resultado_salvar = tool_salvar_editais_selecionados(editais_para_salvar, user_id)
+
+        if resultado_salvar.get("success"):
+            salvos = resultado_salvar.get("salvos", [])
+            duplicados = resultado_salvar.get("duplicados", [])
+            erros = resultado_salvar.get("erros", [])
+
+            response = "## 💾 Resultado do Salvamento\n\n"
+
+            if salvos:
+                response += f"**✅ Salvos com sucesso:** {len(salvos)} edital(is)\n"
+                for num in salvos[:5]:
+                    response += f"- {num}\n"
+                if len(salvos) > 5:
+                    response += f"- ... e mais {len(salvos) - 5}\n"
+                response += "\n"
+
+            if duplicados:
+                response += f"**⚠️ Já existentes (ignorados):** {len(duplicados)} edital(is)\n"
+                for num in duplicados[:3]:
+                    response += f"- {num}\n"
+                response += "\n"
+
+            if erros:
+                response += f"**❌ Erros:** {len(erros)}\n"
+                for err in erros[:3]:
+                    response += f"- {err}\n"
+                response += "\n"
+
+            response += "Use **liste meus editais** para ver todos os editais salvos."
+
+            return response, resultado_salvar
+        else:
+            return f"Erro ao salvar editais: {resultado_salvar.get('error')}", resultado_salvar
+
+    return "Não consegui identificar a última busca. Execute: **buscar editais de [tema]**", {"status": "sem_contexto"}
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
