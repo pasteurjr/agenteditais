@@ -442,13 +442,21 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     ])
 
                 # Expandir termos médicos/hospitalares
-                if any(t in termo_lower for t in ['médico', 'medico', 'hospital', 'saúde', 'saude', 'reagente']):
+                if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
+                                                   'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
+                                                   'laborat', 'diagnóstic', 'diagnostic']):
                     termos_busca.extend([
-                        'médico', 'medico', 'hospitalar', 'hospital',
+                        'médico', 'medico', 'médica', 'medica',
+                        'hospitalar', 'hospital', 'clínica', 'clinica',
                         'saúde', 'saude', 'reagente', 'reagentes',
                         'laboratorio', 'laboratório', 'medicamento', 'medicamentos',
                         'equipamento médico', 'equipamento hospitalar',
-                        'material hospitalar', 'insumo hospitalar'
+                        'material hospitalar', 'insumo hospitalar',
+                        'enfermagem', 'cirúrgico', 'cirurgico', 'odontológico', 'odontologico',
+                        'farmácia', 'farmacia', 'diagnóstico', 'diagnostico',
+                        'desfibrilador', 'monitor multiparâmetro', 'autoclave', 'oxímetro',
+                        'eletrocardiógrafo', 'bomba de infusão', 'cama hospitalar', 'maca',
+                        'upa', 'ubs', 'pronto socorro', 'uti'
                     ])
 
                 print(f"[TOOLS] Termos de busca expandidos: {termos_busca[:8]}...")

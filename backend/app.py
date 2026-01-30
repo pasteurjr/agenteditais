@@ -59,12 +59,22 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 - **listar_fontes**: Usuário quer ver fontes cadastradas. Exemplos: "quais fontes", "liste fontes"
 - **chat_livre**: Qualquer outra coisa - dúvidas, perguntas gerais sobre licitações, etc.
 
+## IMPORTANTE - TERMO DE BUSCA:
+Se a intenção for **buscar_editais**, extraia o TERMO DE BUSCA otimizado para encontrar editais.
+- Converta termos genéricos em palavras-chave específicas que aparecem em editais de licitação.
+- Exemplos de conversão:
+  - "área médica" → "hospitalar" (editais usam "hospitalar", "equipamento hospitalar", "material hospitalar")
+  - "área de tecnologia" → "informática" (editais usam "informática", "equipamento de informática")
+  - "equipamentos hospitalares" → "hospitalar"
+  - "área da saúde" → "saúde" ou "hospitalar"
+  - "computadores" → "informática"
+
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
 
 ## RESPOSTA:
 Retorne APENAS um JSON no formato:
-{{"intencao": "<categoria>", "termo_busca": "<termo extraído se for busca, senão null>"}}"""
+{{"intencao": "<categoria>", "termo_busca": "<termo OTIMIZADO para busca em editais, ou null se não for busca>"}}"""
 
 
 def detectar_intencao_ia(message: str) -> dict:
