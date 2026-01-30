@@ -30,18 +30,58 @@ CORS(app, origins=["http://localhost:5173", "http://localhost:5175", "http://loc
 JWT_SECRET = "editais-ia-secret-key-change-in-production-2024"
 JWT_EXPIRY_HOURS = 24
 
-# Ações disponíveis no sistema
-ACOES_DISPONIVEIS = [
-    {"id": "buscar_material_web", "nome": "Buscar material na web", "descricao": "Busca PDF na web, baixa, extrai specs, salva no banco"},
-    {"id": "upload_manual", "nome": "Upload de manual", "descricao": "Recebe PDF, extrai specs, salva no banco"},
-    {"id": "cadastrar_fonte", "nome": "Cadastrar fonte de editais", "descricao": "Adiciona fonte (PNCP, BEC, etc) ao banco"},
-    {"id": "buscar_editais", "nome": "Buscar editais", "descricao": "Busca nas fontes, salva editais + requisitos"},
-    {"id": "buscar_editais_score", "nome": "Buscar editais + calcular score", "descricao": "Busca E calcula aderência com produtos"},
-    {"id": "listar_editais", "nome": "Listar editais salvos", "descricao": "Mostra editais com filtros"},
-    {"id": "calcular_aderencia", "nome": "Calcular aderência", "descricao": "Compara produto x edital, gera scores"},
-    {"id": "gerar_proposta", "nome": "Gerar proposta", "descricao": "Gera proposta técnica"},
-    {"id": "chat_livre", "nome": "Chat livre", "descricao": "Conversa normal sobre licitações"},
+# Prompts prontos para o dropdown
+PROMPTS_PRONTOS = [
+    {"id": "listar_produtos", "nome": "Listar meus produtos", "prompt": "Liste todos os meus produtos cadastrados"},
+    {"id": "listar_editais", "nome": "Listar editais abertos", "prompt": "Quais editais estão abertos?"},
+    {"id": "calcular_aderencia", "nome": "Calcular aderência", "prompt": "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]"},
+    {"id": "gerar_proposta", "nome": "Gerar proposta", "prompt": "Gere uma proposta do produto [NOME_PRODUTO] para o edital [NUMERO_EDITAL] com preço R$ [VALOR]"},
+    {"id": "buscar_editais", "nome": "Buscar editais", "prompt": "Busque editais de [TERMO] no PNCP"},
+    {"id": "cadastrar_fonte", "nome": "Cadastrar fonte", "prompt": "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]"},
+    {"id": "listar_fontes", "nome": "Listar fontes", "prompt": "Quais são as fontes de editais cadastradas?"},
+    {"id": "ajuda", "nome": "O que posso fazer?", "prompt": "O que você pode fazer? Quais são suas capacidades?"},
 ]
+
+
+def detectar_intencao(message: str) -> str:
+    """Detecta automaticamente a intenção do usuário baseado na mensagem."""
+    msg = message.lower()
+
+    # Listar produtos
+    if any(p in msg for p in ["liste meus produtos", "listar produtos", "meus produtos", "produtos cadastrados", "quais produtos"]):
+        return "listar_produtos"
+
+    # Listar editais
+    if any(p in msg for p in ["liste editais", "listar editais", "editais abertos", "quais editais", "meus editais", "editais salvos", "editais cadastrados"]):
+        return "listar_editais"
+
+    # Calcular aderência
+    if any(p in msg for p in ["calcul", "aderência", "aderencia", "analise", "analisar", "score", "atende", "compatível", "compativel"]):
+        if any(p in msg for p in ["edital", "pe-", "pregão", "pregao", "licitação", "licitacao"]):
+            return "calcular_aderencia"
+
+    # Gerar proposta
+    if any(p in msg for p in ["gere proposta", "gerar proposta", "proposta técnica", "proposta tecnica", "elabore proposta", "crie proposta"]):
+        return "gerar_proposta"
+
+    # Buscar editais
+    if any(p in msg for p in ["busque editais", "buscar editais", "procure editais", "encontre editais", "pesquise editais"]):
+        return "buscar_editais"
+
+    # Cadastrar fonte
+    if any(p in msg for p in ["cadastre fonte", "cadastrar fonte", "adicione fonte", "adicionar fonte", "nova fonte"]):
+        return "cadastrar_fonte"
+
+    # Listar fontes
+    if any(p in msg for p in ["fontes cadastradas", "listar fontes", "quais fontes", "minhas fontes"]):
+        return "listar_fontes"
+
+    # Buscar material na web
+    if any(p in msg for p in ["busque na web", "buscar na web", "baixe pdf", "baixar pdf", "download", "busque datasheet"]):
+        return "buscar_material_web"
+
+    # Chat livre (default)
+    return "chat_livre"
 
 
 # =============================================================================
@@ -263,8 +303,8 @@ def logout():
 
 @app.route("/api/acoes", methods=["GET"])
 def listar_acoes():
-    """Lista todas as ações disponíveis para o select."""
-    return jsonify({"acoes": ACOES_DISPONIVEIS})
+    """Lista prompts prontos para o dropdown."""
+    return jsonify({"prompts": PROMPTS_PRONTOS})
 
 
 # =============================================================================
@@ -276,12 +316,11 @@ def listar_acoes():
 def chat():
     """
     Endpoint principal do chat.
-    Recebe: session_id, message, action_type (opcional)
+    Detecta automaticamente a intenção do usuário.
     """
     data = request.json or {}
     session_id = data.get("session_id")
     message = data.get("message", "").strip()
-    action_type = data.get("action_type", "chat_livre")
     user_id = get_current_user_id()
 
     if not session_id or not message:
@@ -298,6 +337,9 @@ def chat():
         if not session:
             return jsonify({"error": "Sessão não encontrada"}), 404
 
+        # Detectar intenção automaticamente
+        action_type = detectar_intencao(message)
+
         # Salvar mensagem do usuário
         user_msg = Message(
             session_id=session_id,
@@ -307,16 +349,12 @@ def chat():
         )
         db.add(user_msg)
 
-        # Processar de acordo com a ação
+        # Processar de acordo com a ação detectada
         response_text = ""
         resultado = None
 
         if action_type == "buscar_material_web":
             response_text, resultado = processar_buscar_material_web(message, user_id)
-
-        elif action_type == "upload_manual":
-            response_text = "Para fazer upload de um manual, use o endpoint /api/upload com o arquivo PDF."
-            resultado = {"instrucao": "Use POST /api/upload com multipart/form-data"}
 
         elif action_type == "cadastrar_fonte":
             response_text, resultado = processar_cadastrar_fonte(message, user_id)
@@ -324,11 +362,14 @@ def chat():
         elif action_type == "buscar_editais":
             response_text, resultado = processar_buscar_editais(message, user_id)
 
-        elif action_type == "buscar_editais_score":
-            response_text, resultado = processar_buscar_editais_score(message, user_id)
-
         elif action_type == "listar_editais":
             response_text, resultado = processar_listar_editais(message, user_id)
+
+        elif action_type == "listar_produtos":
+            response_text, resultado = processar_listar_produtos(message, user_id)
+
+        elif action_type == "listar_fontes":
+            response_text, resultado = processar_listar_fontes(message)
 
         elif action_type == "calcular_aderencia":
             response_text, resultado = processar_calcular_aderencia(message, user_id)
@@ -466,6 +507,59 @@ JSON:"""
 
     response = "Não consegui extrair os parâmetros de busca. Tente algo como:\n'Busque editais de reagentes de glicose no PNCP de São Paulo'"
     return response, {"status": "erro"}
+
+
+def processar_listar_produtos(message: str, user_id: str):
+    """Processa ação: Listar produtos do usuário"""
+    resultado = tool_listar_produtos(user_id)
+
+    if resultado.get("success"):
+        produtos = resultado.get("produtos", [])
+        if produtos:
+            response = f"**Seus produtos cadastrados:** {len(produtos)}\n\n"
+
+            # Agrupar por categoria
+            por_categoria = {}
+            for p in produtos:
+                cat = p.get("categoria", "outro")
+                if cat not in por_categoria:
+                    por_categoria[cat] = []
+                por_categoria[cat].append(p)
+
+            for cat, prods in sorted(por_categoria.items()):
+                response += f"**[{cat.upper()}]**\n"
+                for p in prods:
+                    response += f"- {p['nome']} ({p.get('fabricante', 'N/A')} - {p.get('modelo', 'N/A')})\n"
+                response += "\n"
+        else:
+            response = "Você não tem produtos cadastrados ainda. Faça upload de um manual PDF para cadastrar."
+    else:
+        response = f"Erro ao listar produtos: {resultado.get('error')}"
+
+    return response, resultado
+
+
+def processar_listar_fontes(message: str):
+    """Processa ação: Listar fontes de editais"""
+    resultado = tool_listar_fontes()
+
+    if resultado.get("success"):
+        fontes = resultado.get("fontes", [])
+        if fontes:
+            response = f"**Fontes de editais cadastradas:** {len(fontes)}\n\n"
+            for f in fontes:
+                status = "✅ Ativa" if f.get("ativo") else "❌ Inativa"
+                response += f"- **{f['nome']}** ({f['tipo']}) {status}\n"
+                response += f"  URL: {f.get('url_base', 'N/A')}\n"
+                if f.get('descricao'):
+                    response += f"  {f['descricao'][:100]}\n"
+                response += "\n"
+        else:
+            response = "Nenhuma fonte de editais cadastrada."
+    else:
+        response = f"Erro ao listar fontes: {resultado.get('error')}"
+
+    return response, resultado
 
 
 def processar_buscar_editais_score(message: str, user_id: str):

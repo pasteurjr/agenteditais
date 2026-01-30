@@ -112,8 +112,7 @@ export interface SendMessageResponse extends ChatResponse {
 
 export async function sendMessage(
   sessionId: string,
-  message: string,
-  actionType: string = "chat_livre"
+  message: string
 ): Promise<SendMessageResponse> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/api/chat`, {
@@ -121,8 +120,7 @@ export async function sendMessage(
     headers,
     body: JSON.stringify({
       session_id: sessionId,
-      message,
-      action_type: actionType
+      message
     }),
   });
   if (res.status === 401) throw new Error("Não autenticado");

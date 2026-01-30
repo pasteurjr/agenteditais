@@ -1,44 +1,32 @@
 import { useState, useRef, useEffect } from "react";
 import { SendHorizontal, ChevronDown } from "lucide-react";
 
-// Tipos de ação disponíveis
-export type ActionType =
-  | "chat_livre"
-  | "buscar_material_web"
-  | "upload_manual"
-  | "cadastrar_fonte"
-  | "buscar_editais"
-  | "buscar_editais_score"
-  | "listar_editais"
-  | "calcular_aderencia"
-  | "gerar_proposta";
-
-interface ActionOption {
-  id: ActionType;
+// Prompts prontos para o dropdown
+interface PromptPronto {
+  id: string;
   nome: string;
-  descricao: string;
+  prompt: string;
 }
 
-const ACOES: ActionOption[] = [
-  { id: "chat_livre", nome: "Chat Livre", descricao: "Conversa livre sobre editais e licitações" },
-  { id: "buscar_material_web", nome: "Buscar Material na Web", descricao: "Busca PDFs na web, baixa e extrai especificações" },
-  { id: "upload_manual", nome: "Upload de Manual", descricao: "Envia PDF de manual para extração de especificações" },
-  { id: "cadastrar_fonte", nome: "Cadastrar Fonte", descricao: "Adiciona nova fonte de editais (PNCP, BEC, etc)" },
-  { id: "buscar_editais", nome: "Buscar Editais", descricao: "Busca editais nas fontes cadastradas" },
-  { id: "buscar_editais_score", nome: "Buscar Editais + Score", descricao: "Busca editais e calcula aderência com produtos" },
-  { id: "listar_editais", nome: "Listar Editais", descricao: "Lista editais salvos com filtros" },
-  { id: "calcular_aderencia", nome: "Calcular Aderência", descricao: "Compara produto com edital e gera scores" },
-  { id: "gerar_proposta", nome: "Gerar Proposta", descricao: "Gera proposta técnica para edital" },
+const PROMPTS_PRONTOS: PromptPronto[] = [
+  { id: "vazio", nome: "-- Selecione um prompt pronto --", prompt: "" },
+  { id: "listar_produtos", nome: "📦 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
+  { id: "listar_editais", nome: "📋 Listar editais abertos", prompt: "Quais editais estão abertos?" },
+  { id: "calcular_aderencia", nome: "📊 Calcular aderência", prompt: "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]" },
+  { id: "gerar_proposta", nome: "📝 Gerar proposta", prompt: "Gere uma proposta do produto [NOME_PRODUTO] para o edital [NUMERO_EDITAL] com preço R$ [VALOR]" },
+  { id: "buscar_editais", nome: "🔍 Buscar editais", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "cadastrar_fonte", nome: "➕ Cadastrar fonte", prompt: "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]" },
+  { id: "listar_fontes", nome: "🌐 Listar fontes", prompt: "Quais são as fontes de editais cadastradas?" },
+  { id: "ajuda", nome: "❓ O que posso fazer?", prompt: "O que você pode fazer? Quais são suas capacidades?" },
 ];
 
 interface ChatInputProps {
-  onSend: (message: string, actionType: ActionType) => void;
+  onSend: (message: string) => void;
   disabled: boolean;
 }
 
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [text, setText] = useState("");
-  const [actionType, setActionType] = useState<ActionType>("chat_livre");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -52,7 +40,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed, actionType);
+    onSend(trimmed);
     setText("");
   };
 
@@ -63,35 +51,43 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
-  const selectedAction = ACOES.find(a => a.id === actionType);
+  const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = e.target.value;
+    const prompt = PROMPTS_PRONTOS.find(p => p.id === selectedId);
+    if (prompt && prompt.prompt) {
+      setText(prompt.prompt);
+      // Foca no textarea para o usuário poder editar
+      setTimeout(() => textareaRef.current?.focus(), 100);
+    }
+    // Reset o select para mostrar o placeholder
+    e.target.value = "vazio";
+  };
 
   return (
     <div className="chat-input-container">
       <div className="action-selector-wrapper">
         <div className="action-selector">
           <select
-            value={actionType}
-            onChange={(e) => setActionType(e.target.value as ActionType)}
+            onChange={handlePromptSelect}
             disabled={disabled}
             className="action-select"
+            defaultValue="vazio"
           >
-            {ACOES.map((acao) => (
-              <option key={acao.id} value={acao.id}>
-                {acao.nome}
+            {PROMPTS_PRONTOS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
               </option>
             ))}
           </select>
           <ChevronDown size={16} className="select-arrow" />
         </div>
-        {selectedAction && (
-          <span className="action-description">{selectedAction.descricao}</span>
-        )}
+        <span className="action-description">Selecione um prompt ou digite livremente</span>
       </div>
       <div className="chat-input-wrapper">
         <textarea
           ref={textareaRef}
           className="chat-input"
-          placeholder={getPlaceholder(actionType)}
+          placeholder="Digite sua pergunta sobre editais, produtos ou licitações..."
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -108,27 +104,4 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
       </div>
     </div>
   );
-}
-
-function getPlaceholder(actionType: ActionType): string {
-  switch (actionType) {
-    case "buscar_material_web":
-      return "Descreva o material que deseja buscar (ex: manual do produto X)...";
-    case "upload_manual":
-      return "Descreva o produto para o qual será enviado o manual...";
-    case "cadastrar_fonte":
-      return "Informe a fonte de editais a cadastrar (nome, URL)...";
-    case "buscar_editais":
-      return "Informe critérios de busca (UF, categoria, palavra-chave)...";
-    case "buscar_editais_score":
-      return "Informe critérios de busca e produto para calcular aderência...";
-    case "listar_editais":
-      return "Informe filtros desejados (status, UF, categoria)...";
-    case "calcular_aderencia":
-      return "Informe o produto e edital para análise de aderência...";
-    case "gerar_proposta":
-      return "Informe o produto e edital para gerar proposta técnica...";
-    default:
-      return "Digite sua pergunta sobre editais e licitações...";
-  }
 }

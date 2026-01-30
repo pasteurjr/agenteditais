@@ -8,7 +8,6 @@ import { useChat } from "./hooks/useChat";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
 import { setTokenGetter } from "./api/client";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
-import type { ActionType } from "./components/ChatInput";
 import "./styles/globals.css";
 
 function AppContent() {
@@ -64,14 +63,14 @@ function AppContent() {
   );
 
   const handleSend = useCallback(
-    async (message: string, actionType: ActionType = "chat_livre") => {
+    async (message: string) => {
       let sessionId = activeSessionId;
       if (!sessionId) {
         const session = await addSession();
         sessionId = session.session_id;
         setActiveSessionId(sessionId);
       }
-      const response = await send(sessionId, message, actionType);
+      const response = await send(sessionId, message);
       // Update session name if auto-renamed
       if (response?.session_name) {
         await refreshSessions();
