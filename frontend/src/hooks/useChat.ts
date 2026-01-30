@@ -5,6 +5,7 @@ import type { SendMessageResponse } from "../api/client";
 
 // Status de carregamento para feedback visual
 const LOADING_STATUSES = [
+  "Detectando intenção...",
   "Analisando sua solicitação...",
   "Buscando editais no PNCP...",
   "Filtrando resultados relevantes...",

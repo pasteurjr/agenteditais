@@ -44,62 +44,87 @@ PROMPTS_PRONTOS = [
 ]
 
 
-def detectar_intencao(message: str) -> str:
-    """Detecta automaticamente a intenção do usuário baseado na mensagem."""
+PROMPT_CLASSIFICAR_INTENCAO = """Você é um agente classificador de intenções para um sistema de gestão de editais e licitações.
+
+Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
+
+## CATEGORIAS:
+- **buscar_editais**: Usuário quer buscar/pesquisar/encontrar/ver editais novos (na web, PNCP, etc). Exemplos: "busque editais de tecnologia", "retorne editais da área médica", "quero ver licitações de informática", "mostre pregões de equipamentos"
+- **listar_editais**: Usuário quer ver editais JÁ SALVOS no sistema. Exemplos: "liste meus editais", "quais editais tenho salvos", "mostre editais cadastrados"
+- **salvar_editais**: Usuário quer salvar editais recomendados. Exemplos: "salvar editais", "salvar recomendados", "guardar esses editais"
+- **listar_produtos**: Usuário quer ver seus produtos cadastrados. Exemplos: "liste meus produtos", "quais produtos tenho", "mostre meu portfólio"
+- **calcular_aderencia**: Usuário quer calcular aderência/score de produto vs edital. Exemplos: "calcule aderência", "analise compatibilidade", "qual o score"
+- **gerar_proposta**: Usuário quer gerar proposta técnica. Exemplos: "gere proposta", "crie proposta técnica", "elabore proposta"
+- **cadastrar_fonte**: Usuário quer cadastrar nova fonte de editais. Exemplos: "cadastre fonte", "adicione nova fonte"
+- **listar_fontes**: Usuário quer ver fontes cadastradas. Exemplos: "quais fontes", "liste fontes"
+- **chat_livre**: Qualquer outra coisa - dúvidas, perguntas gerais sobre licitações, etc.
+
+## MENSAGEM DO USUÁRIO:
+"{mensagem}"
+
+## RESPOSTA:
+Retorne APENAS um JSON no formato:
+{{"intencao": "<categoria>", "termo_busca": "<termo extraído se for busca, senão null>"}}"""
+
+
+def detectar_intencao_ia(message: str) -> dict:
+    """
+    Usa DeepSeek-chat para classificar a intenção do usuário.
+    Retorna dict com 'intencao' e 'termo_busca' (se aplicável).
+    """
+    import json
+    import re
+
+    prompt = PROMPT_CLASSIFICAR_INTENCAO.format(mensagem=message)
+
+    try:
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=100,
+            model_override="deepseek-chat"  # Rápido para classificação
+        )
+
+        # Extrair JSON da resposta
+        json_match = re.search(r'\{[\s\S]*?\}', resposta)
+        if json_match:
+            resultado = json.loads(json_match.group())
+            print(f"[AGENTE] Intenção detectada: {resultado.get('intencao')} | Termo: {resultado.get('termo_busca')}")
+            return resultado
+    except Exception as e:
+        print(f"[AGENTE] Erro na classificação: {e}")
+
+    # Fallback para detecção por palavras-chave
+    return {"intencao": detectar_intencao_fallback(message), "termo_busca": None}
+
+
+def detectar_intencao_fallback(message: str) -> str:
+    """Fallback: detecção por palavras-chave (usado se IA falhar)."""
     msg = message.lower()
 
-    # Salvar editais (deve vir antes de outras detecções)
-    if any(p in msg for p in ["salvar edital", "salvar editais", "salve edital", "salve editais",
-                              "guardar edital", "guardar editais", "salvar recomendados"]):
+    if any(p in msg for p in ["salvar edital", "salvar editais", "salve", "guardar"]):
         return "salvar_editais"
-
-    # Listar produtos
-    if any(p in msg for p in ["liste meus produtos", "listar produtos", "meus produtos", "produtos cadastrados", "quais produtos"]):
+    if any(p in msg for p in ["meus produtos", "listar produtos", "produtos cadastrados"]):
         return "listar_produtos"
-
-    # Listar editais (salvos/cadastrados)
-    if any(p in msg for p in ["liste editais", "listar editais", "editais abertos", "quais editais", "meus editais", "editais salvos", "editais cadastrados"]):
+    if any(p in msg for p in ["meus editais", "editais salvos", "editais cadastrados"]):
         return "listar_editais"
-
-    # Calcular aderência
-    if any(p in msg for p in ["calcul", "aderência", "aderencia", "analise", "analisar", "score", "atende", "compatível", "compativel"]):
-        if any(p in msg for p in ["edital", "pe-", "pregão", "pregao", "licitação", "licitacao"]):
-            return "calcular_aderencia"
-
-    # Gerar proposta
-    if any(p in msg for p in ["gere proposta", "gerar proposta", "proposta técnica", "proposta tecnica", "elabore proposta", "crie proposta"]):
+    if any(p in msg for p in ["aderência", "aderencia", "score", "compatível"]):
+        return "calcular_aderencia"
+    if any(p in msg for p in ["proposta"]):
         return "gerar_proposta"
-
-    # Buscar editais (na web/PNCP) - detecção mais flexível e tolerante a erros
-    busca_palavras = ["busque", "buscar", "procure", "procurar", "encontre", "encontrar", "pesquise", "pesquisar"]
-    edital_palavras = ["edital", "editais", "editasi", "ediatl", "edtais",  # com erros comuns
-                       "licitação", "licitações", "licitacao", "licitacoes",
-                       "pregão", "pregao", "pregões", "pregoes"]
-
-    # Detectar busca de editais
-    tem_busca = any(b in msg for b in busca_palavras)
-    tem_edital = any(e in msg for e in edital_palavras)
-
-    # Também detectar padrões como "editais na área de", "editais de tecnologia"
-    padrao_area = ("edital" in msg or "editai" in msg) and ("área" in msg or "area" in msg or " de " in msg)
-
-    if (tem_busca and tem_edital) or (tem_busca and padrao_area):
+    if "edital" in msg or "editais" in msg or "licitaç" in msg or "pregão" in msg or "pregao" in msg:
         return "buscar_editais"
-
-    # Cadastrar fonte
-    if any(p in msg for p in ["cadastre fonte", "cadastrar fonte", "adicione fonte", "adicionar fonte", "nova fonte"]):
-        return "cadastrar_fonte"
-
-    # Listar fontes
-    if any(p in msg for p in ["fontes cadastradas", "listar fontes", "quais fontes", "minhas fontes"]):
+    if any(p in msg for p in ["fonte"]):
+        if "cadastr" in msg or "adicion" in msg:
+            return "cadastrar_fonte"
         return "listar_fontes"
 
-    # Buscar material na web
-    if any(p in msg for p in ["busque na web", "buscar na web", "baixe pdf", "baixar pdf", "download", "busque datasheet"]):
-        return "buscar_material_web"
-
-    # Chat livre (default)
     return "chat_livre"
+
+
+def detectar_intencao(message: str) -> str:
+    """Wrapper para compatibilidade - retorna apenas a intenção."""
+    resultado = detectar_intencao_ia(message)
+    return resultado.get("intencao", "chat_livre")
 
 
 # =============================================================================
@@ -388,8 +413,12 @@ def chat():
         # Check if this is the first user message (for auto-rename)
         is_first_message = count_session_messages(session_id, db) == 0
 
-        # Detectar intenção automaticamente
-        action_type = detectar_intencao(message)
+        # Detectar intenção usando agente IA
+        print(f"[CHAT] Detectando intenção para: {message[:50]}...")
+        intencao_resultado = detectar_intencao_ia(message)
+        action_type = intencao_resultado.get("intencao", "chat_livre")
+        termo_busca_ia = intencao_resultado.get("termo_busca")
+        print(f"[CHAT] Intenção: {action_type} | Termo: {termo_busca_ia}")
 
         # Salvar mensagem do usuário
         user_msg = Message(
@@ -411,7 +440,7 @@ def chat():
             response_text, resultado = processar_cadastrar_fonte(message, user_id)
 
         elif action_type == "buscar_editais":
-            response_text, resultado = processar_buscar_editais(message, user_id)
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
 
         elif action_type == "listar_editais":
             response_text, resultado = processar_listar_editais(message, user_id)
@@ -541,7 +570,7 @@ Exemplo: "Cadastre a fonte BEC-SP, tipo scraper, URL https://bec.sp.gov.br" """
     return response, {"status": "aguardando_dados"}
 
 
-def processar_buscar_editais(message: str, user_id: str):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None):
     """
     Processa ação: Buscar editais
 
@@ -551,58 +580,69 @@ def processar_buscar_editais(message: str, user_id: str):
     3. Ordena por score
     4. Mostra recomendações (PARTICIPAR/AVALIAR/NÃO PARTICIPAR) com justificativas
     5. Oferece opção de salvar os recomendados
+
+    Args:
+        message: Mensagem original do usuário
+        user_id: ID do usuário
+        termo_ia: Termo de busca já extraído pelo agente classificador (opcional)
     """
     import json
     import re
 
-    termo = None
     fonte = "PNCP"
     uf = None
 
-    # Tentar extrair parâmetros com LLM (usar deepseek-chat para rapidez)
-    prompt = f"""Extraia os parâmetros de busca de editais da mensagem.
+    # Usar termo da IA se disponível, senão extrair da mensagem
+    if termo_ia:
+        termo = termo_ia
+        print(f"[BUSCA] Usando termo da IA: '{termo}'")
+    else:
+        termo = None
+        # Tentar extrair parâmetros com LLM (usar deepseek-chat para rapidez)
+        prompt = f"""Extraia os parâmetros de busca de editais da mensagem.
 Retorne APENAS um JSON válido com: fonte (PNCP, ComprasNet, BEC-SP ou null), termo (palavras-chave da busca), uf (sigla do estado com 2 letras ou null)
 
 Mensagem: "{message}"
 
 JSON:"""
 
-    try:
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=200, model_override="deepseek-chat")
-        json_match = re.search(r'\{[\s\S]*?\}', resposta)
-        if json_match:
-            dados = json.loads(json_match.group())
-            fonte = dados.get('fonte') or 'PNCP'
-            termo = dados.get('termo')
-            uf = dados.get('uf')
-    except Exception as e:
-        print(f"Erro ao extrair parâmetros com LLM: {e}")
+        try:
+            resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=200, model_override="deepseek-chat")
+            json_match = re.search(r'\{[\s\S]*?\}', resposta)
+            if json_match:
+                dados = json.loads(json_match.group())
+                fonte = dados.get('fonte') or 'PNCP'
+                termo = dados.get('termo')
+                uf = dados.get('uf')
+        except Exception as e:
+            print(f"Erro ao extrair parâmetros com LLM: {e}")
 
     # Fallback: extrair termos da própria mensagem
     if not termo:
         # Remover palavras comuns de comando
         palavras_ignorar = ['busque', 'buscar', 'procure', 'procurar', 'editais', 'edital', 'de', 'do', 'da',
-                           'no', 'na', 'em', 'para', 'pncp', 'comprasnet', 'bec', 'sp', 'são', 'paulo']
+                           'no', 'na', 'em', 'para', 'pncp', 'comprasnet', 'bec', 'sp', 'são', 'paulo',
+                           'retorne', 'mostre', 'liste', 'quero', 'ver', 'todos', 'área', 'area']
         palavras = message.lower().split()
         termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
         termo = ' '.join(termos) if termos else message
 
-        # Detectar UF na mensagem
-        ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
-        msg_upper = message.upper()
-        for sigla in ufs:
-            if f" {sigla} " in f" {msg_upper} " or msg_upper.endswith(f" {sigla}"):
-                uf = sigla
-                break
-        # Detectar por nome do estado
-        if "SÃO PAULO" in msg_upper or "SAO PAULO" in msg_upper:
-            uf = "SP"
-        elif "RIO DE JANEIRO" in msg_upper:
-            uf = "RJ"
-        elif "MINAS GERAIS" in msg_upper:
-            uf = "MG"
+    # Detectar UF na mensagem
+    ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+    msg_upper = message.upper()
+    for sigla in ufs:
+        if f" {sigla} " in f" {msg_upper} " or msg_upper.endswith(f" {sigla}"):
+            uf = sigla
+            break
+    # Detectar por nome do estado
+    if "SÃO PAULO" in msg_upper or "SAO PAULO" in msg_upper:
+        uf = "SP"
+    elif "RIO DE JANEIRO" in msg_upper:
+        uf = "RJ"
+    elif "MINAS GERAIS" in msg_upper:
+        uf = "MG"
 
-    print(f"DEBUG buscar_editais: termo='{termo}', fonte='{fonte}', uf='{uf}'")
+    print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}'")
 
     # ========== PASSO 1: Buscar editais (sem salvar) ==========
     resultado = tool_buscar_editais_fonte(fonte, termo, user_id, uf=uf)
