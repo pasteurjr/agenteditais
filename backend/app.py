@@ -48,33 +48,52 @@ PROMPT_CLASSIFICAR_INTENCAO = """Você é um agente classificador de intenções
 
 Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
-## CATEGORIAS:
-- **buscar_editais**: Usuário quer buscar/pesquisar/encontrar/ver editais novos (na web, PNCP, etc). Exemplos: "busque editais de tecnologia", "retorne editais da área médica", "quero ver licitações de informática", "mostre pregões de equipamentos"
-- **listar_editais**: Usuário quer ver editais JÁ SALVOS no sistema. Exemplos: "liste meus editais", "quais editais tenho salvos", "mostre editais cadastrados"
-- **salvar_editais**: Usuário quer salvar editais recomendados. Exemplos: "salvar editais", "salvar recomendados", "guardar esses editais"
-- **listar_produtos**: Usuário quer ver seus produtos cadastrados. Exemplos: "liste meus produtos", "quais produtos tenho", "mostre meu portfólio"
-- **calcular_aderencia**: Usuário quer calcular aderência/score de produto vs edital. Exemplos: "calcule aderência", "analise compatibilidade", "qual o score"
-- **gerar_proposta**: Usuário quer gerar proposta técnica. Exemplos: "gere proposta", "crie proposta técnica", "elabore proposta"
-- **cadastrar_fonte**: Usuário quer cadastrar nova fonte de editais. Exemplos: "cadastre fonte", "adicione nova fonte"
-- **listar_fontes**: Usuário quer ver fontes cadastradas. Exemplos: "quais fontes", "liste fontes"
-- **chat_livre**: Qualquer outra coisa - dúvidas, perguntas gerais sobre licitações, etc.
+## CATEGORIAS (9 AÇÕES DO SISTEMA):
 
-## IMPORTANTE - TERMO DE BUSCA:
-Se a intenção for **buscar_editais**, extraia o TERMO DE BUSCA otimizado para encontrar editais.
-- Converta termos genéricos em palavras-chave específicas que aparecem em editais de licitação.
-- Exemplos de conversão:
-  - "área médica" → "hospitalar" (editais usam "hospitalar", "equipamento hospitalar", "material hospitalar")
-  - "área de tecnologia" → "informática" (editais usam "informática", "equipamento de informática")
-  - "equipamentos hospitalares" → "hospitalar"
-  - "área da saúde" → "saúde" ou "hospitalar"
-  - "computadores" → "informática"
+1. **buscar_web**: Usuário quer buscar/pesquisar MATERIAIS, MANUAIS, DATASHEETS, ESPECIFICAÇÕES na WEB (não editais!).
+   Exemplos: "busque na web o manual do equipamento X", "encontre o datasheet do produto Y", "pesquise especificações do Z na internet", "busque informações sobre o analisador BS-240"
+
+2. **upload_manual**: Usuário fez upload de um arquivo (PDF, manual) e quer processá-lo para cadastrar como produto.
+   Exemplos: "processe o manual que enviei", "cadastre esse PDF como produto", "extraia especificações do arquivo"
+
+3. **cadastrar_fonte**: Usuário quer cadastrar/adicionar nova fonte de editais (portal, site).
+   Exemplos: "cadastre a fonte BEC-SP", "adicione novo portal de licitações", "registre fonte ComprasNet"
+
+4. **buscar_editais**: Usuário quer buscar/pesquisar EDITAIS novos em portais (PNCP, BEC, etc).
+   Exemplos: "busque editais de tecnologia", "retorne editais da área médica", "pesquise licitações de informática", "mostre pregões de equipamentos hospitalares"
+
+5. **listar_editais**: Usuário quer ver editais JÁ SALVOS no sistema.
+   Exemplos: "liste meus editais", "quais editais tenho salvos", "mostre editais cadastrados", "ver editais salvos"
+
+6. **calcular_aderencia**: Usuário quer calcular aderência/score de um produto específico vs um edital específico.
+   Exemplos: "calcule aderência do produto X com edital Y", "analise compatibilidade", "qual o score do meu produto para esse edital"
+
+7. **gerar_proposta**: Usuário quer gerar proposta técnica para um edital.
+   Exemplos: "gere proposta para o edital X", "crie proposta técnica", "elabore proposta comercial"
+
+8. **listar_produtos**: Usuário quer ver seus produtos cadastrados.
+   Exemplos: "liste meus produtos", "quais produtos tenho", "mostre meu portfólio", "ver produtos cadastrados"
+
+9. **chat_livre**: Qualquer outra coisa - dúvidas gerais, perguntas sobre licitações, conversas, etc.
+   Exemplos: "o que é pregão eletrônico?", "como funciona licitação?", "olá", "obrigado"
+
+## ATENÇÃO - DIFERENÇA CRÍTICA:
+- **buscar_web** = buscar MANUAIS/DATASHEETS/ESPECIFICAÇÕES de PRODUTOS na internet
+- **buscar_editais** = buscar EDITAIS/LICITAÇÕES/PREGÕES em portais de compras públicas
+
+## PARÂMETROS EXTRAS:
+- Se **buscar_editais**: extraia "termo_busca" otimizado (ex: "área médica" → "hospitalar")
+- Se **buscar_web**: extraia "termo_busca" com nome do equipamento/produto
+- Se **upload_manual**: extraia "nome_produto" se mencionado
+- Se **cadastrar_fonte**: extraia "nome_fonte", "tipo_fonte", "url_fonte" se mencionados
+- Se **calcular_aderencia** ou **gerar_proposta**: extraia "produto" e "edital" se mencionados
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
 
 ## RESPOSTA:
 Retorne APENAS um JSON no formato:
-{{"intencao": "<categoria>", "termo_busca": "<termo OTIMIZADO para busca em editais, ou null se não for busca>"}}"""
+{{"intencao": "<categoria>", "termo_busca": "<valor ou null>", "nome_produto": "<valor ou null>", "produto": "<valor ou null>", "edital": "<valor ou null>", "nome_fonte": "<valor ou null>", "tipo_fonte": "<valor ou null>", "url_fonte": "<valor ou null>"}}"""
 
 
 def detectar_intencao_ia(message: str) -> dict:
@@ -111,22 +130,45 @@ def detectar_intencao_fallback(message: str) -> str:
     """Fallback: detecção por palavras-chave (usado se IA falhar)."""
     msg = message.lower()
 
-    if any(p in msg for p in ["salvar edital", "salvar editais", "salve", "guardar"]):
+    # 1. Buscar na WEB (manuais, datasheets) - ANTES de buscar editais!
+    if any(p in msg for p in ["busque na web", "buscar na web", "pesquise na web", "datasheet", "manual do"]):
+        return "buscar_web"
+    if any(p in msg for p in ["especificações do", "especificacoes do"]) and "edital" not in msg:
+        return "buscar_web"
+
+    # 2. Upload de manual
+    if any(p in msg for p in ["upload", "enviei", "arquivo que", "processe o manual", "processe o pdf"]):
+        return "upload_manual"
+
+    # 3. Salvar editais
+    if any(p in msg for p in ["salvar edital", "salvar editais", "salve", "guardar edital"]):
         return "salvar_editais"
-    if any(p in msg for p in ["meus produtos", "listar produtos", "produtos cadastrados"]):
+
+    # 4. Listar produtos
+    if any(p in msg for p in ["meus produtos", "listar produtos", "produtos cadastrados", "ver produtos"]):
         return "listar_produtos"
-    if any(p in msg for p in ["meus editais", "editais salvos", "editais cadastrados"]):
+
+    # 5. Listar editais salvos
+    if any(p in msg for p in ["meus editais", "editais salvos", "editais cadastrados", "ver editais"]):
         return "listar_editais"
-    if any(p in msg for p in ["aderência", "aderencia", "score", "compatível"]):
+
+    # 6. Calcular aderência
+    if any(p in msg for p in ["aderência", "aderencia", "score", "compatível", "compatibilidade"]):
         return "calcular_aderencia"
-    if any(p in msg for p in ["proposta"]):
+
+    # 7. Gerar proposta
+    if any(p in msg for p in ["proposta", "gerar proposta", "elaborar proposta"]):
         return "gerar_proposta"
-    if "edital" in msg or "editais" in msg or "licitaç" in msg or "pregão" in msg or "pregao" in msg:
-        return "buscar_editais"
+
+    # 8. Fontes
     if any(p in msg for p in ["fonte"]):
-        if "cadastr" in msg or "adicion" in msg:
+        if any(p in msg for p in ["cadastr", "adicion", "nova fonte"]):
             return "cadastrar_fonte"
         return "listar_fontes"
+
+    # 9. Buscar editais - por último, pois é genérico
+    if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
+        return "buscar_editais"
 
     return "chat_livre"
 
@@ -443,11 +485,14 @@ def chat():
         response_text = ""
         resultado = None
 
-        if action_type == "buscar_material_web":
-            response_text, resultado = processar_buscar_material_web(message, user_id)
+        if action_type == "buscar_web":
+            response_text, resultado = processar_buscar_web(message, user_id, intencao_resultado)
+
+        elif action_type == "upload_manual":
+            response_text, resultado = processar_upload_manual(message, user_id, intencao_resultado)
 
         elif action_type == "cadastrar_fonte":
-            response_text, resultado = processar_cadastrar_fonte(message, user_id)
+            response_text, resultado = processar_cadastrar_fonte(message, user_id, intencao_resultado)
 
         elif action_type == "buscar_editais":
             response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
@@ -523,25 +568,99 @@ def chat():
 # Processadores de Ações
 # =============================================================================
 
-def processar_buscar_material_web(message: str, user_id: str):
-    """Processa ação: Buscar material na web"""
-    resultado = tool_web_search(message, user_id)
+def processar_buscar_web(message: str, user_id: str, intencao_resultado: dict):
+    """
+    Processa ação: Buscar material/manuais/datasheets na web.
+
+    Diferente de buscar_editais - aqui buscamos MANUAIS e ESPECIFICAÇÕES de produtos,
+    não licitações/editais.
+    """
+    # Extrair termo de busca da IA ou usar mensagem
+    termo = intencao_resultado.get("termo_busca") or message
+
+    resultado = tool_web_search(termo, user_id)
+
     if resultado.get("success"):
-        response = f"""**Busca realizada:** {message}
+        response = f"""## 🔍 Busca de Material na Web
+
+**Termo pesquisado:** {termo}
 
 {resultado.get('instrucao', '')}
 
 {resultado.get('sugestao', '')}
 
-Para baixar um arquivo específico, forneça a URL direta do PDF."""
+---
+**Próximos passos:**
+- Para baixar um PDF encontrado, envie: "Baixe o arquivo da URL: <url_do_pdf>"
+- Após baixar, o sistema extrairá as especificações e cadastrará como produto."""
     else:
-        response = f"Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
+        response = f"❌ Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
+
     return response, resultado
 
 
-def processar_cadastrar_fonte(message: str, user_id: str):
+def processar_upload_manual(message: str, user_id: str, intencao_resultado: dict):
+    """
+    Processa ação: Upload de manual/PDF para cadastrar produto.
+
+    Nota: O upload físico do arquivo é feito via /api/upload.
+    Esta função processa a intenção quando o usuário menciona que quer processar um arquivo.
+    """
+    nome_produto = intencao_resultado.get("nome_produto")
+
+    if nome_produto:
+        response = f"""## 📄 Upload de Manual
+
+Para cadastrar o produto **{nome_produto}**, faça o seguinte:
+
+1. Clique no botão **📎** ao lado do campo de mensagem
+2. Selecione o arquivo PDF do manual
+3. Após o upload, envie uma mensagem confirmando: "Processe como {nome_produto}"
+
+O sistema irá:
+- Extrair o texto do PDF
+- Identificar especificações técnicas
+- Cadastrar o produto com todas as specs"""
+    else:
+        response = """## 📄 Upload de Manual
+
+Para cadastrar um produto a partir de um manual PDF:
+
+1. Clique no botão **📎** ao lado do campo de mensagem
+2. Selecione o arquivo PDF do manual
+3. Após o upload, informe o nome do produto
+
+Exemplo: "Processe o manual que enviei e cadastre como Analisador Bioquímico BS-240"
+
+O sistema extrairá automaticamente as especificações técnicas do manual."""
+
+    return response, {"status": "aguardando_upload", "nome_produto": nome_produto}
+
+
+def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: dict = None):
     """Processa ação: Cadastrar fonte de editais"""
-    # Tentar extrair informações da mensagem
+    intencao_resultado = intencao_resultado or {}
+
+    # Verificar se a IA já extraiu os dados
+    nome_fonte = intencao_resultado.get("nome_fonte")
+    tipo_fonte = intencao_resultado.get("tipo_fonte")
+    url_fonte = intencao_resultado.get("url_fonte")
+
+    if nome_fonte and url_fonte:
+        # Dados já extraídos pela IA
+        resultado = tool_cadastrar_fonte(
+            nome=nome_fonte,
+            tipo=tipo_fonte or "scraper",
+            url_base=url_fonte,
+            descricao=f"Fonte cadastrada via chat: {nome_fonte}"
+        )
+        if resultado.get("success"):
+            response = f"✅ Fonte **{nome_fonte}** cadastrada com sucesso!"
+        else:
+            response = f"❌ Erro ao cadastrar: {resultado.get('error')}"
+        return response, resultado
+
+    # Fallback: Tentar extrair informações da mensagem
     prompt = f"""Extraia as informações de fonte de editais da mensagem abaixo.
 Retorne JSON com: nome, tipo (api ou scraper), url_base, descricao
 
