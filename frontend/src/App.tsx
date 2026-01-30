@@ -73,10 +73,12 @@ function AppContent() {
       const response = await send(sessionId, message);
       // Update session name if auto-renamed
       if (response?.session_name) {
-        await refreshSessions();
+        console.log("Session renamed to:", response.session_name);
+        // Update locally for immediate feedback
+        updateSessionName(sessionId, response.session_name);
       }
     },
-    [activeSessionId, send, addSession, refreshSessions]
+    [activeSessionId, send, addSession, updateSessionName]
   );
 
   const handleLogout = useCallback(async () => {

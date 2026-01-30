@@ -44,12 +44,20 @@ export function useSessions() {
     );
   };
 
+  // Update session name locally without API call (for auto-rename from backend)
+  const setSessionNameLocal = (sessionId: string, name: string) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.session_id === sessionId ? { ...s, name } : s))
+    );
+  };
+
   return {
     sessions,
     loading,
     addSession,
     removeSession,
     updateSessionName,
+    setSessionNameLocal,
     refreshSessions: loadSessions,
   };
 }

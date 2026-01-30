@@ -361,9 +361,10 @@ def tool_listar_fontes() -> Dict[str, Any]:
 def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                                uf: str = None, modalidade: str = None) -> Dict[str, Any]:
     """
-    Busca editais em uma fonte específica.
-    Por enquanto, simula busca no PNCP.
+    Busca editais em uma fonte específica (PNCP).
     """
+    from datetime import timedelta
+
     db = get_db()
     try:
         # Buscar fonte no banco
@@ -377,57 +378,127 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         editais_encontrados = []
 
         if fonte_obj.nome.upper() == 'PNCP':
-            # Tentar API do PNCP
+            # API do PNCP - endpoint de busca com parâmetros obrigatórios
             try:
+                # Datas: últimos 90 dias
+                data_final = datetime.now()
+                data_inicial = data_final - timedelta(days=90)
+
                 params = {
-                    "q": termo,
+                    "dataInicial": data_inicial.strftime("%Y%m%d"),
+                    "dataFinal": data_final.strftime("%Y%m%d"),
+                    "codigoModalidadeContratacao": 6,  # 6 = Pregão Eletrônico
                     "pagina": 1,
-                    "tamanhoPagina": 10
+                    "tamanhoPagina": 50  # Mínimo é 10, buscar mais para filtrar
                 }
                 if uf:
                     params["uf"] = uf.upper()
 
+                print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
+                print(f"[TOOLS] Params: {params}")
+                print(f"[TOOLS] Termo de busca: '{termo}'")
+
                 response = requests.get(
                     f"{PNCP_BASE_URL}/contratacoes/publicacao",
                     params=params,
-                    timeout=30
+                    timeout=30,
+                    headers={"Accept": "application/json"}
                 )
 
-                if response.status_code == 200:
+                print(f"[TOOLS] PNCP response status: {response.status_code}, size: {len(response.text) if response.text else 0}")
+
+                if response.status_code == 200 and response.text:
                     data = response.json()
-                    for item in data.get('data', [])[:5]:
+                    items = data.get('data', [])
+                    total_api = data.get('totalRegistros', len(items))
+                    print(f"[TOOLS] PNCP retornou {len(items)} itens de {total_api} total")
+
+                    # Expandir termo para termos relacionados
+                    termo_lower = termo.lower()
+                    termos_busca = [termo_lower]
+
+                    # Expandir termos de TI/tecnologia
+                    if any(t in termo_lower for t in ['tecnologia', 'ti', 'informática', 'informatica', 'computador', 'computação']):
+                        termos_busca.extend(['tecnologia', 'informática', 'informatica', 'computador', 'software',
+                                            'sistema', 'hardware', 'servidor', 'notebook', 'monitor', 'impressora',
+                                            'rede', 'equipamento'])
+
+                    # Expandir termos médicos/hospitalares
+                    if any(t in termo_lower for t in ['médico', 'medico', 'hospital', 'saúde', 'saude', 'reagente']):
+                        termos_busca.extend(['médico', 'medico', 'hospitalar', 'saúde', 'saude', 'reagente',
+                                            'laboratorio', 'laboratório', 'medicamento', 'equipamento médico'])
+
+                    print(f"[TOOLS] Termos de busca expandidos: {termos_busca[:5]}...")
+
+                    # Filtrar por termos de busca no objeto
+                    for item in items:
+                        objeto = (item.get('objetoCompra', '') or '').lower()
+
+                        # Verificar se algum termo está no objeto
+                        match = any(t in objeto for t in termos_busca)
+                        if termo and not match:
+                            continue
+
+                        # Extrair dados do item
+                        orgao_data = item.get('orgaoEntidade', {}) or {}
+                        numero_pncp = item.get('numeroControlePNCP', '')
+
+                        # Construir link se não existir
+                        link = item.get('linkSistemaOrigem')
+                        if not link and numero_pncp:
+                            link = f"https://pncp.gov.br/app/editais/{numero_pncp}"
+
                         edital = Edital(
                             user_id=user_id,
                             numero=item.get('numeroCompra', 'N/A'),
-                            orgao=item.get('orgaoEntidade', {}).get('razaoSocial', 'N/A'),
-                            orgao_tipo='federal',
-                            uf=item.get('uf'),
-                            objeto=item.get('objetoCompra', termo),
-                            modalidade='pregao_eletronico',
+                            orgao=orgao_data.get('razaoSocial', 'N/A'),
+                            orgao_tipo='municipal' if orgao_data.get('esferaId') == 'M' else 'federal',
+                            uf=orgao_data.get('uf'),
+                            objeto=objeto[:500] if objeto else f"Contratação - {termo}",
+                            modalidade=item.get('modalidadeNome', 'Pregão Eletrônico'),
+                            valor_referencia=item.get('valorTotalEstimado'),
+                            data_publicacao=item.get('dataPublicacaoPncp'),
+                            data_abertura=item.get('dataAberturaProposta'),
                             fonte='PNCP',
-                            url=item.get('linkSistemaOrigem'),
+                            url=link,
                             status='novo'
                         )
                         db.add(edital)
                         editais_encontrados.append(edital)
+                        print(f"[TOOLS] + Edital: {edital.numero} - {edital.orgao[:30]}")
+
+                        if len(editais_encontrados) >= 10:
+                            break
+
+                    print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais após filtro por '{termo}'")
+                else:
+                    print(f"[TOOLS] PNCP erro: {response.status_code} - {response.text[:300] if response.text else 'empty'}")
+
             except Exception as e:
                 print(f"[TOOLS] Erro ao buscar PNCP: {e}")
+                import traceback
+                traceback.print_exc()
 
-        # Se não encontrou via API, criar edital de exemplo
+        # Se não encontrou na API, buscar editais existentes no banco que correspondam ao termo
         if not editais_encontrados:
-            edital = Edital(
-                user_id=user_id,
-                numero=f"PE-{datetime.now().strftime('%Y%m%d')}-001",
-                orgao=f"Órgão de {uf or 'Brasil'}",
-                orgao_tipo='municipal' if uf else 'federal',
-                uf=uf,
-                objeto=f"Aquisição de {termo}",
-                modalidade=modalidade or 'pregao_eletronico',
-                fonte=fonte_obj.nome,
-                status='novo'
-            )
-            db.add(edital)
-            editais_encontrados.append(edital)
+            print(f"[TOOLS] Buscando no banco local por '{termo}'")
+            editais_db = db.query(Edital).filter(
+                Edital.user_id == user_id,
+                Edital.objeto.ilike(f"%{termo}%")
+            ).order_by(Edital.created_at.desc()).limit(10).all()
+
+            if editais_db:
+                editais_encontrados = editais_db
+            else:
+                # Não criar fake - informar que não encontrou
+                return {
+                    "success": True,
+                    "fonte": fonte_obj.nome,
+                    "termo": termo,
+                    "editais": [],
+                    "total": 0,
+                    "mensagem": f"Nenhum edital encontrado para '{termo}'. A API do PNCP pode estar indisponível ou não há editais recentes com esse termo."
+                }
 
         db.commit()
 
@@ -435,7 +506,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
             "success": True,
             "fonte": fonte_obj.nome,
             "termo": termo,
-            "editais": [e.to_dict() for e in editais_encontrados],
+            "editais": [e.to_dict() if hasattr(e, 'to_dict') else e for e in editais_encontrados],
             "total": len(editais_encontrados)
         }
 

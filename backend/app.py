@@ -51,7 +51,7 @@ def detectar_intencao(message: str) -> str:
     if any(p in msg for p in ["liste meus produtos", "listar produtos", "meus produtos", "produtos cadastrados", "quais produtos"]):
         return "listar_produtos"
 
-    # Listar editais
+    # Listar editais (salvos/cadastrados)
     if any(p in msg for p in ["liste editais", "listar editais", "editais abertos", "quais editais", "meus editais", "editais salvos", "editais cadastrados"]):
         return "listar_editais"
 
@@ -64,8 +64,10 @@ def detectar_intencao(message: str) -> str:
     if any(p in msg for p in ["gere proposta", "gerar proposta", "proposta técnica", "proposta tecnica", "elabore proposta", "crie proposta"]):
         return "gerar_proposta"
 
-    # Buscar editais
-    if any(p in msg for p in ["busque editais", "buscar editais", "procure editais", "encontre editais", "pesquise editais"]):
+    # Buscar editais (na web/PNCP) - detecção mais flexível
+    busca_palavras = ["busque", "buscar", "procure", "procurar", "encontre", "encontrar", "pesquise", "pesquisar"]
+    edital_palavras = ["edital", "editais", "licitação", "licitações", "licitacao", "licitacoes", "pregão", "pregao"]
+    if any(b in msg for b in busca_palavras) and any(e in msg for e in edital_palavras):
         return "buscar_editais"
 
     # Cadastrar fonte
@@ -319,14 +321,16 @@ Responda apenas com o título, sem aspas ou pontuação final."""
 
     try:
         messages = [{"role": "user", "content": prompt}]
-        title = call_deepseek(messages, max_tokens=50)
+        # Usar deepseek-chat para tarefas simples (reasoner retorna vazio para prompts curtos)
+        title = call_deepseek(messages, max_tokens=50, model_override="deepseek-chat")
         # Clean up the title
         title = title.strip().strip('"\'').strip()
         # Limit length
         if len(title) > 50:
             title = title[:47] + "..."
         return title if title else None
-    except Exception:
+    except Exception as e:
+        print(f"Erro ao gerar título: {e}")
         return None
 
 
@@ -422,12 +426,16 @@ def chat():
 
         # Auto-rename session if first message
         new_session_name = None
+        print(f"DEBUG: is_first_message={is_first_message}, session.name='{session.name}'")
         if is_first_message and session.name == "Nova conversa":
             try:
+                print(f"DEBUG: Gerando título para: {message[:50]}...")
                 new_session_name = generate_session_title(message)
+                print(f"DEBUG: Título gerado: {new_session_name}")
                 if new_session_name:
                     session.name = new_session_name
-            except Exception:
+            except Exception as e:
+                print(f"DEBUG: Erro ao gerar título: {e}")
                 pass  # Don't fail the request if rename fails
 
         # Atualizar sessão
@@ -516,43 +524,111 @@ Exemplo: "Cadastre a fonte BEC-SP, tipo scraper, URL https://bec.sp.gov.br" """
 
 def processar_buscar_editais(message: str, user_id: str):
     """Processa ação: Buscar editais"""
-    # Extrair parâmetros da mensagem
-    prompt = f"""Extraia os parâmetros de busca de editais da mensagem.
-Retorne JSON com: fonte (PNCP, ComprasNet, BEC-SP ou null), termo (palavras-chave), uf (sigla do estado ou null)
+    import json
+    import re
 
-Mensagem: {message}
+    termo = None
+    fonte = "PNCP"
+    uf = None
+
+    # Tentar extrair parâmetros com LLM (usar deepseek-chat para rapidez)
+    prompt = f"""Extraia os parâmetros de busca de editais da mensagem.
+Retorne APENAS um JSON válido com: fonte (PNCP, ComprasNet, BEC-SP ou null), termo (palavras-chave da busca), uf (sigla do estado com 2 letras ou null)
+
+Mensagem: "{message}"
 
 JSON:"""
 
     try:
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=300)
-        import json
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=200, model_override="deepseek-chat")
+        json_match = re.search(r'\{[\s\S]*?\}', resposta)
         if json_match:
             dados = json.loads(json_match.group())
             fonte = dados.get('fonte') or 'PNCP'
-            termo = dados.get('termo', message)
+            termo = dados.get('termo')
             uf = dados.get('uf')
+    except Exception as e:
+        print(f"Erro ao extrair parâmetros com LLM: {e}")
 
-            resultado = tool_buscar_editais_fonte(fonte, termo, user_id, uf=uf)
+    # Fallback: extrair termos da própria mensagem
+    if not termo:
+        # Remover palavras comuns de comando
+        palavras_ignorar = ['busque', 'buscar', 'procure', 'procurar', 'editais', 'edital', 'de', 'do', 'da',
+                           'no', 'na', 'em', 'para', 'pncp', 'comprasnet', 'bec', 'sp', 'são', 'paulo']
+        palavras = message.lower().split()
+        termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
+        termo = ' '.join(termos) if termos else message
 
-            if resultado.get("success"):
-                editais = resultado.get("editais", [])
-                response = f"""**Busca realizada:** {termo}
+        # Detectar UF na mensagem
+        ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+        msg_upper = message.upper()
+        for sigla in ufs:
+            if f" {sigla} " in f" {msg_upper} " or msg_upper.endswith(f" {sigla}"):
+                uf = sigla
+                break
+        # Detectar por nome do estado
+        if "SÃO PAULO" in msg_upper or "SAO PAULO" in msg_upper:
+            uf = "SP"
+        elif "RIO DE JANEIRO" in msg_upper:
+            uf = "RJ"
+        elif "MINAS GERAIS" in msg_upper:
+            uf = "MG"
+
+    print(f"DEBUG buscar_editais: termo='{termo}', fonte='{fonte}', uf='{uf}'")
+
+    # Fazer a busca
+    resultado = tool_buscar_editais_fonte(fonte, termo, user_id, uf=uf)
+
+    if resultado.get("success"):
+        editais = resultado.get("editais", [])
+        response = f"""**Busca realizada:** {termo}
 **Fonte:** {fonte}
 **Resultados:** {len(editais)} edital(is) encontrado(s)
 
 """
-                for i, ed in enumerate(editais[:5], 1):
-                    response += f"{i}. **{ed['numero']}** - {ed['orgao']}\n   Objeto: {ed['objeto'][:100]}...\n\n"
+        for i, ed in enumerate(editais[:10], 1):
+            numero = ed.get('numero', 'N/A')
+            orgao = ed.get('orgao', 'N/A')
+            uf_ed = ed.get('uf', '')
+            cidade = ed.get('cidade', '')
+            local = f"{cidade}/{uf_ed}" if cidade and uf_ed else (uf_ed or cidade or 'Brasil')
+            objeto = ed.get('objeto', '')[:200]
+            valor = ed.get('valor_referencia')
+            valor_str = f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if valor else "Não informado"
+            data_abertura = ed.get('data_abertura', 'Não informada')
+            modalidade = ed.get('modalidade', 'N/A')
+            status = ed.get('status', 'novo')
+            url = ed.get('url', '')
 
-                return response, resultado
-    except Exception as e:
-        print(f"Erro ao processar busca: {e}")
+            response += f"---\n"
+            response += f"### {i}. {numero}\n"
+            response += f"**Órgão:** {orgao} ({local})\n"
+            response += f"**Modalidade:** {modalidade} | **Status:** {status}\n"
+            response += f"**Valor estimado:** {valor_str}\n"
+            response += f"**Data abertura:** {data_abertura}\n"
+            response += f"**Objeto:** {objeto}\n"
+            if url:
+                response += f"**🔗 Link:** [{url}]({url})\n"
+            response += "\n"
 
-    response = "Não consegui extrair os parâmetros de busca. Tente algo como:\n'Busque editais de reagentes de glicose no PNCP de São Paulo'"
-    return response, {"status": "erro"}
+        return response, resultado
+    elif resultado.get("success") and resultado.get("total", 0) == 0:
+        # Busca bem sucedida mas sem resultados
+        mensagem = resultado.get("mensagem", f"Nenhum edital encontrado para '{termo}'.")
+        response = f"""**Busca realizada:** {termo}
+**Fonte:** {fonte}
+
+⚠️ {mensagem}
+
+**Sugestões:**
+- Tente termos mais específicos (ex: "monitor LCD 24 polegadas")
+- Verifique se há editais salvos: "liste meus editais"
+- A API do PNCP pode estar temporariamente indisponível
+"""
+        return response, resultado
+    else:
+        response = f"Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
+        return response, resultado
 
 
 def processar_listar_produtos(message: str, user_id: str):
