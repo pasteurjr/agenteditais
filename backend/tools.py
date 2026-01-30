@@ -1035,13 +1035,17 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                 "aviso": "Você não tem produtos cadastrados. Cadastre produtos para calcular aderência."
             }
 
-        # Preparar dados dos produtos para o prompt (formato compacto)
-        # Limitar a 15 produtos para evitar prompt muito grande
+        # Preparar dados dos produtos para o prompt
+        # Usar formato RESUMIDO para incluir TODOS os produtos sem exceder limite
+        # (nome, categoria, fabricante + nomes das 3 specs principais)
         produtos_data = []
-        for p in produtos[:15]:
+        for p in produtos:
             specs = db.query(ProdutoEspecificacao).filter(
                 ProdutoEspecificacao.produto_id == p.id
-            ).limit(5).all()  # Limitar specs também
+            ).limit(3).all()
+
+            # Formato resumido: só nomes das specs, não valores completos
+            specs_resumo = [s.nome_especificacao for s in specs]
 
             produtos_data.append({
                 "id": p.id,
@@ -1049,11 +1053,12 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                 "categoria": p.categoria,
                 "fabricante": p.fabricante,
                 "modelo": p.modelo,
-                "especificacoes": [{"nome": s.nome_especificacao, "valor": s.valor} for s in specs]
+                "specs": specs_resumo  # Só os nomes das specs principais
             })
 
         # Usar formato compacto (sem indent) para reduzir tamanho
         produtos_json = json.dumps(produtos_data, ensure_ascii=False)
+        print(f"[TOOLS] Portfólio: {len(produtos)} produtos, JSON: {len(produtos_json)} chars")
 
         # Calcular score para cada edital
         editais_com_score = []
@@ -1098,11 +1103,11 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                 if json_match:
                     try:
                         raw_json = json_match.group()
-                        # Limpar caracteres problemáticos dentro de strings JSON
-                        # Substituir \n literais dentro de strings por espaço
-                        raw_json = re.sub(r'(?<!\\)\\n', ' ', raw_json)
-                        # Remover tabs
-                        raw_json = raw_json.replace('\t', ' ')
+                        # Limpar quebras de linha e tabs reais (chars 0x0A, 0x0D, 0x09)
+                        # que podem aparecer dentro de strings JSON e quebram o parser
+                        raw_json = raw_json.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+                        # Limpar múltiplos espaços
+                        raw_json = re.sub(r'  +', ' ', raw_json)
 
                         score_data = json.loads(raw_json)
                         edital['score_tecnico'] = score_data.get('score_tecnico', score_data.get('score', 0))
