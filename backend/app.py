@@ -308,6 +308,34 @@ def listar_acoes():
 
 
 # =============================================================================
+# Auto-rename session
+# =============================================================================
+
+def generate_session_title(first_question: str) -> str:
+    """Generate a short title for the session based on the first question."""
+    prompt = f"""Crie um título curto (3-5 palavras) que resuma esta pergunta sobre licitações/editais:
+"{first_question}"
+Responda apenas com o título, sem aspas ou pontuação final."""
+
+    try:
+        messages = [{"role": "user", "content": prompt}]
+        title = call_deepseek(messages, max_tokens=50)
+        # Clean up the title
+        title = title.strip().strip('"\'').strip()
+        # Limit length
+        if len(title) > 50:
+            title = title[:47] + "..."
+        return title if title else None
+    except Exception:
+        return None
+
+
+def count_session_messages(session_id: str, db) -> int:
+    """Count messages in a session."""
+    return db.query(Message).filter(Message.session_id == session_id).count()
+
+
+# =============================================================================
 # Chat Routes (com suporte a ações)
 # =============================================================================
 
@@ -336,6 +364,9 @@ def chat():
 
         if not session:
             return jsonify({"error": "Sessão não encontrada"}), 404
+
+        # Check if this is the first user message (for auto-rename)
+        is_first_message = count_session_messages(session_id, db) == 0
 
         # Detectar intenção automaticamente
         action_type = detectar_intencao(message)
@@ -389,16 +420,31 @@ def chat():
         )
         db.add(assistant_msg)
 
+        # Auto-rename session if first message
+        new_session_name = None
+        if is_first_message and session.name == "Nova conversa":
+            try:
+                new_session_name = generate_session_title(message)
+                if new_session_name:
+                    session.name = new_session_name
+            except Exception:
+                pass  # Don't fail the request if rename fails
+
         # Atualizar sessão
         session.updated_at = datetime.now()
         db.commit()
 
-        return jsonify({
+        response_data = {
             "response": response_text,
             "session_id": session_id,
             "action_type": action_type,
             "resultado": resultado
-        })
+        }
+
+        if new_session_name:
+            response_data["session_name"] = new_session_name
+
+        return jsonify(response_data)
 
     except Exception as e:
         db.rollback()
