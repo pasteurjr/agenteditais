@@ -973,42 +973,47 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
 # NOVAS FUNÇÕES: Score de Aderência e Salvamento
 # =============================================================================
 
-PROMPT_CALCULAR_SCORE = """Você é um especialista em análise de licitações públicas.
+PROMPT_CALCULAR_SCORE = """Você é um especialista em análise de licitações públicas brasileiras.
 
 Analise a aderência entre os PRODUTOS do portfólio da empresa e o EDITAL de licitação.
 
-## PRODUTOS DO PORTFÓLIO:
+## PRODUTOS DO PORTFÓLIO DA EMPRESA:
 {produtos_json}
 
-## EDITAL:
+## EDITAL A ANALISAR:
 - Número: {numero}
 - Órgão: {orgao}
 - Objeto: {objeto}
 - Valor estimado: {valor}
 
-## TAREFA:
-Calcule o SCORE DE ADERÊNCIA TÉCNICA (0-100%) considerando:
-1. Quão bem os produtos atendem ao objeto do edital
-2. Compatibilidade técnica (especificações vs requisitos)
-3. Categoria dos produtos vs tipo de contratação
+## CRITÉRIOS DE ANÁLISE:
+1. **Aderência Técnica**: Os produtos atendem ao objeto do edital? Há compatibilidade técnica?
+2. **Categoria**: A categoria dos produtos (informática, equipamento médico, etc.) corresponde ao tipo de contratação?
+3. **Especificações**: As especificações dos produtos são compatíveis com os requisitos implícitos do edital?
 
-## RESPOSTA (JSON):
-Retorne um JSON com:
+## REGRAS DE SCORE:
+- **80-100%**: Alta aderência - produtos atendem diretamente ao objeto. Recomendação: PARTICIPAR
+- **50-79%**: Média aderência - produtos podem atender com adaptações. Recomendação: AVALIAR
+- **0-49%**: Baixa aderência - produtos não correspondem ao objeto. Recomendação: NÃO PARTICIPAR
+
+## RESPOSTA OBRIGATÓRIA:
+Forneça sua análise em formato JSON:
+
+```json
 {{
-    "score_tecnico": <número 0-100>,
-    "recomendacao": "PARTICIPAR" | "AVALIAR" | "NÃO PARTICIPAR",
+    "score_tecnico": <número inteiro de 0 a 100>,
+    "recomendacao": "<PARTICIPAR ou AVALIAR ou NÃO PARTICIPAR>",
     "produtos_aderentes": [
         {{
-            "produto_id": "...",
-            "produto_nome": "...",
+            "produto_id": "<id do produto>",
+            "produto_nome": "<nome do produto>",
             "aderencia": <número 0-100>,
-            "motivo": "explicação breve"
+            "motivo": "<explicação de 1-2 frases>"
         }}
     ],
-    "justificativa": "Explicação detalhada de 2-3 parágrafos sobre os motivos do score, pontos fortes e fracos, riscos e oportunidades."
+    "justificativa": "<Explicação detalhada de 2-3 parágrafos explicando: 1) Por que o score foi atribuído, 2) Quais produtos são mais aderentes e por quê, 3) Riscos e oportunidades da participação>"
 }}
-
-Responda APENAS com o JSON, sem texto adicional."""
+```"""
 
 
 def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str, Any]:
@@ -1016,6 +1021,8 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
     Calcula o score de aderência para uma lista de editais vs produtos do usuário.
     Usa DeepSeek Reasoner para análise detalhada com justificativa.
     """
+    import time
+
     db = get_db()
     try:
         # Buscar produtos do usuário
@@ -1028,12 +1035,13 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                 "aviso": "Você não tem produtos cadastrados. Cadastre produtos para calcular aderência."
             }
 
-        # Preparar dados dos produtos para o prompt
+        # Preparar dados dos produtos para o prompt (formato compacto)
+        # Limitar a 15 produtos para evitar prompt muito grande
         produtos_data = []
-        for p in produtos:
+        for p in produtos[:15]:
             specs = db.query(ProdutoEspecificacao).filter(
                 ProdutoEspecificacao.produto_id == p.id
-            ).all()
+            ).limit(5).all()  # Limitar specs também
 
             produtos_data.append({
                 "id": p.id,
@@ -1041,11 +1049,11 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                 "categoria": p.categoria,
                 "fabricante": p.fabricante,
                 "modelo": p.modelo,
-                "descricao": p.descricao[:200] if p.descricao else None,
-                "especificacoes": [{"nome": s.nome_especificacao, "valor": s.valor} for s in specs[:10]]
+                "especificacoes": [{"nome": s.nome_especificacao, "valor": s.valor} for s in specs]
             })
 
-        produtos_json = json.dumps(produtos_data, ensure_ascii=False, indent=2)
+        # Usar formato compacto (sem indent) para reduzir tamanho
+        produtos_json = json.dumps(produtos_data, ensure_ascii=False)
 
         # Calcular score para cada edital
         editais_com_score = []
@@ -1059,27 +1067,65 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
                     valor=f"R$ {edital.get('valor_referencia'):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if edital.get('valor_referencia') else 'Não informado'
                 )
 
-                # Usar DeepSeek Reasoner para análise detalhada
-                resposta = call_deepseek(
-                    [{"role": "user", "content": prompt}],
-                    max_tokens=2000
-                )
+                # Tentar até 2 vezes (retry em caso de resposta vazia)
+                resposta = None
+                for tentativa in range(2):
+                    print(f"[TOOLS] Calculando score para {edital.get('numero')} (tentativa {tentativa + 1})...")
+
+                    # Usar DeepSeek Reasoner para análise detalhada
+                    resposta = call_deepseek(
+                        [{"role": "user", "content": prompt}],
+                        max_tokens=2000
+                    )
+
+                    if resposta and len(resposta.strip()) > 10:
+                        break
+
+                    print(f"[TOOLS] Resposta vazia, tentando novamente...")
+                    time.sleep(1)  # Pequena pausa antes de retry
+
+                # Se ainda vazio após retries, tentar com deepseek-chat como fallback
+                if not resposta or len(resposta.strip()) < 10:
+                    print(f"[TOOLS] Usando deepseek-chat como fallback para {edital.get('numero')}...")
+                    resposta = call_deepseek(
+                        [{"role": "user", "content": prompt}],
+                        max_tokens=2000,
+                        model_override="deepseek-chat"
+                    )
 
                 # Extrair JSON da resposta
-                json_match = re.search(r'\{[\s\S]*\}', resposta)
+                json_match = re.search(r'\{[\s\S]*\}', resposta or "")
                 if json_match:
-                    score_data = json.loads(json_match.group())
-                    edital['score_tecnico'] = score_data.get('score_tecnico', 0)
-                    edital['recomendacao'] = score_data.get('recomendacao', 'AVALIAR')
-                    edital['produtos_aderentes'] = score_data.get('produtos_aderentes', [])
-                    edital['justificativa'] = score_data.get('justificativa', '')
+                    try:
+                        raw_json = json_match.group()
+                        # Limpar caracteres problemáticos dentro de strings JSON
+                        # Substituir \n literais dentro de strings por espaço
+                        raw_json = re.sub(r'(?<!\\)\\n', ' ', raw_json)
+                        # Remover tabs
+                        raw_json = raw_json.replace('\t', ' ')
+
+                        score_data = json.loads(raw_json)
+                        edital['score_tecnico'] = score_data.get('score_tecnico', score_data.get('score', 0))
+                        edital['recomendacao'] = score_data.get('recomendacao', 'AVALIAR')
+                        edital['produtos_aderentes'] = score_data.get('produtos_aderentes', [])
+                        edital['justificativa'] = score_data.get('justificativa', '')
+                        print(f"[TOOLS] Score {edital.get('numero')}: {edital['score_tecnico']}% - {edital['recomendacao']}")
+                    except json.JSONDecodeError as je:
+                        print(f"[TOOLS] Erro ao parsear JSON para {edital.get('numero')}: {je}")
+                        print(f"[TOOLS] JSON bruto: {raw_json[:300]}...")
+                        edital['score_tecnico'] = 0
+                        edital['recomendacao'] = 'AVALIAR'
+                        edital['justificativa'] = 'Erro ao processar resposta da IA.'
                 else:
+                    print(f"[TOOLS] Nenhum JSON encontrado para {edital.get('numero')}")
                     edital['score_tecnico'] = 0
                     edital['recomendacao'] = 'AVALIAR'
                     edital['justificativa'] = 'Não foi possível calcular score automaticamente.'
 
             except Exception as e:
                 print(f"[TOOLS] Erro ao calcular score para {edital.get('numero')}: {e}")
+                import traceback
+                traceback.print_exc()
                 edital['score_tecnico'] = 0
                 edital['recomendacao'] = 'AVALIAR'
                 edital['justificativa'] = f'Erro no cálculo: {str(e)[:100]}'
