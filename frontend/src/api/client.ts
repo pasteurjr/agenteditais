@@ -131,6 +131,35 @@ export async function sendMessage(
   return res.json();
 }
 
+// Envia mensagem com arquivo anexo (PDF)
+export async function sendMessageWithFile(
+  sessionId: string,
+  message: string,
+  file: File
+): Promise<SendMessageResponse> {
+  const token = getAccessTokenFn ? await getAccessTokenFn() : null;
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("session_id", sessionId);
+  formData.append("message", message);
+
+  const res = await fetch(`${API_BASE}/api/chat-upload`, {
+    method: "POST",
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+    body: formData,
+  });
+
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao enviar mensagem");
+  }
+  return res.json();
+}
+
 // =============================================================================
 // Upload
 // =============================================================================

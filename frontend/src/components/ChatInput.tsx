@@ -21,16 +21,13 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
 ];
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
-  onUpload: (file: File, nomeProduto: string) => void;
+  onSend: (message: string, file?: File) => void;
   disabled: boolean;
 }
 
-export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [text, setText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [nomeProduto, setNomeProduto] = useState("");
-  const [showUploadForm, setShowUploadForm] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,9 +41,13 @@ export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
 
   const handleSubmit = () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    if ((!trimmed && !selectedFile) || disabled) return;
+    onSend(trimmed, selectedFile || undefined);
     setText("");
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -72,29 +73,15 @@ export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      setShowUploadForm(true);
-      // Tentar extrair nome do produto do nome do arquivo
-      const fileName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-      setNomeProduto(fileName);
+      // Focar no textarea para o usuário digitar o nome do produto
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
     }
   };
 
-  const handleUploadSubmit = () => {
-    if (selectedFile && nomeProduto.trim()) {
-      onUpload(selectedFile, nomeProduto.trim());
-      setSelectedFile(null);
-      setNomeProduto("");
-      setShowUploadForm(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const handleCancelUpload = () => {
+  const handleRemoveFile = () => {
     setSelectedFile(null);
-    setNomeProduto("");
-    setShowUploadForm(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -121,32 +108,14 @@ export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
         <span className="action-description">Selecione um prompt ou digite livremente</span>
       </div>
 
-      {/* Formulário de upload */}
-      {showUploadForm && selectedFile && (
-        <div className="upload-form">
-          <div className="upload-file-info">
-            <FileText size={20} />
-            <span className="upload-filename">{selectedFile.name}</span>
-            <button className="upload-cancel" onClick={handleCancelUpload} title="Cancelar">
-              <X size={16} />
-            </button>
-          </div>
-          <div className="upload-product-name">
-            <input
-              type="text"
-              placeholder="Nome do produto (ex: Analisador Bioquímico BS-240)"
-              value={nomeProduto}
-              onChange={(e) => setNomeProduto(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleUploadSubmit()}
-            />
-            <button
-              className="upload-submit"
-              onClick={handleUploadSubmit}
-              disabled={!nomeProduto.trim()}
-            >
-              Cadastrar Produto
-            </button>
-          </div>
+      {/* Arquivo selecionado */}
+      {selectedFile && (
+        <div className="selected-file-banner">
+          <FileText size={16} />
+          <span className="selected-file-name">{selectedFile.name}</span>
+          <button className="remove-file-btn" onClick={handleRemoveFile} title="Remover arquivo">
+            <X size={14} />
+          </button>
         </div>
       )}
 
@@ -171,7 +140,7 @@ export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
         <textarea
           ref={textareaRef}
           className="chat-input"
-          placeholder="Digite sua pergunta sobre editais, produtos ou licitações..."
+          placeholder={selectedFile ? "Digite o nome do produto e pressione Enter..." : "Digite sua pergunta sobre editais, produtos ou licitações..."}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -181,7 +150,7 @@ export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
         <button
           className="send-button"
           onClick={handleSubmit}
-          disabled={disabled || !text.trim()}
+          disabled={disabled || (!text.trim() && !selectedFile)}
         >
           <SendHorizontal size={20} />
         </button>

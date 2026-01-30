@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { Message } from "../types";
-import { sendMessage, getSessionMessages } from "../api/client";
+import { sendMessage, sendMessageWithFile, getSessionMessages } from "../api/client";
 import type { SendMessageResponse } from "../api/client";
 
 // Status de carregamento para feedback visual
@@ -30,21 +30,30 @@ export function useChat() {
   }, []);
 
   const send = useCallback(
-    async (sessionId: string, text: string): Promise<SendMessageResponse | null> => {
-      const userMessage: Message = { role: "user", content: text };
+    async (sessionId: string, text: string, file?: File): Promise<SendMessageResponse | null> => {
+      // Mostrar mensagem do usuário
+      const userContent = file ? `📎 ${file.name}\n${text}` : text;
+      const userMessage: Message = { role: "user", content: userContent };
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
       // Iniciar rotação de status
       let statusIndex = 0;
-      setLoadingStatus(LOADING_STATUSES[0]);
+      const statuses = file
+        ? ["Enviando arquivo...", "Extraindo texto do PDF...", "Identificando especificações...", "Cadastrando produto..."]
+        : LOADING_STATUSES;
+      setLoadingStatus(statuses[0]);
       const statusInterval = setInterval(() => {
-        statusIndex = (statusIndex + 1) % LOADING_STATUSES.length;
-        setLoadingStatus(LOADING_STATUSES[statusIndex]);
+        statusIndex = (statusIndex + 1) % statuses.length;
+        setLoadingStatus(statuses[statusIndex]);
       }, 3000);
 
       try {
-        const response = await sendMessage(sessionId, text);
+        // Se tem arquivo, usa endpoint de upload
+        const response = file
+          ? await sendMessageWithFile(sessionId, text, file)
+          : await sendMessage(sessionId, text);
+
         const assistantMessage: Message = {
           role: "assistant",
           content: response.response,
