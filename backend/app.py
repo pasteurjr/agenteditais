@@ -616,7 +616,12 @@ def processar_listar_editais(message: str, user_id: str):
         if editais:
             response = f"**Editais salvos:** {len(editais)}\n\n"
             for i, ed in enumerate(editais[:10], 1):
-                response += f"{i}. **{ed['numero']}** ({ed['status']})\n   {ed['orgao']} - {ed['uf'] or 'N/A'}\n   {ed['objeto'][:80]}...\n\n"
+                response += f"{i}. **{ed['numero']}** ({ed['status']})\n"
+                response += f"   {ed['orgao']} - {ed['uf'] or 'N/A'}\n"
+                response += f"   {ed['objeto'][:80]}...\n"
+                if ed.get('url'):
+                    response += f"   🔗 [Acessar edital]({ed['url']})\n"
+                response += "\n"
         else:
             response = "Você não tem editais salvos ainda. Use 'Buscar editais' para encontrar oportunidades."
     else:
