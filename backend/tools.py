@@ -380,9 +380,9 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         if 'PNCP' in fonte_obj.nome.upper():
             # API do PNCP - endpoint de busca com parâmetros obrigatórios
             try:
-                # Datas: últimos 90 dias
+                # Datas de PUBLICAÇÃO: últimos 180 dias
                 data_final = datetime.now()
-                data_inicial = data_final - timedelta(days=90)
+                data_inicial = data_final - timedelta(days=180)
 
                 base_params = {
                     "dataInicial": data_inicial.strftime("%Y%m%d"),
@@ -392,6 +392,9 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 }
                 if uf:
                     base_params["uf"] = uf.upper()
+
+                # Data atual para filtrar apenas editais EM ABERTO
+                hoje = datetime.now()
 
                 print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
                 print(f"[TOOLS] Termo de busca: '{termo}'")
@@ -461,14 +464,31 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
                 print(f"[TOOLS] Termos de busca expandidos: {termos_busca[:8]}...")
 
-                # Filtrar por termos de busca no objeto
+                # Filtrar por termos de busca no objeto E por data de abertura futura
+                editais_em_aberto = 0
+                editais_encerrados = 0
+
                 for item in items:
+                    # FILTRO 1: Verificar se edital está EM ABERTO (data de abertura futura)
+                    data_abertura_str = item.get('dataAberturaProposta')
+                    if data_abertura_str:
+                        try:
+                            # Formato: "2025-11-03T08:00:00"
+                            data_abertura = datetime.fromisoformat(data_abertura_str.replace('Z', ''))
+                            if data_abertura < hoje:
+                                editais_encerrados += 1
+                                continue  # Pular editais já encerrados
+                        except (ValueError, TypeError):
+                            pass  # Se não conseguir parsear, inclui mesmo assim
+
                     objeto = (item.get('objetoCompra', '') or '').lower()
 
-                    # Verificar se algum termo está no objeto
+                    # FILTRO 2: Verificar se algum termo está no objeto
                     match = any(t in objeto for t in termos_busca)
                     if termo and not match:
                         continue
+
+                    editais_em_aberto += 1
 
                     # Extrair dados do item
                     orgao_data = item.get('orgaoEntidade', {}) or {}
@@ -519,7 +539,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     if len(editais_encontrados) >= 10:
                         break
 
-                print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais após filtro por '{termo}'")
+                print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais EM ABERTO (filtrados {editais_encerrados} já encerrados)")
 
             except Exception as e:
                 print(f"[TOOLS] Erro ao buscar PNCP: {e}")
