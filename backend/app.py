@@ -731,7 +731,7 @@ JSON:"""
         texto += f"**Data abertura:** {data_abertura}\n"
         texto += f"**Objeto:** {objeto}\n"
         if justificativa:
-            texto += f"\n**Análise:** {justificativa[:500]}\n"
+            texto += f"\n**Análise:** {justificativa}\n"
         if url:
             texto += f"\n🔗 [Acessar edital]({url})\n"
         texto += "\n"
