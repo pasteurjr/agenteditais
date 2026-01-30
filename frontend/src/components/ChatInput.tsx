@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { SendHorizontal, ChevronDown } from "lucide-react";
+import { SendHorizontal, ChevronDown, Paperclip, X, FileText } from "lucide-react";
 
 // Prompts prontos para o dropdown
 interface PromptPronto {
@@ -22,12 +22,17 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onUpload: (file: File, nomeProduto: string) => void;
   disabled: boolean;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onUpload, disabled }: ChatInputProps) {
   const [text, setText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [nomeProduto, setNomeProduto] = useState("");
+  const [showUploadForm, setShowUploadForm] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -63,6 +68,38 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     e.target.value = "vazio";
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setShowUploadForm(true);
+      // Tentar extrair nome do produto do nome do arquivo
+      const fileName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+      setNomeProduto(fileName);
+    }
+  };
+
+  const handleUploadSubmit = () => {
+    if (selectedFile && nomeProduto.trim()) {
+      onUpload(selectedFile, nomeProduto.trim());
+      setSelectedFile(null);
+      setNomeProduto("");
+      setShowUploadForm(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleCancelUpload = () => {
+    setSelectedFile(null);
+    setNomeProduto("");
+    setShowUploadForm(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="chat-input-container">
       <div className="action-selector-wrapper">
@@ -83,7 +120,54 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         </div>
         <span className="action-description">Selecione um prompt ou digite livremente</span>
       </div>
+
+      {/* Formulário de upload */}
+      {showUploadForm && selectedFile && (
+        <div className="upload-form">
+          <div className="upload-file-info">
+            <FileText size={20} />
+            <span className="upload-filename">{selectedFile.name}</span>
+            <button className="upload-cancel" onClick={handleCancelUpload} title="Cancelar">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="upload-product-name">
+            <input
+              type="text"
+              placeholder="Nome do produto (ex: Analisador Bioquímico BS-240)"
+              value={nomeProduto}
+              onChange={(e) => setNomeProduto(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUploadSubmit()}
+            />
+            <button
+              className="upload-submit"
+              onClick={handleUploadSubmit}
+              disabled={!nomeProduto.trim()}
+            >
+              Cadastrar Produto
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="chat-input-wrapper">
+        {/* Botão de upload */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept=".pdf,.doc,.docx"
+          style={{ display: "none" }}
+        />
+        <button
+          className="upload-button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          title="Enviar PDF/Manual para cadastrar produto"
+        >
+          <Paperclip size={20} />
+        </button>
+
         <textarea
           ref={textareaRef}
           className="chat-input"

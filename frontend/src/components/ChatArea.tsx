@@ -9,10 +9,11 @@ interface ChatAreaProps {
   isLoading: boolean;
   loadingStatus?: string;
   onSend: (message: string) => void;
+  onUpload: (file: File, nomeProduto: string) => void;
   hasSession: boolean;
 }
 
-export function ChatArea({ messages, isLoading, loadingStatus, onSend, hasSession }: ChatAreaProps) {
+export function ChatArea({ messages, isLoading, loadingStatus, onSend, onUpload, hasSession }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export function ChatArea({ messages, isLoading, loadingStatus, onSend, hasSessio
         )}
         <div ref={messagesEndRef} />
       </div>
-      <ChatInput onSend={onSend} disabled={isLoading || !hasSession} />
+      <ChatInput onSend={onSend} onUpload={onUpload} disabled={isLoading || !hasSession} />
     </div>
   );
 }

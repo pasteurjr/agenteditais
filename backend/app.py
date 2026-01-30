@@ -1535,6 +1535,134 @@ def upload_manual():
         return jsonify(resultado), 400
 
 
+@app.route("/api/upload-chat", methods=["POST"])
+@require_auth
+def upload_chat():
+    """
+    Upload de arquivo via chat - processa e cadastra produto, salvando mensagens na sessão.
+
+    Form data:
+    - file: arquivo PDF
+    - session_id: ID da sessão de chat
+    - nome_produto: nome do produto
+    """
+    user_id = get_current_user_id()
+
+    if 'file' not in request.files:
+        return jsonify({"error": "Arquivo não enviado"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nenhum arquivo selecionado"}), 400
+
+    session_id = request.form.get('session_id')
+    nome_produto = request.form.get('nome_produto', '').strip()
+
+    if not session_id:
+        return jsonify({"error": "session_id é obrigatório"}), 400
+    if not nome_produto:
+        return jsonify({"error": "nome_produto é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        # Verificar sessão
+        session = db.query(Session).filter(
+            Session.id == session_id,
+            Session.user_id == user_id
+        ).first()
+
+        if not session:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+
+        # Salvar arquivo
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        filename = f"{user_id}_{uuid.uuid4().hex[:8]}_{file.filename}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+
+        # Salvar mensagem do usuário
+        user_msg_content = f"📎 Upload: **{file.filename}**\nCadastrar como: **{nome_produto}**"
+        user_msg = Message(
+            session_id=session_id,
+            role='user',
+            content=user_msg_content,
+            action_type='upload_manual'
+        )
+        db.add(user_msg)
+
+        # Determinar categoria automaticamente
+        categoria = "equipamento"
+        nome_lower = nome_produto.lower()
+        if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
+            categoria = "analisador"
+        elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
+            categoria = "equipamento_laboratorio"
+        elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
+            categoria = "mobiliario_hospitalar"
+        elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
+            categoria = "equipamento_medico"
+
+        # Processar arquivo
+        resultado = tool_processar_upload(
+            filepath=filepath,
+            user_id=user_id,
+            nome_produto=nome_produto,
+            categoria=categoria,
+            fabricante=None,
+            modelo=None
+        )
+
+        # Montar resposta
+        if resultado.get("success"):
+            produto = resultado.get("produto", {})
+            specs = resultado.get("especificacoes", [])
+
+            response_text = f"""## ✅ Produto Cadastrado com Sucesso!
+
+**Nome:** {produto.get('nome', nome_produto)}
+**Categoria:** {categoria}
+**ID:** {produto.get('id', 'N/A')}
+
+### Especificações Extraídas ({len(specs)} encontradas):
+"""
+            for spec in specs[:15]:
+                response_text += f"- **{spec.get('nome', 'N/A')}:** {spec.get('valor', 'N/A')}\n"
+
+            if len(specs) > 15:
+                response_text += f"\n... e mais {len(specs) - 15} especificações.\n"
+
+            response_text += "\n---\n✅ Produto pronto para calcular aderência com editais!"
+        else:
+            response_text = f"❌ Erro ao processar arquivo: {resultado.get('error', 'Erro desconhecido')}"
+
+        # Salvar resposta do assistente
+        assistant_msg = Message(
+            session_id=session_id,
+            role='assistant',
+            content=response_text,
+            action_type='upload_manual'
+        )
+        db.add(assistant_msg)
+
+        # Atualizar sessão
+        session.updated_at = datetime.now()
+        db.commit()
+
+        return jsonify({
+            "success": resultado.get("success", False),
+            "response": response_text,
+            "session_id": session_id,
+            "produto": resultado.get("produto"),
+            "especificacoes_extraidas": len(resultado.get("especificacoes", []))
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # =============================================================================
 # Session Routes
 # =============================================================================

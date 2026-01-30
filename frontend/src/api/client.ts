@@ -172,6 +172,44 @@ export async function uploadManual(
   return res.json();
 }
 
+// Upload de arquivo via chat - processa e cadastra produto automaticamente
+export interface UploadFileResponse extends SendMessageResponse {
+  produto?: {
+    id: string;
+    nome: string;
+    categoria: string;
+  };
+  especificacoes_extraidas?: number;
+}
+
+export async function uploadFile(
+  sessionId: string,
+  file: File,
+  nomeProduto: string
+): Promise<UploadFileResponse> {
+  const token = getAccessTokenFn ? await getAccessTokenFn() : null;
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("session_id", sessionId);
+  formData.append("nome_produto", nomeProduto);
+
+  const res = await fetch(`${API_BASE}/api/upload-chat`, {
+    method: "POST",
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+    body: formData,
+  });
+
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Erro ao fazer upload");
+  }
+  return res.json();
+}
+
 // =============================================================================
 // Produtos
 // =============================================================================

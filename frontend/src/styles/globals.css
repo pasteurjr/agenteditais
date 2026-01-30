@@ -648,6 +648,126 @@ body {
   color: var(--text-muted);
 }
 
+/* Upload Button */
+.upload-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+.upload-button:hover:not(:disabled) {
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.upload-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Upload Form */
+.upload-form {
+  max-width: 800px;
+  margin: 0 auto 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.upload-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.upload-file-info svg {
+  color: var(--accent);
+}
+
+.upload-filename {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+.upload-cancel:hover {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.upload-product-name {
+  display: flex;
+  gap: 10px;
+}
+
+.upload-product-name input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.upload-product-name input:focus {
+  border-color: var(--accent);
+}
+
+.upload-product-name input::placeholder {
+  color: var(--text-muted);
+}
+
+.upload-submit {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.upload-submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.upload-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Toggle de busca de jurisprudência */
 .busca-juris-toggle {
   display: flex;

@@ -6,7 +6,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { useSessions } from "./hooks/useSessions";
 import { useChat } from "./hooks/useChat";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
-import { setTokenGetter } from "./api/client";
+import { setTokenGetter, uploadFile } from "./api/client";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
 import "./styles/globals.css";
 
@@ -87,6 +87,30 @@ function AppContent() {
     clearMessages();
   }, [logout, clearMessages]);
 
+  const handleUpload = useCallback(
+    async (file: File, nomeProduto: string) => {
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        const session = await addSession();
+        sessionId = session.session_id;
+        setActiveSessionId(sessionId);
+      }
+      try {
+        // Envia o arquivo para o backend
+        const response = await uploadFile(sessionId, file, nomeProduto);
+        // Recarrega as mensagens para mostrar o resultado
+        await loadSession(sessionId);
+        // Update session name if auto-renamed
+        if (response?.session_name) {
+          updateSessionName(sessionId, response.session_name);
+        }
+      } catch (error) {
+        console.error("Erro no upload:", error);
+      }
+    },
+    [activeSessionId, addSession, loadSession, updateSessionName]
+  );
+
   // Show loading state
   if (isLoading) {
     return (
@@ -131,6 +155,7 @@ function AppContent() {
         isLoading={chatLoading}
         loadingStatus={loadingStatus}
         onSend={handleSend}
+        onUpload={handleUpload}
         hasSession={true}
       />
     </div>
