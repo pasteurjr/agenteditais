@@ -48,12 +48,16 @@ PROMPT_CLASSIFICAR_INTENCAO = """Você é um agente classificador de intenções
 
 Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
-## CATEGORIAS (9 AÇÕES DO SISTEMA):
+## CATEGORIAS (10 AÇÕES DO SISTEMA):
 
 1. **buscar_web**: Usuário quer buscar/pesquisar MATERIAIS, MANUAIS, DATASHEETS, ESPECIFICAÇÕES na WEB (não editais!).
    Exemplos: "busque na web o manual do equipamento X", "encontre o datasheet do produto Y", "pesquise especificações do Z na internet", "busque informações sobre o analisador BS-240"
 
-2. **upload_manual**: Usuário fez upload de um arquivo (PDF, manual) e quer processá-lo para cadastrar como produto.
+2. **download_url**: Usuário quer BAIXAR um arquivo de uma URL específica e cadastrar como produto.
+   Exemplos: "baixe o arquivo da URL: http://...", "baixe o PDF http://...", "faça download de http://...", "baixe https://..."
+   IMPORTANTE: Se a mensagem contém uma URL (http:// ou https://), classifique como download_url!
+
+3. **upload_manual**: Usuário fez upload de um arquivo (PDF, manual) e quer processá-lo para cadastrar como produto.
    Exemplos: "processe o manual que enviei", "cadastre esse PDF como produto", "extraia especificações do arquivo"
 
 3. **cadastrar_fonte**: Usuário quer cadastrar/adicionar nova fonte de editais (portal, site).
@@ -84,6 +88,7 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 ## PARÂMETROS EXTRAS:
 - Se **buscar_editais**: extraia "termo_busca" otimizado (ex: "área médica" → "hospitalar")
 - Se **buscar_web**: extraia "termo_busca" com nome do equipamento/produto
+- Se **download_url**: extraia "url" (a URL completa do arquivo) e "nome_produto" se mencionado
 - Se **upload_manual**: extraia "nome_produto" se mencionado
 - Se **cadastrar_fonte**: extraia "nome_fonte", "tipo_fonte", "url_fonte" se mencionados
 - Se **calcular_aderencia** ou **gerar_proposta**: extraia "produto" e "edital" se mencionados
@@ -93,7 +98,7 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
 ## RESPOSTA:
 Retorne APENAS um JSON no formato:
-{{"intencao": "<categoria>", "termo_busca": "<valor ou null>", "nome_produto": "<valor ou null>", "produto": "<valor ou null>", "edital": "<valor ou null>", "nome_fonte": "<valor ou null>", "tipo_fonte": "<valor ou null>", "url_fonte": "<valor ou null>"}}"""
+{{"intencao": "<categoria>", "termo_busca": "<valor ou null>", "nome_produto": "<valor ou null>", "produto": "<valor ou null>", "edital": "<valor ou null>", "nome_fonte": "<valor ou null>", "tipo_fonte": "<valor ou null>", "url_fonte": "<valor ou null>", "url": "<URL do arquivo para download ou null>"}}"""
 
 
 def detectar_intencao_ia(message: str) -> dict:
@@ -139,6 +144,14 @@ def detectar_intencao_fallback(message: str) -> str:
     # 2. Upload de manual
     if any(p in msg for p in ["upload", "enviei", "arquivo que", "processe o manual", "processe o pdf"]):
         return "upload_manual"
+
+    # 2.5. Download de URL - ANTES de outras ações
+    if "http://" in msg or "https://" in msg:
+        if any(p in msg for p in ["baixe", "baixar", "download", "faça download"]):
+            return "download_url"
+        # Se tem URL e fala de PDF/manual/arquivo, também é download
+        if any(p in msg for p in [".pdf", "manual", "arquivo", "documento"]):
+            return "download_url"
 
     # 3. Salvar editais
     if any(p in msg for p in ["salvar edital", "salvar editais", "salve", "guardar edital"]):
@@ -491,6 +504,9 @@ def chat():
         elif action_type == "upload_manual":
             response_text, resultado = processar_upload_manual(message, user_id, intencao_resultado)
 
+        elif action_type == "download_url":
+            response_text, resultado = processar_download_url(message, user_id, intencao_resultado)
+
         elif action_type == "cadastrar_fonte":
             response_text, resultado = processar_cadastrar_fonte(message, user_id, intencao_resultado)
 
@@ -657,6 +673,117 @@ Exemplo: "Processe o manual que enviei e cadastre como Analisador Bioquímico BS
 O sistema extrairá automaticamente as especificações técnicas do manual."""
 
     return response, {"status": "aguardando_upload", "nome_produto": nome_produto}
+
+
+def processar_download_url(message: str, user_id: str, intencao_resultado: dict):
+    """
+    Processa ação: Baixar arquivo de URL, extrair especificações e cadastrar produto.
+
+    Fluxo completo:
+    1. Baixa o arquivo da URL
+    2. Extrai texto do PDF
+    3. Usa IA para extrair especificações técnicas
+    4. Cadastra produto no banco
+    """
+    import re
+
+    intencao_resultado = intencao_resultado or {}
+
+    # Extrair URL da mensagem ou do resultado da IA
+    url = intencao_resultado.get("url")
+    nome_produto = intencao_resultado.get("nome_produto")
+
+    # Se IA não extraiu a URL, tentar extrair via regex
+    if not url:
+        url_match = re.search(r'https?://[^\s<>"\']+', message)
+        if url_match:
+            url = url_match.group()
+
+    if not url:
+        return "❌ Não encontrei uma URL na mensagem. Envie no formato:\n`Baixe o arquivo da URL: https://exemplo.com/manual.pdf`", {"error": "URL não encontrada"}
+
+    # Se não tem nome do produto, tentar extrair do nome do arquivo ou pedir
+    if not nome_produto:
+        # Tentar extrair do nome do arquivo na URL
+        filename = url.split('/')[-1].split('?')[0]
+        if filename and len(filename) > 5:
+            nome_produto = filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ')[:50]
+
+    response = f"## ⏳ Baixando arquivo...\n\n**URL:** {url}\n\n"
+
+    # 1. Baixar o arquivo
+    resultado_download = tool_download_arquivo(url, user_id, nome_produto)
+
+    if not resultado_download.get("success"):
+        return f"❌ Erro ao baixar arquivo: {resultado_download.get('error')}", resultado_download
+
+    filepath = resultado_download.get("filepath")
+    filesize = resultado_download.get("size", 0)
+    response += f"✅ Arquivo baixado: {resultado_download.get('filename')} ({filesize/1024:.1f} KB)\n\n"
+
+    # 2. Se não tem nome do produto, pedir ao usuário
+    if not nome_produto or nome_produto == "documento":
+        response += """## ⚠️ Nome do produto não identificado
+
+Envie o nome do produto para cadastrar. Exemplo:
+`Cadastre como Analisador Bioquímico BS-240 da Mindray`
+
+Ou informe mais detalhes:
+`Cadastre como [nome], fabricante [fabricante], categoria [categoria]`"""
+        return response, {
+            "success": True,
+            "status": "aguardando_nome_produto",
+            "filepath": filepath,
+            "filesize": filesize
+        }
+
+    # 3. Processar o arquivo e cadastrar produto
+    response += f"## ⏳ Processando PDF e extraindo especificações...\n\n"
+
+    # Determinar categoria automaticamente
+    categoria = "equipamento"  # Padrão
+    nome_lower = nome_produto.lower()
+    if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
+        categoria = "analisador"
+    elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
+        categoria = "equipamento_laboratorio"
+    elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
+        categoria = "mobiliario_hospitalar"
+    elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
+        categoria = "equipamento_medico"
+
+    resultado_processo = tool_processar_upload(
+        filepath=filepath,
+        user_id=user_id,
+        nome_produto=nome_produto,
+        categoria=categoria,
+        fabricante="Mindray" if "mindray" in message.lower() else None,
+        modelo=None
+    )
+
+    if resultado_processo.get("success"):
+        produto = resultado_processo.get("produto", {})
+        specs = resultado_processo.get("especificacoes", [])
+
+        response += f"""## ✅ Produto Cadastrado com Sucesso!
+
+**Nome:** {produto.get('nome', nome_produto)}
+**Categoria:** {categoria}
+**Fabricante:** {produto.get('fabricante', 'Não informado')}
+
+### Especificações Extraídas ({len(specs)} encontradas):
+"""
+        for spec in specs[:10]:  # Mostrar até 10 specs
+            response += f"- **{spec.get('nome', 'N/A')}:** {spec.get('valor', 'N/A')}\n"
+
+        if len(specs) > 10:
+            response += f"\n... e mais {len(specs) - 10} especificações.\n"
+
+        response += f"\n---\n✅ Produto pronto para calcular aderência com editais!"
+    else:
+        response += f"❌ Erro ao processar: {resultado_processo.get('error')}"
+
+    return response, resultado_processo
 
 
 def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: dict = None):
