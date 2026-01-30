@@ -377,7 +377,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
         editais_encontrados = []
 
-        if fonte_obj.nome.upper() == 'PNCP':
+        if 'PNCP' in fonte_obj.nome.upper():
             # API do PNCP - endpoint de busca com parâmetros obrigatórios
             try:
                 # Datas: últimos 90 dias
@@ -448,6 +448,25 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         if not link and numero_pncp:
                             link = f"https://pncp.gov.br/app/editais/{numero_pncp}"
 
+                        # Mapear modalidade da API para ENUM do banco
+                        modalidade_api = (item.get('modalidadeNome', '') or '').lower()
+                        if 'eletrônico' in modalidade_api or 'eletronico' in modalidade_api:
+                            modalidade_db = 'pregao_eletronico'
+                        elif 'presencial' in modalidade_api:
+                            modalidade_db = 'pregao_presencial'
+                        elif 'concorrência' in modalidade_api or 'concorrencia' in modalidade_api:
+                            modalidade_db = 'concorrencia'
+                        elif 'tomada' in modalidade_api:
+                            modalidade_db = 'tomada_precos'
+                        elif 'convite' in modalidade_api:
+                            modalidade_db = 'convite'
+                        elif 'dispensa' in modalidade_api:
+                            modalidade_db = 'dispensa'
+                        elif 'inexigibilidade' in modalidade_api:
+                            modalidade_db = 'inexigibilidade'
+                        else:
+                            modalidade_db = 'pregao_eletronico'  # default
+
                         edital = Edital(
                             user_id=user_id,
                             numero=item.get('numeroCompra', 'N/A'),
@@ -455,7 +474,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                             orgao_tipo='municipal' if orgao_data.get('esferaId') == 'M' else 'federal',
                             uf=orgao_data.get('uf'),
                             objeto=objeto[:500] if objeto else f"Contratação - {termo}",
-                            modalidade=item.get('modalidadeNome', 'Pregão Eletrônico'),
+                            modalidade=modalidade_db,
                             valor_referencia=item.get('valorTotalEstimado'),
                             data_publicacao=item.get('dataPublicacaoPncp'),
                             data_abertura=item.get('dataAberturaProposta'),
