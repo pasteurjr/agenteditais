@@ -14,7 +14,7 @@ from tools import (
     tool_buscar_editais_fonte, tool_extrair_requisitos, tool_listar_editais,
     tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
     tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
-    execute_tool
+    execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
 
@@ -1556,19 +1556,32 @@ def chat_upload():
         return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
     session_id = request.form.get('session_id')
-    message = request.form.get('message', '').strip()
+    message = request.form.get('message', '').strip().lower()
 
     if not session_id:
         return jsonify({"error": "session_id é obrigatório"}), 400
 
-    # Nome do produto é opcional - se não informado, a IA extrai do PDF
+    # Detectar intenção do usuário com o arquivo
+    # Padrão: cadastrar produto
+    intencao_arquivo = "cadastrar"
     nome_produto = None
+
     if message:
-        # Limpar palavras-chave comuns do prompt
-        nome_produto = message
-        for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como"]:
-            nome_produto = nome_produto.lower().replace(palavra, "").strip()
-        nome_produto = nome_produto.strip().title() if nome_produto.strip() else None
+        if any(p in message for p in ["mostre", "mostra", "exib", "conteúdo", "conteudo", "texto", "leia", "ler"]):
+            intencao_arquivo = "mostrar_conteudo"
+        elif any(p in message for p in ["especificaç", "especificac", "specs", "spec"]):
+            intencao_arquivo = "extrair_specs"
+        elif any(p in message for p in ["resum", "sintetiz"]):
+            intencao_arquivo = "resumir"
+        elif any(p in message for p in ["analise", "analisa", "avalie", "avalia"]):
+            intencao_arquivo = "analisar"
+        else:
+            # É cadastro - extrair nome do produto da mensagem
+            intencao_arquivo = "cadastrar"
+            nome_produto = message
+            for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como", "produto"]:
+                nome_produto = nome_produto.replace(palavra, "").strip()
+            nome_produto = nome_produto.strip().title() if nome_produto.strip() else None
 
     db = get_db()
     try:
@@ -1587,8 +1600,26 @@ def chat_upload():
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
 
+        # Extrair texto do PDF
+        import fitz
+        texto_pdf = ""
+        try:
+            doc = fitz.open(filepath)
+            for page in doc:
+                texto_pdf += page.get_text()
+            doc.close()
+        except Exception as e:
+            texto_pdf = f"Erro ao extrair texto: {e}"
+
         # Salvar mensagem do usuário
-        user_msg_content = f"📎 **{file.filename}**" + (f"\nNome sugerido: {nome_produto}" if nome_produto else "\n*Identificando produto automaticamente...*")
+        acoes_desc = {
+            "cadastrar": "Cadastrar como produto",
+            "mostrar_conteudo": "Mostrar conteúdo",
+            "extrair_specs": "Extrair especificações",
+            "resumir": "Resumir documento",
+            "analisar": "Analisar documento"
+        }
+        user_msg_content = f"📎 **{file.filename}**\n*{acoes_desc.get(intencao_arquivo, 'Processar')}*"
         user_msg = Message(
             session_id=session_id,
             role='user',
@@ -1597,22 +1628,111 @@ def chat_upload():
         )
         db.add(user_msg)
 
-        # Processar arquivo - nome e categoria serão extraídos automaticamente se não informados
-        resultado = tool_processar_upload(
-            filepath=filepath,
-            user_id=user_id,
-            nome_produto=nome_produto,  # Pode ser None - a IA extrai
-            categoria=None,  # A IA determina
-            fabricante=None,
-            modelo=None
-        )
+        resultado = {"success": True}
+        response_text = ""
 
-        # Montar resposta
-        if resultado.get("success"):
-            produto = resultado.get("produto", {})
-            specs = resultado.get("especificacoes", [])
+        # ========== AÇÃO: MOSTRAR CONTEÚDO ==========
+        if intencao_arquivo == "mostrar_conteudo":
+            response_text = f"""## 📄 Conteúdo do Documento
 
-            response_text = f"""## ✅ Produto Cadastrado com Sucesso!
+**Arquivo:** {file.filename}
+**Tamanho:** {len(texto_pdf)} caracteres
+
+---
+
+{texto_pdf[:5000]}
+
+{"..." if len(texto_pdf) > 5000 else ""}
+
+---
+*Para cadastrar como produto, envie: "cadastre"*"""
+
+        # ========== AÇÃO: EXTRAIR SPECS (sem cadastrar) ==========
+        elif intencao_arquivo == "extrair_specs":
+            # info e specs já importados no topo
+            info = _extrair_info_produto(texto_pdf[:8000])
+
+            # Extrair specs via IA
+            prompt = PROMPT_EXTRAIR_SPECS.format(texto=texto_pdf[:15000])
+            resposta_ia = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000)
+
+            response_text = f"""## 📊 Especificações Extraídas
+
+**Produto identificado:** {info.get('nome', 'N/A')}
+**Fabricante:** {info.get('fabricante', 'N/A')}
+**Modelo:** {info.get('modelo', 'N/A')}
+
+### Especificações:
+
+{resposta_ia[:4000]}
+
+---
+*Para cadastrar como produto, envie: "cadastre"*"""
+
+        # ========== AÇÃO: RESUMIR ==========
+        elif intencao_arquivo == "resumir":
+            prompt_resumo = f"""Resuma o documento abaixo em português, destacando:
+1. Tipo de documento (manual, datasheet, etc)
+2. Produto/equipamento descrito
+3. Principais características
+4. Pontos importantes
+
+DOCUMENTO:
+{texto_pdf[:10000]}
+
+RESUMO:"""
+            resumo = call_deepseek([{"role": "user", "content": prompt_resumo}], max_tokens=2000, model_override="deepseek-chat")
+
+            response_text = f"""## 📝 Resumo do Documento
+
+**Arquivo:** {file.filename}
+
+{resumo}
+
+---
+*Para cadastrar como produto, envie: "cadastre"*"""
+
+        # ========== AÇÃO: ANALISAR ==========
+        elif intencao_arquivo == "analisar":
+            prompt_analise = f"""Analise o documento técnico abaixo e forneça:
+1. Tipo de documento
+2. Produto/equipamento descrito
+3. Fabricante
+4. Principais especificações técnicas
+5. Aplicações/uso indicado
+6. Pontos fortes e fracos (se identificáveis)
+
+DOCUMENTO:
+{texto_pdf[:12000]}
+
+ANÁLISE:"""
+            analise = call_deepseek([{"role": "user", "content": prompt_analise}], max_tokens=3000, model_override="deepseek-chat")
+
+            response_text = f"""## 🔍 Análise do Documento
+
+**Arquivo:** {file.filename}
+
+{analise}
+
+---
+*Para cadastrar como produto, envie: "cadastre"*"""
+
+        # ========== AÇÃO: CADASTRAR (padrão) ==========
+        else:
+            resultado = tool_processar_upload(
+                filepath=filepath,
+                user_id=user_id,
+                nome_produto=nome_produto,
+                categoria=None,
+                fabricante=None,
+                modelo=None
+            )
+
+            if resultado.get("success"):
+                produto = resultado.get("produto", {})
+                specs = resultado.get("especificacoes", [])
+
+                response_text = f"""## ✅ Produto Cadastrado com Sucesso!
 
 **Nome:** {produto.get('nome', 'N/A')}
 **Fabricante:** {produto.get('fabricante', 'Não identificado')}
@@ -1622,15 +1742,15 @@ def chat_upload():
 
 ### Especificações Extraídas ({len(specs)} encontradas):
 """
-            for spec in specs[:15]:
-                response_text += f"- **{spec.get('nome', 'N/A')}:** {spec.get('valor', 'N/A')}\n"
+                for spec in specs[:15]:
+                    response_text += f"- **{spec.get('nome', 'N/A')}:** {spec.get('valor', 'N/A')}\n"
 
-            if len(specs) > 15:
-                response_text += f"\n... e mais {len(specs) - 15} especificações.\n"
+                if len(specs) > 15:
+                    response_text += f"\n... e mais {len(specs) - 15} especificações.\n"
 
-            response_text += "\n---\n✅ Produto pronto para calcular aderência com editais!"
-        else:
-            response_text = f"❌ Erro ao processar arquivo: {resultado.get('error', 'Erro desconhecido')}"
+                response_text += "\n---\n✅ Produto pronto para calcular aderência com editais!"
+            else:
+                response_text = f"❌ Erro ao processar arquivo: {resultado.get('error', 'Erro desconhecido')}"
 
         # Salvar resposta do assistente
         assistant_msg = Message(
