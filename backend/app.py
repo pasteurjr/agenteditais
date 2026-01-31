@@ -48,73 +48,102 @@ PROMPT_CLASSIFICAR_INTENCAO = """Você é um agente classificador de intenções
 
 Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
-## CATEGORIAS (10 AÇÕES DO SISTEMA):
+## CATEGORIAS DO SISTEMA:
 
-1. **buscar_web**: Usuário quer buscar/pesquisar MATERIAIS, MANUAIS, DATASHEETS, ESPECIFICAÇÕES na WEB (não editais!).
-   Exemplos: "busque na web o manual do equipamento X", "encontre o datasheet do produto Y", "pesquise especificações do Z na internet", "busque informações sobre o analisador BS-240"
+### AÇÕES COM ARQUIVOS (quando usuário envia um PDF/documento):
+1. **arquivo_cadastrar**: Cadastrar o arquivo como produto no sistema (PADRÃO se não especificar outra ação)
+   Exemplos: "cadastre", "salve como produto", "registre", "" (vazio), "cadastre como Analisador X"
 
-2. **download_url**: Usuário quer BAIXAR um arquivo de uma URL específica e cadastrar como produto.
-   Exemplos: "baixe o arquivo da URL: http://...", "baixe o PDF http://...", "faça download de http://...", "baixe https://..."
-   IMPORTANTE: Se a mensagem contém uma URL (http:// ou https://), classifique como download_url!
+2. **arquivo_mostrar**: Mostrar/exibir o conteúdo do arquivo
+   Exemplos: "mostre o conteúdo", "exiba o texto", "o que tem nesse PDF?", "leia o documento", "mostra"
 
-3. **upload_manual**: Usuário fez upload de um arquivo (PDF, manual) e quer processá-lo para cadastrar como produto.
-   Exemplos: "processe o manual que enviei", "cadastre esse PDF como produto", "extraia especificações do arquivo"
+3. **arquivo_specs**: Extrair e listar especificações técnicas (sem cadastrar)
+   Exemplos: "quais especificações?", "extraia as specs", "liste as características técnicas"
 
-3. **cadastrar_fonte**: Usuário quer cadastrar/adicionar nova fonte de editais (portal, site).
-   Exemplos: "cadastre a fonte BEC-SP", "adicione novo portal de licitações", "registre fonte ComprasNet"
+4. **arquivo_resumir**: Fazer um resumo do documento
+   Exemplos: "resuma", "faça um resumo", "sintetize", "resuma o documento"
 
-4. **buscar_editais**: Usuário quer buscar/pesquisar EDITAIS novos em portais (PNCP, BEC, etc).
-   Exemplos: "busque editais de tecnologia", "retorne editais da área médica", "pesquise licitações de informática", "mostre pregões de equipamentos hospitalares"
+5. **arquivo_analisar**: Fazer análise detalhada do documento
+   Exemplos: "analise", "faça uma análise", "avalie o documento", "o que você acha desse manual?"
 
-5. **listar_editais**: Usuário quer ver editais JÁ SALVOS no sistema.
-   Exemplos: "liste meus editais", "quais editais tenho salvos", "mostre editais cadastrados", "ver editais salvos"
+### AÇÕES DE BUSCA:
+6. **buscar_web**: Buscar MATERIAIS/MANUAIS/DATASHEETS na WEB (não editais!)
+   Exemplos: "busque na web o manual do equipamento X", "encontre o datasheet do Y"
 
-6. **calcular_aderencia**: Usuário quer calcular aderência/score de um produto específico vs um edital específico.
-   Exemplos: "calcule aderência do produto X com edital Y", "analise compatibilidade", "qual o score do meu produto para esse edital"
+7. **download_url**: Baixar arquivo de uma URL específica
+   Exemplos: "baixe o arquivo da URL: http://...", "baixe https://..."
+   IMPORTANTE: Se contém URL (http:// ou https://), classifique como download_url!
 
-7. **gerar_proposta**: Usuário quer gerar proposta técnica para um edital.
-   Exemplos: "gere proposta para o edital X", "crie proposta técnica", "elabore proposta comercial"
+8. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC)
+   Exemplos: "busque editais de tecnologia", "editais da área médica"
 
-8. **listar_produtos**: Usuário quer ver seus produtos cadastrados.
-   Exemplos: "liste meus produtos", "quais produtos tenho", "mostre meu portfólio", "ver produtos cadastrados"
+### AÇÕES DE LISTAGEM:
+9. **listar_editais**: Ver editais JÁ SALVOS no sistema
+   Exemplos: "liste meus editais", "editais salvos"
 
-9. **chat_livre**: Qualquer outra coisa - dúvidas gerais, perguntas sobre licitações, conversas, etc.
-   Exemplos: "o que é pregão eletrônico?", "como funciona licitação?", "olá", "obrigado"
+10. **listar_produtos**: Ver produtos cadastrados
+    Exemplos: "liste meus produtos", "quais produtos tenho"
 
-## ATENÇÃO - DIFERENÇA CRÍTICA:
-- **buscar_web** = buscar MANUAIS/DATASHEETS/ESPECIFICAÇÕES de PRODUTOS na internet
-- **buscar_editais** = buscar EDITAIS/LICITAÇÕES/PREGÕES em portais de compras públicas
+11. **listar_fontes**: Ver fontes de editais cadastradas
+    Exemplos: "quais fontes?", "liste fontes"
 
-## PARÂMETROS EXTRAS:
-- Se **buscar_editais**: extraia "termo_busca" otimizado (ex: "área médica" → "hospitalar")
-- Se **buscar_web**: extraia "termo_busca" com nome do equipamento/produto
-- Se **download_url**: extraia "url" (a URL completa do arquivo) e "nome_produto" se mencionado
-- Se **upload_manual**: extraia "nome_produto" se mencionado
-- Se **cadastrar_fonte**: extraia "nome_fonte", "tipo_fonte", "url_fonte" se mencionados
-- Se **calcular_aderencia** ou **gerar_proposta**: extraia "produto" e "edital" se mencionados
+### AÇÕES DE PROCESSAMENTO:
+12. **calcular_aderencia**: Calcular score produto vs edital
+    Exemplos: "calcule aderência do produto X com edital Y"
+
+13. **gerar_proposta**: Gerar proposta técnica
+    Exemplos: "gere proposta para o edital X"
+
+14. **cadastrar_fonte**: Cadastrar nova fonte de editais
+    Exemplos: "cadastre a fonte BEC-SP"
+
+15. **salvar_editais**: Salvar editais da última busca
+    Exemplos: "salve os editais", "salvar recomendados"
+
+16. **chat_livre**: Dúvidas gerais, conversas
+    Exemplos: "o que é pregão?", "olá", "obrigado"
+
+## CONTEXTO IMPORTANTE:
+- **tem_arquivo**: {tem_arquivo} (true se usuário enviou um arquivo junto com a mensagem)
+- Se tem_arquivo=true E mensagem vazia ou genérica → **arquivo_cadastrar**
+- Se tem_arquivo=true E pede para mostrar/ler → **arquivo_mostrar**
+
+## PARÂMETROS EXTRAS (extraia se mencionados):
+- "termo_busca": termo de busca otimizado
+- "nome_produto": nome do produto
+- "url": URL completa se houver
+- "produto": nome do produto para aderência/proposta
+- "edital": número/identificador do edital
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
 
 ## RESPOSTA:
-Retorne APENAS um JSON no formato:
-{{"intencao": "<categoria>", "termo_busca": "<valor ou null>", "nome_produto": "<valor ou null>", "produto": "<valor ou null>", "edital": "<valor ou null>", "nome_fonte": "<valor ou null>", "tipo_fonte": "<valor ou null>", "url_fonte": "<valor ou null>", "url": "<URL do arquivo para download ou null>"}}"""
+Retorne APENAS um JSON:
+{{"intencao": "<categoria>", "termo_busca": null, "nome_produto": null, "url": null, "produto": null, "edital": null}}"""
 
 
-def detectar_intencao_ia(message: str) -> dict:
+def detectar_intencao_ia(message: str, tem_arquivo: bool = False) -> dict:
     """
     Usa DeepSeek-chat para classificar a intenção do usuário.
-    Retorna dict com 'intencao' e 'termo_busca' (se aplicável).
+    Retorna dict com 'intencao' e parâmetros extraídos.
+
+    Args:
+        message: Mensagem do usuário
+        tem_arquivo: True se o usuário enviou um arquivo junto
     """
     import json
     import re
 
-    prompt = PROMPT_CLASSIFICAR_INTENCAO.format(mensagem=message)
+    prompt = PROMPT_CLASSIFICAR_INTENCAO.format(
+        mensagem=message or "(mensagem vazia)",
+        tem_arquivo="true" if tem_arquivo else "false"
+    )
 
     try:
         resposta = call_deepseek(
             [{"role": "user", "content": prompt}],
-            max_tokens=100,
+            max_tokens=150,
             model_override="deepseek-chat"  # Rápido para classificação
         )
 
@@ -1539,12 +1568,13 @@ def upload_manual():
 @require_auth
 def chat_upload():
     """
-    Envia mensagem com arquivo anexo - a mensagem é o nome do produto.
+    Envia mensagem com arquivo anexo.
+    O agente classificador interpreta a intenção do usuário.
 
     Form data:
     - file: arquivo PDF
     - session_id: ID da sessão de chat
-    - message: mensagem do usuário (nome do produto)
+    - message: mensagem do usuário (opcional)
     """
     user_id = get_current_user_id()
 
@@ -1556,32 +1586,30 @@ def chat_upload():
         return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
     session_id = request.form.get('session_id')
-    message = request.form.get('message', '').strip().lower()
+    message = request.form.get('message', '').strip()
 
     if not session_id:
         return jsonify({"error": "session_id é obrigatório"}), 400
 
-    # Detectar intenção do usuário com o arquivo
-    # Padrão: cadastrar produto
-    intencao_arquivo = "cadastrar"
-    nome_produto = None
+    # ========== USAR AGENTE CLASSIFICADOR ==========
+    print(f"[CHAT-UPLOAD] Classificando intenção: '{message}' (tem_arquivo=True)")
+    intencao_resultado = detectar_intencao_ia(message, tem_arquivo=True)
+    intencao_arquivo = intencao_resultado.get("intencao", "arquivo_cadastrar")
+    nome_produto = intencao_resultado.get("nome_produto")
+    print(f"[CHAT-UPLOAD] Intenção detectada: {intencao_arquivo}")
 
-    if message:
-        if any(p in message for p in ["mostre", "mostra", "exib", "conteúdo", "conteudo", "texto", "leia", "ler"]):
-            intencao_arquivo = "mostrar_conteudo"
-        elif any(p in message for p in ["especificaç", "especificac", "specs", "spec"]):
-            intencao_arquivo = "extrair_specs"
-        elif any(p in message for p in ["resum", "sintetiz"]):
-            intencao_arquivo = "resumir"
-        elif any(p in message for p in ["analise", "analisa", "avalie", "avalia"]):
-            intencao_arquivo = "analisar"
-        else:
-            # É cadastro - extrair nome do produto da mensagem
-            intencao_arquivo = "cadastrar"
-            nome_produto = message
-            for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como", "produto"]:
-                nome_produto = nome_produto.replace(palavra, "").strip()
-            nome_produto = nome_produto.strip().title() if nome_produto.strip() else None
+    # Mapear intenções do classificador para ações internas
+    mapa_intencoes = {
+        "arquivo_cadastrar": "cadastrar",
+        "arquivo_mostrar": "mostrar_conteudo",
+        "arquivo_specs": "extrair_specs",
+        "arquivo_resumir": "resumir",
+        "arquivo_analisar": "analisar",
+        # Fallbacks para compatibilidade
+        "upload_manual": "cadastrar",
+        "chat_livre": "cadastrar"  # Se não entendeu, cadastra
+    }
+    intencao_arquivo = mapa_intencoes.get(intencao_arquivo, "cadastrar")
 
     db = get_db()
     try:
