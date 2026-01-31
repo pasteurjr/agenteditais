@@ -140,7 +140,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         <textarea
           ref={textareaRef}
           className="chat-input"
-          placeholder={selectedFile ? "Digite o nome do produto e pressione Enter..." : "Digite sua pergunta sobre editais, produtos ou licitações..."}
+          placeholder={selectedFile ? "Pressione Enter para cadastrar (nome será extraído automaticamente)" : "Digite sua pergunta sobre editais, produtos ou licitações..."}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}

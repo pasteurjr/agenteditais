@@ -115,6 +115,49 @@ A proposta deve ser formal, técnica e seguir o padrão de licitações pública
 """
 
 
+# ==================== FUNÇÕES AUXILIARES ====================
+
+def _extrair_info_produto(texto: str) -> Dict[str, Any]:
+    """
+    Usa IA para extrair informações do produto a partir do texto do manual.
+    Retorna: nome, fabricante, modelo, categoria
+    """
+    prompt = f"""Analise o texto abaixo (extraído de um manual/datasheet) e identifique:
+
+1. **Nome do produto** - Nome comercial completo do equipamento/produto
+2. **Fabricante** - Empresa que fabrica o produto
+3. **Modelo** - Código/número do modelo
+4. **Categoria** - Uma das opções: equipamento, reagente, insumo_hospitalar, insumo_laboratorial, informatica, redes, mobiliario, eletronico, outro
+
+TEXTO:
+{texto[:5000]}
+
+Retorne APENAS um JSON válido no formato:
+{{"nome": "Nome do Produto", "fabricante": "Nome do Fabricante", "modelo": "ABC-123", "categoria": "equipamento"}}
+
+Se não encontrar alguma informação, use null.
+JSON:"""
+
+    try:
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500, model_override="deepseek-chat")
+
+        # Extrair JSON da resposta
+        import re
+        json_match = re.search(r'\{[\s\S]*?\}', resposta)
+        if json_match:
+            info = json.loads(json_match.group())
+            return {
+                "nome": info.get("nome") or "Produto",
+                "fabricante": info.get("fabricante"),
+                "modelo": info.get("modelo"),
+                "categoria": info.get("categoria", "equipamento")
+            }
+    except Exception as e:
+        print(f"[TOOLS] Erro ao extrair info do produto: {e}")
+
+    return {"nome": "Produto", "fabricante": None, "modelo": None, "categoria": "equipamento"}
+
+
 # ==================== TOOLS ====================
 
 def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str, Any]:
@@ -217,13 +260,13 @@ def tool_download_arquivo(url: str, user_id: str, nome_produto: str = None) -> D
         return {"success": False, "error": str(e)}
 
 
-def tool_processar_upload(filepath: str, user_id: str, nome_produto: str,
-                          categoria: str, fabricante: str = None,
+def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
+                          categoria: str = None, fabricante: str = None,
                           modelo: str = None) -> Dict[str, Any]:
     """
     Processa um arquivo PDF uploadado:
     1. Extrai texto com PyMuPDF
-    2. Usa IA para extrair especificações
+    2. Usa IA para identificar nome do produto, fabricante e especificações
     3. Salva produto e specs no banco
     """
     db = get_db()
@@ -238,7 +281,24 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str,
         if not texto.strip():
             return {"success": False, "error": "Não foi possível extrair texto do PDF"}
 
-        # 2. Criar produto no banco
+        # 2. Se não tem nome do produto, extrair automaticamente via IA
+        if not nome_produto or nome_produto.strip() == "":
+            info_produto = _extrair_info_produto(texto[:8000])
+            nome_produto = info_produto.get("nome", "Produto sem nome")
+            if not fabricante:
+                fabricante = info_produto.get("fabricante")
+            if not modelo:
+                modelo = info_produto.get("modelo")
+            if not categoria:
+                categoria = info_produto.get("categoria", "equipamento")
+
+        # Garantir categoria válida
+        categorias_validas = ['equipamento', 'reagente', 'insumo_hospitalar', 'insumo_laboratorial',
+                             'informatica', 'redes', 'mobiliario', 'eletronico', 'outro']
+        if not categoria or categoria not in categorias_validas:
+            categoria = "equipamento"
+
+        # 3. Criar produto no banco
         produto = Produto(
             user_id=user_id,
             nome=nome_produto,

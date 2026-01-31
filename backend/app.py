@@ -1561,13 +1561,14 @@ def chat_upload():
     if not session_id:
         return jsonify({"error": "session_id é obrigatório"}), 400
 
-    # A mensagem é o nome do produto - limpar palavras-chave comuns
-    nome_produto = message if message else file.filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ')
-    # Remover palavras-chave do prompt
-    for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como"]:
-        nome_produto = nome_produto.lower().replace(palavra, "").strip()
-    # Capitalizar corretamente
-    nome_produto = nome_produto.strip().title()
+    # Nome do produto é opcional - se não informado, a IA extrai do PDF
+    nome_produto = None
+    if message:
+        # Limpar palavras-chave comuns do prompt
+        nome_produto = message
+        for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como"]:
+            nome_produto = nome_produto.lower().replace(palavra, "").strip()
+        nome_produto = nome_produto.strip().title() if nome_produto.strip() else None
 
     db = get_db()
     try:
@@ -1587,7 +1588,7 @@ def chat_upload():
         file.save(filepath)
 
         # Salvar mensagem do usuário
-        user_msg_content = f"📎 **{file.filename}**\nCadastrar como: **{nome_produto}**"
+        user_msg_content = f"📎 **{file.filename}**" + (f"\nNome sugerido: {nome_produto}" if nome_produto else "\n*Identificando produto automaticamente...*")
         user_msg = Message(
             session_id=session_id,
             role='user',
@@ -1596,24 +1597,12 @@ def chat_upload():
         )
         db.add(user_msg)
 
-        # Determinar categoria automaticamente
-        categoria = "equipamento"
-        nome_lower = nome_produto.lower()
-        if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
-            categoria = "equipamento"
-        elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
-            categoria = "equipamento"
-        elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
-            categoria = "mobiliario"
-        elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
-            categoria = "equipamento"
-
-        # Processar arquivo
+        # Processar arquivo - nome e categoria serão extraídos automaticamente se não informados
         resultado = tool_processar_upload(
             filepath=filepath,
             user_id=user_id,
-            nome_produto=nome_produto,
-            categoria=categoria,
+            nome_produto=nome_produto,  # Pode ser None - a IA extrai
+            categoria=None,  # A IA determina
             fabricante=None,
             modelo=None
         )
@@ -1625,8 +1614,10 @@ def chat_upload():
 
             response_text = f"""## ✅ Produto Cadastrado com Sucesso!
 
-**Nome:** {produto.get('nome', nome_produto)}
-**Categoria:** {categoria}
+**Nome:** {produto.get('nome', 'N/A')}
+**Fabricante:** {produto.get('fabricante', 'Não identificado')}
+**Modelo:** {produto.get('modelo', 'Não identificado')}
+**Categoria:** {produto.get('categoria', 'equipamento')}
 **ID:** {produto.get('id', 'N/A')}
 
 ### Especificações Extraídas ({len(specs)} encontradas):
