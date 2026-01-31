@@ -19,6 +19,19 @@ export function ChatArea({ messages, isLoading, loadingStatus, onSend, hasSessio
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Handler para ações dos botões
+  const handleAction = (actionId: string) => {
+    // Mapeia o ID do botão para um comando de texto
+    const actionMap: Record<string, string> = {
+      'salvar_recomendados': 'salvar editais recomendados',
+      'salvar_participar': 'salvar editais para participar',
+      'salvar_todos': 'salvar todos os editais',
+    };
+
+    const command = actionMap[actionId] || actionId;
+    onSend(command);
+  };
+
   return (
     <div className="chat-area">
       <div className="messages-container">
@@ -34,7 +47,7 @@ export function ChatArea({ messages, isLoading, loadingStatus, onSend, hasSessio
           </div>
         )}
         {messages.map((msg, i) => (
-          <MessageBubble key={i} message={msg} />
+          <MessageBubble key={i} message={msg} onAction={handleAction} />
         ))}
         {isLoading && (
           <div className="message-row assistant-row">

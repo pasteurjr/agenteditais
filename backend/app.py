@@ -1065,15 +1065,35 @@ JSON:"""
             contador += 1
 
     # ========== PASSO 4: Oferecer salvamento ==========
-    qtd_recomendados = len(participar) + len(avaliar)
+    qtd_participar = len(participar)
+    qtd_avaliar = len(avaliar)
+    qtd_recomendados = qtd_participar + qtd_avaliar
+
     if qtd_recomendados > 0:
         response += f"\n---\n"
-        response += f"**💾 {qtd_recomendados} edital(is) recomendado(s) para acompanhamento.**\n"
-        response += f"Para salvar, digite: **\"salvar editais recomendados\"** ou **\"salvar edital [número]\"**\n"
+        response += f"## 💾 Deseja salvar os editais?\n\n"
+        response += f"Encontrei **{qtd_recomendados} edital(is)** recomendado(s):\n"
+        if qtd_participar > 0:
+            response += f"- ✅ {qtd_participar} para PARTICIPAR\n"
+        if qtd_avaliar > 0:
+            response += f"- ⚠️ {qtd_avaliar} para AVALIAR\n"
+        response += f"\n"
+
+        # Botões de ação (marcação especial para o frontend)
+        response += f"<!-- BOTOES_SALVAR -->\n"
+        response += f"[[btn:salvar_recomendados:💾 Salvar Recomendados ({qtd_recomendados})]]\n"
+        if qtd_participar > 0 and qtd_avaliar > 0:
+            response += f"[[btn:salvar_participar:✅ Salvar só PARTICIPAR ({qtd_participar})]]\n"
+        response += f"[[btn:salvar_todos:📋 Salvar Todos ({len(editais_com_score)})]]\n"
+        response += f"<!-- /BOTOES_SALVAR -->\n\n"
+
+        response += f"*Ou digite: \"salvar editais\", \"salvar recomendados\", \"salvar edital PE-2026/001\"*\n"
 
     # Adicionar editais ao resultado para possível salvamento posterior
     resultado["editais_com_score"] = editais_com_score
     resultado["editais_recomendados"] = participar + avaliar
+    resultado["editais_participar"] = participar
+    resultado["editais_avaliar"] = avaliar
 
     return response, resultado
 
@@ -1372,8 +1392,17 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
 
     msg_lower = message.lower()
 
-    # Verificar se quer salvar todos os recomendados ou um específico
-    salvar_todos = "recomendados" in msg_lower or "todos" in msg_lower
+    # Determinar o que salvar
+    # - "salvar recomendados" ou "salvar editais recomendados" → PARTICIPAR + AVALIAR
+    # - "salvar para participar" ou "salvar participar" → só PARTICIPAR
+    # - "salvar todos" → todos com score
+    salvar_tipo = "recomendados"  # padrão
+    if "todos" in msg_lower and "edita" in msg_lower:
+        salvar_tipo = "todos"
+    elif "participar" in msg_lower:
+        salvar_tipo = "participar"
+    elif "recomendados" in msg_lower or "recomendado" in msg_lower:
+        salvar_tipo = "recomendados"
 
     # Buscar última mensagem de busca no histórico
     mensagens_anteriores = db.query(Message).filter(
@@ -1405,20 +1434,28 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
             return "Erro ao recuperar editais da busca anterior. Tente buscar novamente.", {"status": "erro_busca"}
 
         editais_para_salvar = []
+        editais_com_score = resultado_busca.get("editais_com_score", [])
 
-        if salvar_todos:
-            # Salvar todos os recomendados (PARTICIPAR e AVALIAR)
+        if salvar_tipo == "todos":
+            # Salvar TODOS os editais encontrados
+            editais_para_salvar = editais_com_score
+        elif salvar_tipo == "participar":
+            # Salvar só os PARTICIPAR
+            editais_para_salvar = resultado_busca.get("editais_participar", [])
+            if not editais_para_salvar:
+                # Fallback: pegar os com score >= 80
+                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 80]
+        elif salvar_tipo == "recomendados":
+            # Salvar PARTICIPAR + AVALIAR
             editais_para_salvar = resultado_busca.get("editais_recomendados", [])
             if not editais_para_salvar:
-                # Se não há recomendados, pegar os com score > 50
-                editais_com_score = resultado_busca.get("editais_com_score", [])
+                # Fallback: pegar os com score >= 50
                 editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
         else:
             # Tentar extrair número específico do edital
             numero_match = re.search(r'edital\s+(\S+)', msg_lower)
             if numero_match:
                 numero_busca = numero_match.group(1).upper()
-                editais_com_score = resultado_busca.get("editais_com_score", [])
                 for ed in editais_com_score:
                     if numero_busca in ed.get("numero", "").upper():
                         editais_para_salvar.append(ed)
