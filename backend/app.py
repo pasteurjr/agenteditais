@@ -744,13 +744,13 @@ Ou informe mais detalhes:
     categoria = "equipamento"  # Padrão
     nome_lower = nome_produto.lower()
     if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
-        categoria = "analisador"
+        categoria = "equipamento"
     elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
-        categoria = "equipamento_laboratorio"
+        categoria = "equipamento"
     elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
-        categoria = "mobiliario_hospitalar"
+        categoria = "mobiliario"
     elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
-        categoria = "equipamento_medico"
+        categoria = "equipamento"
 
     resultado_processo = tool_processar_upload(
         filepath=filepath,
@@ -1561,8 +1561,13 @@ def chat_upload():
     if not session_id:
         return jsonify({"error": "session_id é obrigatório"}), 400
 
-    # A mensagem é o nome do produto
+    # A mensagem é o nome do produto - limpar palavras-chave comuns
     nome_produto = message if message else file.filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ')
+    # Remover palavras-chave do prompt
+    for palavra in ["cadastre", "cadastrar", "salve", "salvar", "processe", "processar", "registre", "registrar", "como"]:
+        nome_produto = nome_produto.lower().replace(palavra, "").strip()
+    # Capitalizar corretamente
+    nome_produto = nome_produto.strip().title()
 
     db = get_db()
     try:
@@ -1595,13 +1600,13 @@ def chat_upload():
         categoria = "equipamento"
         nome_lower = nome_produto.lower()
         if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
-            categoria = "analisador"
+            categoria = "equipamento"
         elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
-            categoria = "equipamento_laboratorio"
+            categoria = "equipamento"
         elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
-            categoria = "mobiliario_hospitalar"
+            categoria = "mobiliario"
         elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
-            categoria = "equipamento_medico"
+            categoria = "equipamento"
 
         # Processar arquivo
         resultado = tool_processar_upload(
@@ -1718,13 +1723,13 @@ def upload_chat():
         categoria = "equipamento"
         nome_lower = nome_produto.lower()
         if any(t in nome_lower for t in ["analisador", "bioquímic", "laborat"]):
-            categoria = "analisador"
+            categoria = "equipamento"
         elif any(t in nome_lower for t in ["centrifuga", "microscop"]):
-            categoria = "equipamento_laboratorio"
+            categoria = "equipamento"
         elif any(t in nome_lower for t in ["cama", "maca", "cadeira"]):
-            categoria = "mobiliario_hospitalar"
+            categoria = "mobiliario"
         elif any(t in nome_lower for t in ["monitor", "desfibrilador", "eletrocard"]):
-            categoria = "equipamento_medico"
+            categoria = "equipamento"
 
         # Processar arquivo
         resultado = tool_processar_upload(
