@@ -109,11 +109,20 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 - Se tem_arquivo=true E pede para mostrar/ler → **arquivo_mostrar**
 
 ## PARÂMETROS EXTRAS (extraia se mencionados):
-- "termo_busca": termo de busca otimizado
+- "termo_busca": termo de busca OTIMIZADO para APIs de licitação
 - "nome_produto": nome do produto
 - "url": URL completa se houver
 - "produto": nome do produto para aderência/proposta
 - "edital": número/identificador do edital
+
+## IMPORTANTE - OTIMIZAÇÃO DE TERMO DE BUSCA:
+Se a intenção for **buscar_editais**, converta termos genéricos para palavras-chave usadas em editais:
+- "área médica" → "hospitalar"
+- "área de tecnologia" → "informática"
+- "equipamentos hospitalares" → "hospitalar"
+- "área da saúde" → "hospitalar"
+- "computadores" → "informática"
+- "equipamentos de laboratório" → "laboratorial"
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
