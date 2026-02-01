@@ -11,8 +11,8 @@ from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
     tool_extrair_especificacoes, tool_cadastrar_fonte, tool_listar_fontes,
-    tool_buscar_editais_fonte, tool_extrair_requisitos, tool_listar_editais,
-    tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
+    tool_buscar_editais_fonte, tool_buscar_editais_scraper, tool_extrair_requisitos,
+    tool_listar_editais, tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
     tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
     tool_reprocessar_produto, tool_atualizar_produto,
     execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS
@@ -838,7 +838,11 @@ Ou informe mais detalhes:
 
 
 def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: dict = None):
-    """Processa ação: Cadastrar fonte de editais"""
+    """
+    Processa ação: Cadastrar fonte de editais.
+    Se tiver todos os dados, cadastra direto.
+    Se faltar URL ou tipo, busca na web automaticamente.
+    """
     import re
 
     intencao_resultado = intencao_resultado or {}
@@ -851,26 +855,81 @@ def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: di
     # Se não tem nome_fonte, tentar extrair da mensagem com regex
     if not nome_fonte:
         # Padrão: "fonte NOME" ou "fonte: NOME" ou "cadastre a fonte NOME"
-        match = re.search(r'fonte[:\s]+([A-Za-z0-9\-_]+)', message, re.IGNORECASE)
+        # Inclui caracteres acentuados (À-ú)
+        match = re.search(r'fonte[:\s]+([A-Za-zÀ-ú0-9\-_\s]+?)(?:,|\s+tipo|\s+url|$)', message, re.IGNORECASE)
         if match:
             nome_fonte = match.group(1).strip()
 
-    # Se não tem tipo_fonte, tentar extrair
+    # Se não tem tipo_fonte, tentar extrair da mensagem
     if not tipo_fonte:
         if 'tipo api' in message.lower() or ', api,' in message.lower() or ' api ' in message.lower():
             tipo_fonte = 'api'
         elif 'tipo scraper' in message.lower() or ', scraper,' in message.lower() or ' scraper ' in message.lower():
             tipo_fonte = 'scraper'
-        else:
-            tipo_fonte = 'scraper'  # padrão
 
-    # Se não tem URL, tentar extrair
+    # Se não tem URL, tentar extrair da mensagem
     if not url_fonte:
         url_match = re.search(r'https?://[^\s,]+', message)
         if url_match:
             url_fonte = url_match.group(0).strip()
 
-    print(f"[FONTE] nome={nome_fonte}, tipo={tipo_fonte}, url={url_fonte}")
+    print(f"[FONTE] Dados extraídos: nome={nome_fonte}, tipo={tipo_fonte}, url={url_fonte}")
+
+    # Se tem nome mas falta URL, buscar na web
+    if nome_fonte and not url_fonte:
+        print(f"[FONTE] URL não informada, buscando na web...")
+
+        # Buscar na web
+        resultado_busca = tool_web_search(f"{nome_fonte} portal licitações governo site oficial", user_id, num_results=5)
+
+        # Combinar todos os resultados (PDFs + outros)
+        todos_resultados = resultado_busca.get("resultados_pdf", []) + resultado_busca.get("outros_resultados", [])
+
+        if resultado_busca.get("success") and todos_resultados:
+            # Usar IA para extrair a URL correta dos resultados
+            resultados_texto = "\n".join([
+                f"- {r.get('titulo')}: {r.get('link')}"
+                for r in todos_resultados[:5]
+            ])
+
+            prompt_extrair = f"""Analise os resultados de busca abaixo e identifique a URL oficial do portal de licitações "{nome_fonte}".
+
+Resultados:
+{resultados_texto}
+
+Retorne APENAS um JSON com:
+- url: URL oficial do portal (a mais provável)
+- tipo: "api" se for portal do governo federal ou tiver API conhecida, "scraper" caso contrário
+- nome_completo: nome completo/oficial da fonte
+
+JSON:"""
+
+            try:
+                resposta_ia = call_deepseek([{"role": "user", "content": prompt_extrair}], max_tokens=300, model_override="deepseek-chat")
+                json_match = re.search(r'\{[\s\S]*?\}', resposta_ia)
+                if json_match:
+                    dados_web = json.loads(json_match.group())
+                    url_fonte = dados_web.get("url")
+                    if not tipo_fonte:
+                        tipo_fonte = dados_web.get("tipo", "scraper")
+                    nome_completo = dados_web.get("nome_completo")
+                    if nome_completo:
+                        nome_fonte = nome_completo
+                    print(f"[FONTE] Dados da web: url={url_fonte}, tipo={tipo_fonte}, nome={nome_fonte}")
+            except Exception as e:
+                print(f"[FONTE] Erro ao extrair dados da web: {e}")
+                # Fallback: usar primeiro resultado
+                if todos_resultados:
+                    primeiro = todos_resultados[0]
+                    url_fonte = primeiro.get("link")
+                    if not tipo_fonte:
+                        tipo_fonte = "scraper"
+
+    # Se ainda não tem tipo, usar padrão
+    if not tipo_fonte:
+        tipo_fonte = "scraper"
+
+    print(f"[FONTE] Dados finais: nome={nome_fonte}, tipo={tipo_fonte}, url={url_fonte}")
 
     if nome_fonte and url_fonte:
         resultado = tool_cadastrar_fonte(
@@ -880,20 +939,30 @@ def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: di
             descricao=f"Fonte cadastrada via chat: {nome_fonte}"
         )
         if resultado.get("success"):
-            response = f"✅ Fonte **{nome_fonte}** cadastrada com sucesso!"
+            response = f"""✅ Fonte cadastrada com sucesso!
+
+**Nome:** {nome_fonte}
+**Tipo:** {tipo_fonte}
+**URL:** {url_fonte}"""
         elif resultado.get("duplicada"):
-            response = f"⚠️ Fonte já existe: **{resultado.get('fonte_existente', {}).get('nome')}**"
+            fonte_exist = resultado.get('fonte_existente', {})
+            response = f"""⚠️ Fonte já existe!
+
+**Nome:** {fonte_exist.get('nome')}
+**URL:** {fonte_exist.get('url')}"""
         else:
             response = f"❌ Erro ao cadastrar: {resultado.get('error')}"
         return response, resultado
 
-    # Se não conseguiu extrair, pedir mais informações
-    response = """Para cadastrar uma fonte de editais, preciso de:
-- **Nome**: Nome da fonte (ex: PNCP, BEC-SP)
+    # Se não conseguiu extrair nem da web, pedir mais informações
+    response = f"""Não consegui encontrar informações sobre a fonte "{nome_fonte or 'informada'}".
+
+Por favor, forneça os dados completos:
+- **Nome**: Nome da fonte
 - **Tipo**: api ou scraper
 - **URL**: URL base da fonte
 
-Exemplo: "Cadastre a fonte BEC-SP, tipo scraper, URL https://bec.sp.gov.br" """
+Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
     return response, {"status": "aguardando_dados"}
 
 
@@ -971,27 +1040,79 @@ JSON:"""
 
     print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}'")
 
-    # ========== PASSO 1: Buscar editais (sem salvar) ==========
-    resultado = tool_buscar_editais_fonte(fonte, termo, user_id, uf=uf)
+    # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
+    editais = []
+    fontes_consultadas = []
+    erros_fontes = []
 
-    if not resultado.get("success"):
-        response = f"Erro na busca: {resultado.get('error', 'Erro desconhecido')}"
-        return response, resultado
+    # 1.1 Buscar no PNCP (API oficial)
+    print(f"[BUSCA] Consultando PNCP via API...")
+    resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf)
+    if resultado_pncp.get("success"):
+        editais_pncp = resultado_pncp.get("editais", [])
+        # Marcar fonte
+        for ed in editais_pncp:
+            ed['fonte'] = 'PNCP (API)'
+        editais.extend(editais_pncp)
+        fontes_consultadas.append("PNCP (API)")
+        print(f"[BUSCA] PNCP: {len(editais_pncp)} editais encontrados")
+    else:
+        erros_fontes.append(f"PNCP: {resultado_pncp.get('error', 'erro desconhecido')}")
 
-    editais = resultado.get("editais", [])
+    # 1.2 Buscar em outras fontes via Serper (scraper)
+    print(f"[BUSCA] Consultando outras fontes via Serper...")
+    resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
+    if resultado_scraper.get("success"):
+        editais_scraper = resultado_scraper.get("editais", [])
+        # Filtrar editais que já vieram do PNCP (evitar duplicatas)
+        links_pncp = {ed.get('url', '') for ed in editais}
+        editais_novos = []
+        for ed in editais_scraper:
+            if ed.get('link') not in links_pncp and ed.get('link'):
+                # Padronizar campos
+                ed_normalizado = {
+                    'numero': ed.get('numero', ed.get('titulo', '')[:50]),
+                    'orgao': ed.get('orgao', 'Não identificado'),
+                    'objeto': ed.get('descricao', ed.get('titulo', '')),
+                    'url': ed.get('link'),
+                    'fonte': f"{ed.get('fonte', 'Web')} (Scraper)",
+                    'modalidade': 'Identificar no portal',
+                    'valor_referencia': None,
+                    'data_abertura': 'Ver no portal'
+                }
+                editais_novos.append(ed_normalizado)
+        editais.extend(editais_novos)
+        fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
+        fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
+        print(f"[BUSCA] Scraper: {len(editais_novos)} editais adicionais encontrados")
+        if resultado_scraper.get('erros'):
+            for err in resultado_scraper.get('erros', []):
+                erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
+
+    # Montar resultado combinado
+    resultado = {
+        "success": len(editais) > 0,
+        "termo": termo,
+        "fontes_consultadas": fontes_consultadas,
+        "total_resultados": len(editais),
+        "editais": editais,
+        "erros": erros_fontes if erros_fontes else None
+    }
 
     if not editais:
-        mensagem = resultado.get("mensagem", f"Nenhum edital encontrado para '{termo}'.")
+        fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else 'nenhuma fonte disponível'
         response = f"""**Busca realizada:** {termo}
-**Fonte:** {fonte}
+**Fontes consultadas:** {fontes_str}
 
-⚠️ {mensagem}
+⚠️ Nenhum edital encontrado para '{termo}'.
 
 **Sugestões:**
 - Tente termos mais específicos (ex: "monitor LCD 24 polegadas")
 - Verifique se há editais salvos: "liste meus editais"
-- A API do PNCP pode estar temporariamente indisponível
+- Cadastre mais fontes de editais: "cadastre a fonte BEC-SP"
 """
+        if erros_fontes:
+            response += f"\n**Erros nas fontes:** {'; '.join(erros_fontes)}\n"
         return response, resultado
 
     # ========== PASSO 2: Calcular score de aderência ==========
@@ -1006,8 +1127,9 @@ JSON:"""
         aviso_produtos = None
 
     # ========== PASSO 3: Formatar resposta com scores ==========
+    fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else fonte
     response = f"""**Busca realizada:** {termo}
-**Fonte:** {fonte}
+**Fontes consultadas:** {fontes_str}
 **Resultados:** {len(editais_com_score)} edital(is) encontrado(s)
 
 """
@@ -1036,6 +1158,7 @@ JSON:"""
         url = ed.get('url', '')
         score = ed.get('score_tecnico')
         justificativa = ed.get('justificativa', '')
+        fonte_edital = ed.get('fonte', '')
 
         texto = f"---\n"
         texto += f"### {i}. {numero}"
@@ -1043,6 +1166,8 @@ JSON:"""
             texto += f" | Score: **{score:.0f}%**"
         texto += "\n"
         texto += f"**Órgão:** {orgao} ({local})\n"
+        if fonte_edital:
+            texto += f"**Fonte:** {fonte_edital}\n"
         texto += f"**Modalidade:** {modalidade}\n"
         texto += f"**Valor estimado:** {valor_str}\n"
         texto += f"**Data abertura:** {data_abertura}\n"

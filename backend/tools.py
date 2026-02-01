@@ -260,6 +260,155 @@ def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str
         }
 
 
+def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca editais em múltiplas fontes usando Serper API (Google Search com site:).
+    Não depende de APIs específicas de cada portal.
+
+    Args:
+        termo: Termo de busca (ex: "equipamento laboratorial")
+        fontes: Lista de URLs base das fontes (ex: ["bec.sp.gov.br", "comprasnet.gov.br"])
+        user_id: ID do usuário
+
+    Returns:
+        Dict com editais encontrados de todas as fontes
+    """
+    from config import SERPER_API_KEY, SERPER_API_URL
+
+    # Se não especificar fontes, buscar nas principais cadastradas
+    if not fontes:
+        db = get_db()
+        try:
+            fontes_db = db.query(FonteEdital).filter(FonteEdital.ativo == True).all()
+            fontes = []
+            for f in fontes_db:
+                # Extrair domínio da URL
+                url = f.url_base
+                if url:
+                    # Remover protocolo e path
+                    dominio = url.replace("https://", "").replace("http://", "").split("/")[0]
+                    if dominio not in fontes:
+                        fontes.append(dominio)
+        finally:
+            db.close()
+
+    # Se ainda não tem fontes, usar padrão
+    if not fontes:
+        fontes = [
+            "pncp.gov.br",
+            "gov.br/compras",
+            "bec.sp.gov.br",
+            "compras.mg.gov.br",
+            "licitacoes-e.com.br"
+        ]
+
+    print(f"[SCRAPER] Buscando '{termo}' em {len(fontes)} fontes: {fontes}")
+
+    todos_resultados = []
+    erros = []
+
+    for fonte in fontes[:5]:  # Limitar a 5 fontes para não demorar muito
+        try:
+            # Montar query com site:
+            search_query = f"site:{fonte} edital {termo} 2025 OR 2026"
+
+            print(f"[SCRAPER] Buscando: {search_query}")
+
+            response = requests.post(
+                SERPER_API_URL,
+                headers={
+                    'X-API-KEY': SERPER_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'q': search_query,
+                    'num': 10,
+                    'gl': 'br',
+                    'hl': 'pt'
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Processar resultados
+            for item in data.get('organic', []):
+                link = item.get('link', '')
+                titulo = item.get('title', '')
+                descricao = item.get('snippet', '')
+
+                # Extrair informações do edital
+                edital_info = {
+                    'fonte': fonte,
+                    'titulo': titulo,
+                    'link': link,
+                    'descricao': descricao,
+                    'numero': _extrair_numero_edital(titulo + " " + descricao),
+                    'orgao': _extrair_orgao(titulo + " " + descricao),
+                    'tipo': 'scraper'
+                }
+                todos_resultados.append(edital_info)
+
+            print(f"[SCRAPER] {fonte}: {len(data.get('organic', []))} resultados")
+
+        except Exception as e:
+            print(f"[SCRAPER] Erro em {fonte}: {e}")
+            erros.append({"fonte": fonte, "erro": str(e)})
+
+    # Remover duplicatas por link
+    links_vistos = set()
+    resultados_unicos = []
+    for r in todos_resultados:
+        if r['link'] not in links_vistos:
+            links_vistos.add(r['link'])
+            resultados_unicos.append(r)
+
+    print(f"[SCRAPER] Total: {len(resultados_unicos)} editais únicos encontrados")
+
+    return {
+        "success": True,
+        "termo": termo,
+        "fontes_consultadas": fontes[:5],
+        "total_resultados": len(resultados_unicos),
+        "editais": resultados_unicos[:20],  # Top 20
+        "erros": erros if erros else None
+    }
+
+
+def _extrair_numero_edital(texto: str) -> str:
+    """Extrai número do edital do texto."""
+    import re
+    # Padrões comuns: PE 001/2025, Pregão 123/2025, Edital nº 456/2025
+    padroes = [
+        r'(?:PE|Pregão|PREGÃO|Edital|EDITAL)[:\s]*[Nn]?[ºo°]?\s*(\d+[/-]\d{4})',
+        r'(?:PE|Pregão|PREGÃO)[:\s]*(\d+[/-]\d{4})',
+        r'[Nn][ºo°]\s*(\d+[/-]\d{4})',
+        r'(\d{1,5}[/-]20\d{2})',
+    ]
+    for padrao in padroes:
+        match = re.search(padrao, texto)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extrair_orgao(texto: str) -> str:
+    """Extrai nome do órgão do texto."""
+    import re
+    # Padrões comuns
+    padroes = [
+        r'(?:Prefeitura|PREFEITURA)\s+(?:Municipal\s+)?(?:de\s+)?([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
+        r'(?:Secretaria|SECRETARIA)\s+(?:de\s+)?([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
+        r'(?:Hospital|HOSPITAL)\s+([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
+        r'(?:Universidade|UNIVERSIDADE)\s+([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
+    ]
+    for padrao in padroes:
+        match = re.search(padrao, texto)
+        if match:
+            return match.group(0).strip()[:100]  # Limitar tamanho
+    return None
+
+
 def tool_download_arquivo(url: str, user_id: str, nome_produto: str = None) -> Dict[str, Any]:
     """
     Baixa arquivo de uma URL e salva localmente.
