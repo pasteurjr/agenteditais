@@ -307,19 +307,29 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
     todos_resultados = []
     erros = []
 
-    # Palavras que indicam que NÃO é um edital de licitação
+    # Palavras que indicam que NÃO é um edital de licitação (notícias, concursos, etc.)
     palavras_excluir = [
-        'concurso público', 'concurso publico', 'vagas', 'aprovados',
+        'concurso público', 'concurso publico', 'vagas para', 'aprovados',
         'convocação', 'convocacao', 'nomeação', 'nomeacao', 'posse',
         'inscrição', 'inscricao', 'gabarito', 'resultado preliminar',
         'notícia', 'noticia', 'comunicado', 'portaria', 'decreto',
-        'lei complementar', 'resolução', 'resolucao'
+        'lei complementar', 'resolução', 'resolucao', 'será atendido',
+        'passam para', 'transição', 'como vai funcionar', 'servidores estaduais',
+        'funcionário', 'funcionarios', 'salário', 'salario', '13º',
+        'atendimentos do sas', 'serão transferidos'
+    ]
+
+    # Padrões de URL que indicam página de edital (não notícia)
+    padroes_url_edital = [
+        '/editais/', '/edital/', '/pregao/', '/licitacao/', '/licitacoes/',
+        '/compras/', '/dispensa/', '/inexigibilidade/', '/ata-registro/',
+        'edital=', 'pregao=', 'licitacao=', 'processo='
     ]
 
     for fonte in fontes[:5]:  # Limitar a 5 fontes para não demorar muito
         try:
-            # Montar query com site: - buscar por licitação/pregão
-            search_query = f"site:{fonte} (licitação OR pregão OR edital) {termo} 2025 OR 2026"
+            # Montar query com site: - buscar por licitação/pregão com número
+            search_query = f"site:{fonte} pregão eletrônico {termo} 2025 OR 2026"
 
             print(f"[SCRAPER] Buscando: {search_query}")
 
@@ -348,20 +358,63 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
                 descricao = item.get('snippet', '')
                 texto_completo = (titulo + " " + descricao).lower()
 
-                # Filtrar resultados que não são editais de licitação
-                eh_concurso = any(palavra in texto_completo for palavra in palavras_excluir)
-                if eh_concurso:
-                    print(f"[SCRAPER] Ignorando (concurso/notícia): {titulo[:50]}...")
+                # 1. Filtrar resultados que são notícias/concursos
+                eh_noticia = any(palavra in texto_completo for palavra in palavras_excluir)
+                if eh_noticia:
+                    print(f"[SCRAPER] Ignorando (notícia): {titulo[:40]}...")
                     continue
 
-                # Extrair informações do edital
+                # 2. Verificar se a URL parece ser de um edital
+                url_lower = link.lower()
+                eh_url_edital = any(padrao in url_lower for padrao in padroes_url_edital)
+
+                # 3. Extrair número do edital
+                numero_edital = _extrair_numero_edital(titulo + " " + descricao)
+
+                # 4. Se não tem número E não é URL de edital, provavelmente é notícia
+                if not numero_edital and not eh_url_edital:
+                    print(f"[SCRAPER] Ignorando (sem número/URL): {titulo[:40]}...")
+                    continue
+
+                # 5. Extrair órgão
+                orgao = _extrair_orgao(titulo + " " + descricao)
+
+                # Se não extraiu órgão, tentar extrair do título de forma mais simples
+                if not orgao and '-' in titulo:
+                    # Padrão comum: "Edital 123/2025 - Prefeitura de XYZ"
+                    partes = titulo.split('-')
+                    if len(partes) > 1:
+                        orgao = partes[-1].strip()[:80]
+
+                # Fallback: usar nome amigável da fonte
+                if not orgao:
+                    fonte_nomes = {
+                        'www.administracao.pr.gov.br': 'Governo do Paraná',
+                        'www.compras.rs.gov.br': 'Governo do Rio Grande do Sul',
+                        'www.gov.br': 'Governo Federal',
+                        'www.comprasnet.gov.br': 'ComprasNet - Gov Federal',
+                        'www.licitacoes-e.com.br': 'Licitações-e (BB)',
+                        'portaldecompraspublicas.com.br': 'Portal de Compras Públicas',
+                        'www.comprasnet.ba.gov.br': 'Governo da Bahia',
+                        'www.bec.sp.gov.br': 'BEC - Governo de São Paulo',
+                        'www.compras.mg.gov.br': 'Governo de Minas Gerais',
+                        'www.licitanet.com.br': 'LicitaNet',
+                        'pncp.gov.br': 'PNCP - Portal Nacional'
+                    }
+                    orgao = fonte_nomes.get(fonte, fonte)
+
+                # Usar título como fallback para número se não encontrou
+                if not numero_edital:
+                    # Tentar usar parte do título que parece ser identificador
+                    numero_edital = titulo[:50] if len(titulo) < 60 else None
+
                 edital_info = {
                     'fonte': fonte,
                     'titulo': titulo,
                     'link': link,
                     'descricao': descricao,
-                    'numero': _extrair_numero_edital(titulo + " " + descricao),
-                    'orgao': _extrair_orgao(titulo + " " + descricao),
+                    'numero': numero_edital,
+                    'orgao': orgao,
                     'tipo': 'scraper'
                 }
                 todos_resultados.append(edital_info)
@@ -413,17 +466,29 @@ def _extrair_numero_edital(texto: str) -> str:
 def _extrair_orgao(texto: str) -> str:
     """Extrai nome do órgão do texto."""
     import re
-    # Padrões comuns
+    # Padrões comuns - ordem de prioridade
     padroes = [
-        r'(?:Prefeitura|PREFEITURA)\s+(?:Municipal\s+)?(?:de\s+)?([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
-        r'(?:Secretaria|SECRETARIA)\s+(?:de\s+)?([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
-        r'(?:Hospital|HOSPITAL)\s+([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
-        r'(?:Universidade|UNIVERSIDADE)\s+([A-Za-zÀ-ú\s]+?)(?:\s*[-–]|\s*$)',
+        # Órgãos específicos
+        r'(Prefeitura\s+(?:Municipal\s+)?(?:de\s+)?[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Secretaria\s+(?:de\s+)?(?:Estado\s+)?(?:da\s+)?[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Hospital\s+[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Universidade\s+[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Ministério\s+(?:da\s+|do\s+)?[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Governo\s+(?:do\s+)?(?:Estado\s+)?(?:de\s+)?[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Fundação\s+[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(Instituto\s+[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        r'(CELIC[A-Za-zÀ-ú\s\-]*)',  # Central de Licitações
+        r'(Departamento\s+(?:de\s+)?[A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
+        # Siglas de estados (fallback)
+        r'(?:Estado\s+(?:do\s+|de\s+)?)([A-Za-zÀ-ú\s]+?)(?:\s*[-–,\.]|\s*$)',
     ]
     for padrao in padroes:
-        match = re.search(padrao, texto)
+        match = re.search(padrao, texto, re.IGNORECASE)
         if match:
-            return match.group(0).strip()[:100]  # Limitar tamanho
+            orgao = match.group(1).strip()
+            # Limpar e validar
+            if len(orgao) > 5 and len(orgao) < 100:
+                return orgao[:100]
     return None
 
 
