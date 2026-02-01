@@ -444,7 +444,33 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
         if not categoria or categoria not in categorias_validas:
             categoria = "equipamento"
 
-        # 3. Criar produto no banco
+        # 3. Verificar se produto já existe (mesmo nome + mesmo usuário)
+        produto_existente = db.query(Produto).filter(
+            Produto.user_id == user_id,
+            Produto.nome.ilike(nome_produto)
+        ).first()
+
+        # Também verificar por modelo se disponível
+        if not produto_existente and modelo:
+            produto_existente = db.query(Produto).filter(
+                Produto.user_id == user_id,
+                Produto.modelo.ilike(modelo)
+            ).first()
+
+        if produto_existente:
+            return {
+                "success": False,
+                "error": f"Produto já cadastrado: '{produto_existente.nome}' (ID: {produto_existente.id})",
+                "duplicado": True,
+                "produto_existente": {
+                    "id": produto_existente.id,
+                    "nome": produto_existente.nome,
+                    "modelo": produto_existente.modelo,
+                    "fabricante": produto_existente.fabricante
+                }
+            }
+
+        # 4. Criar produto no banco
         produto = Produto(
             user_id=user_id,
             nome=nome_produto,

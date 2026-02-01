@@ -1923,6 +1923,15 @@ ANÁLISE:"""
                     response_text += f"\n... e mais {len(specs) - 15} especificações.\n"
 
                 response_text += "\n---\n✅ Produto pronto para calcular aderência com editais!"
+            elif resultado.get("duplicado"):
+                prod_exist = resultado.get("produto_existente", {})
+                response_text = f"""## ⚠️ Produto já cadastrado!
+
+**Nome:** {prod_exist.get('nome', 'N/A')}
+**Modelo:** {prod_exist.get('modelo', 'N/A')}
+**ID:** {prod_exist.get('id', 'N/A')}
+
+Use **reprocesse o produto {prod_exist.get('nome')}** para atualizar as especificações."""
             else:
                 response_text = f"❌ Erro ao processar arquivo: {resultado.get('error', 'Erro desconhecido')}"
 
