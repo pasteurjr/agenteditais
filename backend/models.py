@@ -2,6 +2,7 @@
 SQLAlchemy ORM models for the Editais IA system.
 """
 from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, create_engine
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -186,7 +187,7 @@ class ProdutoDocumento(Base):
     tipo = Column(Enum('manual', 'ficha_tecnica', 'certificado_anvisa', 'certificado_outro'), nullable=False)
     nome_arquivo = Column(String(255), nullable=False)
     path_arquivo = Column(String(500), nullable=False)
-    texto_extraido = Column(Text, nullable=True)
+    texto_extraido = Column(LONGTEXT, nullable=True)
     processado = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -325,7 +326,7 @@ class EditalDocumento(Base):
     tipo = Column(Enum('edital_principal', 'termo_referencia', 'anexo', 'planilha', 'outro'), nullable=False)
     nome_arquivo = Column(String(255), nullable=False)
     path_arquivo = Column(String(500), nullable=False)
-    texto_extraido = Column(Text, nullable=True)
+    texto_extraido = Column(LONGTEXT, nullable=True)
     processado = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
 

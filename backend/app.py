@@ -14,6 +14,7 @@ from tools import (
     tool_buscar_editais_fonte, tool_extrair_requisitos, tool_listar_editais,
     tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
     tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
+    tool_reprocessar_produto, tool_atualizar_produto,
     execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
@@ -100,7 +101,10 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 15. **salvar_editais**: Salvar editais da última busca
     Exemplos: "salve os editais", "salvar recomendados"
 
-16. **chat_livre**: Dúvidas gerais, conversas
+16. **reprocessar_produto**: Reprocessar/atualizar especificações de um produto
+    Exemplos: "reprocesse o produto X", "atualize specs do produto X", "extraia novamente as especificações"
+
+17. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -114,6 +118,8 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 - "url": URL completa se houver
 - "produto": nome do produto para aderência/proposta
 - "edital": número/identificador do edital
+- "nome_fonte": nome da fonte de editais (ex: "ComprasNet", "BEC-SP")
+- "tipo_fonte": tipo da fonte ("api" ou "scraper")
 
 ## IMPORTANTE - OTIMIZAÇÃO DE TERMO DE BUSCA:
 Se a intenção for **buscar_editais**, converta termos genéricos para palavras-chave usadas em editais:
@@ -202,6 +208,10 @@ def detectar_intencao_fallback(message: str) -> str:
     # 5. Listar editais salvos
     if any(p in msg for p in ["meus editais", "editais salvos", "editais cadastrados", "ver editais"]):
         return "listar_editais"
+
+    # 5.5 Reprocessar produto
+    if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
+        return "reprocessar_produto"
 
     # 6. Calcular aderência
     if any(p in msg for p in ["aderência", "aderencia", "score", "compatível", "compatibilidade"]):
@@ -569,6 +579,9 @@ def chat():
         elif action_type == "salvar_editais":
             response_text, resultado = processar_salvar_editais(message, user_id, session_id, db)
 
+        elif action_type == "reprocessar_produto":
+            response_text, resultado = processar_reprocessar_produto(message, user_id)
+
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
 
@@ -826,55 +839,53 @@ Ou informe mais detalhes:
 
 def processar_cadastrar_fonte(message: str, user_id: str, intencao_resultado: dict = None):
     """Processa ação: Cadastrar fonte de editais"""
+    import re
+
     intencao_resultado = intencao_resultado or {}
 
-    # Verificar se a IA já extraiu os dados
-    nome_fonte = intencao_resultado.get("nome_fonte")
-    tipo_fonte = intencao_resultado.get("tipo_fonte")
-    url_fonte = intencao_resultado.get("url_fonte")
+    # Verificar se a IA já extraiu os dados (aceitar vários nomes de campo)
+    nome_fonte = intencao_resultado.get("nome_fonte") or intencao_resultado.get("nome")
+    tipo_fonte = intencao_resultado.get("tipo_fonte") or intencao_resultado.get("tipo")
+    url_fonte = intencao_resultado.get("url_fonte") or intencao_resultado.get("url")
+
+    # Se não tem nome_fonte, tentar extrair da mensagem com regex
+    if not nome_fonte:
+        # Padrão: "fonte NOME" ou "fonte: NOME" ou "cadastre a fonte NOME"
+        match = re.search(r'fonte[:\s]+([A-Za-z0-9\-_]+)', message, re.IGNORECASE)
+        if match:
+            nome_fonte = match.group(1).strip()
+
+    # Se não tem tipo_fonte, tentar extrair
+    if not tipo_fonte:
+        if 'tipo api' in message.lower() or ', api,' in message.lower() or ' api ' in message.lower():
+            tipo_fonte = 'api'
+        elif 'tipo scraper' in message.lower() or ', scraper,' in message.lower() or ' scraper ' in message.lower():
+            tipo_fonte = 'scraper'
+        else:
+            tipo_fonte = 'scraper'  # padrão
+
+    # Se não tem URL, tentar extrair
+    if not url_fonte:
+        url_match = re.search(r'https?://[^\s,]+', message)
+        if url_match:
+            url_fonte = url_match.group(0).strip()
+
+    print(f"[FONTE] nome={nome_fonte}, tipo={tipo_fonte}, url={url_fonte}")
 
     if nome_fonte and url_fonte:
-        # Dados já extraídos pela IA
         resultado = tool_cadastrar_fonte(
             nome=nome_fonte,
-            tipo=tipo_fonte or "scraper",
+            tipo=tipo_fonte,
             url_base=url_fonte,
             descricao=f"Fonte cadastrada via chat: {nome_fonte}"
         )
         if resultado.get("success"):
             response = f"✅ Fonte **{nome_fonte}** cadastrada com sucesso!"
+        elif resultado.get("duplicada"):
+            response = f"⚠️ Fonte já existe: **{resultado.get('fonte_existente', {}).get('nome')}**"
         else:
             response = f"❌ Erro ao cadastrar: {resultado.get('error')}"
         return response, resultado
-
-    # Fallback: Tentar extrair informações da mensagem
-    prompt = f"""Extraia as informações de fonte de editais da mensagem abaixo.
-Retorne JSON com: nome, tipo (api ou scraper), url_base, descricao
-
-Mensagem: {message}
-
-JSON:"""
-
-    try:
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500)
-        import json
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', resposta)
-        if json_match:
-            dados = json.loads(json_match.group())
-            resultado = tool_cadastrar_fonte(
-                nome=dados.get('nome', 'Nova Fonte'),
-                tipo=dados.get('tipo', 'scraper'),
-                url_base=dados.get('url_base', ''),
-                descricao=dados.get('descricao')
-            )
-            if resultado.get("success"):
-                response = f"✅ Fonte **{dados.get('nome')}** cadastrada com sucesso!"
-            else:
-                response = f"❌ Erro ao cadastrar: {resultado.get('error')}"
-            return response, resultado
-    except Exception as e:
-        pass
 
     # Se não conseguiu extrair, pedir mais informações
     response = """Para cadastrar uma fonte de editais, preciso de:
@@ -1133,6 +1144,77 @@ def processar_listar_produtos(message: str, user_id: str):
             response = "Você não tem produtos cadastrados ainda. Faça upload de um manual PDF para cadastrar."
     else:
         response = f"Erro ao listar produtos: {resultado.get('error')}"
+
+    return response, resultado
+
+
+def processar_reprocessar_produto(message: str, user_id: str):
+    """
+    Reprocessa um produto para extrair especificações novamente.
+    Útil quando a extração inicial falhou ou foi incompleta.
+    """
+    # Tentar identificar o produto na mensagem
+    # Primeiro listar produtos do usuário
+    produtos_resultado = tool_listar_produtos(user_id)
+
+    if not produtos_resultado.get("success"):
+        return "Erro ao buscar seus produtos.", produtos_resultado
+
+    produtos = produtos_resultado.get("produtos", [])
+    if not produtos:
+        return "Você não tem produtos cadastrados para reprocessar.", {"success": False}
+
+    # Tentar encontrar o produto mencionado na mensagem
+    msg_lower = message.lower()
+    produto_id = None
+    produto_nome = None
+
+    for p in produtos:
+        nome_lower = p.get("nome", "").lower()
+        modelo_lower = (p.get("modelo") or "").lower()
+
+        # Verificar se nome ou modelo está na mensagem
+        if nome_lower and any(parte in msg_lower for parte in nome_lower.split()[:3]):
+            produto_id = p.get("id")
+            produto_nome = p.get("nome")
+            break
+        if modelo_lower and modelo_lower in msg_lower:
+            produto_id = p.get("id")
+            produto_nome = p.get("nome")
+            break
+
+    # Se não encontrou, usar o último produto cadastrado
+    if not produto_id:
+        ultimo = produtos[-1]
+        produto_id = ultimo.get("id")
+        produto_nome = ultimo.get("nome")
+
+    # Reprocessar
+    print(f"[APP] Reprocessando produto: {produto_nome} ({produto_id})")
+    resultado = tool_reprocessar_produto(produto_id, user_id)
+
+    if resultado.get("success"):
+        specs = resultado.get("specs", [])
+        response = f"""## 🔄 Produto Reprocessado!
+
+**Produto:** {resultado.get('produto_nome', produto_nome)}
+**ID:** {produto_id}
+
+### Especificações Extraídas ({resultado.get('specs_extraidas', 0)} encontradas):
+
+"""
+        for spec in specs[:30]:
+            nome = spec.get('nome_especificacao', 'N/A')
+            valor = spec.get('valor', 'N/A')
+            unidade = spec.get('unidade', '')
+            response += f"- **{nome}:** {valor} {unidade}\n"
+
+        if len(specs) > 30:
+            response += f"\n... e mais {len(specs) - 30} especificações.\n"
+
+        response += "\n✅ Produto atualizado e pronto para calcular aderência!"
+    else:
+        response = f"❌ Erro ao reprocessar: {resultado.get('error')}"
 
     return response, resultado
 
@@ -1436,30 +1518,46 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
 
     if ultima_busca_user:
         # Re-executar a busca para obter os dados
+        # IMPORTANTE: Passar pelo classificador para obter o termo otimizado
         print(f"[APP] Re-executando busca para salvar: {ultima_busca_user.content}")
-        _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id)
+
+        # Re-classificar para obter o termo_ia otimizado (ex: "área médica" → "hospitalar")
+        classificacao = detectar_intencao_ia(ultima_busca_user.content, tem_arquivo=False)
+        termo_ia = classificacao.get("termo_busca")
+        print(f"[SALVAR] Termo otimizado pela IA: {termo_ia}")
+
+        _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id, termo_ia=termo_ia)
 
         if not resultado_busca.get("success"):
             return "Erro ao recuperar editais da busca anterior. Tente buscar novamente.", {"status": "erro_busca"}
 
         editais_para_salvar = []
         editais_com_score = resultado_busca.get("editais_com_score", [])
+        editais_participar = resultado_busca.get("editais_participar", [])
+        editais_recomendados = resultado_busca.get("editais_recomendados", [])
+
+        print(f"[SALVAR] Tipo: {salvar_tipo}")
+        print(f"[SALVAR] editais_com_score: {len(editais_com_score)}")
+        print(f"[SALVAR] editais_participar: {len(editais_participar)}")
+        print(f"[SALVAR] editais_recomendados: {len(editais_recomendados)}")
 
         if salvar_tipo == "todos":
             # Salvar TODOS os editais encontrados
             editais_para_salvar = editais_com_score
         elif salvar_tipo == "participar":
-            # Salvar só os PARTICIPAR
-            editais_para_salvar = resultado_busca.get("editais_participar", [])
+            # Salvar só os PARTICIPAR (score >= 80 ou recomendação PARTICIPAR)
+            editais_para_salvar = editais_participar
             if not editais_para_salvar:
-                # Fallback: pegar os com score >= 80
-                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 80]
+                # Fallback: pegar os com score >= 75 (margem para variação)
+                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 75]
+                print(f"[SALVAR] Fallback participar: {len(editais_para_salvar)} com score >= 75")
         elif salvar_tipo == "recomendados":
             # Salvar PARTICIPAR + AVALIAR
-            editais_para_salvar = resultado_busca.get("editais_recomendados", [])
+            editais_para_salvar = editais_recomendados
             if not editais_para_salvar:
                 # Fallback: pegar os com score >= 50
                 editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
+                print(f"[SALVAR] Fallback recomendados: {len(editais_para_salvar)} com score >= 50")
         else:
             # Tentar extrair número específico do edital
             numero_match = re.search(r'edital\s+(\S+)', msg_lower)
@@ -1469,6 +1567,8 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
                     if numero_busca in ed.get("numero", "").upper():
                         editais_para_salvar.append(ed)
                         break
+
+        print(f"[SALVAR] editais_para_salvar: {len(editais_para_salvar)}")
 
         if not editais_para_salvar:
             return """Não encontrei editais para salvar.

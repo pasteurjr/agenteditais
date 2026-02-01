@@ -23,25 +23,26 @@ from config import UPLOAD_FOLDER, PNCP_BASE_URL
 
 # ==================== PROMPTS PARA EXTRAÇÃO ====================
 
-PROMPT_EXTRAIR_SPECS = """Você é um especialista em extração de especificações técnicas de manuais de equipamentos médicos/laboratoriais.
-
-Analise o texto do manual abaixo e extraia TODAS as especificações técnicas encontradas.
+PROMPT_EXTRAIR_SPECS = """Extraia TODAS as especificações técnicas do texto abaixo.
 
 Para cada especificação, retorne um objeto JSON com:
-- nome_especificacao: nome da especificação (ex: "Sensibilidade", "Faixa de medição", "Precisão")
-- valor: valor completo como está no texto (ex: "0.03 mg/dL", "10-500 mg/dL")
-- unidade: unidade de medida se houver (ex: "mg/dL", "mm", "°C")
-- valor_numerico: valor numérico extraído (null se não for numérico)
-- operador: operador se houver ("<", "<=", "=", ">=", ">", "range")
-- valor_min: valor mínimo se for range
-- valor_max: valor máximo se for range
+- nome: nome descritivo da especificação (ex: "Temperatura de operação", "Largura", "Peso", "Alimentação", "Consumo energético")
+- valor: valor completo como está no texto (ex: "15 a 30°C", "645 mm", "78 kg")
+- unidade: unidade de medida se houver (ex: "mm", "kg", "°C", "%", "kPa", "VA")
+
+Exemplo:
+[
+  {{"nome": "Temperatura de operação", "valor": "15 a 30°C", "unidade": "°C"}},
+  {{"nome": "Largura", "valor": "645 mm", "unidade": "mm"}},
+  {{"nome": "Peso total", "valor": "78 kg", "unidade": "kg"}}
+]
 
 Retorne APENAS um array JSON válido, sem texto adicional.
 
-TEXTO DO MANUAL:
+TEXTO:
 {texto}
 
-ESPECIFICAÇÕES EXTRAÍDAS (JSON):
+JSON:
 """
 
 PROMPT_EXTRAIR_REQUISITOS = """Você é um especialista em análise de editais de licitação.
@@ -117,6 +118,34 @@ A proposta deve ser formal, técnica e seguir o padrão de licitações pública
 
 # ==================== FUNÇÕES AUXILIARES ====================
 
+def _extrair_json_array(texto: str) -> List[Dict]:
+    """
+    Extrai um array JSON de uma resposta da IA.
+    Lida com casos onde a resposta vem com ```json ou markdown.
+    """
+    # Remover blocos de código markdown
+    texto_limpo = texto
+    if "```json" in texto:
+        # Extrair conteúdo entre ```json e ```
+        match = re.search(r'```json\s*([\s\S]*?)\s*```', texto)
+        if match:
+            texto_limpo = match.group(1)
+    elif "```" in texto:
+        match = re.search(r'```\s*([\s\S]*?)\s*```', texto)
+        if match:
+            texto_limpo = match.group(1)
+
+    # Tentar extrair array JSON
+    json_match = re.search(r'\[[\s\S]*\]', texto_limpo)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+
+    return []
+
+
 def _extrair_info_produto(texto: str) -> Dict[str, Any]:
     """
     Usa IA para extrair informações do produto a partir do texto do manual.
@@ -139,19 +168,24 @@ Se não encontrar alguma informação, use null.
 JSON:"""
 
     try:
+        print(f"[TOOLS] Chamando IA para extrair info do produto...")
         resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500, model_override="deepseek-chat")
+        print(f"[TOOLS] Resposta da IA: {resposta[:300]}")
 
         # Extrair JSON da resposta
         import re
         json_match = re.search(r'\{[\s\S]*?\}', resposta)
         if json_match:
             info = json.loads(json_match.group())
+            print(f"[TOOLS] JSON extraído: {info}")
             return {
                 "nome": info.get("nome") or "Produto",
                 "fabricante": info.get("fabricante"),
                 "modelo": info.get("modelo"),
                 "categoria": info.get("categoria", "equipamento")
             }
+        else:
+            print(f"[TOOLS] Não encontrou JSON na resposta")
     except Exception as e:
         print(f"[TOOLS] Erro ao extrair info do produto: {e}")
 
@@ -260,30 +294,142 @@ def tool_download_arquivo(url: str, user_id: str, nome_produto: str = None) -> D
         return {"success": False, "error": str(e)}
 
 
+def _extrair_texto_por_paginas(filepath: str) -> List[Dict[str, Any]]:
+    """
+    Extrai texto do PDF página por página.
+    Retorna lista de dicts com número da página e texto.
+    """
+    paginas = []
+    doc = fitz.open(filepath)
+    for i, page in enumerate(doc):
+        texto = page.get_text()
+        paginas.append({
+            "pagina": i + 1,
+            "texto": texto,
+            "chars": len(texto)
+        })
+    doc.close()
+    return paginas
+
+
+def _encontrar_paginas_specs(paginas: List[Dict[str, Any]]) -> str:
+    """
+    Busca inteligentemente as páginas que contêm especificações técnicas.
+    Retorna o texto concatenado das páginas relevantes.
+    """
+    keywords_specs = [
+        'especificações', 'specifications', 'technical data', 'dados técnicos',
+        'características técnicas', 'informações técnicas', 'technical information',
+        'dimensões', 'dimensions', 'peso', 'weight', 'voltagem', 'voltage',
+        'alimentação', 'power supply', 'consumo', 'consumption', 'temperatura',
+        'faixa de medição', 'range', 'precisão', 'accuracy', 'sensibilidade'
+    ]
+
+    paginas_relevantes = []
+
+    for pag in paginas:
+        texto_lower = pag["texto"].lower()
+        score = sum(1 for kw in keywords_specs if kw in texto_lower)
+        if score >= 2:  # Pelo menos 2 keywords
+            paginas_relevantes.append((score, pag["pagina"], pag["texto"]))
+
+    # Ordenar por score (mais relevantes primeiro)
+    paginas_relevantes.sort(key=lambda x: x[0], reverse=True)
+
+    # Pegar as 10 páginas mais relevantes
+    texto_specs = ""
+    for score, num, texto in paginas_relevantes[:10]:
+        texto_specs += f"\n\n=== PÁGINA {num} ===\n{texto}"
+
+    return texto_specs
+
+
+def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db) -> List[Dict]:
+    """
+    Processa documento grande em chunks e extrai especificações.
+    Usa contexto de 60000 tokens (~240000 chars) do DeepSeek.
+    """
+    MAX_CHUNK_SIZE = 60000  # Chars por chunk (conservador para ~15k tokens)
+    specs_totais = []
+
+    # Se texto cabe em um chunk, processar direto
+    if len(texto_completo) <= MAX_CHUNK_SIZE:
+        chunks = [texto_completo]
+    else:
+        # Dividir em chunks
+        chunks = []
+        for i in range(0, len(texto_completo), MAX_CHUNK_SIZE):
+            chunks.append(texto_completo[i:i + MAX_CHUNK_SIZE])
+
+    print(f"[TOOLS] Processando {len(chunks)} chunk(s) de specs")
+
+    for i, chunk in enumerate(chunks):
+        print(f"[TOOLS] Processando chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
+
+        prompt = PROMPT_EXTRAIR_SPECS.format(texto=chunk)
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=16000)
+
+        try:
+            specs = _extrair_json_array(resposta)
+            if specs:
+                print(f"[TOOLS] Chunk {i+1}: {len(specs)} specs encontradas")
+
+                for spec in specs:
+                    # Aceitar tanto 'nome_especificacao' quanto 'nome'
+                    nome_spec = spec.get('nome_especificacao') or spec.get('nome') or 'N/A'
+
+                    # Evitar duplicatas
+                    if not any((s.get('nome_especificacao') or s.get('nome')) == nome_spec for s in specs_totais):
+                        spec_obj = ProdutoEspecificacao(
+                            produto_id=produto_id,
+                            nome_especificacao=nome_spec,
+                            valor=spec.get('valor', 'N/A'),
+                            unidade=spec.get('unidade'),
+                            valor_numerico=spec.get('valor_numerico'),
+                            operador=spec.get('operador'),
+                            valor_min=spec.get('valor_min'),
+                            valor_max=spec.get('valor_max')
+                        )
+                        db.add(spec_obj)
+                        # Normalizar o spec para usar nome_especificacao
+                        spec['nome_especificacao'] = nome_spec
+                        specs_totais.append(spec)
+        except json.JSONDecodeError as e:
+            print(f"[TOOLS] Erro ao parsear chunk {i+1}: {e}")
+
+    return specs_totais
+
+
 def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
                           categoria: str = None, fabricante: str = None,
                           modelo: str = None) -> Dict[str, Any]:
     """
     Processa um arquivo PDF uploadado:
-    1. Extrai texto com PyMuPDF
-    2. Usa IA para identificar nome do produto, fabricante e especificações
-    3. Salva produto e specs no banco
+    1. Extrai texto com PyMuPDF (todas as páginas)
+    2. Busca inteligentemente páginas com especificações
+    3. Usa IA para identificar nome do produto, fabricante e especificações
+    4. Processa em chunks se necessário
+    5. Salva produto e specs no banco
     """
     db = get_db()
     try:
-        # 1. Extrair texto do PDF
-        texto = ""
-        doc = fitz.open(filepath)
-        for page in doc:
-            texto += page.get_text()
-        doc.close()
+        # 1. Extrair texto do PDF página por página
+        print(f"[TOOLS] Extraindo texto do PDF: {filepath}")
+        paginas = _extrair_texto_por_paginas(filepath)
+        texto_completo = "\n".join([p["texto"] for p in paginas])
 
-        if not texto.strip():
+        if not texto_completo.strip():
             return {"success": False, "error": "Não foi possível extrair texto do PDF"}
+
+        print(f"[TOOLS] PDF: {len(paginas)} páginas, {len(texto_completo)} caracteres")
 
         # 2. Se não tem nome do produto, extrair automaticamente via IA
         if not nome_produto or nome_produto.strip() == "":
-            info_produto = _extrair_info_produto(texto[:8000])
+            print(f"[TOOLS] Extraindo info do produto automaticamente...")
+            # Usar primeiras páginas para identificar produto
+            texto_inicio = texto_completo[:10000]
+            info_produto = _extrair_info_produto(texto_inicio)
+            print(f"[TOOLS] Info extraída: {info_produto}")
             nome_produto = info_produto.get("nome", "Produto sem nome")
             if not fabricante:
                 fabricante = info_produto.get("fabricante")
@@ -309,48 +455,33 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
         db.add(produto)
         db.flush()
 
-        # 3. Salvar documento
+        # 4. Salvar documento (texto completo)
         doc_registro = ProdutoDocumento(
             produto_id=produto.id,
             tipo='manual',
             nome_arquivo=os.path.basename(filepath),
             path_arquivo=filepath,
-            texto_extraido=texto[:50000],  # Limitar tamanho
+            texto_extraido=texto_completo,  # Texto completo
             processado=False
         )
         db.add(doc_registro)
 
-        # 4. Extrair especificações com IA
-        # Limitar texto para não exceder contexto
-        texto_limitado = texto[:15000]
-        prompt = PROMPT_EXTRAIR_SPECS.format(texto=texto_limitado)
+        # 5. Buscar páginas com especificações
+        print(f"[TOOLS] Buscando páginas com especificações técnicas...")
+        texto_specs = _encontrar_paginas_specs(paginas)
 
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000)
+        if not texto_specs:
+            # Fallback: usar últimas páginas (onde geralmente ficam as specs)
+            print(f"[TOOLS] Nenhuma página de specs encontrada, usando últimas páginas")
+            ultimas_paginas = paginas[-20:] if len(paginas) > 20 else paginas
+            texto_specs = "\n".join([p["texto"] for p in ultimas_paginas])
 
-        # 5. Parsear resposta e salvar specs
-        specs_salvas = []
-        try:
-            # Tentar extrair JSON da resposta
-            json_match = re.search(r'\[[\s\S]*\]', resposta)
-            if json_match:
-                specs = json.loads(json_match.group())
-                for spec in specs:
-                    spec_obj = ProdutoEspecificacao(
-                        produto_id=produto.id,
-                        nome_especificacao=spec.get('nome_especificacao', 'N/A'),
-                        valor=spec.get('valor', 'N/A'),
-                        unidade=spec.get('unidade'),
-                        valor_numerico=spec.get('valor_numerico'),
-                        operador=spec.get('operador'),
-                        valor_min=spec.get('valor_min'),
-                        valor_max=spec.get('valor_max')
-                    )
-                    db.add(spec_obj)
-                    specs_salvas.append(spec)
-        except json.JSONDecodeError:
-            print(f"[TOOLS] Erro ao parsear specs: {resposta[:200]}")
+        print(f"[TOOLS] Texto de specs: {len(texto_specs)} caracteres")
 
-        # 6. Marcar documento como processado
+        # 6. Extrair especificações em chunks
+        specs_salvas = _extrair_specs_em_chunks(texto_specs, produto.id, db)
+
+        # 7. Marcar documento como processado
         doc_registro.processado = True
         db.commit()
 
@@ -359,7 +490,16 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
             "produto_id": produto.id,
             "nome": nome_produto,
             "specs_extraidas": len(specs_salvas),
-            "specs": specs_salvas[:10]  # Retornar primeiras 10
+            "specs": specs_salvas[:10],  # Retornar primeiras 10
+            # Adicionar estrutura completa para o app.py
+            "produto": {
+                "id": produto.id,
+                "nome": nome_produto,
+                "fabricante": fabricante,
+                "modelo": modelo,
+                "categoria": categoria
+            },
+            "especificacoes": specs_salvas
         }
 
     except Exception as e:
@@ -390,9 +530,8 @@ def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str) -> Di
 
         specs_salvas = []
         try:
-            json_match = re.search(r'\[[\s\S]*\]', resposta)
-            if json_match:
-                specs = json.loads(json_match.group())
+            specs = _extrair_json_array(resposta)
+            if specs:
                 for spec in specs:
                     spec_obj = ProdutoEspecificacao(
                         produto_id=produto_id,
@@ -422,13 +561,144 @@ def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str) -> Di
         db.close()
 
 
+def tool_reprocessar_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Reprocessa um produto existente para extrair especificações novamente.
+    Útil quando a extração inicial falhou ou foi incompleta.
+    Usa o documento já salvo no banco.
+    """
+    db = get_db()
+    try:
+        # Verificar se produto existe e pertence ao usuário
+        produto = db.query(Produto).filter(
+            Produto.id == produto_id,
+            Produto.user_id == user_id
+        ).first()
+
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        # Buscar documento do produto
+        documento = db.query(ProdutoDocumento).filter(
+            ProdutoDocumento.produto_id == produto_id
+        ).first()
+
+        if not documento:
+            return {"success": False, "error": "Documento do produto não encontrado"}
+
+        # Se tem arquivo, reprocessar do arquivo
+        if documento.path_arquivo and os.path.exists(documento.path_arquivo):
+            print(f"[TOOLS] Reprocessando produto do arquivo: {documento.path_arquivo}")
+            paginas = _extrair_texto_por_paginas(documento.path_arquivo)
+            texto_specs = _encontrar_paginas_specs(paginas)
+
+            if not texto_specs:
+                ultimas_paginas = paginas[-20:] if len(paginas) > 20 else paginas
+                texto_specs = "\n".join([p["texto"] for p in ultimas_paginas])
+        elif documento.texto_extraido:
+            # Usar texto salvo
+            texto_specs = documento.texto_extraido
+        else:
+            return {"success": False, "error": "Nenhum texto disponível para reprocessar"}
+
+        # Limpar specs antigas
+        db.query(ProdutoEspecificacao).filter(
+            ProdutoEspecificacao.produto_id == produto_id
+        ).delete()
+
+        # Extrair novas specs
+        print(f"[TOOLS] Reprocessando specs ({len(texto_specs)} chars)")
+        specs_salvas = _extrair_specs_em_chunks(texto_specs, produto_id, db)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "produto_id": produto_id,
+            "produto_nome": produto.nome,
+            "specs_extraidas": len(specs_salvas),
+            "specs": specs_salvas[:20]
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_atualizar_produto(produto_id: str, user_id: str, nome: str = None,
+                           fabricante: str = None, modelo: str = None,
+                           categoria: str = None) -> Dict[str, Any]:
+    """
+    Atualiza informações de um produto existente.
+    """
+    db = get_db()
+    try:
+        produto = db.query(Produto).filter(
+            Produto.id == produto_id,
+            Produto.user_id == user_id
+        ).first()
+
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        if nome:
+            produto.nome = nome
+        if fabricante:
+            produto.fabricante = fabricante
+        if modelo:
+            produto.modelo = modelo
+        if categoria:
+            categorias_validas = ['equipamento', 'reagente', 'insumo_hospitalar', 'insumo_laboratorial',
+                                 'informatica', 'redes', 'mobiliario', 'eletronico', 'outro']
+            if categoria in categorias_validas:
+                produto.categoria = categoria
+
+        db.commit()
+
+        return {
+            "success": True,
+            "produto": {
+                "id": produto.id,
+                "nome": produto.nome,
+                "fabricante": produto.fabricante,
+                "modelo": produto.modelo,
+                "categoria": produto.categoria
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
 def tool_cadastrar_fonte(nome: str, tipo: str, url_base: str,
                          descricao: str = None, api_key: str = None) -> Dict[str, Any]:
     """
     Cadastra uma nova fonte de editais no banco.
+    Verifica duplicatas por nome ou URL.
     """
     db = get_db()
     try:
+        # Verificar se já existe fonte com mesmo nome ou URL
+        fonte_existente = db.query(FonteEdital).filter(
+            (FonteEdital.nome.ilike(nome)) |
+            (FonteEdital.url_base == url_base)
+        ).first()
+
+        if fonte_existente:
+            return {
+                "success": False,
+                "error": f"Fonte já cadastrada: '{fonte_existente.nome}' ({fonte_existente.url_base})",
+                "duplicada": True,
+                "fonte_existente": {
+                    "id": fonte_existente.id,
+                    "nome": fonte_existente.nome,
+                    "url": fonte_existente.url_base
+                }
+            }
+
         fonte = FonteEdital(
             nome=nome,
             tipo=tipo,
@@ -722,9 +992,8 @@ def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str) -> Dict[st
 
         requisitos_salvos = []
         try:
-            json_match = re.search(r'\[[\s\S]*\]', resposta)
-            if json_match:
-                requisitos = json.loads(json_match.group())
+            requisitos = _extrair_json_array(resposta)
+            if requisitos:
                 for req in requisitos:
                     req_obj = EditalRequisito(
                         edital_id=edital_id,
