@@ -307,10 +307,19 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
     todos_resultados = []
     erros = []
 
+    # Palavras que indicam que NÃO é um edital de licitação
+    palavras_excluir = [
+        'concurso público', 'concurso publico', 'vagas', 'aprovados',
+        'convocação', 'convocacao', 'nomeação', 'nomeacao', 'posse',
+        'inscrição', 'inscricao', 'gabarito', 'resultado preliminar',
+        'notícia', 'noticia', 'comunicado', 'portaria', 'decreto',
+        'lei complementar', 'resolução', 'resolucao'
+    ]
+
     for fonte in fontes[:5]:  # Limitar a 5 fontes para não demorar muito
         try:
-            # Montar query com site:
-            search_query = f"site:{fonte} edital {termo} 2025 OR 2026"
+            # Montar query com site: - buscar por licitação/pregão
+            search_query = f"site:{fonte} (licitação OR pregão OR edital) {termo} 2025 OR 2026"
 
             print(f"[SCRAPER] Buscando: {search_query}")
 
@@ -332,10 +341,18 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
             data = response.json()
 
             # Processar resultados
+            resultados_fonte = 0
             for item in data.get('organic', []):
                 link = item.get('link', '')
                 titulo = item.get('title', '')
                 descricao = item.get('snippet', '')
+                texto_completo = (titulo + " " + descricao).lower()
+
+                # Filtrar resultados que não são editais de licitação
+                eh_concurso = any(palavra in texto_completo for palavra in palavras_excluir)
+                if eh_concurso:
+                    print(f"[SCRAPER] Ignorando (concurso/notícia): {titulo[:50]}...")
+                    continue
 
                 # Extrair informações do edital
                 edital_info = {
@@ -348,8 +365,9 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
                     'tipo': 'scraper'
                 }
                 todos_resultados.append(edital_info)
+                resultados_fonte += 1
 
-            print(f"[SCRAPER] {fonte}: {len(data.get('organic', []))} resultados")
+            print(f"[SCRAPER] {fonte}: {resultados_fonte} editais válidos (de {len(data.get('organic', []))} resultados)")
 
         except Exception as e:
             print(f"[SCRAPER] Erro em {fonte}: {e}")

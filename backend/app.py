@@ -1089,6 +1089,21 @@ JSON:"""
             for err in resultado_scraper.get('erros', []):
                 erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
 
+    # Remover duplicatas por número de edital (priorizar PNCP)
+    editais_unicos = []
+    numeros_vistos = set()
+    for ed in editais:
+        numero = ed.get('numero', '')
+        # Se não tem número ou número é genérico, usar URL como chave
+        chave = numero if numero and numero not in ['N/A', 'None', ''] else ed.get('url', '')
+        if chave and chave not in numeros_vistos:
+            numeros_vistos.add(chave)
+            editais_unicos.append(ed)
+
+    if len(editais) != len(editais_unicos):
+        print(f"[BUSCA] Removidas {len(editais) - len(editais_unicos)} duplicatas")
+    editais = editais_unicos
+
     # Montar resultado combinado
     resultado = {
         "success": len(editais) > 0,
