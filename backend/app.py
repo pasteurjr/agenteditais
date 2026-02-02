@@ -1922,7 +1922,8 @@ def processar_calcular_aderencia(message: str, user_id: str):
     produto_encontrado = _encontrar_produto(produtos.get("produtos", []), message_lower)
 
     for e in editais.get("editais", []):
-        if e["numero"].lower() in message_lower:
+        numero = e.get("numero") or ""
+        if numero and numero.lower() in message_lower:
             edital_encontrado = e
             break
 
@@ -1984,7 +1985,8 @@ def processar_gerar_proposta(message: str, user_id: str):
     produto_encontrado = _encontrar_produto(produtos.get("produtos", []), message_lower)
 
     for e in editais.get("editais", []):
-        if e["numero"].lower() in message_lower:
+        numero = e.get("numero") or ""
+        if numero and numero.lower() in message_lower:
             edital_encontrado = e
             break
 
