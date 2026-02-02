@@ -1,19 +1,19 @@
 -- =============================================================================
--- SETUP AGENTE EDITAIS - PADRÃO natural_language_database_searcher
+-- SETUP AGENTE EDITAIS - PADRAO natural_language_database_searcher (GPT-4o)
 -- =============================================================================
 -- Executar no MindsDB Studio (http://192.168.1.100:47334)
 -- Data: 2026-02-02
--- Padrão: Idêntico ao natural_language_database_searcher (GPT-4o + OpenAI)
+-- Padrao: Identico ao natural_language_database_searcher
 -- =============================================================================
 
 -- =============================================================================
--- PASSO 1: CONECTAR BANCO DE DADOS EDITAIS (se ainda não existir)
+-- PASSO 1: CONECTAR BANCO DE DADOS EDITAIS (se ainda nao existir)
 -- =============================================================================
 
--- Verificar se já existe
+-- Verificar se ja existe
 SHOW DATABASES;
 
--- Se não existir, criar:
+-- Se nao existir, criar:
 CREATE DATABASE editais_db
 WITH ENGINE = 'mysql',
 PARAMETERS = {
@@ -35,14 +35,14 @@ CREATE SKILL editais_sql_skill_searcher
 USING
     type = 'sql',
     database = 'editais_db',
-    description = 'A base de dados contém informações sobre editais de licitação e produtos para participação em pregões públicos.
+    description = 'A base de dados contem informacoes sobre editais de licitacao e produtos para participacao em pregoes publicos.
 
 TABELAS PRINCIPAIS:
 - **produtos**: id, user_id, nome, fabricante, modelo, categoria (equipamento, reagente, insumo_hospitalar, insumo_laboratorial, informatica, redes, mobiliario, eletronico, outro)
-- **produtos_especificacoes**: id, produto_id, nome_especificacao, valor, unidade - especificações técnicas dos produtos
+- **produtos_especificacoes**: id, produto_id, nome_especificacao, valor, unidade - especificacoes tecnicas dos produtos
 - **editais**: id, user_id, numero, orgao, objeto, modalidade (pregao_eletronico, pregao_presencial, concorrencia, etc), status (novo, analisando, participar, nao_participar, proposta_enviada, ganho, perdido, cancelado), data_abertura, data_publicacao, valor_referencia, uf, cidade, url, fonte
-- **editais_requisitos**: id, edital_id, descricao, tipo, obrigatorio - requisitos técnicos de cada edital
-- **analises**: id, edital_id, produto_id, user_id, score_tecnico (0-100), recomendacao - análises de aderência entre produtos e editais
+- **editais_requisitos**: id, edital_id, descricao, tipo, obrigatorio - requisitos tecnicos de cada edital
+- **analises**: id, edital_id, produto_id, user_id, score_tecnico (0-100), recomendacao - analises de aderencia entre produtos e editais
 - **analises_detalhes**: id, analise_id, requisito_id, status (atendido, parcial, nao_atendido), observacao
 - **propostas**: id, edital_id, produto_id, user_id, conteudo, valor_proposto, status, created_at
 - **fontes_editais**: id, nome, tipo, url_base, ativo - fontes de editais (PNCP, ComprasNet, BEC, etc)
@@ -56,11 +56,11 @@ RELACIONAMENTOS:
 - propostas.edital_id -> editais.id
 - propostas.produto_id -> produtos.id
 
-INSTRUÇÕES:
+INSTRUCOES:
 - As datas nas perguntas seguem formato dd/mm/yyyy, converter para yyyy-mm-dd nas queries
-- Responder sempre em português brasileiro
+- Responder sempre em portugues brasileiro
 - Para scores, usar porcentagem (ex: 85%)
-- Para valores monetários, formatar como R$ X.XXX,XX
+- Para valores monetarios, formatar como R$ X.XXX,XX
 - status dos editais: novo, analisando, participar, nao_participar, proposta_enviada, ganho, perdido, cancelado';
 
 -- =============================================================================
@@ -69,22 +69,23 @@ INSTRUÇÕES:
 
 SHOW SKILLS;
 
--- ⚠️ IMPORTANTE: Copie o ID COMPLETO da skill criada
+-- IMPORTANTE: Copie o ID COMPLETO da skill criada
 -- Exemplo: editais_sql_skill_searcher_abc123def456...
--- Você precisará desse ID no próximo passo!
+-- Voce precisara desse ID no proximo passo!
 
 -- =============================================================================
 -- PASSO 4: CRIAR AGENTE (usar ID da skill do passo anterior)
 -- =============================================================================
 
--- ⚠️ SUBSTITUIR <SKILL_ID> pelo ID real da skill do PASSO 3
+-- SUBSTITUIR <SKILL_ID> pelo ID real da skill do PASSO 3
+-- SUBSTITUIR <SUA_OPENAI_API_KEY> pela sua chave OpenAI
 
 CREATE AGENT editais_database_searcher
 USING
     model = 'gpt-4o',
     provider = 'openai',
-    openai_api_key = '<SUA_OPENAI_API_KEY>',  -- Usar mesma chave dos outros agentes
-    prompt_template = 'Gere a query sql para consulta ao banco de dados e responda a essa pergunta em português: {{question}}',
+    openai_api_key = '<SUA_OPENAI_API_KEY>',
+    prompt_template = 'Gere a query sql para consulta ao banco de dados e responda a essa pergunta em portugues: {{question}}',
     skills = ['<SKILL_ID>'];
 
 -- =============================================================================
@@ -109,32 +110,32 @@ WHERE question = 'Quantos produtos e editais existem no banco?';
 -- Teste 2: Listar editais novos
 SELECT *
 FROM mindsdb.editais_database_searcher
-WHERE question = 'Quais editais estão com status novo?';
+WHERE question = 'Quais editais estao com status novo?';
 
--- Teste 3: Editais por órgão
+-- Teste 3: Editais por orgao
 SELECT *
 FROM mindsdb.editais_database_searcher
-WHERE question = 'Liste editais do Ministério da Saúde';
+WHERE question = 'Liste editais do Ministerio da Saude';
 
--- Teste 4: Editais que vencem no mês
+-- Teste 4: Editais que vencem no mes
 SELECT *
 FROM mindsdb.editais_database_searcher
-WHERE question = 'Quais editais têm data de abertura em fevereiro de 2026?';
+WHERE question = 'Quais editais tem data de abertura em fevereiro de 2026?';
 
--- Teste 5: Score de aderência
+-- Teste 5: Score de aderencia
 SELECT *
 FROM mindsdb.editais_database_searcher
-WHERE question = 'Qual é o score médio de aderência das análises?';
+WHERE question = 'Qual e o score medio de aderencia das analises?';
 
 -- Teste 6: Produtos por categoria
 SELECT *
 FROM mindsdb.editais_database_searcher
 WHERE question = 'Quantos produtos temos em cada categoria?';
 
--- Teste 7: Editais e produtos compatíveis
+-- Teste 7: Editais e produtos compativeis
 SELECT *
 FROM mindsdb.editais_database_searcher
-WHERE question = 'Quais produtos têm aderência acima de 70% em algum edital?';
+WHERE question = 'Quais produtos tem aderencia acima de 70% em algum edital?';
 
 -- Teste 8: Propostas geradas
 SELECT *
@@ -142,38 +143,9 @@ FROM mindsdb.editais_database_searcher
 WHERE question = 'Quantas propostas foram geradas?';
 
 -- =============================================================================
--- CONSULTAS ADICIONAIS ÚTEIS
--- =============================================================================
-
--- Editais que vencem esta semana
-SELECT *
-FROM mindsdb.editais_database_searcher
-WHERE question = 'Quais editais vencem esta semana?';
-
--- Produto com melhor score
-SELECT *
-FROM mindsdb.editais_database_searcher
-WHERE question = 'Qual produto tem o melhor score de aderência?';
-
--- Editais por estado
-SELECT *
-FROM mindsdb.editais_database_searcher
-WHERE question = 'Quantos editais temos por estado (UF)?';
-
--- Editais de equipamentos médicos
-SELECT *
-FROM mindsdb.editais_database_searcher
-WHERE question = 'Liste editais que mencionam equipamentos médicos ou hospitalares no objeto';
-
--- Resumo geral
-SELECT *
-FROM mindsdb.editais_database_searcher
-WHERE question = 'Faça um resumo do banco: total de produtos, editais, análises e propostas';
-
--- =============================================================================
 -- FIM
 -- =============================================================================
--- ✅ Banco: editais_db (camerascasas.no-ip.info:3308/editais)
--- ✅ Provider: OpenAI (GPT-4o) - mesmo dos outros agentes
--- ✅ Padrão: Idêntico ao natural_language_database_searcher
+-- Banco: editais_db (camerascasas.no-ip.info:3308/editais)
+-- Provider: OpenAI (GPT-4o) - mesmo dos outros agentes
+-- Padrao: Identico ao natural_language_database_searcher
 -- =============================================================================
