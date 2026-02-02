@@ -2157,3 +2157,101 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
+
+# ==================== MINDSDB TOOL ====================
+
+def tool_consulta_mindsdb(pergunta: str, user_id: str) -> Dict[str, Any]:
+    """
+    Envia uma pergunta em linguagem natural para o agente MindsDB (editais_database_searcher).
+    O agente traduz para SQL, executa e retorna a resposta formatada.
+
+    Args:
+        pergunta: Pergunta em linguagem natural sobre editais/produtos
+        user_id: ID do usuário (para contexto)
+
+    Returns:
+        Dict com resposta do MindsDB ou erro
+    """
+    import os
+
+    # Configuração MindsDB
+    MINDSDB_HOST = os.getenv("MINDSDB_HOST", "192.168.1.100")
+    MINDSDB_PORT = os.getenv("MINDSDB_PORT", "47334")
+    MINDSDB_USER = os.getenv("MINDSDB_USER", "mindsdb")
+    MINDSDB_PASSWORD = os.getenv("MINDSDB_PASSWORD", "")
+
+    try:
+        # Método 1: Via API REST do MindsDB
+        url = f"http://{MINDSDB_HOST}:{MINDSDB_PORT}/api/sql/query"
+
+        # Query para o agente
+        sql_query = f"""
+        SELECT *
+        FROM mindsdb.editais_database_searcher
+        WHERE question = '{pergunta.replace("'", "''")}';
+        """
+
+        print(f"[MINDSDB] Enviando consulta: {pergunta[:100]}...")
+
+        response = requests.post(
+            url,
+            json={"query": sql_query},
+            headers={"Content-Type": "application/json"},
+            timeout=120  # MindsDB pode demorar com consultas complexas
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+
+            # Extrair resposta do agente
+            if data.get("data") and len(data["data"]) > 0:
+                row = data["data"][0]
+                # A resposta pode estar em diferentes colunas dependendo da versão
+                resposta = None
+                if isinstance(row, dict):
+                    resposta = row.get("answer") or row.get("response") or row.get("result")
+                elif isinstance(row, list) and len(row) > 0:
+                    resposta = row[0]
+
+                if resposta:
+                    print(f"[MINDSDB] Resposta recebida: {str(resposta)[:200]}...")
+                    return {
+                        "success": True,
+                        "resposta": resposta,
+                        "pergunta": pergunta
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Resposta vazia do agente MindsDB",
+                        "raw_data": data
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": "Sem dados retornados pelo MindsDB",
+                    "raw_response": data
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"Erro HTTP {response.status_code}: {response.text[:500]}"
+            }
+
+    except requests.exceptions.ConnectionError:
+        return {
+            "success": False,
+            "error": f"Não foi possível conectar ao MindsDB em {MINDSDB_HOST}:{MINDSDB_PORT}. Verifique se o serviço está rodando."
+        }
+    except requests.exceptions.Timeout:
+        return {
+            "success": False,
+            "error": "Timeout na consulta ao MindsDB (>120s). A consulta pode ser muito complexa."
+        }
+    except Exception as e:
+        print(f"[MINDSDB] Erro: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }

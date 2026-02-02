@@ -104,7 +104,11 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 16. **reprocessar_produto**: Reprocessar/atualizar especificações de um produto
     Exemplos: "reprocesse o produto X", "atualize specs do produto X", "extraia novamente as especificações"
 
-17. **chat_livre**: Dúvidas gerais, conversas
+17. **consulta_mindsdb**: Consultas analíticas complexas sobre editais e produtos via linguagem natural
+    Exemplos: "qual o score médio de aderência?", "quantos editais por estado?", "qual produto tem melhor desempenho?", "estatísticas dos editais", "análise dos dados", "relatório de editais"
+    Use quando: perguntas analíticas, estatísticas, agregações, comparações, rankings, tendências
+
+18. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -246,6 +250,13 @@ def detectar_intencao_fallback(message: str) -> str:
     # 9. Buscar editais - por último, pois é genérico
     if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
         return "buscar_editais"
+
+    # 10. Consultas analíticas via MindsDB
+    if any(p in msg for p in ["estatística", "estatistica", "score médio", "score medio", "média de", "media de",
+                               "quantos editais", "quantos produtos", "análise dos dados", "analise dos dados",
+                               "relatório", "relatorio", "ranking", "tendência", "tendencia", "comparar",
+                               "por estado", "por uf", "por categoria", "desempenho", "performance"]):
+        return "consulta_mindsdb"
 
     return "chat_livre"
 
@@ -609,6 +620,9 @@ def chat():
 
         elif action_type == "atualizar_produto":
             response_text, resultado = processar_atualizar_produto(message, user_id)
+
+        elif action_type == "consulta_mindsdb":
+            response_text, resultado = processar_consulta_mindsdb(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -2149,6 +2163,44 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
         return response, resultado_salvar
     else:
         return f"Erro ao salvar editais: {resultado_salvar.get('error')}", resultado_salvar
+
+
+def processar_consulta_mindsdb(message: str, user_id: str):
+    """
+    Processa consultas analíticas via MindsDB.
+    Envia a pergunta em linguagem natural para o agente editais_database_searcher.
+    """
+    from tools import tool_consulta_mindsdb
+
+    resultado = tool_consulta_mindsdb(message, user_id)
+
+    if resultado.get("success"):
+        resposta_mindsdb = resultado.get("resposta", "")
+        response = f"""## 📊 Consulta Analítica
+
+**Pergunta:** {message}
+
+---
+
+{resposta_mindsdb}
+
+---
+*Consulta realizada via MindsDB (GPT-4o)*"""
+    else:
+        error = resultado.get("error", "Erro desconhecido")
+        response = f"""## ❌ Erro na Consulta
+
+Não foi possível processar a consulta analítica.
+
+**Erro:** {error}
+
+**Dica:** Tente reformular a pergunta ou use comandos diretos como:
+- "liste meus editais"
+- "liste meus produtos"
+- "calcule aderência do produto X ao edital Y"
+"""
+
+    return response, resultado
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):

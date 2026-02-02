@@ -42,3 +42,9 @@ PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1"
 # Serper API (Google Search)
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "d46999449953645b87258a752ef428d98ae5970f")
 SERPER_API_URL = "https://google.serper.dev/search"
+
+# MindsDB (Consultas analíticas via linguagem natural)
+MINDSDB_HOST = os.getenv("MINDSDB_HOST", "192.168.1.100")
+MINDSDB_PORT = os.getenv("MINDSDB_PORT", "47334")
+MINDSDB_USER = os.getenv("MINDSDB_USER", "mindsdb")
+MINDSDB_PASSWORD = os.getenv("MINDSDB_PASSWORD", "")
