@@ -34,6 +34,20 @@ JWT_EXPIRY_HOURS = 24
 
 # Prompts prontos para o dropdown
 PROMPTS_PRONTOS = [
+    # === CONSULTAS ANALÍTICAS (MindsDB) ===
+    {"id": "mindsdb_totais", "nome": "📊 Totais (produtos/editais)", "prompt": "Quantos produtos e editais existem no banco?"},
+    {"id": "mindsdb_editais_novos", "nome": "📊 Editais com status novo", "prompt": "Quais editais estão com status novo?"},
+    {"id": "mindsdb_editais_orgao", "nome": "📊 Editais por órgão", "prompt": "Liste editais do Ministério da Saúde"},
+    {"id": "mindsdb_editais_mes", "nome": "📊 Editais do mês", "prompt": "Quais editais têm data de abertura em fevereiro de 2026?"},
+    {"id": "mindsdb_score_medio", "nome": "📊 Score médio de aderência", "prompt": "Qual é o score médio de aderência das análises?"},
+    {"id": "mindsdb_produtos_categoria", "nome": "📊 Produtos por categoria", "prompt": "Quantos produtos temos em cada categoria?"},
+    {"id": "mindsdb_alta_aderencia", "nome": "📊 Produtos c/ alta aderência", "prompt": "Quais produtos têm aderência acima de 70% em algum edital?"},
+    {"id": "mindsdb_propostas", "nome": "📊 Total de propostas", "prompt": "Quantas propostas foram geradas?"},
+    {"id": "mindsdb_editais_semana", "nome": "📊 Editais da semana", "prompt": "Quais editais vencem esta semana?"},
+    {"id": "mindsdb_melhor_produto", "nome": "📊 Produto c/ melhor score", "prompt": "Qual produto tem o melhor score de aderência?"},
+    {"id": "mindsdb_editais_uf", "nome": "📊 Editais por UF", "prompt": "Quantos editais temos por estado (UF)?"},
+    {"id": "mindsdb_resumo", "nome": "📊 Resumo geral do banco", "prompt": "Faça um resumo do banco: total de produtos, editais, análises e propostas"},
+    # === AÇÕES DO SISTEMA ===
     {"id": "listar_produtos", "nome": "Listar meus produtos", "prompt": "Liste todos os meus produtos cadastrados"},
     {"id": "listar_editais", "nome": "Listar editais abertos", "prompt": "Quais editais estão abertos?"},
     {"id": "calcular_aderencia", "nome": "Calcular aderência", "prompt": "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]"},
