@@ -1804,19 +1804,33 @@ def processar_listar_editais(message: str, user_id: str):
     elif "analisando" in message_lower:
         status = "analisando"
 
+    # Verificar se usuário quer ver todos
+    mostrar_todos = any(p in message_lower for p in ["todos", "all", "completo", "completa"])
+    limite = 100 if mostrar_todos else 20  # Default 20, ou 100 se pedir todos
+
     resultado = tool_listar_editais(user_id, status=status, uf=uf)
 
     if resultado.get("success"):
         editais = resultado.get("editais", [])
         if editais:
-            response = f"**Editais salvos:** {len(editais)}\n\n"
-            for i, ed in enumerate(editais[:10], 1):
+            total = len(editais)
+            editais_mostrar = editais[:limite]
+
+            response = f"**Editais salvos:** {total}"
+            if total > limite:
+                response += f" (mostrando {limite})"
+            response += "\n\n"
+
+            for i, ed in enumerate(editais_mostrar, 1):
                 response += f"{i}. **{ed['numero']}** ({ed['status']})\n"
                 response += f"   {ed['orgao']} - {ed['uf'] or 'N/A'}\n"
                 response += f"   {ed['objeto'][:80]}...\n"
                 if ed.get('url'):
                     response += f"   🔗 [Acessar edital]({ed['url']})\n"
                 response += "\n"
+
+            if total > limite:
+                response += f"\n📋 *Mostrando {limite} de {total} editais. Digite 'listar todos editais' para ver todos.*"
         else:
             response = "Você não tem editais salvos ainda. Use 'Buscar editais' para encontrar oportunidades."
     else:
