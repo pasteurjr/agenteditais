@@ -1870,9 +1870,9 @@ def processar_listar_editais(message: str, user_id: str):
 def _encontrar_produto(produtos: list, message_lower: str):
     """Helper para encontrar produto por nome, modelo ou palavras-chave"""
     for p in produtos:
-        nome_lower = p["nome"].lower()
-        modelo_lower = p.get("modelo", "").lower()
-        fabricante_lower = p.get("fabricante", "").lower()
+        nome_lower = (p.get("nome") or "").lower()
+        modelo_lower = (p.get("modelo") or "").lower()
+        fabricante_lower = (p.get("fabricante") or "").lower()
 
         # Match exato do nome
         if nome_lower in message_lower:
