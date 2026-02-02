@@ -1845,6 +1845,29 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
             orgao = edital_data.get('orgao')
             numero_pncp = edital_data.get('numero_pncp')
 
+            # Validar numero - campo obrigatório
+            if not numero:
+                # Tentar extrair da URL ou gerar um identificador único
+                url = edital_data.get('url', '')
+                if url:
+                    # Extrair identificador da URL
+                    import re
+                    match = re.search(r'/(\d+[-_/]\d+)/?', url)
+                    if match:
+                        numero = match.group(1).replace('/', '-').replace('_', '-')
+                    else:
+                        # Usar hash da URL como identificador
+                        import hashlib
+                        url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+                        numero = f"SCR-{url_hash}"
+                else:
+                    # Gerar número único
+                    numero = f"SCR-{str(uuid.uuid4())[:8]}"
+
+            # Validar orgao - campo obrigatório
+            if not orgao:
+                orgao = edital_data.get('fonte', 'Não identificado')
+
             # Verificar se já existe
             existe = db.query(Edital).filter(
                 Edital.user_id == user_id,
@@ -1866,7 +1889,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
 
                 # Validar data_abertura - não pode ser string como "Ver no portal"
                 data_abertura = edital_data.get('data_abertura')
-                if isinstance(data_abertura, str) and not data_abertura[0].isdigit():
+                if isinstance(data_abertura, str) and data_abertura and not data_abertura[0].isdigit():
                     data_abertura = None  # Limpar valores inválidos
 
                 edital = Edital(
