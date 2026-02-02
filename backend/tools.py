@@ -689,17 +689,32 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
             categoria = "equipamento"
 
         # 3. Verificar se produto já existe (mesmo nome + mesmo usuário)
-        produto_existente = db.query(Produto).filter(
-            Produto.user_id == user_id,
-            Produto.nome.ilike(nome_produto)
-        ).first()
+        # Normalizar nome para comparação (remover espaços extras, lowercase)
+        import unicodedata
+        def normalizar_nome(nome):
+            if not nome:
+                return ""
+            # Remover acentos
+            nome = unicodedata.normalize('NFKD', nome).encode('ASCII', 'ignore').decode('ASCII')
+            # Lowercase e remover espaços extras
+            nome = ' '.join(nome.lower().split())
+            return nome
 
-        # Também verificar por modelo se disponível
-        if not produto_existente and modelo:
-            produto_existente = db.query(Produto).filter(
-                Produto.user_id == user_id,
-                Produto.modelo.ilike(modelo)
-            ).first()
+        nome_normalizado = normalizar_nome(nome_produto)
+
+        # Buscar todos os produtos do usuário para comparação normalizada
+        produtos_usuario = db.query(Produto).filter(Produto.user_id == user_id).all()
+        produto_existente = None
+
+        for p in produtos_usuario:
+            # Comparar nome normalizado
+            if normalizar_nome(p.nome) == nome_normalizado:
+                produto_existente = p
+                break
+            # Comparar modelo se disponível
+            if modelo and p.modelo and normalizar_nome(p.modelo) == normalizar_nome(modelo):
+                produto_existente = p
+                break
 
         if produto_existente:
             return {
