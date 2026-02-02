@@ -1857,6 +1857,18 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                 continue
 
             try:
+                # Validar modalidade - deve ser um dos valores do ENUM
+                modalidades_validas = ['pregao_eletronico', 'pregao_presencial', 'concorrencia',
+                                       'tomada_precos', 'convite', 'dispensa', 'inexigibilidade']
+                modalidade = edital_data.get('modalidade', 'pregao_eletronico')
+                if modalidade not in modalidades_validas:
+                    modalidade = 'pregao_eletronico'  # Default para scraper
+
+                # Validar data_abertura - não pode ser string como "Ver no portal"
+                data_abertura = edital_data.get('data_abertura')
+                if isinstance(data_abertura, str) and not data_abertura[0].isdigit():
+                    data_abertura = None  # Limpar valores inválidos
+
                 edital = Edital(
                     id=str(uuid.uuid4()),
                     user_id=user_id,
@@ -1865,10 +1877,10 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                     orgao_tipo=edital_data.get('orgao_tipo', 'federal'),
                     uf=edital_data.get('uf'),
                     objeto=edital_data.get('objeto', ''),
-                    modalidade=edital_data.get('modalidade', 'pregao_eletronico'),
+                    modalidade=modalidade,
                     valor_referencia=edital_data.get('valor_referencia'),
                     data_publicacao=edital_data.get('data_publicacao'),
-                    data_abertura=edital_data.get('data_abertura'),
+                    data_abertura=data_abertura,
                     fonte=edital_data.get('fonte', 'PNCP'),
                     url=edital_data.get('url'),
                     status='novo'
