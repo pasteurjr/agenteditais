@@ -586,11 +586,24 @@ def chat():
             response_text = processar_chat_livre(message, user_id, session_id, db)
 
         # Salvar resposta do assistente
+        # Se foi busca de editais, salvar os editais no sources_json para recuperar depois
+        sources_data = None
+        if action_type == "buscar_editais" and resultado:
+            # Salvar editais para uso posterior (salvar_editais)
+            sources_data = {
+                "editais": resultado.get("editais", []),
+                "editais_com_score": resultado.get("editais_com_score", []),
+                "editais_recomendados": resultado.get("editais_recomendados", []),
+                "editais_participar": resultado.get("editais_participar", []),
+                "termo": resultado.get("termo")
+            }
+
         assistant_msg = Message(
             session_id=session_id,
             role='assistant',
             content=response_text,
-            action_type=action_type
+            action_type=action_type,
+            sources_json=sources_data
         )
         db.add(assistant_msg)
 
@@ -1642,55 +1655,61 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
     # Determinar o que salvar
     # - "salvar recomendados" ou "salvar editais recomendados" → PARTICIPAR + AVALIAR
     # - "salvar para participar" ou "salvar participar" → só PARTICIPAR
-    # - "salvar todos" → todos com score
+    # - "salvar todos" → todos os editais
     salvar_tipo = "recomendados"  # padrão
-    if "todos" in msg_lower and "edita" in msg_lower:
+    if "todos" in msg_lower:
         salvar_tipo = "todos"
     elif "participar" in msg_lower:
         salvar_tipo = "participar"
     elif "recomendados" in msg_lower or "recomendado" in msg_lower:
         salvar_tipo = "recomendados"
 
-    # Buscar última mensagem de busca no histórico
-    mensagens_anteriores = db.query(Message).filter(
+    # Buscar última mensagem de busca no histórico (com editais salvos em sources_json)
+    ultima_busca = db.query(Message).filter(
         Message.session_id == session_id,
         Message.action_type == "buscar_editais",
         Message.role == "assistant"
     ).order_by(Message.created_at.desc()).first()
 
-    if not mensagens_anteriores:
+    if not ultima_busca:
         return "Não encontrei uma busca de editais recente. Execute primeiro: **buscar editais de [tema]**", {"status": "sem_busca"}
 
-    # Tentar recuperar editais do contexto (resultado JSON salvo na mensagem)
-    # Como não temos isso armazenado, vamos fazer uma nova busca simplificada
-    # ou pedir para o usuário re-executar
+    # Tentar recuperar editais do sources_json (salvo na busca)
+    editais_para_salvar = []
+    editais_com_score = []
+    editais_participar = []
+    editais_recomendados = []
 
-    # Buscar última mensagem do usuário com busca
-    ultima_busca_user = db.query(Message).filter(
-        Message.session_id == session_id,
-        Message.action_type == "buscar_editais",
-        Message.role == "user"
-    ).order_by(Message.created_at.desc()).first()
+    if ultima_busca.sources_json:
+        # Recuperar editais salvos - SEM re-buscar!
+        print(f"[SALVAR] Recuperando editais do sources_json...")
+        sources = ultima_busca.sources_json
+        editais_com_score = sources.get("editais_com_score", sources.get("editais", []))
+        editais_participar = sources.get("editais_participar", [])
+        editais_recomendados = sources.get("editais_recomendados", [])
+        print(f"[SALVAR] Encontrados {len(editais_com_score)} editais salvos na sessão")
+    else:
+        # Fallback: sources_json vazio, precisa re-buscar (compatibilidade com buscas antigas)
+        print(f"[SALVAR] sources_json vazio, buscando mensagem do usuário...")
+        ultima_busca_user = db.query(Message).filter(
+            Message.session_id == session_id,
+            Message.action_type == "buscar_editais",
+            Message.role == "user"
+        ).order_by(Message.created_at.desc()).first()
 
-    if ultima_busca_user:
-        # Re-executar a busca para obter os dados
-        # IMPORTANTE: Passar pelo classificador para obter o termo otimizado
-        print(f"[APP] Re-executando busca para salvar: {ultima_busca_user.content}")
+        if ultima_busca_user:
+            print(f"[SALVAR] Re-executando busca (fallback): {ultima_busca_user.content[:50]}...")
+            classificacao = detectar_intencao_ia(ultima_busca_user.content, tem_arquivo=False)
+            termo_ia = classificacao.get("termo_busca")
+            _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id, termo_ia=termo_ia)
 
-        # Re-classificar para obter o termo_ia otimizado (ex: "área médica" → "hospitalar")
-        classificacao = detectar_intencao_ia(ultima_busca_user.content, tem_arquivo=False)
-        termo_ia = classificacao.get("termo_busca")
-        print(f"[SALVAR] Termo otimizado pela IA: {termo_ia}")
+            if resultado_busca.get("success"):
+                editais_com_score = resultado_busca.get("editais_com_score", [])
+                editais_participar = resultado_busca.get("editais_participar", [])
+                editais_recomendados = resultado_busca.get("editais_recomendados", [])
 
-        _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id, termo_ia=termo_ia)
-
-        if not resultado_busca.get("success"):
-            return "Erro ao recuperar editais da busca anterior. Tente buscar novamente.", {"status": "erro_busca"}
-
-        editais_para_salvar = []
-        editais_com_score = resultado_busca.get("editais_com_score", [])
-        editais_participar = resultado_busca.get("editais_participar", [])
-        editais_recomendados = resultado_busca.get("editais_recomendados", [])
+    if not editais_com_score:
+        return "Não há editais para salvar. Execute uma busca primeiro: **buscar editais de [tema]**", {"status": "sem_editais"}
 
         print(f"[SALVAR] Tipo: {salvar_tipo}")
         print(f"[SALVAR] editais_com_score: {len(editais_com_score)}")
