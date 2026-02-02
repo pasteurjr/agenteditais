@@ -213,6 +213,22 @@ def detectar_intencao_fallback(message: str) -> str:
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
         return "reprocessar_produto"
 
+    # 5.6 Excluir edital
+    if any(p in msg for p in ["excluir edital", "excluir editais", "deletar edital", "remover edital", "apagar edital"]):
+        return "excluir_edital"
+
+    # 5.7 Excluir produto
+    if any(p in msg for p in ["excluir produto", "deletar produto", "remover produto", "apagar produto"]):
+        return "excluir_produto"
+
+    # 5.8 Atualizar/Editar edital
+    if any(p in msg for p in ["editar edital", "atualizar edital", "modificar edital", "alterar edital"]):
+        return "atualizar_edital"
+
+    # 5.9 Atualizar/Editar produto
+    if any(p in msg for p in ["editar produto", "atualizar produto", "modificar produto", "alterar produto"]):
+        return "atualizar_produto"
+
     # 6. Calcular aderência
     if any(p in msg for p in ["aderência", "aderencia", "score", "compatível", "compatibilidade"]):
         return "calcular_aderencia"
@@ -581,6 +597,18 @@ def chat():
 
         elif action_type == "reprocessar_produto":
             response_text, resultado = processar_reprocessar_produto(message, user_id)
+
+        elif action_type == "excluir_edital":
+            response_text, resultado = processar_excluir_edital(message, user_id)
+
+        elif action_type == "excluir_produto":
+            response_text, resultado = processar_excluir_produto(message, user_id)
+
+        elif action_type == "atualizar_edital":
+            response_text, resultado = processar_atualizar_edital(message, user_id)
+
+        elif action_type == "atualizar_produto":
+            response_text, resultado = processar_atualizar_produto(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -1386,6 +1414,324 @@ def processar_reprocessar_produto(message: str, user_id: str):
         response = f"❌ Erro ao reprocessar: {resultado.get('error')}"
 
     return response, resultado
+
+
+def processar_excluir_edital(message: str, user_id: str):
+    """
+    Processa ação: Excluir edital(is).
+    Identifica editais por número, ID ou palavras-chave na mensagem.
+    """
+    from backend.tools import tool_excluir_edital, tool_excluir_editais_multiplos, tool_listar_editais
+
+    msg_lower = message.lower()
+
+    # Verificar se é exclusão de todos
+    if "todos" in msg_lower:
+        editais_resultado = tool_listar_editais(user_id)
+        if not editais_resultado.get("success") or not editais_resultado.get("editais"):
+            return "Você não tem editais salvos para excluir.", {"success": False}
+
+        edital_ids = [e["id"] for e in editais_resultado.get("editais", [])]
+        resultado = tool_excluir_editais_multiplos(edital_ids, user_id)
+
+        if resultado.get("success"):
+            return f"✅ {resultado.get('excluidos', 0)} edital(is) excluído(s) com sucesso!", resultado
+        else:
+            return f"❌ Erro ao excluir editais: {resultado.get('error')}", resultado
+
+    # Listar editais para identificar qual excluir
+    editais_resultado = tool_listar_editais(user_id)
+    if not editais_resultado.get("success"):
+        return "Erro ao buscar seus editais.", editais_resultado
+
+    editais = editais_resultado.get("editais", [])
+    if not editais:
+        return "Você não tem editais salvos para excluir.", {"success": False}
+
+    # Tentar encontrar edital por número ou ID na mensagem
+    edital_a_excluir = None
+    for ed in editais:
+        numero = ed.get("numero", "").lower()
+        edital_id = ed.get("id", "")
+
+        if numero and numero in msg_lower:
+            edital_a_excluir = ed
+            break
+        if edital_id[:8].lower() in msg_lower:
+            edital_a_excluir = ed
+            break
+
+    if not edital_a_excluir:
+        # Mostrar lista de editais para o usuário escolher
+        response = "**Qual edital você deseja excluir?**\n\nEditais salvos:\n"
+        for i, ed in enumerate(editais[:10], 1):
+            response += f"{i}. **{ed.get('numero')}** - {ed.get('orgao', 'N/A')[:40]}\n"
+        response += "\nDigite: 'excluir edital [número]' para confirmar."
+        return response, {"success": False, "editais": editais}
+
+    # Excluir o edital encontrado
+    resultado = tool_excluir_edital(edital_a_excluir["id"], user_id)
+
+    if resultado.get("success"):
+        return f"✅ Edital **{edital_a_excluir.get('numero')}** excluído com sucesso!", resultado
+    else:
+        return f"❌ Erro ao excluir edital: {resultado.get('error')}", resultado
+
+
+def processar_excluir_produto(message: str, user_id: str):
+    """
+    Processa ação: Excluir produto.
+    Identifica produto por nome ou ID na mensagem.
+    """
+    from backend.tools import tool_excluir_produto, tool_listar_produtos
+
+    msg_lower = message.lower()
+
+    # Listar produtos para identificar qual excluir
+    produtos_resultado = tool_listar_produtos(user_id)
+    if not produtos_resultado.get("success"):
+        return "Erro ao buscar seus produtos.", produtos_resultado
+
+    produtos = produtos_resultado.get("produtos", [])
+    if not produtos:
+        return "Você não tem produtos cadastrados para excluir.", {"success": False}
+
+    # Verificar se é exclusão de todos
+    if "todos" in msg_lower:
+        excluidos = 0
+        erros = 0
+        for p in produtos:
+            resultado = tool_excluir_produto(p["id"], user_id)
+            if resultado.get("success"):
+                excluidos += 1
+            else:
+                erros += 1
+        return f"✅ {excluidos} produto(s) excluído(s)!" + (f" ({erros} erros)" if erros else ""), {"success": True, "excluidos": excluidos}
+
+    # Tentar encontrar produto por nome na mensagem
+    produto_a_excluir = None
+    for p in produtos:
+        nome = p.get("nome", "").lower()
+        modelo = (p.get("modelo") or "").lower()
+        produto_id = p.get("id", "")
+
+        # Verificar se nome, modelo ou ID está na mensagem
+        if nome and any(parte in msg_lower for parte in nome.split()[:3]):
+            produto_a_excluir = p
+            break
+        if modelo and modelo in msg_lower:
+            produto_a_excluir = p
+            break
+        if produto_id[:8].lower() in msg_lower:
+            produto_a_excluir = p
+            break
+
+    if not produto_a_excluir:
+        # Mostrar lista de produtos para o usuário escolher
+        response = "**Qual produto você deseja excluir?**\n\nProdutos cadastrados:\n"
+        for i, p in enumerate(produtos[:10], 1):
+            response += f"{i}. **{p.get('nome')}** ({p.get('fabricante', 'N/A')})\n"
+        response += "\nDigite: 'excluir produto [nome]' para confirmar."
+        return response, {"success": False, "produtos": produtos}
+
+    # Excluir o produto encontrado
+    resultado = tool_excluir_produto(produto_a_excluir["id"], user_id)
+
+    if resultado.get("success"):
+        return f"✅ Produto **{produto_a_excluir.get('nome')}** excluído com sucesso!", resultado
+    else:
+        return f"❌ Erro ao excluir produto: {resultado.get('error')}", resultado
+
+
+def processar_atualizar_edital(message: str, user_id: str):
+    """
+    Processa ação: Atualizar/Editar edital.
+    Usa IA para extrair o que o usuário quer alterar.
+    """
+    from backend.tools import tool_atualizar_edital, tool_listar_editais
+
+    # Listar editais para identificar qual atualizar
+    editais_resultado = tool_listar_editais(user_id)
+    if not editais_resultado.get("success"):
+        return "Erro ao buscar seus editais.", editais_resultado
+
+    editais = editais_resultado.get("editais", [])
+    if not editais:
+        return "Você não tem editais salvos para editar.", {"success": False}
+
+    msg_lower = message.lower()
+
+    # Tentar encontrar edital por número na mensagem
+    edital_a_editar = None
+    for ed in editais:
+        numero = ed.get("numero", "").lower()
+        if numero and numero in msg_lower:
+            edital_a_editar = ed
+            break
+
+    if not edital_a_editar:
+        # Usar o último edital
+        edital_a_editar = editais[0]
+
+    # Extrair campos a atualizar usando IA
+    prompt = f"""Analise a mensagem do usuário e extraia quais campos do edital ele quer alterar.
+
+Mensagem: "{message}"
+
+Campos possíveis: numero, orgao, objeto, modalidade, status, valor_referencia, data_abertura
+
+Status possíveis: novo, analisando, participar, nao_participar, proposta_enviada, ganho, perdido, cancelado
+Modalidades: pregao_eletronico, pregao_presencial, concorrencia, tomada_precos, convite, dispensa, inexigibilidade
+
+Retorne JSON com apenas os campos a alterar:
+{{"campo1": "novo_valor", "campo2": "novo_valor"}}
+
+Se não identificar campos claros, retorne {{}}
+"""
+
+    try:
+        resposta_ia = call_deepseek([{"role": "user", "content": prompt}], max_tokens=100, model_override="deepseek-chat")
+        import json
+        import re
+        json_match = re.search(r'\{[\s\S]*?\}', resposta_ia)
+        if json_match:
+            campos = json.loads(json_match.group())
+        else:
+            campos = {}
+    except:
+        campos = {}
+
+    if not campos:
+        # Mostrar edital atual e pedir para especificar
+        response = f"""**Editar Edital: {edital_a_editar.get('numero')}**
+
+Dados atuais:
+- **Número:** {edital_a_editar.get('numero')}
+- **Órgão:** {edital_a_editar.get('orgao')}
+- **Status:** {edital_a_editar.get('status')}
+- **Modalidade:** {edital_a_editar.get('modalidade')}
+
+Por favor, especifique o que deseja alterar. Exemplos:
+- "alterar status para participar"
+- "mudar órgão para Prefeitura de SP"
+"""
+        return response, {"success": False, "edital": edital_a_editar}
+
+    # Aplicar atualizações
+    resultado = tool_atualizar_edital(
+        edital_id=edital_a_editar["id"],
+        user_id=user_id,
+        **campos
+    )
+
+    if resultado.get("success"):
+        edital_atualizado = resultado.get("edital", {})
+        response = f"""✅ Edital **{edital_atualizado.get('numero')}** atualizado!
+
+Novos dados:
+- **Número:** {edital_atualizado.get('numero')}
+- **Órgão:** {edital_atualizado.get('orgao')}
+- **Status:** {edital_atualizado.get('status')}
+- **Modalidade:** {edital_atualizado.get('modalidade')}
+"""
+        return response, resultado
+    else:
+        return f"❌ Erro ao atualizar edital: {resultado.get('error')}", resultado
+
+
+def processar_atualizar_produto(message: str, user_id: str):
+    """
+    Processa ação: Atualizar/Editar produto.
+    Usa IA para extrair o que o usuário quer alterar.
+    """
+    from backend.tools import tool_atualizar_produto, tool_listar_produtos
+
+    # Listar produtos para identificar qual atualizar
+    produtos_resultado = tool_listar_produtos(user_id)
+    if not produtos_resultado.get("success"):
+        return "Erro ao buscar seus produtos.", produtos_resultado
+
+    produtos = produtos_resultado.get("produtos", [])
+    if not produtos:
+        return "Você não tem produtos cadastrados para editar.", {"success": False}
+
+    msg_lower = message.lower()
+
+    # Tentar encontrar produto por nome na mensagem
+    produto_a_editar = None
+    for p in produtos:
+        nome = p.get("nome", "").lower()
+        if nome and any(parte in msg_lower for parte in nome.split()[:3]):
+            produto_a_editar = p
+            break
+
+    if not produto_a_editar:
+        # Usar o último produto
+        produto_a_editar = produtos[-1]
+
+    # Extrair campos a atualizar usando IA
+    prompt = f"""Analise a mensagem do usuário e extraia quais campos do produto ele quer alterar.
+
+Mensagem: "{message}"
+
+Campos possíveis: nome, fabricante, modelo, categoria
+
+Categorias: equipamento, reagente, insumo_hospitalar, insumo_laboratorial, informatica, redes, mobiliario, eletronico, outro
+
+Retorne JSON com apenas os campos a alterar:
+{{"campo1": "novo_valor", "campo2": "novo_valor"}}
+
+Se não identificar campos claros, retorne {{}}
+"""
+
+    try:
+        resposta_ia = call_deepseek([{"role": "user", "content": prompt}], max_tokens=100, model_override="deepseek-chat")
+        import json
+        import re
+        json_match = re.search(r'\{[\s\S]*?\}', resposta_ia)
+        if json_match:
+            campos = json.loads(json_match.group())
+        else:
+            campos = {}
+    except:
+        campos = {}
+
+    if not campos:
+        # Mostrar produto atual e pedir para especificar
+        response = f"""**Editar Produto: {produto_a_editar.get('nome')}**
+
+Dados atuais:
+- **Nome:** {produto_a_editar.get('nome')}
+- **Fabricante:** {produto_a_editar.get('fabricante', 'N/A')}
+- **Modelo:** {produto_a_editar.get('modelo', 'N/A')}
+- **Categoria:** {produto_a_editar.get('categoria', 'N/A')}
+
+Por favor, especifique o que deseja alterar. Exemplos:
+- "alterar fabricante para Philips"
+- "mudar categoria para equipamento"
+"""
+        return response, {"success": False, "produto": produto_a_editar}
+
+    # Aplicar atualizações
+    resultado = tool_atualizar_produto(
+        produto_id=produto_a_editar["id"],
+        user_id=user_id,
+        **campos
+    )
+
+    if resultado.get("success"):
+        produto_atualizado = resultado.get("produto", {})
+        response = f"""✅ Produto **{produto_atualizado.get('nome')}** atualizado!
+
+Novos dados:
+- **Nome:** {produto_atualizado.get('nome')}
+- **Fabricante:** {produto_atualizado.get('fabricante', 'N/A')}
+- **Modelo:** {produto_atualizado.get('modelo', 'N/A')}
+- **Categoria:** {produto_atualizado.get('categoria', 'N/A')}
+"""
+        return response, resultado
+    else:
+        return f"❌ Erro ao atualizar produto: {resultado.get('error')}", resultado
 
 
 def processar_listar_fontes(message: str):

@@ -943,6 +943,197 @@ def tool_atualizar_produto(produto_id: str, user_id: str, nome: str = None,
         db.close()
 
 
+def tool_excluir_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Exclui um produto e todas suas especificações e documentos associados.
+    """
+    db = get_db()
+    try:
+        produto = db.query(Produto).filter(
+            Produto.id == produto_id,
+            Produto.user_id == user_id
+        ).first()
+
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        nome_produto = produto.nome
+
+        # Excluir especificações associadas
+        db.query(ProdutoEspecificacao).filter(
+            ProdutoEspecificacao.produto_id == produto_id
+        ).delete()
+
+        # Excluir documentos associados
+        db.query(ProdutoDocumento).filter(
+            ProdutoDocumento.produto_id == produto_id
+        ).delete()
+
+        # Excluir análises associadas
+        db.query(Analise).filter(
+            Analise.produto_id == produto_id
+        ).delete()
+
+        # Excluir o produto
+        db.delete(produto)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Produto '{nome_produto}' excluído com sucesso, incluindo especificações, documentos e análises associadas."
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_excluir_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Exclui um edital e todos seus requisitos e análises associados.
+    """
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        numero_edital = edital.numero
+
+        # Excluir requisitos associados
+        db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital_id
+        ).delete()
+
+        # Excluir documentos associados
+        db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id
+        ).delete()
+
+        # Excluir análises associadas
+        db.query(Analise).filter(
+            Analise.edital_id == edital_id
+        ).delete()
+
+        # Excluir detalhes de análise (se existirem análises com detalhes)
+        # Primeiro buscar IDs das análises
+        analise_ids = [a.id for a in db.query(Analise.id).filter(Analise.edital_id == edital_id).all()]
+        if analise_ids:
+            db.query(AnaliseDetalhe).filter(
+                AnaliseDetalhe.analise_id.in_(analise_ids)
+            ).delete(synchronize_session=False)
+
+        # Excluir o edital
+        db.delete(edital)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Edital '{numero_edital}' excluído com sucesso, incluindo requisitos, documentos e análises associadas."
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_excluir_editais_multiplos(edital_ids: List[str], user_id: str) -> Dict[str, Any]:
+    """
+    Exclui múltiplos editais de uma vez.
+    """
+    db = get_db()
+    try:
+        excluidos = []
+        erros = []
+
+        for edital_id in edital_ids:
+            resultado = tool_excluir_edital(edital_id, user_id)
+            if resultado.get("success"):
+                excluidos.append(edital_id)
+            else:
+                erros.append({"id": edital_id, "erro": resultado.get("error")})
+
+        return {
+            "success": len(excluidos) > 0,
+            "excluidos": len(excluidos),
+            "erros": len(erros),
+            "detalhes_erros": erros if erros else None,
+            "message": f"{len(excluidos)} edital(is) excluído(s) com sucesso." + (f" {len(erros)} erro(s)." if erros else "")
+        }
+    finally:
+        db.close()
+
+
+def tool_atualizar_edital(edital_id: str, user_id: str, numero: str = None,
+                          orgao: str = None, objeto: str = None,
+                          modalidade: str = None, status: str = None,
+                          valor_referencia: float = None,
+                          data_abertura: str = None) -> Dict[str, Any]:
+    """
+    Atualiza informações de um edital existente.
+    """
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        if numero:
+            edital.numero = numero
+        if orgao:
+            edital.orgao = orgao
+        if objeto:
+            edital.objeto = objeto
+        if modalidade:
+            modalidades_validas = ['pregao_eletronico', 'pregao_presencial', 'concorrencia',
+                                   'tomada_precos', 'convite', 'dispensa', 'inexigibilidade']
+            if modalidade in modalidades_validas:
+                edital.modalidade = modalidade
+        if status:
+            status_validos = ['novo', 'analisando', 'participar', 'nao_participar',
+                             'proposta_enviada', 'ganho', 'perdido', 'cancelado']
+            if status in status_validos:
+                edital.status = status
+        if valor_referencia is not None:
+            edital.valor_referencia = valor_referencia
+        if data_abertura:
+            from datetime import datetime
+            try:
+                edital.data_abertura = datetime.strptime(data_abertura, "%Y-%m-%d")
+            except:
+                pass  # Ignorar se formato inválido
+
+        db.commit()
+
+        return {
+            "success": True,
+            "edital": {
+                "id": edital.id,
+                "numero": edital.numero,
+                "orgao": edital.orgao,
+                "objeto": edital.objeto[:100] + "..." if len(edital.objeto or '') > 100 else edital.objeto,
+                "modalidade": edital.modalidade,
+                "status": edital.status,
+                "valor_referencia": float(edital.valor_referencia) if edital.valor_referencia else None
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
 def tool_cadastrar_fonte(nome: str, tipo: str, url_base: str,
                          descricao: str = None, api_key: str = None) -> Dict[str, Any]:
     """
