@@ -307,16 +307,28 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
     todos_resultados = []
     erros = []
 
-    # Palavras que indicam que NÃO é um edital de licitação (notícias, concursos, etc.)
+    # Palavras que indicam que NÃO é um edital de AQUISIÇÃO DE PRODUTOS
     palavras_excluir = [
+        # Concursos e RH
         'concurso público', 'concurso publico', 'vagas para', 'aprovados',
         'convocação', 'convocacao', 'nomeação', 'nomeacao', 'posse',
         'inscrição', 'inscricao', 'gabarito', 'resultado preliminar',
+        'funcionário', 'funcionarios', 'salário', 'salario', '13º',
+        # Notícias
         'notícia', 'noticia', 'comunicado', 'portaria', 'decreto',
         'lei complementar', 'resolução', 'resolucao', 'será atendido',
         'passam para', 'transição', 'como vai funcionar', 'servidores estaduais',
-        'funcionário', 'funcionarios', 'salário', 'salario', '13º',
-        'atendimentos do sas', 'serão transferidos'
+        'atendimentos do sas', 'serão transferidos',
+        # Serviços (não produtos)
+        'prestação de serviço', 'prestacao de servico', 'mão de obra', 'mao de obra',
+        'dedicação exclusiva', 'dedicacao exclusiva', 'terceirização', 'terceirizacao',
+        'serviço de lavanderia', 'servico de lavanderia', 'serviço de limpeza',
+        'manutenção preventiva', 'manutencao preventiva', 'manutenção corretiva',
+        # Prorrogações/Aditivos (não novos editais)
+        'termo aditivo', 'prorrogação da ata', 'prorrogacao da ata',
+        'prorrogação parcial', 'prorrogacao parcial',
+        # Editais genéricos sem objeto
+        'poderão participar do processo as empresas devidamente credenciadas'
     ]
 
     # Padrões de URL que indicam página de edital (não notícia)
@@ -328,8 +340,8 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
 
     for fonte in fontes[:5]:  # Limitar a 5 fontes para não demorar muito
         try:
-            # Montar query com site: - buscar por licitação/pregão com número
-            search_query = f"site:{fonte} pregão eletrônico {termo} 2025 OR 2026"
+            # Montar query com site: - buscar por aquisição de bens/equipamentos
+            search_query = f"site:{fonte} pregão eletrônico aquisição {termo} 2025 OR 2026"
 
             print(f"[SCRAPER] Buscando: {search_query}")
 
