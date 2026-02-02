@@ -1066,9 +1066,25 @@ JSON:"""
         editais_scraper = resultado_scraper.get("editais", [])
         # Filtrar editais que já vieram do PNCP (evitar duplicatas)
         links_pncp = {ed.get('url', '') for ed in editais}
+
+        # Palavras que indicam que NÃO é edital de aquisição de produtos
+        palavras_excluir_objeto = [
+            'prestação de serviço', 'mão de obra', 'dedicação exclusiva',
+            'terceirização', 'lavanderia', 'limpeza', 'manutenção preventiva',
+            'manutenção corretiva', 'prorrogação da ata', 'prorrogação parcial',
+            'termo aditivo', 'credenciadas no sistema', 'poderão participar'
+        ]
+
         editais_novos = []
         for ed in editais_scraper:
             if ed.get('link') not in links_pncp and ed.get('link'):
+                # Verificar se é edital de serviço ou prorrogação (filtrar)
+                texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
+                eh_servico_ou_prorrogacao = any(p in texto for p in palavras_excluir_objeto)
+                if eh_servico_ou_prorrogacao:
+                    print(f"[BUSCA] Filtrando (serviço/prorrogação): {ed.get('numero', ed.get('titulo', '')[:30])}")
+                    continue
+
                 # Padronizar campos
                 ed_normalizado = {
                     'numero': ed.get('numero', ed.get('titulo', '')[:50]),
