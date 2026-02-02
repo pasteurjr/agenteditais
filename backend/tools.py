@@ -81,38 +81,75 @@ OBJETO DO EDITAL:
 Responda APENAS com a categoria (uma palavra), sem explicação.
 """
 
-PROMPT_GERAR_PROPOSTA = """Você é um especialista em elaboração de propostas técnicas para licitações públicas.
+PROMPT_GERAR_PROPOSTA = """Você é um especialista em elaboração de propostas técnicas para licitações públicas brasileiras.
 
-Com base nas informações abaixo, gere uma PROPOSTA TÉCNICA completa e profissional.
+Com base nas informações abaixo, gere uma PROPOSTA TÉCNICA COMPLETA e profissional.
 
-EDITAL:
+## DADOS DO EDITAL:
 - Número: {numero_edital}
 - Órgão: {orgao}
 - Objeto: {objeto}
 
-PRODUTO OFERTADO:
+## PRODUTO OFERTADO:
 - Nome: {nome_produto}
 - Fabricante: {fabricante}
 - Modelo: {modelo}
 
-ESPECIFICAÇÕES DO PRODUTO:
+## ESPECIFICAÇÕES TÉCNICAS DO PRODUTO:
 {especificacoes}
 
-REQUISITOS DO EDITAL E ATENDIMENTO:
+## ANÁLISE DE REQUISITOS DO EDITAL:
 {analise_requisitos}
 
-PREÇO: R$ {preco}
+## PREÇO PROPOSTO: R$ {preco}
 
-Gere uma proposta técnica formatada em Markdown com as seguintes seções:
-1. IDENTIFICAÇÃO DA PROPONENTE (deixar campos em branco para preenchimento)
-2. OBJETO DA PROPOSTA
-3. DESCRIÇÃO TÉCNICA DO PRODUTO
-4. ATENDIMENTO AOS REQUISITOS DO EDITAL (tabela comparativa)
-5. CONDIÇÕES COMERCIAIS
-6. VALIDADE DA PROPOSTA
-7. DECLARAÇÕES
+---
 
-A proposta deve ser formal, técnica e seguir o padrão de licitações públicas brasileiras.
+GERE A PROPOSTA TÉCNICA COMPLETA em Markdown com TODAS as seções abaixo. NÃO OMITA NENHUMA SEÇÃO:
+
+# PROPOSTA TÉCNICA - EDITAL Nº {numero_edital}
+
+## 1. IDENTIFICAÇÃO DA PROPONENTE
+(Incluir campos em branco: Razão Social, CNPJ, Endereço, Telefone, E-mail, Representante Legal)
+
+## 2. OBJETO DA PROPOSTA
+(Descrição clara do que está sendo ofertado, referenciando o edital)
+
+## 3. DESCRIÇÃO TÉCNICA DO PRODUTO
+(Detalhar o produto, fabricante, modelo e principais características técnicas)
+
+## 4. ATENDIMENTO AOS REQUISITOS DO EDITAL
+(OBRIGATÓRIO: Criar uma TABELA MARKDOWN comparando requisitos do edital vs especificações do produto)
+
+| Requisito do Edital | Especificação Oferecida | Status |
+|---------------------|-------------------------|--------|
+| (requisito 1) | (spec do produto) | ✅ Atende |
+| (requisito 2) | (spec do produto) | ✅ Atende |
+
+## 5. CONDIÇÕES COMERCIAIS
+OBRIGATÓRIO incluir:
+- **PREÇO UNITÁRIO: R$ {preco}**
+- **PREÇO TOTAL: R$ {preco}** (quantidade: 1 unidade)
+- Prazo de entrega: XX dias após emissão da ordem de fornecimento
+- Prazo de garantia: XX meses
+- Assistência técnica: disponível em todo território nacional
+- Forma de pagamento: conforme edital
+
+## 6. VALIDADE DA PROPOSTA
+A presente proposta tem validade de 60 (sessenta) dias, contados da data de sua apresentação.
+
+## 7. DECLARAÇÕES
+Incluir declarações padrão:
+- Declaração de que os produtos atendem às especificações técnicas
+- Declaração de inexistência de fato impeditivo
+- Declaração de não emprego de menores
+- Declaração de conformidade com a legislação vigente
+
+## 8. ENCERRAMENTO
+Local, data e assinatura do representante legal.
+
+---
+IMPORTANTE: Gere a proposta COMPLETA com TODAS as 8 seções acima. O preço R$ {preco} DEVE aparecer na seção 5.
 """
 
 
@@ -1764,30 +1801,51 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
         ).all()
         specs_texto = "\n".join([f"- {s.nome_especificacao}: {s.valor}" for s in specs])
 
-        # Buscar análise de requisitos
-        analise_texto = "Análise não disponível"
+        # Buscar requisitos do edital
+        requisitos = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital_id
+        ).all()
+        requisitos_texto = ""
+        if requisitos:
+            requisitos_texto = "\n".join([
+                f"- {r.descricao} (Tipo: {r.tipo}, Obrigatório: {'Sim' if r.obrigatorio else 'Não'})"
+                for r in requisitos
+            ])
+        else:
+            requisitos_texto = "Requisitos específicos não cadastrados para este edital."
+
+        # Buscar análise de aderência se existir
+        analise_texto = ""
         if analise:
             detalhes = db.query(AnaliseDetalhe).filter(
                 AnaliseDetalhe.analise_id == analise.id
             ).all()
-            analise_texto = "\n".join([
-                f"- {d.justificativa} ({d.status})" for d in detalhes
-            ])
+            if detalhes:
+                analise_texto = "\n\nANÁLISE DE ADERÊNCIA:\n" + "\n".join([
+                    f"- {d.justificativa} ({d.status})" for d in detalhes
+                ])
+
+        # Combinar requisitos e análise
+        requisitos_e_analise = requisitos_texto + analise_texto
+
+        # Formatar preço
+        preco_formatado = f"{preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if preco else "A definir"
 
         # Gerar proposta com IA
         prompt = PROMPT_GERAR_PROPOSTA.format(
-            numero_edital=edital.numero,
-            orgao=edital.orgao,
-            objeto=edital.objeto,
-            nome_produto=produto.nome,
+            numero_edital=edital.numero or "S/N",
+            orgao=edital.orgao or "Não informado",
+            objeto=edital.objeto or "Não informado",
+            nome_produto=produto.nome or "Produto",
             fabricante=produto.fabricante or "N/A",
             modelo=produto.modelo or "N/A",
-            especificacoes=specs_texto or "Não disponível",
-            analise_requisitos=analise_texto,
-            preco=f"{preco:,.2f}" if preco else "A definir"
+            especificacoes=specs_texto or "Especificações não cadastradas",
+            analise_requisitos=requisitos_e_analise,
+            preco=preco_formatado
         )
 
-        texto_proposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=16000)
+        # Usar max_tokens maior para proposta completa
+        texto_proposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=32000)
 
         # Salvar proposta
         proposta = Proposta(
