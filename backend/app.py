@@ -1711,42 +1711,42 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
     if not editais_com_score:
         return "Não há editais para salvar. Execute uma busca primeiro: **buscar editais de [tema]**", {"status": "sem_editais"}
 
-        print(f"[SALVAR] Tipo: {salvar_tipo}")
-        print(f"[SALVAR] editais_com_score: {len(editais_com_score)}")
-        print(f"[SALVAR] editais_participar: {len(editais_participar)}")
-        print(f"[SALVAR] editais_recomendados: {len(editais_recomendados)}")
+    print(f"[SALVAR] Tipo: {salvar_tipo}")
+    print(f"[SALVAR] editais_com_score: {len(editais_com_score)}")
+    print(f"[SALVAR] editais_participar: {len(editais_participar)}")
+    print(f"[SALVAR] editais_recomendados: {len(editais_recomendados)}")
 
-        if salvar_tipo == "todos":
-            # Salvar TODOS os editais encontrados
-            editais_para_salvar = editais_com_score
-        elif salvar_tipo == "participar":
-            # Salvar só os PARTICIPAR (score >= 80 ou recomendação PARTICIPAR)
-            editais_para_salvar = editais_participar
-            if not editais_para_salvar:
-                # Fallback: pegar os com score >= 75 (margem para variação)
-                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 75]
-                print(f"[SALVAR] Fallback participar: {len(editais_para_salvar)} com score >= 75")
-        elif salvar_tipo == "recomendados":
-            # Salvar PARTICIPAR + AVALIAR
-            editais_para_salvar = editais_recomendados
-            if not editais_para_salvar:
-                # Fallback: pegar os com score >= 50
-                editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
-                print(f"[SALVAR] Fallback recomendados: {len(editais_para_salvar)} com score >= 50")
-        else:
-            # Tentar extrair número específico do edital
-            numero_match = re.search(r'edital\s+(\S+)', msg_lower)
-            if numero_match:
-                numero_busca = numero_match.group(1).upper()
-                for ed in editais_com_score:
-                    if numero_busca in ed.get("numero", "").upper():
-                        editais_para_salvar.append(ed)
-                        break
-
-        print(f"[SALVAR] editais_para_salvar: {len(editais_para_salvar)}")
-
+    if salvar_tipo == "todos":
+        # Salvar TODOS os editais encontrados
+        editais_para_salvar = editais_com_score
+    elif salvar_tipo == "participar":
+        # Salvar só os PARTICIPAR (score >= 80 ou recomendação PARTICIPAR)
+        editais_para_salvar = editais_participar
         if not editais_para_salvar:
-            return """Não encontrei editais para salvar.
+            # Fallback: pegar os com score >= 75 (margem para variação)
+            editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 75]
+            print(f"[SALVAR] Fallback participar: {len(editais_para_salvar)} com score >= 75")
+    elif salvar_tipo == "recomendados":
+        # Salvar PARTICIPAR + AVALIAR
+        editais_para_salvar = editais_recomendados
+        if not editais_para_salvar:
+            # Fallback: pegar os com score >= 50
+            editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
+            print(f"[SALVAR] Fallback recomendados: {len(editais_para_salvar)} com score >= 50")
+    else:
+        # Tentar extrair número específico do edital
+        numero_match = re.search(r'edital\s+(\S+)', msg_lower)
+        if numero_match:
+            numero_busca = numero_match.group(1).upper()
+            for ed in editais_com_score:
+                if numero_busca in ed.get("numero", "").upper():
+                    editais_para_salvar.append(ed)
+                    break
+
+    print(f"[SALVAR] editais_para_salvar: {len(editais_para_salvar)}")
+
+    if not editais_para_salvar:
+        return """Não encontrei editais para salvar.
 
 **Opções:**
 - Digite: **salvar editais recomendados** para salvar todos os recomendados
@@ -1754,43 +1754,41 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
 - Execute uma nova busca: **buscar editais de [tema]**
 """, {"status": "sem_editais"}
 
-        # Salvar os editais selecionados (com verificação de duplicatas)
-        resultado_salvar = tool_salvar_editais_selecionados(editais_para_salvar, user_id)
+    # Salvar os editais selecionados (com verificação de duplicatas)
+    resultado_salvar = tool_salvar_editais_selecionados(editais_para_salvar, user_id)
 
-        if resultado_salvar.get("success"):
-            salvos = resultado_salvar.get("salvos", [])
-            duplicados = resultado_salvar.get("duplicados", [])
-            erros = resultado_salvar.get("erros", [])
+    if resultado_salvar.get("success"):
+        salvos = resultado_salvar.get("salvos", [])
+        duplicados = resultado_salvar.get("duplicados", [])
+        erros = resultado_salvar.get("erros", [])
 
-            response = "## 💾 Resultado do Salvamento\n\n"
+        response = "## 💾 Resultado do Salvamento\n\n"
 
-            if salvos:
-                response += f"**✅ Salvos com sucesso:** {len(salvos)} edital(is)\n"
-                for num in salvos[:5]:
-                    response += f"- {num}\n"
-                if len(salvos) > 5:
-                    response += f"- ... e mais {len(salvos) - 5}\n"
-                response += "\n"
+        if salvos:
+            response += f"**✅ Salvos com sucesso:** {len(salvos)} edital(is)\n"
+            for num in salvos[:5]:
+                response += f"- {num}\n"
+            if len(salvos) > 5:
+                response += f"- ... e mais {len(salvos) - 5}\n"
+            response += "\n"
 
-            if duplicados:
-                response += f"**⚠️ Já existentes (ignorados):** {len(duplicados)} edital(is)\n"
-                for num in duplicados[:3]:
-                    response += f"- {num}\n"
-                response += "\n"
+        if duplicados:
+            response += f"**⚠️ Já existentes (ignorados):** {len(duplicados)} edital(is)\n"
+            for num in duplicados[:3]:
+                response += f"- {num}\n"
+            response += "\n"
 
-            if erros:
-                response += f"**❌ Erros:** {len(erros)}\n"
-                for err in erros[:3]:
-                    response += f"- {err}\n"
-                response += "\n"
+        if erros:
+            response += f"**❌ Erros:** {len(erros)}\n"
+            for err in erros[:3]:
+                response += f"- {err}\n"
+            response += "\n"
 
-            response += "Use **liste meus editais** para ver todos os editais salvos."
+        response += "Use **liste meus editais** para ver todos os editais salvos."
 
-            return response, resultado_salvar
-        else:
-            return f"Erro ao salvar editais: {resultado_salvar.get('error')}", resultado_salvar
-
-    return "Não consegui identificar a última busca. Execute: **buscar editais de [tema]**", {"status": "sem_contexto"}
+        return response, resultado_salvar
+    else:
+        return f"Erro ao salvar editais: {resultado_salvar.get('error')}", resultado_salvar
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
