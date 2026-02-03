@@ -250,8 +250,13 @@ def detectar_intencao_fallback(message: str) -> str:
         return "listar_propostas"
 
     # 5.2 Consultar resultado de certame (perguntas sobre resultado)
+    # IMPORTANTE: Deve vir ANTES de buscar_editais para ter prioridade
     if any(p in msg for p in ["qual o resultado", "qual foi o resultado", "resultado do edital",
-                               "quem ganhou", "quem venceu", "como foi o edital"]):
+                               "resultado dos editais", "resultados dos editais", "resultado existente",
+                               "resultados existentes", "busque o resultado", "buscar resultado",
+                               "mostre os resultados", "ver resultados", "listar resultados",
+                               "quem ganhou", "quem venceu", "como foi o edital",
+                               "resultado do certame", "resultados dos certames"]):
         return "consultar_resultado"
 
     # 5.3 Registrar resultado de certame (afirmações de vitória/derrota)
@@ -2488,19 +2493,30 @@ def processar_registrar_resultado(message: str, user_id: str):
 def processar_consultar_resultado(message: str, user_id: str):
     """
     Consulta resultado de um certame já registrado.
+    Suporta consulta de um edital específico ou de todos os editais.
     """
     from models import get_db, Edital, PrecoHistorico, Concorrente, ParticipacaoEdital
     import re
 
     db = get_db()
     try:
+        # Verificar se é consulta de TODOS os editais
+        msg_lower = message.lower()
+        consulta_todos = any(p in msg_lower for p in [
+            "todos os editais", "todos editais", "resultados dos editais",
+            "resultado dos editais", "todos os resultados", "listar resultados"
+        ])
+
+        if consulta_todos:
+            return processar_consultar_todos_resultados(user_id, db)
+
         # Extrair número do edital da mensagem
         # Padrões: PE-001/2026, 90186, PE001, etc
         padrao = r'(?:PE[-\s]?)?(\d{2,6})(?:/\d{4})?'
         match = re.search(padrao, message, re.IGNORECASE)
 
         if not match:
-            return "❌ Não identifiquei o número do edital. Informe o número (ex: PE-041/2026 ou 90186)", None
+            return "❌ Não identifiquei o número do edital. Informe o número (ex: PE-041/2026 ou 90186)\n\nPara ver todos os resultados, use: \"mostre os resultados de todos os editais\"", None
 
         numero_edital = match.group(0)
 
@@ -2610,6 +2626,95 @@ Para registrar o resultado, use:
         return f"❌ Erro ao consultar resultado: {str(e)}", None
     finally:
         db.close()
+
+
+def processar_consultar_todos_resultados(user_id: str, db):
+    """
+    Consulta resultados de TODOS os editais do usuário.
+    Retorna uma tabela markdown com os resultados.
+    """
+    from models import Edital, PrecoHistorico
+
+    try:
+        # Buscar editais com resultado registrado (status diferente de 'novo', 'aberto', 'analisando')
+        status_com_resultado = ['vencedor', 'perdedor', 'cancelado', 'deserto', 'revogado']
+
+        editais = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.status.in_(status_com_resultado)
+        ).order_by(Edital.data_abertura.desc()).all()
+
+        if not editais:
+            # Verificar se tem editais sem resultado
+            total_editais = db.query(Edital).filter(Edital.user_id == user_id).count()
+            if total_editais > 0:
+                return f"""📊 **Resultados de Certames**
+
+⚠️ Nenhum edital com resultado registrado.
+
+Você tem **{total_editais} editais** cadastrados, mas nenhum com resultado definido.
+
+Para registrar um resultado, use:
+- "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR]"
+- "Ganhamos o edital [NUMERO] com R$ [VALOR]"
+- "O edital [NUMERO] foi cancelado"
+""", None
+            else:
+                return "❌ Você não tem editais cadastrados.", None
+
+        # Contar por status
+        contagem = {}
+        for e in editais:
+            status = e.status or "indefinido"
+            contagem[status] = contagem.get(status, 0) + 1
+
+        # Montar tabela markdown
+        response = f"""## 📊 Resultados dos Certames
+
+**Total com resultado:** {len(editais)} editais
+
+**Resumo:**
+"""
+        # Adicionar resumo com emojis
+        emoji_status = {
+            'vencedor': '🏆',
+            'perdedor': '📉',
+            'cancelado': '⛔',
+            'deserto': '🚫',
+            'revogado': '❌'
+        }
+        for status, qtd in sorted(contagem.items(), key=lambda x: -x[1]):
+            emoji = emoji_status.get(status, '📋')
+            response += f"- {emoji} **{status.capitalize()}:** {qtd}\n"
+
+        response += "\n---\n\n"
+
+        # Tabela de editais
+        response += "| Número | Órgão | Status | Valor Ref. | Data |\n"
+        response += "|--------|-------|--------|------------|------|\n"
+
+        for edital in editais[:20]:  # Limitar a 20 para não ficar muito grande
+            numero = edital.numero or "N/A"
+            orgao = (edital.orgao[:30] + "...") if edital.orgao and len(edital.orgao) > 30 else (edital.orgao or "N/A")
+            status = edital.status.capitalize() if edital.status else "N/A"
+            valor = f"R$ {float(edital.valor_referencia):,.0f}".replace(",", ".") if edital.valor_referencia else "N/A"
+            data = edital.data_abertura.strftime('%d/%m/%Y') if edital.data_abertura else "N/A"
+
+            # Adicionar emoji ao status
+            emoji = emoji_status.get(edital.status, '')
+            response += f"| {numero} | {orgao} | {emoji} {status} | {valor} | {data} |\n"
+
+        if len(editais) > 20:
+            response += f"\n*... e mais {len(editais) - 20} editais*\n"
+
+        response += "\n---\n*Para detalhes de um edital específico, use: \"Qual o resultado do edital [NUMERO]?\"*"
+
+        return response, {"total": len(editais), "contagem": contagem}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"❌ Erro ao consultar resultados: {str(e)}", None
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
