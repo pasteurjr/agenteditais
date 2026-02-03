@@ -2278,6 +2278,80 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
         return f"Erro ao salvar editais: {resultado_salvar.get('error')}", resultado_salvar
 
 
+def formatar_resposta_tabular(resposta: str) -> str:
+    """
+    Melhora a formatação de respostas que contêm dados tabulares.
+    Converte tabelas mal formatadas para markdown correto.
+    """
+    import re
+
+    # Se já tem formato markdown de tabela bem formatada, preservar
+    if re.search(r'\|[^|]+\|[^|]+\|', resposta) and '---' in resposta:
+        return resposta
+
+    linhas = resposta.strip().split("\n")
+
+    # Detectar padrões de tabela (linha com múltiplas colunas separadas)
+    # Padrão comum: "ID    Número    Órgão    Status"
+    palavras_header = ["id", "número", "numero", "órgão", "orgao", "status", "valor", "data",
+                       "nome", "objeto", "modalidade", "fonte", "url", "tipo"]
+
+    for i, linha in enumerate(linhas):
+        linha_lower = linha.lower()
+        # Verifica se a linha parece um header de tabela
+        matches = sum(1 for p in palavras_header if p in linha_lower)
+
+        if matches >= 3:  # Pelo menos 3 palavras de header
+            # Encontrou header, tentar converter para markdown
+            # Detectar separador (múltiplos espaços ou tab)
+
+            # Tentar separar por tabs primeiro
+            if "\t" in linha:
+                colunas_header = [c.strip() for c in linha.split("\t") if c.strip()]
+            else:
+                # Separar por múltiplos espaços (4+)
+                colunas_header = [c.strip() for c in re.split(r'\s{4,}', linha) if c.strip()]
+
+            if len(colunas_header) >= 3:
+                # Montar tabela markdown
+                md_linhas = []
+
+                # Header
+                md_linhas.append("| " + " | ".join(colunas_header) + " |")
+                md_linhas.append("|" + "|".join("---" for _ in colunas_header) + "|")
+
+                # Dados (linhas seguintes)
+                for j in range(i + 1, len(linhas)):
+                    data_linha = linhas[j].strip()
+                    if not data_linha:
+                        continue
+
+                    if "\t" in data_linha:
+                        colunas_data = [c.strip() for c in data_linha.split("\t")]
+                    else:
+                        colunas_data = [c.strip() for c in re.split(r'\s{4,}', data_linha)]
+
+                    # Ajustar número de colunas
+                    while len(colunas_data) < len(colunas_header):
+                        colunas_data.append("")
+                    colunas_data = colunas_data[:len(colunas_header)]
+
+                    # Truncar valores muito longos
+                    colunas_data = [c[:80] + "..." if len(c) > 80 else c for c in colunas_data]
+
+                    md_linhas.append("| " + " | ".join(colunas_data) + " |")
+
+                # Texto antes da tabela + tabela
+                texto_antes = "\n".join(linhas[:i]).strip()
+                tabela = "\n".join(md_linhas)
+
+                if texto_antes:
+                    return texto_antes + "\n\n" + tabela
+                return tabela
+
+    return resposta
+
+
 def processar_consulta_mindsdb(message: str, user_id: str):
     """
     Processa consultas analíticas via MindsDB.
@@ -2289,13 +2363,17 @@ def processar_consulta_mindsdb(message: str, user_id: str):
 
     if resultado.get("success"):
         resposta_mindsdb = resultado.get("resposta", "")
+
+        # Melhorar formatação de tabelas
+        resposta_formatada = formatar_resposta_tabular(resposta_mindsdb)
+
         response = f"""## 📊 Consulta Analítica
 
 **Pergunta:** {message}
 
 ---
 
-{resposta_mindsdb}
+{resposta_formatada}
 
 ---
 *Consulta realizada via MindsDB (GPT-4o)*"""

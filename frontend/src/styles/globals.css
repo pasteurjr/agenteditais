@@ -349,6 +349,58 @@ body {
   padding: 0;
 }
 
+/* Tabelas Markdown */
+.assistant-bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+  overflow-x: auto;
+  display: block;
+}
+
+.assistant-bubble thead {
+  background: var(--bg-primary);
+}
+
+.assistant-bubble th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #93c5fd;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.assistant-bubble td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+}
+
+.assistant-bubble tbody tr:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.assistant-bubble tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Tabela responsiva */
+.assistant-bubble table {
+  min-width: 500px;
+}
+
+/* Links na tabela */
+.assistant-bubble td a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.assistant-bubble td a:hover {
+  text-decoration: underline;
+}
+
 /* Loading */
 .loading-bubble {
   display: flex;
