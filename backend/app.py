@@ -2016,11 +2016,11 @@ def processar_gerar_proposta(message: str, user_id: str):
 
 ---
 
-{resultado.get('texto_proposta', '')[:3000]}...
+{resultado.get('texto_proposta', '')}
 
 ---
 
-A proposta completa foi salva. Use o endpoint /api/propostas/{resultado.get('proposta_id')} para acessá-la."""
+*Proposta salva com ID: {resultado.get('proposta_id')}*"""
             return response, resultado
 
     # Se não identificou, mostrar opções
