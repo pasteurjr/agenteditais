@@ -102,27 +102,30 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 11. **listar_fontes**: Ver fontes de editais cadastradas
     Exemplos: "quais fontes?", "liste fontes"
 
+12. **listar_propostas**: Ver propostas técnicas geradas
+    Exemplos: "liste minhas propostas", "quais propostas tenho", "propostas geradas", "ver propostas"
+
 ### AÇÕES DE PROCESSAMENTO:
-12. **calcular_aderencia**: Calcular score produto vs edital
+13. **calcular_aderencia**: Calcular score produto vs edital
     Exemplos: "calcule aderência do produto X com edital Y"
 
-13. **gerar_proposta**: Gerar proposta técnica
+14. **gerar_proposta**: Gerar proposta técnica
     Exemplos: "gere proposta para o edital X"
 
-14. **cadastrar_fonte**: Cadastrar nova fonte de editais
+15. **cadastrar_fonte**: Cadastrar nova fonte de editais
     Exemplos: "cadastre a fonte BEC-SP"
 
-15. **salvar_editais**: Salvar editais da última busca
+16. **salvar_editais**: Salvar editais da última busca
     Exemplos: "salve os editais", "salvar recomendados"
 
-16. **reprocessar_produto**: Reprocessar/atualizar especificações de um produto
+17. **reprocessar_produto**: Reprocessar/atualizar especificações de um produto
     Exemplos: "reprocesse o produto X", "atualize specs do produto X", "extraia novamente as especificações"
 
-17. **consulta_mindsdb**: Consultas analíticas complexas sobre editais e produtos via linguagem natural
+18. **consulta_mindsdb**: Consultas analíticas complexas sobre editais e produtos via linguagem natural
     Exemplos: "qual o score médio de aderência?", "quantos editais por estado?", "qual produto tem melhor desempenho?", "estatísticas dos editais", "análise dos dados", "relatório de editais"
     Use quando: perguntas analíticas, estatísticas, agregações, comparações, rankings, tendências
 
-18. **chat_livre**: Dúvidas gerais, conversas
+19. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -226,6 +229,10 @@ def detectar_intencao_fallback(message: str) -> str:
     # 5. Listar editais salvos
     if any(p in msg for p in ["meus editais", "editais salvos", "editais cadastrados", "ver editais"]):
         return "listar_editais"
+
+    # 5.1 Listar propostas
+    if any(p in msg for p in ["minhas propostas", "listar propostas", "propostas geradas", "ver propostas", "propostas cadastradas"]):
+        return "listar_propostas"
 
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
@@ -610,6 +617,9 @@ def chat():
 
         elif action_type == "listar_fontes":
             response_text, resultado = processar_listar_fontes(message)
+
+        elif action_type == "listar_propostas":
+            response_text, resultado = processar_listar_propostas(message, user_id)
 
         elif action_type == "calcular_aderencia":
             response_text, resultado = processar_calcular_aderencia(message, user_id)
@@ -1783,6 +1793,53 @@ def processar_listar_fontes(message: str):
         response = f"Erro ao listar fontes: {resultado.get('error')}"
 
     return response, resultado
+
+
+def processar_listar_propostas(message: str, user_id: str):
+    """Processa ação: Listar propostas geradas pelo usuário"""
+    db = get_db()
+    try:
+        propostas = db.query(Proposta).filter(
+            Proposta.user_id == user_id
+        ).order_by(Proposta.created_at.desc()).limit(20).all()
+
+        if propostas:
+            response = f"## 📝 Minhas Propostas ({len(propostas)})\n\n"
+            for p in propostas:
+                # Buscar edital e produto relacionados
+                edital = db.query(Edital).filter(Edital.id == p.edital_id).first()
+                produto = db.query(Produto).filter(Produto.id == p.produto_id).first()
+
+                edital_num = edital.numero if edital else "N/A"
+                produto_nome = produto.nome[:40] if produto else "N/A"
+                preco = f"R$ {p.preco_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if p.preco_total else "N/A"
+                data = p.created_at.strftime("%d/%m/%Y %H:%M") if p.created_at else "N/A"
+
+                status_emoji = {
+                    "rascunho": "📋",
+                    "enviada": "📤",
+                    "aceita": "✅",
+                    "rejeitada": "❌"
+                }.get(p.status, "📋")
+
+                response += f"### {status_emoji} Proposta - Edital {edital_num}\n"
+                response += f"- **Produto:** {produto_nome}\n"
+                response += f"- **Preço:** {preco}\n"
+                response += f"- **Status:** {p.status}\n"
+                response += f"- **Data:** {data}\n"
+                response += f"- **ID:** `{p.id[:8]}...`\n\n"
+
+            resultado = {"success": True, "propostas": [p.to_dict() for p in propostas], "total": len(propostas)}
+        else:
+            response = "Você ainda não tem propostas geradas.\n\nPara gerar uma proposta, use:\n`Gere uma proposta do produto [NOME] para o edital [NUMERO] com preço R$ [VALOR]`"
+            resultado = {"success": True, "propostas": [], "total": 0}
+
+        return response, resultado
+
+    except Exception as e:
+        return f"Erro ao listar propostas: {str(e)}", {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 def processar_buscar_editais_score(message: str, user_id: str):
