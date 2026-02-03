@@ -77,6 +77,35 @@ O edital 90008 ficou deserto
 
 ---
 
+## Prompts de CONSULTA (novos)
+
+### 7. Consultar Resultado do Edital
+```
+Qual o resultado do edital PE-041/2026?
+```
+**Esperado:**
+- Exibe o resultado previamente registrado
+- Mostra tabela de participantes (se houver)
+- NÃO registra novo resultado
+
+### 8. Perguntar Quem Ganhou
+```
+Quem ganhou o edital 90186?
+```
+**Esperado:**
+- Exibe informações do vencedor
+- NÃO registra nada
+
+### 9. Consultar Edital Sem Resultado
+```
+Qual o resultado do edital 90099?
+```
+**Esperado:**
+- Informa que nenhum resultado foi registrado
+- Sugere como registrar
+
+---
+
 ## Prompts Disponíveis no Dropdown
 
 Os seguintes prompts foram adicionados ao dropdown da interface:
@@ -86,6 +115,7 @@ Os seguintes prompts foram adicionados ao dropdown da interface:
 | 📉 | Registrar derrota | Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR] |
 | 🏆 | Registrar vitória | Ganhamos o edital [NUMERO] com R$ [VALOR] |
 | ⛔ | Edital cancelado | O edital [NUMERO] foi cancelado |
+| 🔎 | Consultar resultado | Qual o resultado do edital [NUMERO]? |
 
 ---
 
@@ -115,8 +145,8 @@ SELECT numero, status FROM editais WHERE status IN ('vencedor', 'perdedor', 'can
 |---------|-------------|
 | `backend/models.py` | Adicionados models: Concorrente, PrecoHistorico, ParticipacaoEdital |
 | `backend/tools.py` | Adicionada tool_registrar_resultado() |
-| `backend/app.py` | Adicionada intenção registrar_resultado + processar_registrar_resultado() |
-| `frontend/src/components/ChatInput.tsx` | Adicionados 3 prompts no dropdown |
+| `backend/app.py` | Adicionadas intenções registrar_resultado e consultar_resultado + funções de processamento |
+| `frontend/src/components/ChatInput.tsx` | Adicionados 4 prompts no dropdown (3 registros + 1 consulta) |
 
 ---
 

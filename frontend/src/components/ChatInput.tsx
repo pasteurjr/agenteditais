@@ -36,6 +36,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "registrar_derrota", nome: "📉 Registrar derrota", prompt: "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR]" },
   { id: "registrar_vitoria", nome: "🏆 Registrar vitória", prompt: "Ganhamos o edital [NUMERO] com R$ [VALOR]" },
   { id: "registrar_cancelado", nome: "⛔ Edital cancelado", prompt: "O edital [NUMERO] foi cancelado" },
+  { id: "consultar_resultado", nome: "🔎 Consultar resultado", prompt: "Qual o resultado do edital [NUMERO]?" },
 ];
 
 interface ChatInputProps {

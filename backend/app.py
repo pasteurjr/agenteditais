@@ -60,6 +60,7 @@ PROMPTS_PRONTOS = [
     {"id": "registrar_derrota", "nome": "📉 Registrar derrota", "prompt": "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR]"},
     {"id": "registrar_vitoria", "nome": "🏆 Registrar vitória", "prompt": "Ganhamos o edital [NUMERO] com R$ [VALOR]"},
     {"id": "registrar_cancelado", "nome": "⛔ Edital cancelado", "prompt": "O edital [NUMERO] foi cancelado"},
+    {"id": "consultar_resultado", "nome": "🔎 Consultar resultado", "prompt": "Qual o resultado do edital [NUMERO]?"},
 ]
 
 
@@ -129,11 +130,17 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Exemplos: "qual o score médio de aderência?", "quantos editais por estado?", "qual produto tem melhor desempenho?", "estatísticas dos editais", "análise dos dados", "relatório de editais"
     Use quando: perguntas analíticas, estatísticas, agregações, comparações, rankings, tendências
 
-19. **registrar_resultado**: Registrar resultado de certame (vitória ou derrota)
+19. **registrar_resultado**: Registrar resultado de certame (vitória ou derrota) - AFIRMAÇÕES
     Exemplos: "perdemos o edital PE-001", "ganhamos o pregão", "vencedor foi empresa X com R$ 100k", "registre derrota no PE-002", "perdemos por preço para MedLab"
-    Palavras-chave: perdemos, ganhamos, vencedor, derrota, vitória, resultado do edital, segundo lugar
+    Palavras-chave: perdemos, ganhamos, vencedor, derrota, vitória, segundo lugar
+    IMPORTANTE: Use apenas quando o usuário está AFIRMANDO um resultado, não perguntando.
 
-20. **chat_livre**: Dúvidas gerais, conversas
+20. **consultar_resultado**: Consultar/perguntar sobre resultado de um certame - PERGUNTAS
+    Exemplos: "qual o resultado do edital PE-001?", "quem ganhou o pregão?", "como foi o edital?", "qual foi o resultado?"
+    Palavras-chave: qual o resultado, quem ganhou, quem venceu, como foi
+    IMPORTANTE: Use quando o usuário está PERGUNTANDO sobre um resultado.
+
+21. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -242,10 +249,17 @@ def detectar_intencao_fallback(message: str) -> str:
     if any(p in msg for p in ["minhas propostas", "listar propostas", "propostas geradas", "ver propostas", "propostas cadastradas"]):
         return "listar_propostas"
 
-    # 5.2 Registrar resultado de certame (ANTES de outras detecções de edital)
-    if any(p in msg for p in ["perdemos", "ganhamos", "vencedor foi", "vencedora foi", "resultado do edital",
+    # 5.2 Consultar resultado de certame (perguntas sobre resultado)
+    if any(p in msg for p in ["qual o resultado", "qual foi o resultado", "resultado do edital",
+                               "quem ganhou", "quem venceu", "como foi o edital"]):
+        return "consultar_resultado"
+
+    # 5.3 Registrar resultado de certame (afirmações de vitória/derrota)
+    if any(p in msg for p in ["perdemos", "ganhamos", "vencedor foi", "vencedora foi",
                                "derrota", "vitória", "vitoria", "segundo lugar", "terceiro lugar",
-                               "registre resultado", "registrar resultado", "perdemos o", "ganhamos o"]):
+                               "registre resultado", "registrar resultado", "perdemos o", "ganhamos o",
+                               "foi cancelado", "ficou deserto", "foi revogado", "edital cancelado",
+                               "edital deserto", "edital revogado"]):
         return "registrar_resultado"
 
     # 5.5 Reprocessar produto
@@ -664,6 +678,9 @@ def chat():
 
         elif action_type == "registrar_resultado":
             response_text, resultado = processar_registrar_resultado(message, user_id)
+
+        elif action_type == "consultar_resultado":
+            response_text, resultado = processar_consultar_resultado(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -2388,6 +2405,133 @@ def processar_registrar_resultado(message: str, user_id: str):
 """
 
     return response, resultado
+
+
+def processar_consultar_resultado(message: str, user_id: str):
+    """
+    Consulta resultado de um certame já registrado.
+    """
+    from models import get_db, Edital, PrecoHistorico, Concorrente, ParticipacaoEdital
+    import re
+
+    db = get_db()
+    try:
+        # Extrair número do edital da mensagem
+        # Padrões: PE-001/2026, 90186, PE001, etc
+        padrao = r'(?:PE[-\s]?)?(\d{2,6})(?:/\d{4})?'
+        match = re.search(padrao, message, re.IGNORECASE)
+
+        if not match:
+            return "❌ Não identifiquei o número do edital. Informe o número (ex: PE-041/2026 ou 90186)", None
+
+        numero_edital = match.group(0)
+
+        # Buscar edital
+        edital = db.query(Edital).filter(
+            Edital.numero.ilike(f"%{numero_edital}%"),
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            # Tentar busca mais flexível
+            numero_limpo = match.group(1)
+            edital = db.query(Edital).filter(
+                Edital.numero.ilike(f"%{numero_limpo}%"),
+                Edital.user_id == user_id
+            ).first()
+
+        if not edital:
+            return f"❌ Edital '{numero_edital}' não encontrado no seu cadastro.", None
+
+        # Buscar resultado registrado
+        preco_hist = db.query(PrecoHistorico).filter(
+            PrecoHistorico.edital_id == edital.id
+        ).order_by(PrecoHistorico.data_registro.desc()).first()
+
+        if not preco_hist:
+            response = f"""📋 **Edital {edital.numero}**
+
+**Órgão:** {edital.orgao}
+**Status:** {edital.status or 'Não definido'}
+**Valor Referência:** R$ {float(edital.valor_referencia):,.2f}
+
+⚠️ **Nenhum resultado registrado ainda.**
+
+Para registrar o resultado, use:
+- "Perdemos o {edital.numero} para [EMPRESA] com R$ [VALOR]"
+- "Ganhamos o {edital.numero} com R$ [VALOR]"
+"""
+            return response, None
+
+        # Buscar participações
+        participacoes = db.query(ParticipacaoEdital).filter(
+            ParticipacaoEdital.edital_id == edital.id
+        ).order_by(ParticipacaoEdital.posicao_final).all()
+
+        # Montar resposta
+        emoji_resultado = "🏆" if preco_hist.resultado == "vitoria" else "📊"
+        status_texto = {
+            "vitoria": "VITÓRIA",
+            "derrota": "DERROTA",
+            "cancelado": "CANCELADO",
+            "deserto": "DESERTO",
+            "revogado": "REVOGADO"
+        }.get(preco_hist.resultado, preco_hist.resultado.upper() if preco_hist.resultado else "N/A")
+
+        response = f"""{emoji_resultado} **Resultado do Edital {edital.numero}**
+
+**Órgão:** {edital.orgao}
+**Resultado:** {status_texto}
+**Data:** {preco_hist.data_homologacao.strftime('%d/%m/%Y') if preco_hist.data_homologacao else 'N/A'}
+"""
+
+        # Tabela de participantes
+        if participacoes:
+            response += "\n**Participantes:**\n"
+            response += "| Pos | Empresa | Preço |\n"
+            response += "|-----|---------|-------|\n"
+
+            for part in participacoes:
+                if part.concorrente_id:
+                    conc = db.query(Concorrente).get(part.concorrente_id)
+                    nome = conc.nome if conc else "Desconhecido"
+                else:
+                    nome = "Sua Empresa"
+
+                preco_fmt = f"R$ {float(part.preco_proposto):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if part.preco_proposto else "N/A"
+                pos = f"{part.posicao_final}º" if part.posicao_final else "-"
+                response += f"| {pos} | {nome} | {preco_fmt} |\n"
+
+            response += "\n"
+
+        # Análise
+        if preco_hist.resultado == "derrota" and preco_hist.nosso_preco and preco_hist.preco_vencedor:
+            diferenca = float(preco_hist.nosso_preco) - float(preco_hist.preco_vencedor)
+            diferenca_pct = (diferenca / float(preco_hist.nosso_preco)) * 100
+
+            response += f"""**Análise:**
+- Nosso preço: R$ {float(preco_hist.nosso_preco):,.2f}
+- Preço vencedor: R$ {float(preco_hist.preco_vencedor):,.2f}
+- Diferença: R$ {diferenca:,.2f} ({diferenca_pct:.1f}%)
+"""
+            if preco_hist.motivo_perda:
+                motivo_texto = {
+                    "preco": "Preço",
+                    "tecnica": "Questão técnica",
+                    "documentacao": "Documentação",
+                    "prazo": "Prazo",
+                    "outro": "Outro"
+                }.get(preco_hist.motivo_perda, preco_hist.motivo_perda)
+                response += f"- Motivo: {motivo_texto}\n"
+
+        return response, {"edital_id": edital.id, "resultado": preco_hist.resultado}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"❌ Erro ao consultar resultado: {str(e)}", None
+    finally:
+        db.close()
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
