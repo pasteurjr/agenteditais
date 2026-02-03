@@ -135,10 +135,10 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: perdemos, ganhamos, vencedor, derrota, vitória, segundo lugar
     IMPORTANTE: Use apenas quando o usuário está AFIRMANDO um resultado, não perguntando.
 
-20. **consultar_resultado**: Consultar/perguntar sobre resultado de um certame - PERGUNTAS
-    Exemplos: "qual o resultado do edital PE-001?", "quem ganhou o pregão?", "como foi o edital?", "qual foi o resultado?"
-    Palavras-chave: qual o resultado, quem ganhou, quem venceu, como foi
-    IMPORTANTE: Use quando o usuário está PERGUNTANDO sobre um resultado.
+20. **consultar_resultado**: Consultar/perguntar sobre resultado de certames - PERGUNTAS
+    Exemplos: "qual o resultado do edital PE-001?", "quem ganhou o pregão?", "como foi o edital?", "mostre os resultados de todos os editais", "ver resultados dos editais", "listar resultados", "resultados dos certames"
+    Palavras-chave: qual o resultado, quem ganhou, quem venceu, como foi, resultados de todos, ver resultados, listar resultados
+    IMPORTANTE: Use quando o usuário está PERGUNTANDO sobre resultados (um edital ou todos).
 
 21. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
