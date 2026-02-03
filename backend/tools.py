@@ -2556,3 +2556,236 @@ def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, A
     finally:
         if close_db:
             db.close()
+
+
+# ==================== EXTRAIR ATA DE SESSÃO ====================
+
+PROMPT_EXTRAIR_ATA = """Analise esta ata de sessão de pregão eletrônico e extraia TODOS os dados.
+
+TEXTO DA ATA:
+{texto_ata}
+
+EXTRAIA:
+
+1. **Dados Gerais:**
+   - Número do edital/pregão
+   - Órgão licitante
+   - Data da sessão
+   - Objeto resumido
+
+2. **Para CADA ITEM/LOTE:**
+   - Número do item
+   - Descrição do objeto
+   - Empresa vencedora (nome completo)
+   - CNPJ do vencedor (se disponível)
+   - Valor/preço vencedor
+   - TODOS os participantes com seus lances finais
+
+3. **Empresas Desclassificadas:**
+   - Nome da empresa
+   - Motivo da desclassificação
+
+IMPORTANTE:
+- Valores monetários: converta para número (365.000,00 → 365000.00)
+- CNPJs: formato XX.XXX.XXX/XXXX-XX
+- Se não encontrar algum dado, use null
+- Extraia TODOS os itens/lotes da ata
+
+Retorne APENAS um JSON válido:
+{{
+    "edital": "número do pregão/edital (ex: PE-001/2026, 90186)",
+    "orgao": "nome do órgão licitante",
+    "data_sessao": "dd/mm/yyyy",
+    "objeto": "descrição resumida do objeto",
+    "itens": [
+        {{
+            "item": 1,
+            "descricao": "descrição do objeto",
+            "vencedor": "nome da empresa vencedora",
+            "cnpj_vencedor": "XX.XXX.XXX/XXXX-XX ou null",
+            "preco_vencedor": 123456.78,
+            "participantes": [
+                {{"empresa": "nome", "cnpj": "...", "lance_final": 123456.78, "posicao": 1}},
+                {{"empresa": "nome", "cnpj": "...", "lance_final": 130000.00, "posicao": 2}}
+            ]
+        }}
+    ],
+    "desclassificados": [
+        {{"empresa": "nome", "motivo": "motivo da desclassificação"}}
+    ]
+}}"""
+
+
+def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any]:
+    """
+    Extrai resultados de uma ata de sessão de pregão eletrônico.
+
+    Args:
+        texto_pdf: Texto extraído do PDF da ata
+        user_id: ID do usuário
+        db: Sessão do banco (opcional)
+
+    Returns:
+        Dict com dados extraídos e status
+    """
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+
+    try:
+        # Verificar se o texto parece uma ata
+        texto_lower = texto_pdf.lower()
+        palavras_ata = ["ata", "sessão", "pregão", "licitação", "vencedor", "lance", "adjudicado"]
+        if not any(p in texto_lower for p in palavras_ata):
+            return {
+                "success": False,
+                "error": "O documento não parece ser uma ata de sessão de pregão. Envie uma ata de licitação."
+            }
+
+        # Limitar texto para não estourar contexto
+        texto_truncado = texto_pdf[:15000]
+
+        # Enviar para LLM
+        prompt = PROMPT_EXTRAIR_ATA.format(texto_ata=texto_truncado)
+        print(f"[TOOLS] Extraindo dados da ata via LLM...")
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=4000,
+            model_override="deepseek-chat"
+        )
+
+        # Extrair JSON da resposta
+        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        if not json_match:
+            return {"success": False, "error": "Não consegui extrair dados estruturados da ata."}
+
+        dados = json.loads(json_match.group())
+        print(f"[TOOLS] Dados extraídos: edital={dados.get('edital')}, itens={len(dados.get('itens', []))}")
+
+        # Buscar edital correspondente no banco (opcional)
+        edital = None
+        if dados.get("edital"):
+            edital = db.query(Edital).filter(
+                Edital.numero.ilike(f"%{dados['edital']}%"),
+                Edital.user_id == user_id
+            ).first()
+
+        itens_processados = []
+        concorrentes_novos = []
+        concorrentes_atualizados = []
+
+        # Processar cada item
+        for item in dados.get("itens", []):
+            item_result = {
+                "item": item.get("item"),
+                "descricao": item.get("descricao"),
+                "vencedor": item.get("vencedor"),
+                "preco_vencedor": item.get("preco_vencedor"),
+                "participantes_count": len(item.get("participantes", []))
+            }
+
+            # Registrar vencedor como concorrente
+            if item.get("vencedor"):
+                conc = db.query(Concorrente).filter(
+                    Concorrente.nome.ilike(f"%{item['vencedor']}%")
+                ).first()
+
+                if not conc:
+                    conc = Concorrente(
+                        nome=item["vencedor"],
+                        cnpj=item.get("cnpj_vencedor"),
+                        editais_participados=1,
+                        editais_ganhos=1
+                    )
+                    db.add(conc)
+                    db.flush()
+                    concorrentes_novos.append(item["vencedor"])
+                else:
+                    conc.editais_participados = (conc.editais_participados or 0) + 1
+                    conc.editais_ganhos = (conc.editais_ganhos or 0) + 1
+                    concorrentes_atualizados.append(item["vencedor"])
+
+                # Se temos o edital, registrar preço histórico
+                if edital and item.get("preco_vencedor"):
+                    preco_hist = PrecoHistorico(
+                        edital_id=edital.id,
+                        user_id=user_id,
+                        preco_referencia=edital.valor_referencia,
+                        preco_vencedor=item["preco_vencedor"],
+                        empresa_vencedora=item["vencedor"],
+                        cnpj_vencedor=item.get("cnpj_vencedor"),
+                        concorrente_id=conc.id,
+                        resultado="derrota",  # Se estamos extraindo ata, provavelmente não ganhamos
+                        data_homologacao=datetime.strptime(dados.get("data_sessao", ""), "%d/%m/%Y").date() if dados.get("data_sessao") else datetime.now().date(),
+                        fonte="ata_pdf"
+                    )
+                    db.add(preco_hist)
+
+            # Registrar participantes
+            for part in item.get("participantes", []):
+                if part.get("empresa") and part["empresa"] != item.get("vencedor"):
+                    conc_part = db.query(Concorrente).filter(
+                        Concorrente.nome.ilike(f"%{part['empresa']}%")
+                    ).first()
+
+                    if not conc_part:
+                        conc_part = Concorrente(
+                            nome=part["empresa"],
+                            cnpj=part.get("cnpj"),
+                            editais_participados=1,
+                            editais_ganhos=0
+                        )
+                        db.add(conc_part)
+                        db.flush()
+                        concorrentes_novos.append(part["empresa"])
+                    else:
+                        conc_part.editais_participados = (conc_part.editais_participados or 0) + 1
+                        concorrentes_atualizados.append(part["empresa"])
+
+                    # Registrar participação
+                    if edital:
+                        part_edital = ParticipacaoEdital(
+                            edital_id=edital.id,
+                            concorrente_id=conc_part.id,
+                            preco_proposto=part.get("lance_final"),
+                            posicao_final=part.get("posicao"),
+                            fonte="ata_pdf"
+                        )
+                        db.add(part_edital)
+
+            itens_processados.append(item_result)
+
+        # Atualizar status do edital se encontrado
+        if edital:
+            edital.status = "perdedor"
+
+        db.commit()
+
+        return {
+            "success": True,
+            "edital": dados.get("edital"),
+            "orgao": dados.get("orgao"),
+            "data_sessao": dados.get("data_sessao"),
+            "objeto": dados.get("objeto"),
+            "itens": itens_processados,
+            "desclassificados": dados.get("desclassificados", []),
+            "concorrentes_novos": concorrentes_novos,
+            "concorrentes_atualizados": concorrentes_atualizados,
+            "edital_encontrado": edital.numero if edital else None,
+            "dados_salvos": edital is not None
+        }
+
+    except json.JSONDecodeError as e:
+        print(f"[TOOLS] Erro ao parsear JSON da ata: {e}")
+        return {"success": False, "error": f"Erro ao interpretar dados da ata: {str(e)}"}
+    except Exception as e:
+        db.rollback()
+        print(f"[TOOLS] Erro ao extrair ata: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if close_db:
+            db.close()

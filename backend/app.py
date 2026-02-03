@@ -86,15 +86,20 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 5. **arquivo_analisar**: Fazer análise detalhada do documento
    Exemplos: "analise", "faça uma análise", "avalie o documento", "o que você acha desse manual?"
 
+6. **extrair_ata**: Extrair resultados de uma ata de sessão de pregão/licitação
+   Exemplos: "extraia os resultados desta ata", "quem ganhou este pregão?", "registre os resultados da ata", "extraia vencedores", "resultado da licitação"
+   Palavras-chave: ata, resultados da ata, vencedor do pregão, extrair resultados, ata de sessão
+   IMPORTANTE: Use quando o arquivo é uma ATA de sessão (não um manual de produto)
+
 ### AÇÕES DE BUSCA:
-6. **buscar_web**: Buscar MATERIAIS/MANUAIS/DATASHEETS na WEB (não editais!)
+7. **buscar_web**: Buscar MATERIAIS/MANUAIS/DATASHEETS na WEB (não editais!)
    Exemplos: "busque na web o manual do equipamento X", "encontre o datasheet do Y"
 
-7. **download_url**: Baixar arquivo de uma URL específica
+8. **download_url**: Baixar arquivo de uma URL específica
    Exemplos: "baixe o arquivo da URL: http://...", "baixe https://..."
    IMPORTANTE: Se contém URL (http:// ou https://), classifique como download_url!
 
-8. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC)
+9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC)
    Exemplos: "busque editais de tecnologia", "editais da área médica"
 
 ### AÇÕES DE LISTAGEM:
@@ -224,6 +229,13 @@ def detectar_intencao_fallback(message: str) -> str:
     # 2. Upload de manual
     if any(p in msg for p in ["upload", "enviei", "arquivo que", "processe o manual", "processe o pdf"]):
         return "upload_manual"
+
+    # 2.1 Extrair ata de sessão (ANTES de outras ações com arquivo)
+    if any(p in msg for p in ["extraia os resultados", "extrair resultados", "resultados da ata",
+                               "ata de sessão", "ata de sessao", "vencedor do pregão", "vencedor do pregao",
+                               "quem ganhou o pregão", "quem ganhou o pregao", "extraia da ata",
+                               "registre os resultados da ata", "resultado da licitação", "resultado da licitacao"]):
+        return "extrair_ata"
 
     # 2.5. Download de URL - ANTES de outras ações
     if "http://" in msg or "https://" in msg:
@@ -2717,6 +2729,92 @@ Para registrar um resultado, use:
         return f"❌ Erro ao consultar resultados: {str(e)}", None
 
 
+def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename: str):
+    """
+    Processa extração de resultados de uma ata de sessão de pregão.
+
+    Args:
+        texto_pdf: Texto extraído do PDF
+        filepath: Caminho do arquivo
+        user_id: ID do usuário
+        filename: Nome do arquivo original
+
+    Returns:
+        Tuple (response_text, resultado)
+    """
+    from tools import tool_extrair_ata_pdf
+
+    resultado = tool_extrair_ata_pdf(texto_pdf, user_id)
+
+    if not resultado.get("success"):
+        response = f"""## ❌ Erro ao Extrair Ata
+
+**Arquivo:** {filename}
+
+**Erro:** {resultado.get('error', 'Erro desconhecido')}
+
+**Dica:** Certifique-se de que o arquivo é uma ata de sessão de pregão eletrônico.
+"""
+        return response, resultado
+
+    # Montar resposta formatada
+    response = f"""## 📄 Resultados Extraídos da Ata
+
+**Arquivo:** {filename}
+**Edital:** {resultado.get('edital', 'Não identificado')}
+**Órgão:** {resultado.get('orgao', 'Não identificado')}
+**Data da Sessão:** {resultado.get('data_sessao', 'N/A')}
+**Objeto:** {resultado.get('objeto', 'N/A')[:200]}{'...' if resultado.get('objeto') and len(resultado.get('objeto', '')) > 200 else ''}
+
+---
+
+### 📊 Itens/Lotes Extraídos
+
+"""
+
+    for item in resultado.get("itens", []):
+        emoji = "🏆" if item.get("vencedor") else "❓"
+        response += f"""**Item {item.get('item', '?')}:** {item.get('descricao', 'N/A')[:100]}...
+- {emoji} **Vencedor:** {item.get('vencedor', 'Não identificado')}
+- 💰 **Preço:** R$ {item.get('preco_vencedor', 0):,.2f}
+- 👥 **Participantes:** {item.get('participantes_count', 0)}
+
+"""
+
+    # Desclassificados
+    if resultado.get("desclassificados"):
+        response += "### ⚠️ Empresas Desclassificadas\n\n"
+        for desc in resultado["desclassificados"]:
+            response += f"- **{desc.get('empresa', 'N/A')}:** {desc.get('motivo', 'Motivo não informado')}\n"
+        response += "\n"
+
+    # Concorrentes registrados
+    response += "---\n\n### 📁 Dados Registrados\n\n"
+
+    if resultado.get("concorrentes_novos"):
+        response += f"**Novos concorrentes:** {', '.join(resultado['concorrentes_novos'][:5])}"
+        if len(resultado.get('concorrentes_novos', [])) > 5:
+            response += f" (+{len(resultado['concorrentes_novos']) - 5})"
+        response += "\n"
+
+    if resultado.get("concorrentes_atualizados"):
+        response += f"**Concorrentes atualizados:** {len(resultado['concorrentes_atualizados'])}\n"
+
+    if resultado.get("edital_encontrado"):
+        response += f"\n✅ **Edital {resultado['edital_encontrado']} encontrado no sistema - dados salvos no histórico!**\n"
+    else:
+        edital_num = resultado.get('edital', '[NUMERO]')
+        response += f"""
+⚠️ **Edital não encontrado no sistema.**
+
+Para salvar os dados no histórico, primeiro cadastre o edital:
+- Busque editais: "busque editais de {resultado.get('objeto', 'equipamentos')[:30]}"
+- Ou registre manualmente o resultado: "Perdemos o edital {edital_num} para {resultado.get('itens', [{}])[0].get('vencedor', 'EMPRESA')} com R$ {resultado.get('itens', [{}])[0].get('preco_vencedor', 0):,.0f}"
+"""
+
+    return response, resultado
+
+
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
     """Processa chat livre sobre licitações"""
     # Buscar histórico
@@ -2850,6 +2948,7 @@ def chat_upload():
         "arquivo_specs": "extrair_specs",
         "arquivo_resumir": "resumir",
         "arquivo_analisar": "analisar",
+        "extrair_ata": "extrair_ata",  # Nova ação: extrair resultados de ata de pregão
         # Fallbacks para compatibilidade
         "upload_manual": "cadastrar",
         "chat_livre": "cadastrar"  # Se não entendeu, cadastra
@@ -2890,7 +2989,8 @@ def chat_upload():
             "mostrar_conteudo": "Mostrar conteúdo",
             "extrair_specs": "Extrair especificações",
             "resumir": "Resumir documento",
-            "analisar": "Analisar documento"
+            "analisar": "Analisar documento",
+            "extrair_ata": "Extrair resultados da ata"
         }
         user_msg_content = f"📎 **{file.filename}**\n*{acoes_desc.get(intencao_arquivo, 'Processar')}*"
         user_msg = Message(
@@ -2989,6 +3089,10 @@ ANÁLISE:"""
 
 ---
 *Para cadastrar como produto, envie: "cadastre"*"""
+
+        # ========== AÇÃO: EXTRAIR ATA DE SESSÃO ==========
+        elif intencao_arquivo == "extrair_ata":
+            response_text, resultado = processar_extrair_ata(texto_pdf, filepath, user_id, file.filename)
 
         # ========== AÇÃO: CADASTRAR (padrão) ==========
         else:
