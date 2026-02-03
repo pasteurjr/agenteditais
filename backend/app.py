@@ -1990,12 +1990,18 @@ def processar_gerar_proposta(message: str, user_id: str):
             edital_encontrado = e
             break
 
-    # Extrair preço
+    # Extrair preço - buscar padrão "R$ X" ou "preço X" ou "valor X"
     import re
-    preco_match = re.search(r'R?\$?\s*([\d.,]+)', message)
+    # Primeiro tenta R$ seguido de número
+    preco_match = re.search(r'R\$\s*([\d.,]+)', message)
+    if not preco_match:
+        # Tenta "preço" ou "valor" seguido de número
+        preco_match = re.search(r'(?:preço|preco|valor)\s*(?:de\s*)?R?\$?\s*([\d.,]+)', message, re.IGNORECASE)
     if preco_match:
         try:
-            preco = float(preco_match.group(1).replace('.', '').replace(',', '.'))
+            valor_str = preco_match.group(1)
+            # Remove pontos de milhar e converte vírgula decimal
+            preco = float(valor_str.replace('.', '').replace(',', '.'))
         except:
             pass
 
