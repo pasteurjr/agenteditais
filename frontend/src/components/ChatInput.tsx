@@ -37,6 +37,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "registrar_vitoria", nome: "🏆 Registrar vitória", prompt: "Ganhamos o edital [NUMERO] com R$ [VALOR]" },
   { id: "registrar_cancelado", nome: "⛔ Edital cancelado", prompt: "O edital [NUMERO] foi cancelado" },
   { id: "consultar_resultado", nome: "🔎 Consultar resultado", prompt: "Qual o resultado do edital [NUMERO]?" },
+  { id: "consultar_todos_resultados", nome: "📊 Ver todos os resultados", prompt: "Mostre os resultados de todos os editais" },
 ];
 
 interface ChatInputProps {
