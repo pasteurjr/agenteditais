@@ -2789,3 +2789,197 @@ def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any
     finally:
         if close_db:
             db.close()
+
+
+# ==================== BUSCAR ATAS NO PNCP ====================
+
+def tool_buscar_atas_pncp(termo: str, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca atas de registro de preço no PNCP.
+
+    Args:
+        termo: Termo de busca (ex: "hematologia", "equipamento hospitalar")
+        user_id: ID do usuário
+
+    Returns:
+        Dict com atas encontradas e URLs para download
+    """
+    from config import SERPER_API_KEY, SERPER_API_URL
+
+    print(f"[PNCP-ATAS] Buscando atas de '{termo}'...")
+
+    # Método 1: Usar API de busca do PNCP
+    try:
+        url_search = f"https://pncp.gov.br/api/search/?q={termo}&tipos_documento=ata&pagina=1&tam_pagina=10"
+        response = requests.get(url_search, timeout=30)
+
+        if response.status_code == 200:
+            data = response.json()
+            atas = []
+
+            for item in data.get("items", []):
+                ata = {
+                    "id": item.get("id"),
+                    "titulo": item.get("title"),
+                    "descricao": item.get("description"),
+                    "orgao": item.get("orgao_nome"),
+                    "cnpj_orgao": item.get("orgao_cnpj"),
+                    "uf": item.get("uf"),
+                    "municipio": item.get("municipio_nome"),
+                    "modalidade": item.get("modalidade_licitacao_nome"),
+                    "data_publicacao": item.get("data_publicacao_pncp"),
+                    "data_assinatura": item.get("data_assinatura"),
+                    "vigencia_inicio": item.get("data_inicio_vigencia"),
+                    "vigencia_fim": item.get("data_fim_vigencia"),
+                    "numero_controle": item.get("numero_controle_pncp"),
+                    "url_pncp": f"https://pncp.gov.br{item.get('item_url', '')}",
+                    "ano": item.get("ano"),
+                    "sequencial": item.get("numero_sequencial"),
+                }
+                atas.append(ata)
+
+            if atas:
+                return {
+                    "success": True,
+                    "fonte": "pncp_api",
+                    "termo": termo,
+                    "total": data.get("total", len(atas)),
+                    "atas": atas
+                }
+    except Exception as e:
+        print(f"[PNCP-ATAS] Erro na API do PNCP: {e}")
+
+    # Método 2: Fallback para busca via Serper (Google)
+    try:
+        search_query = f"site:pncp.gov.br ata registro preço {termo} filetype:pdf"
+        print(f"[PNCP-ATAS] Buscando via Serper: {search_query}")
+
+        response = requests.post(
+            SERPER_API_URL,
+            headers={
+                'X-API-KEY': SERPER_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            json={
+                'q': search_query,
+                'num': 10,
+                'gl': 'br',
+                'hl': 'pt'
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        atas = []
+        for result in data.get('organic', []):
+            titulo = result.get('title', '')
+            link = result.get('link', '')
+            snippet = result.get('snippet', '')
+
+            # Verificar se é realmente uma ata
+            if any(p in titulo.lower() or p in snippet.lower() for p in ['ata', 'registro de preço', 'homologação']):
+                ata = {
+                    "titulo": titulo,
+                    "descricao": snippet,
+                    "url": link,
+                    "url_pncp": link,
+                    "fonte": "serper"
+                }
+                atas.append(ata)
+
+        if atas:
+            return {
+                "success": True,
+                "fonte": "serper",
+                "termo": termo,
+                "total": len(atas),
+                "atas": atas
+            }
+
+    except Exception as e:
+        print(f"[PNCP-ATAS] Erro no Serper: {e}")
+
+    return {
+        "success": False,
+        "error": f"Não foi possível buscar atas para '{termo}'",
+        "termo": termo
+    }
+
+
+def tool_baixar_ata_pncp(url: str, user_id: str = None) -> Dict[str, Any]:
+    """
+    Baixa uma ata/documento do PNCP e extrai o texto.
+
+    Args:
+        url: URL do documento (página do PNCP ou PDF direto)
+        user_id: ID do usuário
+
+    Returns:
+        Dict com texto extraído e caminho do arquivo
+    """
+    import tempfile
+
+    print(f"[PNCP-ATAS] Baixando documento: {url}")
+
+    try:
+        # Se for URL da página do PNCP, tentar encontrar o PDF
+        if 'pncp.gov.br' in url and not url.endswith('.pdf'):
+            # Tentar obter link do PDF da página
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                # Procurar links de PDF na página
+                import re
+                pdf_links = re.findall(r'href=["\']([^"\']*\.pdf)["\']', response.text, re.IGNORECASE)
+                if pdf_links:
+                    url = pdf_links[0]
+                    if not url.startswith('http'):
+                        url = f"https://pncp.gov.br{url}"
+
+        # Baixar o arquivo
+        response = requests.get(url, timeout=60, stream=True)
+        response.raise_for_status()
+
+        # Salvar em arquivo temporário
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                tmp_file.write(chunk)
+            filepath = tmp_file.name
+
+        # Extrair texto do PDF
+        texto = ""
+        try:
+            doc = fitz.open(filepath)
+            for page in doc:
+                texto += page.get_text()
+            doc.close()
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Erro ao extrair texto do PDF: {e}"
+            }
+
+        if len(texto) < 100:
+            return {
+                "success": False,
+                "error": "PDF vazio ou não foi possível extrair texto (pode ser imagem escaneada)"
+            }
+
+        return {
+            "success": True,
+            "url": url,
+            "filepath": filepath,
+            "texto": texto,
+            "tamanho_texto": len(texto)
+        }
+
+    except requests.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Erro ao baixar documento: {e}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Erro inesperado: {e}"
+        }

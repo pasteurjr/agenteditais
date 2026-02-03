@@ -145,7 +145,12 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: qual o resultado, quem ganhou, quem venceu, como foi, resultados de todos, ver resultados, listar resultados
     IMPORTANTE: Use quando o usuário está PERGUNTANDO sobre resultados (um edital ou todos).
 
-21. **chat_livre**: Dúvidas gerais, conversas
+21. **buscar_atas_pncp**: Buscar atas de sessão/registro de preço no PNCP para download
+    Exemplos: "busque atas de hematologia", "encontre atas de pregão de equipamentos", "baixe atas de registro de preço", "atas de sessão de pregão"
+    Palavras-chave: buscar atas, encontrar atas, baixar atas, atas de registro, atas de sessão, atas pncp
+    IMPORTANTE: Use quando o usuário quer BUSCAR atas no portal PNCP (não quando já tem um arquivo)
+
+22. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -278,6 +283,12 @@ def detectar_intencao_fallback(message: str) -> str:
                                "foi cancelado", "ficou deserto", "foi revogado", "edital cancelado",
                                "edital deserto", "edital revogado"]):
         return "registrar_resultado"
+
+    # 5.4 Buscar atas no PNCP
+    if any(p in msg for p in ["buscar atas", "busque atas", "encontrar atas", "encontre atas",
+                               "baixar atas", "baixe atas", "atas de registro", "atas de sessão",
+                               "atas de sessao", "atas pncp", "atas do pncp"]):
+        return "buscar_atas_pncp"
 
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
@@ -698,6 +709,9 @@ def chat():
 
         elif action_type == "consultar_resultado":
             response_text, resultado = processar_consultar_resultado(message, user_id)
+
+        elif action_type == "buscar_atas_pncp":
+            response_text, resultado = processar_buscar_atas_pncp(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -2810,6 +2824,101 @@ def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename:
 Para salvar os dados no histórico, primeiro cadastre o edital:
 - Busque editais: "busque editais de {resultado.get('objeto', 'equipamentos')[:30]}"
 - Ou registre manualmente o resultado: "Perdemos o edital {edital_num} para {resultado.get('itens', [{}])[0].get('vencedor', 'EMPRESA')} com R$ {resultado.get('itens', [{}])[0].get('preco_vencedor', 0):,.0f}"
+"""
+
+    return response, resultado
+
+
+def processar_buscar_atas_pncp(message: str, user_id: str):
+    """
+    Processa busca de atas de sessão/registro de preço no PNCP.
+
+    Args:
+        message: Mensagem do usuário
+        user_id: ID do usuário
+
+    Returns:
+        Tuple (response_text, resultado)
+    """
+    from tools import tool_buscar_atas_pncp
+
+    # Extrair termo de busca da mensagem
+    import re
+    msg_lower = message.lower()
+
+    # Remover palavras comuns de comando
+    termo = msg_lower
+    for palavra in ["busque", "buscar", "encontre", "encontrar", "baixe", "baixar",
+                    "atas", "ata", "de", "do", "da", "no", "na", "pncp", "registro",
+                    "preço", "preco", "sessão", "sessao"]:
+        termo = termo.replace(palavra, " ")
+
+    # Limpar espaços extras
+    termo = " ".join(termo.split()).strip()
+
+    if not termo or len(termo) < 3:
+        return """## ❓ Termo de Busca Necessário
+
+Por favor, especifique o que você está buscando. Exemplos:
+- "Busque atas de **hematologia**"
+- "Encontre atas de **equipamentos hospitalares**"
+- "Baixe atas de **material de laboratório**"
+""", None
+
+    resultado = tool_buscar_atas_pncp(termo, user_id)
+
+    if not resultado.get("success"):
+        response = f"""## ❌ Erro na Busca de Atas
+
+**Termo:** {termo}
+**Erro:** {resultado.get('error', 'Erro desconhecido')}
+
+**Dica:** Tente termos mais específicos como:
+- "hematologia"
+- "equipamento médico"
+- "reagentes laboratoriais"
+"""
+        return response, resultado
+
+    atas = resultado.get("atas", [])
+
+    response = f"""## 📄 Atas Encontradas no PNCP
+
+**Termo:** {termo}
+**Total:** {resultado.get('total', len(atas))} atas encontradas
+**Fonte:** {resultado.get('fonte', 'PNCP')}
+
+---
+
+"""
+
+    for i, ata in enumerate(atas[:10], 1):
+        titulo = ata.get('titulo', 'Sem título')
+        orgao = ata.get('orgao', 'N/A')
+        descricao = ata.get('descricao', '')[:150]
+        data = ata.get('data_assinatura') or ata.get('data_publicacao', 'N/A')
+        url = ata.get('url_pncp', ata.get('url', '#'))
+
+        response += f"""### {i}. {titulo}
+
+**Órgão:** {orgao}
+**Data:** {data}
+**Descrição:** {descricao}{'...' if len(ata.get('descricao', '')) > 150 else ''}
+
+🔗 [Acessar no PNCP]({url})
+
+---
+
+"""
+
+    response += """
+### 💡 Como usar as atas:
+
+1. Clique no link para acessar a ata no PNCP
+2. Baixe o PDF da ata de sessão
+3. Envie o PDF aqui com a mensagem: **"Extraia os resultados desta ata"**
+
+O sistema irá extrair automaticamente os vencedores, preços e participantes!
 """
 
     return response, resultado

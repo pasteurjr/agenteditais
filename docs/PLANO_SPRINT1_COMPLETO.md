@@ -9,16 +9,17 @@ Permitir que o usuário tome decisões de preço baseadas em dados históricos r
 
 ### Entregáveis
 
-| # | Funcionalidade | Intenção | Prioridade |
-|---|----------------|----------|------------|
-| 1 | Registrar Resultado de Certame | `registrar_resultado` | 🥇 Alta |
-| 2 | Extrair Resultados de Ata (PDF) | `extrair_ata` | 🥇 Alta |
-| 3 | Buscar Preços no PNCP | `buscar_precos_pncp` | 🥈 Média |
-| 4 | Histórico de Preços | `historico_precos` | 🥈 Média |
-| 5 | Lista de Concorrentes | `analisar_concorrentes` | 🥈 Média |
-| 6 | Recomendação de Preços | `recomendar_preco` | 🥇 Alta |
-| 7 | Classificação de Editais | `classificar_edital` | 🥉 Baixa |
-| 8 | Verificar Completude do Produto | `verificar_completude` | 🥉 Baixa |
+| # | Funcionalidade | Intenção | Prioridade | Status |
+|---|----------------|----------|------------|--------|
+| 1 | Registrar Resultado de Certame | `registrar_resultado` | 🥇 Alta | ✅ Feito |
+| 2 | Extrair Resultados de Ata (PDF) | `extrair_ata` | 🥇 Alta | ✅ Feito |
+| 3 | **Buscar/Baixar Atas do PNCP** | `buscar_atas_pncp` | 🥇 Alta | 🔄 Fazendo |
+| 4 | Buscar Preços no PNCP | `buscar_precos_pncp` | 🥈 Média | ⏳ Pendente |
+| 5 | Histórico de Preços | `historico_precos` | 🥈 Média | ⏳ Pendente |
+| 6 | Lista de Concorrentes | `analisar_concorrentes` | 🥈 Média | ⏳ Pendente |
+| 7 | Recomendação de Preços | `recomendar_preco` | 🥇 Alta | ⏳ Pendente |
+| 8 | Classificação de Editais | `classificar_edital` | 🥉 Baixa | ⏳ Pendente |
+| 9 | Verificar Completude do Produto | `verificar_completude` | 🥉 Baixa | ⏳ Pendente |
 
 ---
 
