@@ -56,6 +56,10 @@ PROMPTS_PRONTOS = [
     {"id": "cadastrar_fonte", "nome": "Cadastrar fonte", "prompt": "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]"},
     {"id": "listar_fontes", "nome": "Listar fontes", "prompt": "Quais são as fontes de editais cadastradas?"},
     {"id": "ajuda", "nome": "O que posso fazer?", "prompt": "O que você pode fazer? Quais são suas capacidades?"},
+    # === REGISTRO DE RESULTADOS (Sprint 1) ===
+    {"id": "registrar_derrota", "nome": "📉 Registrar derrota", "prompt": "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR]"},
+    {"id": "registrar_vitoria", "nome": "🏆 Registrar vitória", "prompt": "Ganhamos o edital [NUMERO] com R$ [VALOR]"},
+    {"id": "registrar_cancelado", "nome": "⛔ Edital cancelado", "prompt": "O edital [NUMERO] foi cancelado"},
 ]
 
 
@@ -125,7 +129,11 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Exemplos: "qual o score médio de aderência?", "quantos editais por estado?", "qual produto tem melhor desempenho?", "estatísticas dos editais", "análise dos dados", "relatório de editais"
     Use quando: perguntas analíticas, estatísticas, agregações, comparações, rankings, tendências
 
-19. **chat_livre**: Dúvidas gerais, conversas
+19. **registrar_resultado**: Registrar resultado de certame (vitória ou derrota)
+    Exemplos: "perdemos o edital PE-001", "ganhamos o pregão", "vencedor foi empresa X com R$ 100k", "registre derrota no PE-002", "perdemos por preço para MedLab"
+    Palavras-chave: perdemos, ganhamos, vencedor, derrota, vitória, resultado do edital, segundo lugar
+
+20. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -233,6 +241,12 @@ def detectar_intencao_fallback(message: str) -> str:
     # 5.1 Listar propostas
     if any(p in msg for p in ["minhas propostas", "listar propostas", "propostas geradas", "ver propostas", "propostas cadastradas"]):
         return "listar_propostas"
+
+    # 5.2 Registrar resultado de certame (ANTES de outras detecções de edital)
+    if any(p in msg for p in ["perdemos", "ganhamos", "vencedor foi", "vencedora foi", "resultado do edital",
+                               "derrota", "vitória", "vitoria", "segundo lugar", "terceiro lugar",
+                               "registre resultado", "registrar resultado", "perdemos o", "ganhamos o"]):
+        return "registrar_resultado"
 
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
@@ -647,6 +661,9 @@ def chat():
 
         elif action_type == "consulta_mindsdb":
             response_text, resultado = processar_consulta_mindsdb(message, user_id)
+
+        elif action_type == "registrar_resultado":
+            response_text, resultado = processar_registrar_resultado(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -2277,6 +2294,97 @@ Não foi possível processar a consulta analítica.
 - "liste meus editais"
 - "liste meus produtos"
 - "calcule aderência do produto X ao edital Y"
+"""
+
+    return response, resultado
+
+
+def processar_registrar_resultado(message: str, user_id: str):
+    """
+    Processa registro de resultado de certame (vitória/derrota).
+    Alimenta a base de preços históricos e concorrentes.
+    """
+    from tools import tool_registrar_resultado
+
+    resultado = tool_registrar_resultado(message, user_id)
+
+    if not resultado.get("success"):
+        error = resultado.get("error", "Erro desconhecido")
+        response = f"""❌ **Erro ao registrar resultado**
+
+{error}
+
+**Exemplos de como registrar:**
+- "Perdemos o PE-001/2026 para MedLab com R$ 365.000, nosso preço foi R$ 380.000"
+- "Ganhamos o edital PE-002/2026 com R$ 290.000"
+- "Perdemos o PE-003 por documentação"
+- "O edital PE-004 foi cancelado"
+"""
+        return response, None
+
+    # Montar resposta de sucesso
+    emoji_resultado = "🏆" if resultado["resultado"] == "vitoria" else "📊"
+    status_texto = {
+        "vitoria": "VITÓRIA",
+        "derrota": "DERROTA",
+        "cancelado": "CANCELADO",
+        "deserto": "DESERTO",
+        "revogado": "REVOGADO"
+    }.get(resultado["resultado"], resultado["resultado"].upper())
+
+    response = f"""{emoji_resultado} **Resultado Registrado - {resultado['edital_numero']}**
+
+**Órgão:** {resultado.get('orgao', 'N/A')}
+**Resultado:** {status_texto}
+"""
+
+    # Tabela de preços se disponível
+    if resultado.get("preco_vencedor") or resultado.get("nosso_preco"):
+        response += "\n| Posição | Empresa | Preço |\n"
+        response += "|---------|---------|-------|\n"
+
+        if resultado.get("empresa_vencedora") and resultado["resultado"] != "vitoria":
+            preco_venc = resultado["preco_vencedor"]
+            preco_fmt = f"R$ {preco_venc:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if preco_venc else "N/A"
+            response += f"| 1º | {resultado['empresa_vencedora']} | {preco_fmt} |\n"
+
+        if resultado.get("nosso_preco"):
+            pos = "1º" if resultado["resultado"] == "vitoria" else "2º"
+            nosso_preco = resultado["nosso_preco"]
+            preco_fmt = f"R$ {nosso_preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if nosso_preco else "N/A"
+            response += f"| {pos} | Sua Empresa | {preco_fmt} |\n"
+
+        response += "\n"
+
+    # Análise se foi derrota por preço
+    if resultado.get("diferenca") and resultado["resultado"] == "derrota":
+        diferenca = resultado["diferenca"]
+        diferenca_pct = resultado.get("diferenca_pct", 0)
+        desconto = resultado.get("desconto_percentual")
+
+        response += f"""**Análise:**
+- Diferença: R$ {diferenca:,.2f} ({diferenca_pct:.1f}%)
+"""
+        if desconto:
+            response += f"- Desconto do vencedor: {desconto:.1f}% sobre referência\n"
+
+        if resultado.get("motivo"):
+            motivo_texto = {
+                "preco": "Preço",
+                "tecnica": "Questão técnica",
+                "documentacao": "Documentação",
+                "prazo": "Prazo",
+                "outro": "Outro"
+            }.get(resultado["motivo"], resultado["motivo"])
+            response += f"- Motivo principal: {motivo_texto}\n"
+
+        response += f"""
+💡 **Insight:** Para editais similares, considere preços ~{diferenca_pct:.0f}% menores.
+"""
+
+    # Mensagem de sucesso final
+    response += """
+✅ Dados salvos no histórico de preços e concorrentes!
 """
 
     return response, resultado

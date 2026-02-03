@@ -32,6 +32,10 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "cadastrar_fonte", nome: "➕ Cadastrar fonte", prompt: "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]" },
   { id: "listar_fontes", nome: "🌐 Listar fontes", prompt: "Quais são as fontes de editais cadastradas?" },
   { id: "ajuda", nome: "❓ O que posso fazer?", prompt: "O que você pode fazer? Quais são suas capacidades?" },
+  // === REGISTRO DE RESULTADOS (Sprint 1) ===
+  { id: "registrar_derrota", nome: "📉 Registrar derrota", prompt: "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR]" },
+  { id: "registrar_vitoria", nome: "🏆 Registrar vitória", prompt: "Ganhamos o edital [NUMERO] com R$ [VALOR]" },
+  { id: "registrar_cancelado", nome: "⛔ Edital cancelado", prompt: "O edital [NUMERO] foi cancelado" },
 ];
 
 interface ChatInputProps {

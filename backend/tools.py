@@ -15,7 +15,8 @@ from decimal import Decimal
 from models import (
     get_db, Produto, ProdutoEspecificacao, ProdutoDocumento,
     FonteEdital, Edital, EditalRequisito, EditalDocumento,
-    Analise, AnaliseDetalhe, Proposta
+    Analise, AnaliseDetalhe, Proposta,
+    Concorrente, PrecoHistorico, ParticipacaoEdital
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL
@@ -2313,3 +2314,245 @@ def tool_consulta_mindsdb(pergunta: str, user_id: str) -> Dict[str, Any]:
             "success": False,
             "error": str(e)
         }
+
+
+# ==================== SPRINT 1: REGISTRAR RESULTADO DE CERTAME ====================
+
+PROMPT_EXTRAIR_RESULTADO = """Extraia os dados deste registro de resultado de licitação.
+
+MENSAGEM DO USUÁRIO:
+"{message}"
+
+IMPORTANTE:
+- Valores monetários: converta "365k" para 365000, "1.2M" para 1200000, "R$ 450.000,00" para 450000
+- Se o usuário mencionar que "perdemos" ou "não ganhamos", o resultado é "derrota"
+- Se mencionar "ganhamos" ou "vencemos", o resultado é "vitoria"
+- Se mencionar "cancelado", "revogado" ou "deserto", use esses valores
+- Identifique todos os participantes mencionados com suas posições
+- O "motivo" só deve ser preenchido se for derrota
+
+Retorne APENAS um JSON válido:
+{{
+    "edital": "número do edital (ex: PE-001/2026)",
+    "resultado": "vitoria|derrota|cancelado|deserto|revogado",
+    "nosso_preco": número ou null,
+    "preco_vencedor": número ou null,
+    "empresa_vencedora": "nome da empresa" ou null,
+    "cnpj_vencedor": "cnpj" ou null,
+    "motivo": "preco|tecnica|documentacao|prazo|outro" ou null,
+    "outros_participantes": [
+        {{"empresa": "nome", "preco": número, "posicao": número}}
+    ]
+}}"""
+
+
+def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, Any]:
+    """
+    Registra resultado de certame (vitória/derrota) e alimenta base de preços históricos.
+
+    Args:
+        message: Mensagem do usuário descrevendo o resultado
+        user_id: ID do usuário
+        db: Sessão do banco (opcional, será criada se não fornecida)
+
+    Returns:
+        Dict com sucesso/erro e dados registrados
+    """
+    from models import Edital, Concorrente, PrecoHistorico, ParticipacaoEdital
+
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+
+    try:
+        # 1. Extrair dados via LLM (usar deepseek-chat para extração de JSON)
+        prompt = PROMPT_EXTRAIR_RESULTADO.format(message=message)
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=500,
+            model_override="deepseek-chat"  # Chat é melhor para extração de JSON
+        )
+
+        # Extrair JSON da resposta
+        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        if not json_match:
+            return {"success": False, "error": "Não consegui extrair os dados. Tente um formato como: 'Perdemos o PE-001 para Empresa X com R$ 100.000'"}
+
+        try:
+            dados = json.loads(json_match.group())
+        except json.JSONDecodeError:
+            return {"success": False, "error": "Erro ao processar dados. Tente novamente com mais detalhes."}
+
+        print(f"[TOOLS] Dados extraídos: {dados}")
+
+        # 2. Buscar edital
+        edital_numero = dados.get('edital', '')
+        if not edital_numero:
+            return {"success": False, "error": "Não identifiquei o número do edital. Informe o número (ex: PE-001/2026)"}
+
+        # Busca flexível pelo número
+        edital = db.query(Edital).filter(
+            Edital.numero.ilike(f"%{edital_numero}%"),
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            # Tentar busca mais flexível
+            partes = re.findall(r'[A-Za-z]+|\d+', edital_numero)
+            if partes:
+                edital = db.query(Edital).filter(
+                    Edital.numero.ilike(f"%{partes[-1]}%"),
+                    Edital.user_id == user_id
+                ).first()
+
+        if not edital:
+            return {"success": False, "error": f"Edital '{edital_numero}' não encontrado no seu cadastro."}
+
+        # 3. Registrar/atualizar concorrente vencedor
+        concorrente_id = None
+        empresa_vencedora = dados.get("empresa_vencedora")
+
+        if empresa_vencedora and dados.get("resultado") != "vitoria":
+            # Buscar concorrente existente
+            concorrente = db.query(Concorrente).filter(
+                Concorrente.nome.ilike(f"%{empresa_vencedora}%")
+            ).first()
+
+            if not concorrente:
+                # Criar novo concorrente
+                concorrente = Concorrente(
+                    nome=empresa_vencedora,
+                    cnpj=dados.get("cnpj_vencedor"),
+                    editais_participados=0,
+                    editais_ganhos=0
+                )
+                db.add(concorrente)
+                db.flush()
+
+            concorrente.editais_participados += 1
+            concorrente.editais_ganhos += 1
+
+            # Recalcular taxa de vitória
+            if concorrente.editais_participados > 0:
+                concorrente.taxa_vitoria = (concorrente.editais_ganhos / concorrente.editais_participados) * 100
+
+            concorrente_id = concorrente.id
+
+        # 4. Calcular desconto sobre referência
+        desconto = None
+        if edital.valor_referencia and dados.get("preco_vencedor"):
+            preco_ref = float(edital.valor_referencia)
+            preco_venc = float(dados["preco_vencedor"])
+            if preco_ref > 0:
+                desconto = ((preco_ref - preco_venc) / preco_ref) * 100
+
+        # 5. Registrar preço histórico
+        preco_hist = PrecoHistorico(
+            edital_id=edital.id,
+            user_id=user_id,
+            preco_referencia=edital.valor_referencia,
+            preco_vencedor=dados.get("preco_vencedor"),
+            nosso_preco=dados.get("nosso_preco"),
+            desconto_percentual=desconto,
+            concorrente_id=concorrente_id,
+            empresa_vencedora=empresa_vencedora,
+            cnpj_vencedor=dados.get("cnpj_vencedor"),
+            resultado=dados.get("resultado"),
+            motivo_perda=dados.get("motivo"),
+            data_homologacao=datetime.now().date(),
+            fonte="manual"
+        )
+        db.add(preco_hist)
+
+        # 6. Registrar participações
+        # Vencedor (se não somos nós)
+        if concorrente_id and dados.get("preco_vencedor"):
+            part_vencedor = ParticipacaoEdital(
+                edital_id=edital.id,
+                concorrente_id=concorrente_id,
+                preco_proposto=dados["preco_vencedor"],
+                posicao_final=1,
+                fonte="manual"
+            )
+            db.add(part_vencedor)
+
+        # Nossa participação
+        if dados.get("nosso_preco"):
+            nossa_posicao = 1 if dados.get("resultado") == "vitoria" else 2
+            part_nossa = ParticipacaoEdital(
+                edital_id=edital.id,
+                concorrente_id=None,  # Nós mesmos
+                preco_proposto=dados["nosso_preco"],
+                posicao_final=nossa_posicao,
+                fonte="manual"
+            )
+            db.add(part_nossa)
+
+        # Outros participantes
+        for part in dados.get("outros_participantes", []):
+            if part.get("empresa"):
+                # Buscar ou criar concorrente
+                conc = db.query(Concorrente).filter(
+                    Concorrente.nome.ilike(f"%{part['empresa']}%")
+                ).first()
+
+                if not conc:
+                    conc = Concorrente(nome=part["empresa"])
+                    db.add(conc)
+                    db.flush()
+
+                conc.editais_participados += 1
+
+                part_edital = ParticipacaoEdital(
+                    edital_id=edital.id,
+                    concorrente_id=conc.id,
+                    preco_proposto=part.get("preco"),
+                    posicao_final=part.get("posicao"),
+                    fonte="manual"
+                )
+                db.add(part_edital)
+
+        # 7. Atualizar status do edital
+        resultado = dados.get("resultado")
+        if resultado == "vitoria":
+            edital.status = "vencedor"
+        elif resultado == "derrota":
+            edital.status = "perdedor"
+        elif resultado in ["cancelado", "revogado", "deserto"]:
+            edital.status = resultado
+
+        db.commit()
+
+        # Calcular diferença de preço
+        diferenca = None
+        diferenca_pct = None
+        if dados.get("nosso_preco") and dados.get("preco_vencedor") and dados.get("resultado") == "derrota":
+            diferenca = float(dados["nosso_preco"]) - float(dados["preco_vencedor"])
+            if float(dados["nosso_preco"]) > 0:
+                diferenca_pct = (diferenca / float(dados["nosso_preco"])) * 100
+
+        return {
+            "success": True,
+            "edital_numero": edital.numero,
+            "edital_id": edital.id,
+            "orgao": edital.orgao,
+            "resultado": resultado,
+            "preco_vencedor": dados.get("preco_vencedor"),
+            "nosso_preco": dados.get("nosso_preco"),
+            "empresa_vencedora": empresa_vencedora,
+            "desconto_percentual": round(desconto, 1) if desconto else None,
+            "diferenca": diferenca,
+            "diferenca_pct": round(diferenca_pct, 1) if diferenca_pct else None,
+            "motivo": dados.get("motivo")
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"[TOOLS] Erro ao registrar resultado: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if close_db:
+            db.close()

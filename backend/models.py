@@ -467,6 +467,124 @@ class Proposta(Base):
         }
 
 
+# ==================== CONCORRENTES E PREÇOS HISTÓRICOS ====================
+
+class Concorrente(Base):
+    """Empresas concorrentes em licitações"""
+    __tablename__ = 'concorrentes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    cnpj = Column(String(20), unique=True, nullable=True)
+    razao_social = Column(String(255), nullable=True)
+    segmentos = Column(JSON, nullable=True)  # ["hematologia", "bioquímica", ...]
+    editais_participados = Column(Integer, default=0)
+    editais_ganhos = Column(Integer, default=0)
+    preco_medio = Column(DECIMAL(15, 2), nullable=True)
+    taxa_vitoria = Column(DECIMAL(5, 2), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    precos_historicos = relationship("PrecoHistorico", back_populates="concorrente")
+    participacoes = relationship("ParticipacaoEdital", back_populates="concorrente")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "cnpj": self.cnpj,
+            "razao_social": self.razao_social,
+            "segmentos": self.segmentos,
+            "editais_participados": self.editais_participados,
+            "editais_ganhos": self.editais_ganhos,
+            "preco_medio": float(self.preco_medio) if self.preco_medio else None,
+            "taxa_vitoria": float(self.taxa_vitoria) if self.taxa_vitoria else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PrecoHistorico(Base):
+    """Preços de editais finalizados"""
+    __tablename__ = 'precos_historicos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='SET NULL'), nullable=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+
+    # Valores
+    preco_referencia = Column(DECIMAL(15, 2), nullable=True)
+    preco_vencedor = Column(DECIMAL(15, 2), nullable=True)
+    nosso_preco = Column(DECIMAL(15, 2), nullable=True)
+    desconto_percentual = Column(DECIMAL(5, 2), nullable=True)
+
+    # Vencedor
+    concorrente_id = Column(String(36), ForeignKey('concorrentes.id', ondelete='SET NULL'), nullable=True)
+    empresa_vencedora = Column(String(255), nullable=True)
+    cnpj_vencedor = Column(String(20), nullable=True)
+
+    # Resultado
+    resultado = Column(Enum('vitoria', 'derrota', 'cancelado', 'deserto', 'revogado'), nullable=True)
+    motivo_perda = Column(Enum('preco', 'tecnica', 'documentacao', 'prazo', 'outro'), nullable=True)
+
+    # Datas
+    data_homologacao = Column(Date, nullable=True)
+    data_registro = Column(DateTime, default=datetime.now)
+
+    # Fonte do dado
+    fonte = Column(Enum('manual', 'pncp', 'ata_pdf', 'painel_precos'), nullable=True)
+
+    concorrente = relationship("Concorrente", back_populates="precos_historicos")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "produto_id": self.produto_id,
+            "preco_referencia": float(self.preco_referencia) if self.preco_referencia else None,
+            "preco_vencedor": float(self.preco_vencedor) if self.preco_vencedor else None,
+            "nosso_preco": float(self.nosso_preco) if self.nosso_preco else None,
+            "desconto_percentual": float(self.desconto_percentual) if self.desconto_percentual else None,
+            "empresa_vencedora": self.empresa_vencedora,
+            "resultado": self.resultado,
+            "motivo_perda": self.motivo_perda,
+            "data_homologacao": self.data_homologacao.isoformat() if self.data_homologacao else None,
+            "fonte": self.fonte,
+        }
+
+
+class ParticipacaoEdital(Base):
+    """Participações de empresas em editais"""
+    __tablename__ = 'participacoes_editais'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    concorrente_id = Column(String(36), ForeignKey('concorrentes.id', ondelete='SET NULL'), nullable=True)
+
+    preco_proposto = Column(DECIMAL(15, 2), nullable=True)
+    posicao_final = Column(Integer, nullable=True)  # 1 = vencedor
+    desclassificado = Column(Boolean, default=False)
+    motivo_desclassificacao = Column(Text, nullable=True)
+
+    fonte = Column(Enum('manual', 'pncp', 'ata_pdf'), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    concorrente = relationship("Concorrente", back_populates="participacoes")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "concorrente_id": self.concorrente_id,
+            "preco_proposto": float(self.preco_proposto) if self.preco_proposto else None,
+            "posicao_final": self.posicao_final,
+            "desclassificado": self.desclassificado,
+            "motivo_desclassificacao": self.motivo_desclassificacao,
+            "fonte": self.fonte,
+        }
+
+
 # ==================== DOCUMENTOS GERADOS ====================
 
 class Documento(Base):
