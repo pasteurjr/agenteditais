@@ -15,9 +15,17 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // 1. CADASTRO DE PRODUTOS (Upload de manuais/PDFs)
   // =============================================================================
   { id: "sep_1", nome: "━━━ 1. CADASTRO DE PRODUTOS ━━━", prompt: "" },
+  // -- CADASTRO --
   { id: "upload_manual", nome: "✅ 📎 Cadastrar produto (upload PDF)", prompt: "Cadastre este produto" },
   { id: "download_url", nome: "✅ 🔗 Cadastrar produto de URL", prompt: "Baixe o manual de [URL] e cadastre o produto" },
-  { id: "listar_produtos", nome: "✅ 📦 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
+  // -- BUSCA NA WEB --
+  { id: "buscar_produto_web", nome: "✅ 🌐 Buscar manual na web", prompt: "Busque o manual do produto [NOME] na web" },
+  { id: "buscar_datasheet_web", nome: "✅ 🌐 Buscar datasheet na web", prompt: "Busque o datasheet do [NOME] na web" },
+  // -- BUSCA NO BANCO --
+  { id: "listar_produtos", nome: "✅ 💾 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
+  { id: "buscar_produto_banco", nome: "✅ 💾 Buscar produto no banco", prompt: "Busque o produto [NOME] no banco" },
+  { id: "verificar_produto_cadastrado", nome: "✅ 💾 Verificar produto cadastrado", prompt: "Tenho o produto [NOME] cadastrado?" },
+  // -- GESTÃO --
   { id: "reprocessar_produto", nome: "✅ 🔄 Reprocessar especificações", prompt: "Reprocesse as especificações do produto [NOME_PRODUTO]" },
   { id: "atualizar_produto", nome: "✅ ✏️ Atualizar/editar produto", prompt: "Atualize o produto [NOME_PRODUTO] com [NOVOS_DADOS]" },
   { id: "excluir_produto", nome: "✅ 🗑️ Excluir produto", prompt: "Exclua o produto [NOME_PRODUTO]" },
@@ -27,10 +35,17 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // 2. BUSCA E CADASTRO DE EDITAIS
   // =============================================================================
   { id: "sep_2", nome: "━━━ 2. BUSCA E CADASTRO DE EDITAIS ━━━", prompt: "" },
-  { id: "buscar_editais", nome: "✅ 🔍 Buscar editais por termo (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
-  { id: "buscar_edital_numero", nome: "✅ 🔍 Buscar edital por número", prompt: "Busque o edital [PE-001/2026]" },
+  // -- BUSCA NA WEB (PNCP) --
+  { id: "buscar_editais_web", nome: "✅ 🌐 Buscar editais na web (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "buscar_edital_numero_web", nome: "✅ 🌐 Buscar edital por número (web)", prompt: "Busque o edital [PE-001/2026] no PNCP" },
+  { id: "buscar_editais_web2", nome: "✅ 🌐 Encontrar editais na web", prompt: "Encontre editais de [TERMO] na web" },
+  // -- BUSCA NO BANCO LOCAL --
+  { id: "buscar_editais_banco", nome: "✅ 💾 Buscar editais no banco", prompt: "Busque editais de [TERMO] no banco" },
+  { id: "buscar_edital_numero_banco", nome: "✅ 💾 Buscar edital no sistema", prompt: "Busque o edital [PE-001/2026] no sistema" },
+  { id: "verificar_edital_cadastrado", nome: "✅ 💾 Verificar edital cadastrado", prompt: "Tenho o edital [PE-001/2026] cadastrado?" },
   { id: "listar_editais", nome: "✅ 📋 Listar editais salvos", prompt: "Liste meus editais cadastrados" },
   { id: "listar_editais_status", nome: "✅ 📋 Listar editais por status", prompt: "Liste meus editais com status [novo/analisando/participar/ganho/perdido]" },
+  // -- CADASTRO E GESTÃO --
   { id: "cadastrar_edital", nome: "✅ ➕ Cadastrar edital manualmente", prompt: "Cadastre o edital [NUMERO], órgão [ORGAO], objeto: [OBJETO]" },
   { id: "salvar_editais", nome: "✅ 💾 Salvar editais da busca", prompt: "Salve os editais encontrados" },
   { id: "atualizar_edital", nome: "✅ ✏️ Atualizar/editar edital", prompt: "Atualize o edital [NUMERO] com status [novo/analisando/participar/ganho/perdido]" },

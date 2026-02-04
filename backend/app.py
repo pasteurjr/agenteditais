@@ -339,17 +339,41 @@ def detectar_intencao_fallback(message: str) -> str:
     if any(p in msg for p in ["cadastre o edital", "cadastrar edital", "registre o edital", "adicione o edital", "inserir edital"]):
         return "cadastrar_edital"
 
-    # 10. Buscar edital específico por número - ANTES de buscar_editais genérico
-    import re
-    # Detectar padrões de número de edital: PE-001/2026, PE0013/2025, 90186/2025, nº 123
-    if any(p in msg for p in ["busque o edital", "encontre o edital", "buscar edital nº", "buscar edital número"]):
-        return "buscar_edital_numero"
-    # Também detectar se tem padrão de número de edital na mensagem
-    if re.search(r'(busque|encontre|buscar)\s+(o\s+)?edital\s+\w*\d+', msg, re.IGNORECASE):
-        return "buscar_edital_numero"
+    # 10. Detectar se é busca no BANCO ou na WEB
+    # Palavras que indicam BANCO LOCAL: "no banco", "cadastrado", "salvo", "no sistema", "banco de dados"
+    busca_local = any(p in msg for p in ["no banco", "cadastrado", "salvo", "no sistema", "banco de dados",
+                                          "tenho o edital", "tenho edital", "já tenho", "ja tenho"])
+    # Palavras que indicam WEB: "na web", "no pncp", "internet", "online", "portal"
+    busca_web = any(p in msg for p in ["na web", "no pncp", "pncp", "internet", "online", "portal", "bec"])
 
-    # 11. Buscar editais por termo - genérico
+    import re
+
+    # 10.1 Buscar edital específico por número
+    tem_numero_edital = re.search(r'(PE[-]?\d+|[Pp]reg[aã]o\s*n?[ºo°]?\s*\d+|\d{4,}[/]\d{4}|n[ºo°]\s*\d+)', msg, re.IGNORECASE)
+    if any(p in msg for p in ["busque o edital", "encontre o edital", "buscar edital"]) or tem_numero_edital:
+        if busca_local:
+            return "listar_editais"  # Busca no banco local
+        else:
+            return "buscar_edital_numero"  # Busca na web (padrão)
+
+    # 10.2 Buscar editais por termo
+    if any(p in msg for p in ["busque editais", "buscar editais", "encontre editais", "encontrar editais"]):
+        if busca_local:
+            return "listar_editais"  # Lista do banco
+        else:
+            return "buscar_editais"  # Busca na web (padrão)
+
+    # 10.3 Buscar produtos
+    if any(p in msg for p in ["busque produto", "buscar produto", "encontre produto", "encontrar produto"]):
+        if busca_web:
+            return "buscar_web"  # Busca manual na web
+        else:
+            return "listar_produtos"  # Lista do banco (padrão)
+
+    # 11. Buscar editais genérico (sem especificar banco/web) - default é WEB
     if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
+        if busca_local:
+            return "listar_editais"
         return "buscar_editais"
 
     # 10. Consultas analíticas via MindsDB
@@ -1491,8 +1515,8 @@ Por favor, informe o número no formato:
     print(f"[BUSCA-EDITAL] Buscando edital: {numero_edital}")
 
     # 1. Primeiro verificar se já está salvo no sistema
-    from backend.models import Edital
-    from backend.database import SessionLocal
+    from models import Edital
+    from database import SessionLocal
 
     db = SessionLocal()
     try:
@@ -1502,18 +1526,23 @@ Por favor, informe o número no formato:
         ).first()
 
         if edital_local:
+            valor_ref = f"R$ {edital_local.valor_referencia:,.2f}" if edital_local.valor_referencia else '-'
+            data_ab = edital_local.data_abertura.strftime('%d/%m/%Y') if edital_local.data_abertura else '-'
+            objeto_texto = (edital_local.objeto or '')[:150]
+            objeto_sufixo = '...' if len(edital_local.objeto or '') > 150 else ''
+
             response = f"""## ✅ Edital Encontrado (já salvo no sistema)
 
 | Campo | Valor |
 |-------|-------|
 | **Número** | {edital_local.numero} |
 | **Órgão** | {edital_local.orgao} |
-| **Objeto** | {edital_local.objeto[:150]}{'...' if len(edital_local.objeto or '') > 150 else ''} |
+| **Objeto** | {objeto_texto}{objeto_sufixo} |
 | **Status** | {edital_local.status} |
 | **Modalidade** | {edital_local.modalidade} |
 | **UF** | {edital_local.uf or '-'} |
-| **Data Abertura** | {edital_local.data_abertura.strftime('%d/%m/%Y') if edital_local.data_abertura else '-'} |
-| **Valor Referência** | R$ {edital_local.valor_referencia:,.2f} if edital_local.valor_referencia else '-' |
+| **Data Abertura** | {data_ab} |
+| **Valor Referência** | {valor_ref} |
 
 ---
 **Ações disponíveis:**
