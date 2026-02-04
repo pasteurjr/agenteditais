@@ -82,12 +82,22 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "consultar_todos_resultados", nome: "✅ 📊 Ver todos os resultados", prompt: "Mostre os resultados de todos os editais" },
 
   // =============================================================================
-  // 6. EXTRAÇÃO DE ATAS (PDF)
+  // 6. EXTRAÇÃO DE ATAS (PDF) - Funcionalidade 3 Sprint 1
   // =============================================================================
-  { id: "sep_6", nome: "━━━ 6. EXTRAÇÃO DE ATAS ━━━", prompt: "" },
+  { id: "sep_6", nome: "━━━ 6. BUSCA E EXTRAÇÃO DE ATAS ━━━", prompt: "" },
+  // 6.1 Buscar atas no PNCP
   { id: "buscar_atas", nome: "✅ 🔍 Buscar atas no PNCP", prompt: "Busque atas de [TERMO]" },
+  { id: "buscar_atas_orgao", nome: "✅ 🔍 Buscar atas por órgão", prompt: "Busque atas do [ORGAO] no PNCP" },
+  { id: "buscar_atas_uf", nome: "✅ 🔍 Buscar atas por UF", prompt: "Busque atas de [TERMO] em [UF]" },
+  { id: "buscar_atas_edital", nome: "✅ 🔍 Buscar ata de edital específico", prompt: "Busque a ata do edital [NUMERO]" },
+  { id: "buscar_atas_recentes", nome: "✅ 🔍 Atas mais recentes", prompt: "Busque as atas mais recentes de [TERMO]" },
+  { id: "baixar_atas", nome: "✅ 📥 Baixar atas do PNCP", prompt: "Baixe atas de [TERMO] do PNCP" },
+  // 6.2 Extrair resultados de ata (PDF upload)
   { id: "extrair_ata", nome: "✅ 📄 Extrair resultados de ata (PDF)", prompt: "Extraia os resultados desta ata" },
   { id: "extrair_vencedor", nome: "✅ 🏆 Quem ganhou este pregão?", prompt: "Quem ganhou este pregão?" },
+  { id: "extrair_participantes", nome: "✅ 👥 Listar participantes da ata", prompt: "Liste os participantes desta ata" },
+  { id: "extrair_precos_ata", nome: "✅ 💰 Extrair preços da ata", prompt: "Extraia os preços desta ata de registro" },
+  { id: "registrar_ata", nome: "✅ 💾 Registrar resultados da ata", prompt: "Registre os resultados desta ata no banco" },
 
   // =============================================================================
   // 7. HISTÓRICO DE PREÇOS
