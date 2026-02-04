@@ -1,6 +1,6 @@
 # Relatório de Testes - Sprint 1
 
-**Data:** 04/02/2026 01:29
+**Data:** 04/02/2026 01:32
 
 ## Resumo
 
@@ -24,7 +24,7 @@
 
 #### ✅ Teste: Busque preços de hematologia no PNCP
 
-**Tempo de resposta:** 4.42s
+**Tempo de resposta:** 4.84s
 
 **Resposta:**
 
@@ -45,57 +45,20 @@
 
 #### ✅ Teste: Qual o preço de mercado para analisador bioquímico?
 
-**Tempo de resposta:** 4.21s
+**Tempo de resposta:** 3.94s
 
 **Resposta:**
 
 ```
-## 💰 Preços de Mercado - PNCP
+## ❌ Nenhum Preço Encontrado
 
-**Termo pesquisado:** preço para analisador bioquímico
-**Período:** Últimos 12 meses
-**Contratos encontrados:** 1
-**Fonte:** serper
+**Termo:** preço para analisador bioquímico
+**Erro:** Não foram encontrados preços para 'preço para analisador bioquímico' no PNCP
 
----
-
-### 📊 Estatísticas de Preços
-
-| Métrica | Valor |
-|---------|-------|
-| **Mínimo** | R$ 100,000.00 |
-| **Médio** | R$ 100,000.00 |
-| **Mediano** | R$ 100,000.00 |
-| **Máximo** | R$ 100,000.00 |
-
----
-
-### 🏢 Principais Fornecedores
-
-1. **termo de referência** - 1 contratos (média: R$ 100,000.00)
-
-
----
-
-### 📋 Últimos Contratos
-
-**1. Por exemplo: Caso no final do contrato, o valor mensal do contrato seja R$ 100.0...**
-- 🏢 Órgão: N/A
-- 🏭 Fornecedor: N/A
-- 💵 Valor: **R$ 100,000.00**
-- 📅 Data: N/A
-- 🔗 [Ver no PNCP](https://pncp.gov.br/pncp-api/v1/orgaos/10564953000136/compras/2025/29/arquivos/2)
-
-
----
-
-### 💡 Como usar esses dados:
-
-1. **Para definir preço de proposta:** Use o preço médio como referência
-2. **Para análise de concorrentes:** Veja os principais fornecedores
-3. **Para justificativa de preços:** Cite os contratos como referência
-
-📌 **Dica:** Para salvar esses preços no histórico, registre um resultado de edital!
+**Dica:** Tente termos mais específicos como:
+- "analisador hematológico"
+- "equipamento laboratório"
+- "reagentes diagnóstico"
 
 ```
 
@@ -108,7 +71,7 @@
 
 #### ✅ Teste: Mostre o histórico de preços de hematologia
 
-**Tempo de resposta:** 3.19s
+**Tempo de resposta:** 2.82s
 
 **Resposta:**
 
@@ -125,7 +88,7 @@
 
 #### ✅ Teste: Quais preços já registramos?
 
-**Tempo de resposta:** 2.57s
+**Tempo de resposta:** 2.79s
 
 **Resposta:**
 
@@ -147,7 +110,7 @@
 
 #### ✅ Teste: Liste os concorrentes conhecidos
 
-**Tempo de resposta:** 3.03s
+**Tempo de resposta:** 2.81s
 
 **Resposta:**
 
@@ -176,7 +139,7 @@
 
 #### ✅ Teste: Analise o concorrente MedLab
 
-**Tempo de resposta:** 3.09s
+**Tempo de resposta:** 3.05s
 
 **Resposta:**
 
@@ -222,7 +185,7 @@
 
 #### ✅ Teste: Recomende preço para analisador hematológico
 
-**Tempo de resposta:** 4.34s
+**Tempo de resposta:** 4.29s
 
 **Resposta:**
 
@@ -240,17 +203,41 @@
 
 #### ✅ Teste: Qual preço sugerir para equipamento laboratorial?
 
-**Tempo de resposta:** 3.56s
+**Tempo de resposta:** 3.94s
 
 **Resposta:**
 
 ```
-## ❌ Recomendação de Preço
+## 💡 Recomendação de Preço
 
 **Termo:** equipamento laboratorial
-**Erro:** Não há dados suficientes para recomendar preço para 'equipamento laboratorial'
+**Fonte:** Pncp
+**Registros analisados:** 0
 
-**Dica:** Registre mais resultados de editais ou busque preços no PNCP
+---
+
+### 🎯 Preços Sugeridos
+
+| Estratégia | Preço Sugerido |
+|------------|----------------|
+| 🔥 **Agressivo** | R$ 1,228.35 |
+| ✅ **Ideal** | R$ 1,254.21 |
+| 🛡️ **Conservador** | R$ 1,293.00 |
+
+---
+
+### 📊 Referência de Mercado
+
+| Métrica | Valor |
+|---------|-------|
+| **Preço Médio Vencedor** | R$ 1,293.00 |
+| **Preço Mínimo** | R$ 1,293.00 |
+
+---
+
+**Justificativa:** Baseado em 1 contratos do PNCP
+
+💡 **Dica:** O preço **ideal** oferece boa margem de vitória com lucro razoável.
 
 ```
 
@@ -263,7 +250,7 @@
 
 #### ✅ Teste: Classifique este edital: Aquisição de analisador hematológico automático
 
-**Tempo de resposta:** 2.59s
+**Tempo de resposta:** 3.19s
 
 **Resposta:**
 
@@ -290,7 +277,7 @@
 
 #### ✅ Teste: Que tipo de edital é: Locação de equipamento com fornecimento de reagentes
 
-**Tempo de resposta:** 3.04s
+**Tempo de resposta:** 2.62s
 
 **Resposta:**
 
@@ -324,7 +311,7 @@
 
 #### ✅ Teste: Verifique completude do produto Mindray
 
-**Tempo de resposta:** 2.97s
+**Tempo de resposta:** 2.72s
 
 **Resposta:**
 
@@ -366,7 +353,7 @@
 
 #### ✅ Teste: O produto BC-5000 está completo?
 
-**Tempo de resposta:** 3.05s
+**Tempo de resposta:** 2.89s
 
 **Resposta:**
 
