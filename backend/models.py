@@ -257,6 +257,13 @@ class Edital(Base):
     status = Column(Enum('novo', 'analisando', 'participando', 'proposta_enviada', 'em_pregao', 'vencedor', 'perdedor', 'cancelado', 'desistido', 'aberto', 'fechado', 'suspenso', 'ganho', 'perdido'), default='novo')
     fonte = Column(String(50), nullable=True)
     url = Column(String(500), nullable=True)
+    # Dados PNCP para buscar itens e documentos
+    numero_pncp = Column(String(100), nullable=True)  # Ex: 15126437000143-1-000531/2025
+    cnpj_orgao = Column(String(20), nullable=True)
+    ano_compra = Column(Integer, nullable=True)
+    seq_compra = Column(Integer, nullable=True)
+    srp = Column(Boolean, default=False)  # Sistema de Registro de Preços
+    situacao_pncp = Column(String(100), nullable=True)  # Divulgada, Suspensa, etc.
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -264,6 +271,7 @@ class Edital(Base):
     requisitos = relationship("EditalRequisito", back_populates="edital", cascade="all, delete-orphan")
     documentos = relationship("EditalDocumento", back_populates="edital", cascade="all, delete-orphan")
     analises = relationship("Analise", back_populates="edital", cascade="all, delete-orphan")
+    itens = relationship("EditalItem", back_populates="edital", cascade="all, delete-orphan")
 
     def to_dict(self, include_requisitos=False):
         result = {
@@ -349,6 +357,38 @@ class EditalDocumento(Base):
             "nome_arquivo": self.nome_arquivo,
             "processado": self.processado,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EditalItem(Base):
+    """Itens/lotes do edital (vindos da API PNCP)"""
+    __tablename__ = 'editais_itens'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    numero_item = Column(Integer, nullable=True)
+    descricao = Column(Text, nullable=True)
+    unidade_medida = Column(String(50), nullable=True)
+    quantidade = Column(DECIMAL(15, 4), nullable=True)
+    valor_unitario_estimado = Column(DECIMAL(15, 2), nullable=True)
+    valor_total_estimado = Column(DECIMAL(15, 2), nullable=True)
+    codigo_item = Column(String(100), nullable=True)  # Código no PNCP
+    tipo_beneficio = Column(String(100), nullable=True)  # ME/EPP, Cota reservada, etc.
+    created_at = Column(DateTime, default=datetime.now)
+
+    edital = relationship("Edital", back_populates="itens")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "numero_item": self.numero_item,
+            "descricao": self.descricao,
+            "unidade_medida": self.unidade_medida,
+            "quantidade": float(self.quantidade) if self.quantidade else None,
+            "valor_unitario_estimado": float(self.valor_unitario_estimado) if self.valor_unitario_estimado else None,
+            "valor_total_estimado": float(self.valor_total_estimado) if self.valor_total_estimado else None,
+            "codigo_item": self.codigo_item,
+            "tipo_beneficio": self.tipo_beneficio,
         }
 
 

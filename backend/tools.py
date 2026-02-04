@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from models import (
     get_db, Produto, ProdutoEspecificacao, ProdutoDocumento,
-    FonteEdital, Edital, EditalRequisito, EditalDocumento,
+    FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital
 )
@@ -1389,6 +1389,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
                     # Extrair dados do item
                     orgao_data = item.get('orgaoEntidade', {}) or {}
+                    unidade_data = item.get('unidadeOrgao', {}) or {}
                     numero_pncp = item.get('numeroControlePNCP', '')
 
                     # Construir URL do PNCP usando CNPJ, ano e sequencial (mais confiável)
@@ -1426,19 +1427,41 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         modalidade_db = 'pregao_eletronico'  # default
 
                     # NÃO salvar - apenas criar dict com dados para retornar
+                    # Extrair UF e cidade da unidadeOrgao (não do orgaoEntidade)
+                    uf = unidade_data.get('ufSigla') or orgao_data.get('uf')
+                    cidade = unidade_data.get('municipioNome')
+
+                    # Determinar tipo de órgão baseado na esfera
+                    esfera = orgao_data.get('esferaId', '')
+                    if esfera == 'M':
+                        orgao_tipo = 'municipal'
+                    elif esfera == 'E':
+                        orgao_tipo = 'estadual'
+                    elif esfera == 'F':
+                        orgao_tipo = 'federal'
+                    else:
+                        orgao_tipo = 'outro'
+
                     edital_data = {
                         "numero": item.get('numeroCompra', 'N/A'),
                         "orgao": orgao_data.get('razaoSocial', 'N/A'),
-                        "orgao_tipo": 'municipal' if orgao_data.get('esferaId') == 'M' else 'federal',
-                        "uf": orgao_data.get('uf'),
+                        "orgao_tipo": orgao_tipo,
+                        "uf": uf,
+                        "cidade": cidade,
                         "objeto": objeto[:500] if objeto else f"Contratação - {termo}",
                         "modalidade": modalidade_db,
                         "valor_referencia": item.get('valorTotalEstimado'),
                         "data_publicacao": item.get('dataPublicacaoPncp'),
                         "data_abertura": item.get('dataAberturaProposta'),
+                        "data_encerramento": item.get('dataEncerramentoProposta'),
                         "fonte": 'PNCP',
                         "url": link,
-                        "numero_pncp": numero_pncp,  # Para deduplicação posterior
+                        "numero_pncp": numero_pncp,  # Para deduplicação e busca de itens
+                        "cnpj_orgao": cnpj,
+                        "ano_compra": ano,
+                        "seq_compra": seq,
+                        "srp": item.get('srp', False),  # Sistema de Registro de Preços
+                        "situacao": item.get('situacaoCompraNome'),
                     }
                     editais_encontrados.append(edital_data)
                     print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]}")
@@ -2176,6 +2199,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                     orgao=orgao,
                     orgao_tipo=edital_data.get('orgao_tipo', 'federal'),
                     uf=edital_data.get('uf'),
+                    cidade=edital_data.get('cidade'),
                     objeto=edital_data.get('objeto', ''),
                     modalidade=modalidade,
                     valor_referencia=edital_data.get('valor_referencia'),
@@ -2183,10 +2207,33 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                     data_abertura=data_abertura,
                     fonte=edital_data.get('fonte', 'PNCP'),
                     url=edital_data.get('url'),
+                    # Dados PNCP para buscar itens
+                    numero_pncp=edital_data.get('numero_pncp'),
+                    cnpj_orgao=edital_data.get('cnpj_orgao'),
+                    ano_compra=edital_data.get('ano_compra'),
+                    seq_compra=edital_data.get('seq_compra'),
+                    srp=edital_data.get('srp', False),
+                    situacao_pncp=edital_data.get('situacao'),
                     status='novo'
                 )
                 db.add(edital)
+                db.flush()  # Para obter o ID
                 salvos.append(numero)
+
+                # Buscar itens do edital no PNCP automaticamente
+                if edital_data.get('cnpj_orgao') and edital_data.get('ano_compra') and edital_data.get('seq_compra'):
+                    try:
+                        resultado_itens = tool_buscar_itens_edital_pncp(
+                            edital_id=edital.id,
+                            cnpj=edital_data.get('cnpj_orgao'),
+                            ano=edital_data.get('ano_compra'),
+                            seq=edital_data.get('seq_compra'),
+                            user_id=user_id
+                        )
+                        if resultado_itens.get('success'):
+                            print(f"[SALVAR] {resultado_itens.get('total_itens', 0)} itens salvos para {numero}")
+                    except Exception as e:
+                        print(f"[SALVAR] Erro ao buscar itens de {numero}: {e}")
 
                 # Se tem score, salvar análise
                 if edital_data.get('score_tecnico') is not None:
@@ -3053,6 +3100,129 @@ def tool_baixar_ata_pncp(url: str, user_id: str = None) -> Dict[str, Any]:
             "success": False,
             "error": f"Erro inesperado: {e}"
         }
+
+
+# ==================== BUSCAR ITENS DO EDITAL NO PNCP ====================
+
+def tool_buscar_itens_edital_pncp(edital_id: str = None, cnpj: str = None, ano: int = None, seq: int = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca os itens/lotes de um edital na API do PNCP e salva no banco.
+
+    Args:
+        edital_id: ID do edital no banco (se já existe)
+        cnpj: CNPJ do órgão (sem formatação)
+        ano: Ano da compra
+        seq: Sequencial da compra
+        user_id: ID do usuário
+
+    Returns:
+        Dict com itens encontrados
+    """
+    db = get_db()
+    try:
+        edital = None
+
+        # Se passou edital_id, buscar dados do PNCP do edital
+        if edital_id:
+            edital = db.query(Edital).filter(Edital.id == edital_id).first()
+            if edital:
+                cnpj = edital.cnpj_orgao
+                ano = edital.ano_compra
+                seq = edital.seq_compra
+
+        if not cnpj or not ano or not seq:
+            return {
+                "success": False,
+                "error": "Dados insuficientes para buscar itens (cnpj, ano, seq)"
+            }
+
+        print(f"[PNCP-ITENS] Buscando itens: CNPJ={cnpj}, Ano={ano}, Seq={seq}")
+
+        # API de itens do PNCP
+        # Formato correto: /api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens
+        url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+
+        response = requests.get(
+            url_itens,
+            timeout=30,
+            headers={"Accept": "application/json"}
+        )
+
+        if response.status_code == 404:
+            return {
+                "success": True,
+                "itens": [],
+                "message": "Nenhum item encontrado para este edital"
+            }
+
+        response.raise_for_status()
+        itens_api = response.json()
+
+        print(f"[PNCP-ITENS] Encontrados {len(itens_api)} itens")
+
+        itens_processados = []
+        for item in itens_api:
+            item_data = {
+                "numero_item": item.get('numeroItem'),
+                "descricao": item.get('descricao'),
+                "unidade_medida": item.get('unidadeMedida'),
+                "quantidade": item.get('quantidade'),
+                "valor_unitario_estimado": item.get('valorUnitarioEstimado'),
+                "valor_total_estimado": item.get('valorTotal'),
+                "codigo_item": item.get('codigoRegistroImobiliario') or item.get('materialServico'),
+                "tipo_beneficio": item.get('tipoBeneficioNome'),
+            }
+            itens_processados.append(item_data)
+
+            # Se tem edital, salvar no banco
+            if edital:
+                # Verificar se item já existe
+                item_existente = db.query(EditalItem).filter(
+                    EditalItem.edital_id == edital.id,
+                    EditalItem.numero_item == item_data['numero_item']
+                ).first()
+
+                if not item_existente:
+                    novo_item = EditalItem(
+                        edital_id=edital.id,
+                        numero_item=item_data['numero_item'],
+                        descricao=item_data['descricao'],
+                        unidade_medida=item_data['unidade_medida'],
+                        quantidade=item_data['quantidade'],
+                        valor_unitario_estimado=item_data['valor_unitario_estimado'],
+                        valor_total_estimado=item_data['valor_total_estimado'],
+                        codigo_item=item_data['codigo_item'],
+                        tipo_beneficio=item_data['tipo_beneficio'],
+                    )
+                    db.add(novo_item)
+
+        if edital:
+            db.commit()
+            print(f"[PNCP-ITENS] Itens salvos no banco para edital {edital.numero}")
+
+        return {
+            "success": True,
+            "total_itens": len(itens_processados),
+            "itens": itens_processados,
+            "edital_id": edital.id if edital else None
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"[PNCP-ITENS] Erro na requisição: {e}")
+        return {
+            "success": False,
+            "error": f"Erro ao buscar itens no PNCP: {str(e)}"
+        }
+    except Exception as e:
+        print(f"[PNCP-ITENS] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"Erro: {str(e)}"
+        }
+    finally:
+        db.close()
 
 
 # ==================== SPRINT 1 - FUNCIONALIDADE 4: BUSCAR PREÇOS NO PNCP ====================
