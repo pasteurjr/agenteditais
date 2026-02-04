@@ -161,7 +161,31 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: buscar preços, preço de mercado, preços pncp, quanto custa, preço médio, valores de contrato
     Use quando: usuário quer saber preços praticados em licitações anteriores
 
-23. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
+23. **historico_precos**: Consultar histórico de preços registrados no sistema
+    Exemplos: "mostre histórico de preços de hematologia", "histórico de preços do produto X", "quais preços já registramos?"
+    Palavras-chave: histórico de preços, preços registrados, preços salvos, histórico preço
+
+24. **listar_concorrentes**: Listar todos os concorrentes conhecidos
+    Exemplos: "liste os concorrentes", "quais concorrentes conhecemos?", "mostre os concorrentes"
+    Palavras-chave: listar concorrentes, concorrentes conhecidos, nossos concorrentes
+
+25. **analisar_concorrente**: Analisar um concorrente específico
+    Exemplos: "analise o concorrente MedLab", "como está a empresa TechSaúde?", "histórico do concorrente X"
+    Palavras-chave: analisar concorrente, análise concorrente, histórico concorrente
+
+26. **recomendar_preco**: Recomendar preço para um produto/edital
+    Exemplos: "qual preço sugerir para hematologia?", "recomende preço para analisador", "que preço colocar?"
+    Palavras-chave: recomendar preço, sugerir preço, que preço, qual preço colocar
+
+27. **classificar_edital**: Classificar tipo de edital (comodato, venda, aluguel)
+    Exemplos: "classifique este edital", "que tipo de edital é este?", "é comodato ou venda?"
+    Palavras-chave: classificar edital, tipo de edital, qual modalidade, é comodato
+
+28. **verificar_completude**: Verificar se produto tem todas informações necessárias
+    Exemplos: "produto X está completo?", "verifique completude do produto", "falta algo no produto?"
+    Palavras-chave: verificar completude, produto completo, falta informação, completude produto
+
+29. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
     Exemplos: "cadastre o edital PE-001/2026", "registre este edital", "adicione o edital número X", "salve este edital manualmente"
     Palavras-chave: cadastre edital, registre edital, adicione edital, cadastrar edital manualmente, inserir edital
     IMPORTANTE: Use quando o usuário quer cadastrar UM edital manualmente (diferente de salvar vários da busca)
@@ -313,6 +337,40 @@ def detectar_intencao_fallback(message: str) -> str:
                                "preços de contrato", "precos de contrato", "preço praticado",
                                "preco praticado", "preços praticados", "precos praticados"]):
         return "buscar_precos_pncp"
+
+    # 5.4.2 Histórico de preços (Funcionalidade 5 Sprint 1)
+    if any(p in msg for p in ["histórico de preços", "historico de precos", "preços registrados",
+                               "precos registrados", "preços salvos", "precos salvos",
+                               "histórico preço", "historico preco"]):
+        return "historico_precos"
+
+    # 5.4.3 Listar concorrentes (Funcionalidade 6 Sprint 1)
+    if any(p in msg for p in ["listar concorrentes", "liste concorrentes", "concorrentes conhecidos",
+                               "nossos concorrentes", "quais concorrentes", "ver concorrentes"]):
+        return "listar_concorrentes"
+
+    # 5.4.4 Analisar concorrente (Funcionalidade 6 Sprint 1)
+    if any(p in msg for p in ["analisar concorrente", "analise concorrente", "análise concorrente",
+                               "analise o concorrente", "histórico concorrente", "historico concorrente"]):
+        return "analisar_concorrente"
+
+    # 5.4.5 Recomendar preço (Funcionalidade 7 Sprint 1)
+    if any(p in msg for p in ["recomendar preço", "recomendar preco", "sugerir preço", "sugerir preco",
+                               "que preço colocar", "que preco colocar", "qual preço sugerir",
+                               "qual preco sugerir", "recomende preço", "recomende preco"]):
+        return "recomendar_preco"
+
+    # 5.4.6 Classificar edital (Funcionalidade 8 Sprint 1)
+    if any(p in msg for p in ["classificar edital", "classifique edital", "tipo de edital",
+                               "que tipo de edital", "é comodato", "e comodato", "é venda",
+                               "é aluguel", "qual modalidade"]):
+        return "classificar_edital"
+
+    # 5.4.7 Verificar completude produto (Funcionalidade 9 Sprint 1)
+    if any(p in msg for p in ["verificar completude", "produto completo", "falta informação",
+                               "falta informacao", "completude produto", "está completo",
+                               "esta completo", "informações faltando"]):
+        return "verificar_completude"
 
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
@@ -809,6 +867,24 @@ def chat():
 
         elif action_type == "buscar_precos_pncp":
             response_text, resultado = processar_buscar_precos_pncp(message, user_id)
+
+        elif action_type == "historico_precos":
+            response_text, resultado = processar_historico_precos(message, user_id)
+
+        elif action_type == "listar_concorrentes":
+            response_text, resultado = processar_listar_concorrentes(user_id)
+
+        elif action_type == "analisar_concorrente":
+            response_text, resultado = processar_analisar_concorrente(message, user_id)
+
+        elif action_type == "recomendar_preco":
+            response_text, resultado = processar_recomendar_preco(message, user_id)
+
+        elif action_type == "classificar_edital":
+            response_text, resultado = processar_classificar_edital(message, user_id)
+
+        elif action_type == "verificar_completude":
+            response_text, resultado = processar_verificar_completude(message, user_id)
 
         elif action_type == "cadastrar_edital":
             response_text, resultado = processar_cadastrar_edital(message, user_id, intencao_resultado)
@@ -3319,6 +3395,382 @@ Por favor, especifique o produto/equipamento que deseja pesquisar. Exemplos:
 
 📌 **Dica:** Para salvar esses preços no histórico, registre um resultado de edital!
 """
+
+    return response, resultado
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 5: HISTÓRICO DE PREÇOS ====================
+
+def processar_historico_precos(message: str, user_id: str):
+    """Processa consulta de histórico de preços."""
+    from tools import tool_historico_precos
+
+    # Extrair termo
+    msg_lower = message.lower()
+    termo = msg_lower
+    for palavra in ["histórico", "historico", "preços", "precos", "de", "do", "da",
+                    "registrados", "salvos", "mostre", "ver", "consultar"]:
+        termo = termo.replace(palavra, " ")
+    termo = " ".join(termo.split()).strip()
+
+    resultado = tool_historico_precos(termo=termo if termo else None, user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Histórico de Preços
+
+**Erro:** {resultado.get('error', 'Nenhum registro encontrado')}
+
+**Dica:** Registre resultados de editais para criar histórico de preços.
+""", resultado
+
+    stats = resultado.get("estatisticas", {})
+    historico = resultado.get("historico", [])
+
+    response = f"""## 📈 Histórico de Preços
+
+**Termo:** {termo or 'Todos'}
+**Total de registros:** {resultado.get('total', 0)}
+
+---
+
+### 📊 Estatísticas
+
+| Métrica | Valor |
+|---------|-------|
+| **Mínimo** | R$ {stats.get('preco_minimo', 0):,.2f} |
+| **Médio** | R$ {stats.get('preco_medio', 0):,.2f} |
+| **Mediano** | R$ {stats.get('preco_mediano', 0):,.2f} |
+| **Máximo** | R$ {stats.get('preco_maximo', 0):,.2f} |
+
+---
+
+### 📋 Últimos Registros
+
+"""
+    for i, h in enumerate(historico[:10], 1):
+        resultado_emoji = "🏆" if h.get('resultado') == 'vitoria' else "📊"
+        response += f"{i}. {resultado_emoji} **R$ {h.get('preco_vencedor', 0):,.2f}** - {h.get('empresa_vencedora', 'N/A')} ({h.get('data', 'N/A')})\n"
+
+    return response, resultado
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 6: ANÁLISE DE CONCORRENTES ====================
+
+def processar_listar_concorrentes(user_id: str):
+    """Processa listagem de concorrentes."""
+    from tools import tool_listar_concorrentes
+
+    resultado = tool_listar_concorrentes(user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Concorrentes
+
+**Erro:** {resultado.get('error', 'Nenhum concorrente cadastrado')}
+
+**Dica:** {resultado.get('dica', 'Registre resultados de editais para cadastrar concorrentes automaticamente.')}
+""", resultado
+
+    concorrentes = resultado.get("concorrentes", [])
+
+    response = f"""## 👥 Concorrentes Conhecidos
+
+**Total:** {resultado.get('total', 0)} concorrentes
+
+---
+
+| # | Empresa | Participações | Vitórias | Taxa |
+|---|---------|---------------|----------|------|
+"""
+    for i, c in enumerate(concorrentes[:15], 1):
+        response += f"| {i} | {c.get('nome', 'N/A')[:25]} | {c.get('editais_participados', 0)} | {c.get('editais_ganhos', 0)} | {c.get('taxa_vitoria', 0):.1f}% |\n"
+
+    response += """
+
+---
+
+💡 **Dica:** Use "analise o concorrente [NOME]" para ver detalhes.
+"""
+    return response, resultado
+
+
+def processar_analisar_concorrente(message: str, user_id: str):
+    """Processa análise de concorrente específico."""
+    from tools import tool_analisar_concorrente
+
+    # Extrair nome do concorrente
+    msg_lower = message.lower()
+    nome = msg_lower
+    for palavra in ["analise", "analisar", "análise", "concorrente", "o", "a", "do", "da",
+                    "empresa", "histórico", "historico", "como está", "como esta"]:
+        nome = nome.replace(palavra, " ")
+    nome = " ".join(nome.split()).strip()
+
+    if not nome:
+        return """## ❓ Nome do Concorrente
+
+Por favor, especifique o concorrente. Exemplo:
+- "Analise o concorrente **MedLab**"
+- "Histórico do concorrente **TechSaúde**"
+""", None
+
+    resultado = tool_analisar_concorrente(nome, user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Concorrente Não Encontrado
+
+**Buscado:** {nome}
+**Erro:** {resultado.get('error', 'Não encontrado')}
+
+**Dica:** {resultado.get('dica', 'Use "liste concorrentes" para ver os cadastrados.')}
+""", resultado
+
+    conc = resultado.get("concorrente", {})
+    stats = resultado.get("estatisticas_precos", {})
+    historico = resultado.get("historico_participacoes", [])
+
+    response = f"""## 🔍 Análise do Concorrente
+
+### {conc.get('nome', 'N/A')}
+**CNPJ:** {conc.get('cnpj', 'Não informado')}
+
+---
+
+### 📊 Estatísticas
+
+| Métrica | Valor |
+|---------|-------|
+| **Editais Participados** | {conc.get('editais_participados', 0)} |
+| **Editais Ganhos** | {conc.get('editais_ganhos', 0)} |
+| **Taxa de Vitória** | {conc.get('taxa_vitoria', 0):.1f}% |
+
+### 💰 Preços Praticados
+
+| Métrica | Valor |
+|---------|-------|
+| **Mínimo** | R$ {stats.get('preco_minimo', 0):,.2f} |
+| **Médio** | R$ {stats.get('preco_medio', 0):,.2f} |
+| **Máximo** | R$ {stats.get('preco_maximo', 0):,.2f} |
+
+---
+
+### 📋 Últimas Participações
+
+"""
+    for i, h in enumerate(historico[:10], 1):
+        emoji = "🏆" if h.get('venceu') else "📊"
+        response += f"{i}. {emoji} {h.get('edital', 'N/A')} - R$ {h.get('preco', 0):,.2f} (#{h.get('posicao', '?')}º)\n"
+
+    return response, resultado
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 7: RECOMENDAÇÃO DE PREÇOS ====================
+
+def processar_recomendar_preco(message: str, user_id: str):
+    """Processa recomendação de preço."""
+    from tools import tool_recomendar_preco
+
+    # Extrair termo
+    msg_lower = message.lower()
+    termo = msg_lower
+    for palavra in ["recomendar", "recomende", "sugerir", "sugira", "preço", "preco",
+                    "que", "qual", "colocar", "para", "de", "do", "da"]:
+        termo = termo.replace(palavra, " ")
+    termo = " ".join(termo.split()).strip()
+
+    if not termo:
+        return """## ❓ Produto/Termo Necessário
+
+Por favor, especifique o produto. Exemplo:
+- "Recomende preço para **analisador hematológico**"
+- "Qual preço sugerir para **reagentes bioquímica**?"
+""", None
+
+    resultado = tool_recomendar_preco(termo, user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Recomendação de Preço
+
+**Termo:** {termo}
+**Erro:** {resultado.get('error', 'Dados insuficientes')}
+
+**Dica:** {resultado.get('dica', 'Registre mais resultados de editais ou busque preços no PNCP.')}
+""", resultado
+
+    rec = resultado.get("recomendacao", {})
+    stats = resultado.get("estatisticas_historico", resultado.get("estatisticas_mercado", {}))
+    fonte = resultado.get("fonte", "")
+
+    response = f"""## 💡 Recomendação de Preço
+
+**Termo:** {termo}
+**Fonte:** {fonte.replace('_', ' ').title()}
+**Registros analisados:** {stats.get('total_registros', 0)}
+
+---
+
+### 🎯 Preços Sugeridos
+
+| Estratégia | Preço Sugerido |
+|------------|----------------|
+| 🔥 **Agressivo** | R$ {rec.get('preco_agressivo', rec.get('preco_minimo_sugerido', 0)):,.2f} |
+| ✅ **Ideal** | R$ {rec.get('preco_ideal', 0):,.2f} |
+| 🛡️ **Conservador** | R$ {rec.get('preco_conservador', rec.get('preco_maximo_sugerido', 0)):,.2f} |
+
+---
+
+### 📊 Referência de Mercado
+
+| Métrica | Valor |
+|---------|-------|
+| **Preço Médio Vencedor** | R$ {stats.get('preco_medio_vencedor', stats.get('preco_medio', 0)):,.2f} |
+| **Preço Mínimo** | R$ {stats.get('preco_minimo_vencedor', stats.get('preco_minimo', 0)):,.2f} |
+
+---
+
+**Justificativa:** {resultado.get('justificativa', 'N/A')}
+
+💡 **Dica:** O preço **ideal** oferece boa margem de vitória com lucro razoável.
+"""
+    return response, resultado
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 8: CLASSIFICAÇÃO DE EDITAIS ====================
+
+def processar_classificar_edital(message: str, user_id: str):
+    """Processa classificação de edital."""
+    from tools import tool_classificar_edital
+
+    # Extrair texto do edital ou ID
+    msg_lower = message.lower()
+
+    # Verificar se tem ID de edital
+    import re
+    match_id = re.search(r'edital\s*(\d+)', msg_lower)
+    edital_id = int(match_id.group(1)) if match_id else None
+
+    # Usar mensagem como texto se não tem ID
+    texto = message if not edital_id else None
+
+    resultado = tool_classificar_edital(edital_id=edital_id, texto_edital=texto, user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Classificação de Edital
+
+**Erro:** {resultado.get('error', 'Não foi possível classificar')}
+
+**Dica:** Forneça o texto do objeto do edital ou o ID de um edital cadastrado.
+""", resultado
+
+    categoria = resultado.get("categoria", "outros")
+    confianca = resultado.get("confianca", 0)
+
+    # Mapeamento de categorias
+    categorias_nome = {
+        "comodato": "🤝 Comodato de Equipamentos",
+        "aluguel_reagentes": "📦 Aluguel com Reagentes",
+        "aluguel_simples": "🏷️ Aluguel Simples",
+        "venda": "💰 Venda/Aquisição",
+        "consumo_reagentes": "🧪 Consumo de Reagentes",
+        "insumos_hospitalares": "🏥 Insumos Hospitalares",
+        "insumos_laboratoriais": "🔬 Insumos Laboratoriais",
+        "outros": "❓ Outros"
+    }
+
+    response = f"""## 🏷️ Classificação do Edital
+
+**Categoria Identificada:** {categorias_nome.get(categoria, categoria)}
+**Confiança:** {confianca}%
+
+---
+
+### 📊 Todas as Categorias Detectadas
+
+"""
+    for cat, score in resultado.get("todas_categorias", {}).items():
+        emoji = "✅" if cat == categoria else "⬜"
+        response += f"{emoji} **{cat}**: {score} matches\n"
+
+    response += f"""
+
+---
+
+**Justificativa:** {resultado.get('justificativa', 'N/A')}
+"""
+    return response, resultado
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 9: VERIFICAR COMPLETUDE ====================
+
+def processar_verificar_completude(message: str, user_id: str):
+    """Processa verificação de completude de produto."""
+    from tools import tool_verificar_completude_produto
+
+    # Extrair nome do produto
+    msg_lower = message.lower()
+    nome = msg_lower
+    for palavra in ["verificar", "verifique", "completude", "produto", "está", "esta",
+                    "completo", "falta", "informação", "informacao", "faltando"]:
+        nome = nome.replace(palavra, " ")
+    nome = " ".join(nome.split()).strip()
+
+    resultado = tool_verificar_completude_produto(nome_produto=nome if nome else None, user_id=user_id)
+
+    if not resultado.get("success"):
+        return f"""## ❌ Verificação de Completude
+
+**Erro:** {resultado.get('error', 'Produto não encontrado')}
+
+**Dica:** Informe o nome do produto. Exemplo: "Verifique completude do **Analisador XYZ**"
+""", resultado
+
+    produto = resultado.get("produto", {})
+    completude = resultado.get("completude", {})
+    specs = resultado.get("especificacoes", {})
+
+    # Emoji de status
+    status_emoji = {
+        "completo": "✅",
+        "quase_completo": "🟡",
+        "incompleto": "🟠",
+        "muito_incompleto": "🔴"
+    }
+
+    response = f"""## 📋 Verificação de Completude
+
+### Produto: {produto.get('nome', 'N/A')}
+
+| Campo | Valor |
+|-------|-------|
+| **Fabricante** | {produto.get('fabricante', '❌ Não informado')} |
+| **Modelo** | {produto.get('modelo', '❌ Não informado')} |
+| **Categoria** | {produto.get('categoria', '❌ Não informado')} |
+
+---
+
+### 📊 Status de Completude
+
+| Métrica | Valor |
+|---------|-------|
+| **Status** | {status_emoji.get(completude.get('status'), '❓')} {completude.get('status', 'N/A').replace('_', ' ').title()} |
+| **Percentual** | {completude.get('percentual', 0):.1f}% |
+| **Campos Preenchidos** | {completude.get('campos_preenchidos', 0)}/{completude.get('total_campos', 0)} |
+| **Especificações** | {specs.get('total', 0)}/{specs.get('minimo_recomendado', 5)} recomendadas |
+
+---
+
+### ⚠️ Campos Faltantes
+
+"""
+    for campo in resultado.get("campos_faltantes", []):
+        response += f"- ❌ {campo}\n"
+
+    response += """
+
+### 💡 Recomendações
+
+"""
+    for rec in resultado.get("recomendacoes", []):
+        response += f"- {rec}\n"
 
     return response, resultado
 

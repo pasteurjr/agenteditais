@@ -95,39 +95,52 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "registrar_ata", nome: "✅ 💾 Registrar resultados da ata (PDF)", prompt: "Registre os resultados desta ata" },
 
   // =============================================================================
-  // 7. HISTÓRICO DE PREÇOS - Funcionalidade 4 Sprint 1
+  // 7. HISTÓRICO DE PREÇOS - Funcionalidades 4 e 5 Sprint 1
   // =============================================================================
   { id: "sep_7", nome: "━━━ 7. HISTÓRICO DE PREÇOS ━━━", prompt: "" },
+  // 7.1 Buscar no PNCP (Func 4)
   { id: "buscar_precos_pncp", nome: "✅ 💰 Buscar preços no PNCP", prompt: "Busque preços de [TERMO] no PNCP" },
   { id: "buscar_precos_pncp_2", nome: "✅ 💰 Preço de mercado", prompt: "Qual o preço de mercado para [TERMO]?" },
   { id: "buscar_precos_pncp_3", nome: "✅ 💰 Quanto custa?", prompt: "Quanto custa um [EQUIPAMENTO/PRODUTO] em licitações?" },
-  { id: "buscar_precos_pncp_4", nome: "✅ 💰 Preços de contratos", prompt: "Busque preços de contratos de [TERMO]" },
-  { id: "historico_precos", nome: "❌ 📈 Ver histórico de preços", prompt: "Mostre o histórico de preços para [TERMO/PRODUTO]" },
-  { id: "preco_medio", nome: "❌ 💵 Preço médio histórico", prompt: "Qual o preço médio histórico para [TERMO]?" },
+  // 7.2 Histórico local (Func 5)
+  { id: "historico_precos", nome: "✅ 📈 Ver histórico de preços", prompt: "Mostre o histórico de preços de [TERMO]" },
+  { id: "historico_precos_2", nome: "✅ 📈 Preços registrados", prompt: "Quais preços já registramos?" },
+  { id: "historico_precos_3", nome: "✅ 📈 Histórico do produto", prompt: "Histórico de preços do produto [NOME]" },
 
   // =============================================================================
-  // 8. ANÁLISE DE CONCORRENTES
+  // 8. ANÁLISE DE CONCORRENTES - Funcionalidade 6 Sprint 1
   // =============================================================================
   { id: "sep_8", nome: "━━━ 8. ANÁLISE DE CONCORRENTES ━━━", prompt: "" },
-  { id: "listar_concorrentes", nome: "❌ 👥 Listar concorrentes", prompt: "Liste os concorrentes conhecidos" },
-  { id: "analisar_concorrente", nome: "❌ 🔍 Analisar concorrente", prompt: "Analise o concorrente [NOME_EMPRESA]" },
-  { id: "taxa_vitoria_concorrente", nome: "❌ 📊 Taxa de vitória do concorrente", prompt: "Qual a taxa de vitória do concorrente [NOME_EMPRESA]?" },
-  { id: "historico_concorrente", nome: "❌ 📜 Histórico do concorrente", prompt: "Mostre o histórico de participações do concorrente [NOME_EMPRESA]" },
+  { id: "listar_concorrentes", nome: "✅ 👥 Listar concorrentes", prompt: "Liste os concorrentes conhecidos" },
+  { id: "listar_concorrentes_2", nome: "✅ 👥 Quais concorrentes?", prompt: "Quais concorrentes conhecemos?" },
+  { id: "analisar_concorrente", nome: "✅ 🔍 Analisar concorrente", prompt: "Analise o concorrente [NOME_EMPRESA]" },
+  { id: "analisar_concorrente_2", nome: "✅ 🔍 Histórico do concorrente", prompt: "Histórico do concorrente [NOME_EMPRESA]" },
+  { id: "analisar_concorrente_3", nome: "✅ 📊 Taxa de vitória", prompt: "Qual a taxa de vitória do concorrente [NOME]?" },
 
   // =============================================================================
-  // 9. RECOMENDAÇÃO DE PREÇOS
+  // 9. RECOMENDAÇÃO DE PREÇOS - Funcionalidade 7 Sprint 1
   // =============================================================================
   { id: "sep_9", nome: "━━━ 9. RECOMENDAÇÃO DE PREÇOS ━━━", prompt: "" },
-  { id: "recomendar_preco", nome: "❌ 💡 Recomendar preço", prompt: "Recomende um preço para o produto [NOME_PRODUTO] no edital [NUMERO]" },
-  { id: "faixa_preco", nome: "❌ 📊 Faixa de preço sugerida", prompt: "Qual a faixa de preço sugerida para [TERMO]?" },
+  { id: "recomendar_preco", nome: "✅ 💡 Recomendar preço", prompt: "Recomende preço para [TERMO]" },
+  { id: "recomendar_preco_2", nome: "✅ 💡 Qual preço sugerir?", prompt: "Qual preço sugerir para [PRODUTO]?" },
+  { id: "recomendar_preco_3", nome: "✅ 💡 Que preço colocar?", prompt: "Que preço colocar no edital de [TERMO]?" },
+  { id: "recomendar_preco_4", nome: "✅ 📊 Faixa de preço", prompt: "Qual a faixa de preço para [TERMO]?" },
 
   // =============================================================================
-  // 10. CLASSIFICAÇÃO DE EDITAIS
+  // 10. CLASSIFICAÇÃO DE EDITAIS - Funcionalidade 8 Sprint 1
   // =============================================================================
   { id: "sep_10", nome: "━━━ 10. CLASSIFICAÇÃO DE EDITAIS ━━━", prompt: "" },
-  { id: "classificar_edital", nome: "❌ 🏷️ Classificar edital", prompt: "Classifique o edital [NUMERO] (comodato, venda, aluguel...)" },
-  { id: "editais_comodato", nome: "❌ 🏷️ Editais de comodato", prompt: "Liste editais classificados como comodato" },
-  { id: "editais_venda", nome: "❌ 🏷️ Editais de venda", prompt: "Liste editais classificados como venda de equipamento" },
+  { id: "classificar_edital", nome: "✅ 🏷️ Classificar edital", prompt: "Classifique este edital: [OBJETO DO EDITAL]" },
+  { id: "classificar_edital_2", nome: "✅ 🏷️ Tipo de edital", prompt: "Que tipo de edital é este: [OBJETO]" },
+  { id: "classificar_edital_3", nome: "✅ 🏷️ É comodato ou venda?", prompt: "Este edital é comodato ou venda: [OBJETO]" },
+
+  // =============================================================================
+  // 10.1 VERIFICAR COMPLETUDE - Funcionalidade 9 Sprint 1
+  // =============================================================================
+  { id: "sep_10_1", nome: "━━━ 10.1 COMPLETUDE DE PRODUTOS ━━━", prompt: "" },
+  { id: "verificar_completude", nome: "✅ 📋 Verificar completude", prompt: "Verifique completude do produto [NOME]" },
+  { id: "verificar_completude_2", nome: "✅ 📋 Produto está completo?", prompt: "O produto [NOME] está completo?" },
+  { id: "verificar_completude_3", nome: "✅ 📋 Falta informação?", prompt: "Falta informação no produto [NOME]?" },
 
   // =============================================================================
   // 11. FONTES DE EDITAIS

@@ -3176,3 +3176,526 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
         "top_fornecedores": top_fornecedores,
         "fonte": contratos[0].get("fonte", "pncp") if contratos else None
     }
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 5: HISTÓRICO DE PREÇOS ====================
+
+def tool_historico_precos(termo: str = None, produto_id: int = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Consulta histórico de preços registrados no banco de dados local.
+
+    Args:
+        termo: Termo de busca (nome do produto/equipamento)
+        produto_id: ID do produto específico
+        user_id: ID do usuário
+
+    Returns:
+        Dict com histórico de preços, estatísticas e tendências
+    """
+    from backend.database import SessionLocal
+    from backend.models import PrecoHistorico, Edital, Produto
+    from sqlalchemy import func, desc
+
+    db = SessionLocal()
+
+    try:
+        # Query base
+        query = db.query(PrecoHistorico)
+
+        if produto_id:
+            query = query.filter(PrecoHistorico.produto_id == produto_id)
+
+        if user_id:
+            query = query.filter(PrecoHistorico.user_id == user_id)
+
+        # Se tem termo, buscar por objeto do edital ou produto
+        if termo:
+            query = query.join(Edital, PrecoHistorico.edital_id == Edital.id, isouter=True)
+            query = query.filter(
+                (Edital.objeto.ilike(f"%{termo}%")) |
+                (PrecoHistorico.empresa_vencedora.ilike(f"%{termo}%"))
+            )
+
+        # Ordenar por data
+        query = query.order_by(desc(PrecoHistorico.data_homologacao))
+
+        registros = query.limit(50).all()
+
+        if not registros:
+            return {
+                "success": False,
+                "error": f"Nenhum histórico de preços encontrado para '{termo or 'todos'}'",
+                "termo": termo
+            }
+
+        # Processar dados
+        precos = []
+        historico = []
+
+        for r in registros:
+            preco = r.preco_vencedor or r.nosso_preco
+            if preco:
+                precos.append(float(preco))
+                historico.append({
+                    "id": r.id,
+                    "edital_id": r.edital_id,
+                    "preco_vencedor": float(r.preco_vencedor) if r.preco_vencedor else None,
+                    "nosso_preco": float(r.nosso_preco) if r.nosso_preco else None,
+                    "empresa_vencedora": r.empresa_vencedora,
+                    "resultado": r.resultado,
+                    "data": r.data_homologacao.isoformat() if r.data_homologacao else None,
+                    "fonte": r.fonte
+                })
+
+        # Estatísticas
+        if precos:
+            stats = {
+                "preco_minimo": min(precos),
+                "preco_maximo": max(precos),
+                "preco_medio": sum(precos) / len(precos),
+                "preco_mediano": sorted(precos)[len(precos) // 2],
+                "total_registros": len(precos)
+            }
+        else:
+            stats = {}
+
+        return {
+            "success": True,
+            "termo": termo,
+            "total": len(historico),
+            "historico": historico,
+            "estatisticas": stats
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 6: ANÁLISE DE CONCORRENTES ====================
+
+def tool_listar_concorrentes(user_id: str = None) -> Dict[str, Any]:
+    """
+    Lista todos os concorrentes cadastrados no sistema.
+
+    Returns:
+        Dict com lista de concorrentes e estatísticas
+    """
+    from backend.database import SessionLocal
+    from backend.models import Concorrente
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+
+    try:
+        query = db.query(Concorrente).order_by(desc(Concorrente.editais_ganhos))
+        concorrentes = query.all()
+
+        if not concorrentes:
+            return {
+                "success": False,
+                "error": "Nenhum concorrente cadastrado ainda",
+                "dica": "Concorrentes são cadastrados automaticamente ao registrar resultados de editais"
+            }
+
+        lista = []
+        for c in concorrentes:
+            taxa = (c.editais_ganhos / c.editais_participados * 100) if c.editais_participados > 0 else 0
+            lista.append({
+                "id": c.id,
+                "nome": c.nome,
+                "cnpj": c.cnpj,
+                "editais_participados": c.editais_participados,
+                "editais_ganhos": c.editais_ganhos,
+                "taxa_vitoria": round(taxa, 1),
+                "preco_medio": float(c.preco_medio) if c.preco_medio else None
+            })
+
+        return {
+            "success": True,
+            "total": len(lista),
+            "concorrentes": lista
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_analisar_concorrente(nome_concorrente: str, user_id: str = None) -> Dict[str, Any]:
+    """
+    Analisa um concorrente específico: histórico, taxa de vitória, preços.
+
+    Args:
+        nome_concorrente: Nome do concorrente
+        user_id: ID do usuário
+
+    Returns:
+        Dict com análise detalhada do concorrente
+    """
+    from backend.database import SessionLocal
+    from backend.models import Concorrente, ParticipacaoEdital, PrecoHistorico, Edital
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+
+    try:
+        # Buscar concorrente
+        concorrente = db.query(Concorrente).filter(
+            Concorrente.nome.ilike(f"%{nome_concorrente}%")
+        ).first()
+
+        if not concorrente:
+            return {
+                "success": False,
+                "error": f"Concorrente '{nome_concorrente}' não encontrado",
+                "dica": "Use 'liste concorrentes' para ver os cadastrados"
+            }
+
+        # Buscar participações
+        participacoes = db.query(ParticipacaoEdital).filter(
+            ParticipacaoEdital.concorrente_id == concorrente.id
+        ).order_by(desc(ParticipacaoEdital.created_at)).limit(20).all()
+
+        historico = []
+        precos = []
+        vitorias = 0
+
+        for p in participacoes:
+            edital = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            if p.preco_proposto:
+                precos.append(float(p.preco_proposto))
+            if p.posicao_final == 1:
+                vitorias += 1
+
+            historico.append({
+                "edital": edital.numero if edital else "N/A",
+                "orgao": edital.orgao if edital else "N/A",
+                "preco": float(p.preco_proposto) if p.preco_proposto else None,
+                "posicao": p.posicao_final,
+                "venceu": p.posicao_final == 1
+            })
+
+        taxa_vitoria = (concorrente.editais_ganhos / concorrente.editais_participados * 100) if concorrente.editais_participados > 0 else 0
+
+        return {
+            "success": True,
+            "concorrente": {
+                "id": concorrente.id,
+                "nome": concorrente.nome,
+                "cnpj": concorrente.cnpj,
+                "editais_participados": concorrente.editais_participados,
+                "editais_ganhos": concorrente.editais_ganhos,
+                "taxa_vitoria": round(taxa_vitoria, 1)
+            },
+            "estatisticas_precos": {
+                "preco_minimo": min(precos) if precos else None,
+                "preco_maximo": max(precos) if precos else None,
+                "preco_medio": sum(precos) / len(precos) if precos else None
+            },
+            "historico_participacoes": historico
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 7: RECOMENDAÇÃO DE PREÇOS ====================
+
+def tool_recomendar_preco(termo: str, edital_id: int = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Recomenda faixa de preço baseada em histórico e análise de concorrentes.
+
+    Args:
+        termo: Termo/produto para buscar referências
+        edital_id: ID do edital específico (opcional)
+        user_id: ID do usuário
+
+    Returns:
+        Dict com recomendação de preço e justificativa
+    """
+    from backend.database import SessionLocal
+    from backend.models import PrecoHistorico, Concorrente, Edital
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+
+    try:
+        # 1. Buscar histórico de preços similar
+        query = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id, isouter=True
+        ).filter(
+            Edital.objeto.ilike(f"%{termo}%")
+        ).order_by(desc(PrecoHistorico.data_homologacao)).limit(20)
+
+        registros = query.all()
+
+        precos_vencedores = []
+        precos_nossos = []
+        concorrentes_frequentes = {}
+
+        for r in registros:
+            if r.preco_vencedor:
+                precos_vencedores.append(float(r.preco_vencedor))
+            if r.nosso_preco:
+                precos_nossos.append(float(r.nosso_preco))
+            if r.empresa_vencedora:
+                if r.empresa_vencedora not in concorrentes_frequentes:
+                    concorrentes_frequentes[r.empresa_vencedora] = 0
+                concorrentes_frequentes[r.empresa_vencedora] += 1
+
+        if not precos_vencedores:
+            # Tentar buscar no PNCP
+            resultado_pncp = tool_buscar_precos_pncp(termo, meses=12, user_id=user_id)
+            if resultado_pncp.get("success"):
+                stats = resultado_pncp.get("estatisticas", {})
+                return {
+                    "success": True,
+                    "termo": termo,
+                    "fonte": "pncp",
+                    "recomendacao": {
+                        "preco_minimo_sugerido": stats.get("preco_minimo", 0) * 0.95,
+                        "preco_ideal": stats.get("preco_medio", 0) * 0.97,
+                        "preco_maximo_sugerido": stats.get("preco_medio", 0),
+                    },
+                    "justificativa": f"Baseado em {resultado_pncp.get('total_contratos', 0)} contratos do PNCP",
+                    "estatisticas_mercado": stats
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Não há dados suficientes para recomendar preço para '{termo}'",
+                    "dica": "Registre mais resultados de editais ou busque preços no PNCP"
+                }
+
+        # Calcular recomendação
+        preco_medio_mercado = sum(precos_vencedores) / len(precos_vencedores)
+        preco_minimo_mercado = min(precos_vencedores)
+
+        # Estratégia: preço competitivo = média - 3% a 5%
+        preco_ideal = preco_medio_mercado * 0.97
+        preco_agressivo = preco_medio_mercado * 0.95
+        preco_conservador = preco_medio_mercado * 0.99
+
+        # Principal concorrente
+        principal_concorrente = max(concorrentes_frequentes.items(), key=lambda x: x[1])[0] if concorrentes_frequentes else None
+
+        return {
+            "success": True,
+            "termo": termo,
+            "fonte": "historico_local",
+            "recomendacao": {
+                "preco_agressivo": round(preco_agressivo, 2),
+                "preco_ideal": round(preco_ideal, 2),
+                "preco_conservador": round(preco_conservador, 2)
+            },
+            "estatisticas_historico": {
+                "preco_medio_vencedor": round(preco_medio_mercado, 2),
+                "preco_minimo_vencedor": round(preco_minimo_mercado, 2),
+                "total_registros": len(precos_vencedores)
+            },
+            "analise_concorrencia": {
+                "principal_concorrente": principal_concorrente,
+                "total_concorrentes": len(concorrentes_frequentes)
+            },
+            "justificativa": f"Baseado em {len(precos_vencedores)} registros históricos. Preço médio vencedor: R$ {preco_medio_mercado:,.2f}"
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 8: CLASSIFICAÇÃO DE EDITAIS ====================
+
+def tool_classificar_edital(edital_id: int = None, texto_edital: str = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Classifica um edital em categorias (comodato, venda, aluguel, etc).
+
+    Args:
+        edital_id: ID do edital no banco
+        texto_edital: Texto/objeto do edital para classificar
+        user_id: ID do usuário
+
+    Returns:
+        Dict com categoria identificada e confiança
+    """
+    from backend.database import SessionLocal
+    from backend.models import Edital
+
+    # Categorias e suas keywords
+    CATEGORIAS = {
+        "comodato": ["comodato", "cessão", "cessao", "empréstimo", "emprestimo", "sem ônus", "sem onus"],
+        "aluguel_reagentes": ["locação", "locacao", "aluguel", "reagentes", "com fornecimento"],
+        "aluguel_simples": ["locação", "locacao", "aluguel", "equipamento"],
+        "venda": ["aquisição", "aquisicao", "compra", "venda", "aquisicao de"],
+        "consumo_reagentes": ["reagentes", "kits", "testes", "consumíveis", "consumiveis"],
+        "insumos_hospitalares": ["material hospitalar", "insumos hospitalares", "descartáveis"],
+        "insumos_laboratoriais": ["material laboratorial", "insumos laboratoriais", "vidraria"]
+    }
+
+    texto = ""
+    edital_info = None
+
+    # Obter texto do edital
+    if edital_id:
+        db = SessionLocal()
+        try:
+            edital = db.query(Edital).filter(Edital.id == edital_id).first()
+            if edital:
+                texto = f"{edital.objeto or ''} {edital.numero or ''}"
+                edital_info = {"id": edital.id, "numero": edital.numero, "objeto": edital.objeto}
+        finally:
+            db.close()
+
+    if texto_edital:
+        texto = texto_edital
+
+    if not texto:
+        return {"success": False, "error": "Nenhum texto de edital fornecido"}
+
+    texto_lower = texto.lower()
+
+    # Classificar por keywords
+    scores = {}
+    for categoria, keywords in CATEGORIAS.items():
+        score = sum(1 for kw in keywords if kw in texto_lower)
+        if score > 0:
+            scores[categoria] = score
+
+    if not scores:
+        return {
+            "success": True,
+            "edital": edital_info,
+            "categoria": "outros",
+            "confianca": 0,
+            "justificativa": "Não foi possível identificar categoria específica"
+        }
+
+    # Categoria com maior score
+    categoria_principal = max(scores.items(), key=lambda x: x[1])
+    total_matches = sum(scores.values())
+    confianca = (categoria_principal[1] / len(CATEGORIAS[categoria_principal[0]])) * 100
+
+    return {
+        "success": True,
+        "edital": edital_info,
+        "categoria": categoria_principal[0],
+        "confianca": round(min(confianca, 100), 1),
+        "todas_categorias": scores,
+        "justificativa": f"Identificadas {categoria_principal[1]} palavras-chave da categoria '{categoria_principal[0]}'"
+    }
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 9: VERIFICAR COMPLETUDE DO PRODUTO ====================
+
+def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Verifica se um produto tem todas as informações necessárias para participar de licitações.
+
+    Args:
+        produto_id: ID do produto
+        nome_produto: Nome do produto (busca)
+        user_id: ID do usuário
+
+    Returns:
+        Dict com análise de completude e recomendações
+    """
+    from backend.database import SessionLocal
+    from backend.models import Produto, ProdutoEspecificacao
+
+    db = SessionLocal()
+
+    try:
+        # Buscar produto
+        if produto_id:
+            produto = db.query(Produto).filter(Produto.id == produto_id).first()
+        elif nome_produto:
+            produto = db.query(Produto).filter(
+                (Produto.nome.ilike(f"%{nome_produto}%")) |
+                (Produto.modelo.ilike(f"%{nome_produto}%"))
+            ).first()
+        else:
+            return {"success": False, "error": "Informe o ID ou nome do produto"}
+
+        if not produto:
+            return {"success": False, "error": f"Produto não encontrado: {nome_produto or produto_id}"}
+
+        # Campos obrigatórios e opcionais
+        campos_obrigatorios = {
+            "nome": produto.nome,
+            "fabricante": produto.fabricante,
+            "modelo": produto.modelo,
+            "categoria": produto.categoria
+        }
+
+        campos_opcionais = {
+            "descricao": produto.descricao if hasattr(produto, 'descricao') else None,
+            "registro_anvisa": produto.registro_anvisa if hasattr(produto, 'registro_anvisa') else None,
+        }
+
+        # Buscar especificações
+        specs = db.query(ProdutoEspecificacao).filter(
+            ProdutoEspecificacao.produto_id == produto.id
+        ).all()
+
+        # Análise
+        campos_preenchidos = sum(1 for v in campos_obrigatorios.values() if v)
+        total_obrigatorios = len(campos_obrigatorios)
+        percentual_completude = (campos_preenchidos / total_obrigatorios) * 100
+
+        campos_faltantes = [k for k, v in campos_obrigatorios.items() if not v]
+
+        # Recomendações
+        recomendacoes = []
+        if not produto.fabricante:
+            recomendacoes.append("Adicione o fabricante do produto")
+        if not produto.modelo:
+            recomendacoes.append("Adicione o modelo do produto")
+        if len(specs) < 5:
+            recomendacoes.append(f"Adicione mais especificações técnicas (atual: {len(specs)})")
+        if not hasattr(produto, 'registro_anvisa') or not produto.registro_anvisa:
+            recomendacoes.append("Adicione o registro ANVISA (se aplicável)")
+
+        # Status
+        if percentual_completude >= 100 and len(specs) >= 5:
+            status = "completo"
+        elif percentual_completude >= 75:
+            status = "quase_completo"
+        elif percentual_completude >= 50:
+            status = "incompleto"
+        else:
+            status = "muito_incompleto"
+
+        return {
+            "success": True,
+            "produto": {
+                "id": produto.id,
+                "nome": produto.nome,
+                "fabricante": produto.fabricante,
+                "modelo": produto.modelo,
+                "categoria": produto.categoria
+            },
+            "completude": {
+                "percentual": round(percentual_completude, 1),
+                "status": status,
+                "campos_preenchidos": campos_preenchidos,
+                "total_campos": total_obrigatorios
+            },
+            "especificacoes": {
+                "total": len(specs),
+                "minimo_recomendado": 5
+            },
+            "campos_faltantes": campos_faltantes,
+            "recomendacoes": recomendacoes
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
