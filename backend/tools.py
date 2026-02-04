@@ -3819,6 +3819,7 @@ def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: Li
                 tipo=tipo,
                 data_disparo=data_disparo,
                 tempo_antes_minutos=tempo,
+                status='agendado',  # Explicitamente definir status
                 canal_email="email" in canais,
                 canal_push="push" in canais,
                 titulo=f"⏰ {edital.numero} - {formatar_tempo(tempo)} para {tipo}",

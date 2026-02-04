@@ -4084,9 +4084,9 @@ def processar_configurar_alertas(message: str, user_id: str):
 
     msg = message.lower()
 
-    # Extrair número do edital
-    match_edital = re.search(r'(PE[-]?\d+[-/]?\d*|[Pp]reg[aã]o\s*n?[ºo°]?\s*[\d/]+|\d{1,5}[/]\d{4})', message, re.IGNORECASE)
-    edital_numero = match_edital.group(1) if match_edital else None
+    # Extrair número do edital - aceita formatos: PE-123/2026, PE-TESTE/2026, PE 123, Pregão 123/2026
+    match_edital = re.search(r'(PE[-\s]?[\w]+[-/]?\d*|[Pp]reg[aã]o\s*n?[ºo°]?\s*[\w/]+|\d{1,5}[/]\d{4})', message, re.IGNORECASE)
+    edital_numero = match_edital.group(1).strip() if match_edital else None
 
     if not edital_numero:
         return "⚠️ Para configurar alertas, preciso saber qual edital. Informe o número do edital, por exemplo:\n\n*\"Configure alertas para o PE 123/2024\"*"
