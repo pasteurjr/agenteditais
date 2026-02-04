@@ -368,17 +368,49 @@ def detectar_intencao_fallback(message: str) -> str:
         else:
             return "listar_produtos"  # Lista do banco (padrão)
 
-    # 11. Buscar editais genérico (sem especificar banco/web) - default é WEB
-    if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
-        if busca_local:
-            return "listar_editais"
-        return "buscar_editais"
+    # 11. Consultas analíticas via MindsDB - ANTES de buscar_editais genérico!
+    # Inclui consultas com filtros de status, agregações, estatísticas
+    palavras_mindsdb = [
+        "estatística", "estatistica", "score médio", "score medio", "média de", "media de",
+        "quantos editais", "quantos produtos", "análise dos dados", "analise dos dados",
+        "relatório", "relatorio", "ranking", "tendência", "tendencia", "comparar",
+        "por estado", "por uf", "por categoria", "desempenho", "performance",
+        # Consultas de status/resultado
+        "status perdido", "status ganho", "status novo", "status cancelado",
+        "resultado perdido", "resultado ganho", "editais perdidos", "editais ganhos",
+        "editais com status", "editais que estão", "editais que estao",
+        "quais editais têm", "quais editais tem", "liste editais com",
+        # Agregações
+        "total de", "soma de", "contagem de", "quantidade de"
+    ]
+    if any(p in msg for p in palavras_mindsdb):
+        return "consulta_mindsdb"
 
-    # 10. Consultas analíticas via MindsDB
-    if any(p in msg for p in ["estatística", "estatistica", "score médio", "score medio", "média de", "media de",
-                               "quantos editais", "quantos produtos", "análise dos dados", "analise dos dados",
-                               "relatório", "relatorio", "ranking", "tendência", "tendencia", "comparar",
-                               "por estado", "por uf", "por categoria", "desempenho", "performance"]):
+    # 12. FALLBACK INTELIGENTE: Se parece ser consulta sobre dados do banco → MindsDB
+    # Palavras que indicam que é uma pergunta sobre dados armazenados
+    palavras_dados_banco = [
+        # Entidades do banco
+        "edital", "editais", "produto", "produtos", "proposta", "propostas",
+        "análise", "analise", "análises", "analises", "ata", "atas",
+        "resultado", "resultados", "fonte", "fontes", "concorrente", "concorrentes",
+        # Verbos de consulta
+        "liste", "listar", "mostre", "mostrar", "exiba", "exibir",
+        "quais", "qual", "quantos", "quantas", "onde", "quando",
+        # Filtros
+        "com valor", "acima de", "abaixo de", "maior que", "menor que",
+        "entre", "desde", "até", "depois de", "antes de",
+        "do mês", "da semana", "do ano", "de hoje", "de ontem",
+        "em são paulo", "em sp", "em minas", "em mg", "no rio",
+        # Ordenação
+        "ordenado", "ordenados", "mais recente", "mais antigo", "últimos", "ultimos"
+    ]
+
+    # Se contém palavras de dados E parece ser uma pergunta/consulta
+    eh_pergunta = any(p in msg for p in ["?", "quais", "qual", "quantos", "quantas",
+                                          "liste", "mostre", "exiba", "me diga", "me fale"])
+    menciona_dados = any(p in msg for p in palavras_dados_banco)
+
+    if menciona_dados and eh_pergunta:
         return "consulta_mindsdb"
 
     return "chat_livre"
