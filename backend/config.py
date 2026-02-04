@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 # DeepSeek LLM - Mesmo modelo do trabalhista: reasoner com thinking mode e 64K tokens
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-bb7d97e4754943a2b6f92a00670c72bc")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
@@ -40,7 +40,7 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
 PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1"
 
 # Serper API (Google Search)
-SERPER_API_KEY = os.getenv("SERPER_API_KEY", "d46999449953645b87258a752ef428d98ae5970f")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 SERPER_API_URL = "https://google.serper.dev/search"
 
 # MindsDB (Consultas analíticas via linguagem natural)

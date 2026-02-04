@@ -11,12 +11,12 @@ Antes de usar no MindsDB, testamos a API key diretamente:
 ```bash
 # Testar se a API key está válida
 curl -s https://api.openai.com/v1/models \
-  -H "Authorization: Bearer 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"
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY"
 
 # Testar modelo GPT-4o-mini
 curl -s https://api.openai.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer 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" \
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY" \
   -d '{
     "model": "gpt-4o-mini",
     "messages": [{"role": "user", "content": "Say hello"}],
@@ -62,7 +62,7 @@ DROP ML_ENGINE openai;
 CREATE ML_ENGINE openai
 FROM openai
 USING
-    openai_api_key = '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';
+    openai_api_key = 'YOUR_OPENAI_API_KEY';
 
 -- Passo 4: Recriar o modelo
 CREATE MODEL __ping_openai
@@ -130,7 +130,7 @@ CREATE AGENT natural_language_check_stock
 USING
   model = 'gpt-4o',
   provider = 'openai',
-  openai_api_key = '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',
+  openai_api_key = 'YOUR_OPENAI_API_KEY',
   prompt_template = 'Você é um assistente SQL especializado no banco de dados producao_tropical. Use a skill SQL para gerar e executar queries que respondam às perguntas do usuário em português. Lembre-se: converta datas de dd/mm/yyyy para yyyy-mm-dd, use a tabela producaoproduto (NÃO registroproducao), e consulte saco e movimentacaoestoque para estoque. Pergunta: {{question}}',
   skills = ['producao_tropical_sql_skill_5fd72444521a42ff9e7e36045f25a0db'];
 
@@ -267,7 +267,7 @@ WHERE question = 'teste';
 
 ### OpenAI API Key Atual
 ```
-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
+YOUR_OPENAI_API_KEY
 ```
 
 ---
