@@ -156,7 +156,12 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: buscar atas, encontrar atas, baixar atas, atas de registro, atas de sessão, atas pncp
     IMPORTANTE: Use quando o usuário quer BUSCAR atas no portal PNCP (não quando já tem um arquivo)
 
-22. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
+22. **buscar_precos_pncp**: Buscar preços históricos de contratos no PNCP
+    Exemplos: "busque preços de hematologia", "qual o preço de mercado para analisador?", "preços de contratos de equipamentos", "quanto custa um equipamento X no PNCP?"
+    Palavras-chave: buscar preços, preço de mercado, preços pncp, quanto custa, preço médio, valores de contrato
+    Use quando: usuário quer saber preços praticados em licitações anteriores
+
+23. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
     Exemplos: "cadastre o edital PE-001/2026", "registre este edital", "adicione o edital número X", "salve este edital manualmente"
     Palavras-chave: cadastre edital, registre edital, adicione edital, cadastrar edital manualmente, inserir edital
     IMPORTANTE: Use quando o usuário quer cadastrar UM edital manualmente (diferente de salvar vários da busca)
@@ -300,6 +305,14 @@ def detectar_intencao_fallback(message: str) -> str:
                                "baixar atas", "baixe atas", "atas de registro", "atas de sessão",
                                "atas de sessao", "atas pncp", "atas do pncp"]):
         return "buscar_atas_pncp"
+
+    # 5.4.1 Buscar preços no PNCP (Funcionalidade 4 Sprint 1)
+    if any(p in msg for p in ["buscar preços", "busque preços", "buscar precos", "busque precos",
+                               "preço de mercado", "preco de mercado", "preços pncp", "precos pncp",
+                               "quanto custa", "preço médio", "preco medio", "valores de contrato",
+                               "preços de contrato", "precos de contrato", "preço praticado",
+                               "preco praticado", "preços praticados", "precos praticados"]):
+        return "buscar_precos_pncp"
 
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
@@ -793,6 +806,9 @@ def chat():
 
         elif action_type == "buscar_atas_pncp":
             response_text, resultado = processar_buscar_atas_pncp(message, user_id)
+
+        elif action_type == "buscar_precos_pncp":
+            response_text, resultado = processar_buscar_precos_pncp(message, user_id)
 
         elif action_type == "cadastrar_edital":
             response_text, resultado = processar_cadastrar_edital(message, user_id, intencao_resultado)
@@ -3179,6 +3195,129 @@ Por favor, especifique o que você está buscando. Exemplos:
 3. Envie o PDF aqui com a mensagem: **"Extraia os resultados desta ata"**
 
 O sistema irá extrair automaticamente os vencedores, preços e participantes!
+"""
+
+    return response, resultado
+
+
+def processar_buscar_precos_pncp(message: str, user_id: str):
+    """
+    Processa busca de preços de contratos no PNCP.
+    Funcionalidade 4 da Sprint 1.
+
+    Args:
+        message: Mensagem do usuário
+        user_id: ID do usuário
+
+    Returns:
+        Tuple (response_text, resultado)
+    """
+    from tools import tool_buscar_precos_pncp
+
+    # Extrair termo de busca da mensagem
+    msg_lower = message.lower()
+
+    # Remover palavras comuns de comando
+    termo = msg_lower
+    for palavra in ["busque", "buscar", "encontre", "encontrar", "preços", "precos",
+                    "de", "do", "da", "no", "na", "pncp", "mercado", "médio", "medio",
+                    "quanto", "custa", "valor", "valores", "contrato", "contratos",
+                    "praticado", "praticados", "histórico", "historico"]:
+        termo = termo.replace(palavra, " ")
+
+    # Limpar espaços extras
+    termo = " ".join(termo.split()).strip()
+
+    if not termo or len(termo) < 3:
+        return """## ❓ Termo de Busca Necessário
+
+Por favor, especifique o produto/equipamento que deseja pesquisar. Exemplos:
+- "Busque preços de **analisador hematológico**"
+- "Qual o preço de mercado para **centrífuga**?"
+- "Preços de **reagentes de bioquímica** no PNCP"
+""", None
+
+    resultado = tool_buscar_precos_pncp(termo, meses=12, user_id=user_id)
+
+    if not resultado.get("success"):
+        response = f"""## ❌ Nenhum Preço Encontrado
+
+**Termo:** {termo}
+**Erro:** {resultado.get('error', 'Nenhum contrato encontrado')}
+
+**Dica:** Tente termos mais específicos como:
+- "analisador hematológico"
+- "equipamento laboratório"
+- "reagentes diagnóstico"
+"""
+        return response, resultado
+
+    # Formatar resposta
+    stats = resultado.get("estatisticas", {})
+    contratos = resultado.get("contratos", [])
+    top_fornecedores = resultado.get("top_fornecedores", [])
+
+    response = f"""## 💰 Preços de Mercado - PNCP
+
+**Termo pesquisado:** {termo}
+**Período:** Últimos {resultado.get('periodo_meses', 12)} meses
+**Contratos encontrados:** {resultado.get('total_contratos', 0)}
+**Fonte:** {resultado.get('fonte', 'PNCP')}
+
+---
+
+### 📊 Estatísticas de Preços
+
+| Métrica | Valor |
+|---------|-------|
+| **Mínimo** | R$ {stats.get('preco_minimo', 0):,.2f} |
+| **Médio** | R$ {stats.get('preco_medio', 0):,.2f} |
+| **Mediano** | R$ {stats.get('preco_mediano', 0):,.2f} |
+| **Máximo** | R$ {stats.get('preco_maximo', 0):,.2f} |
+
+---
+
+### 🏢 Principais Fornecedores
+
+"""
+    for i, forn in enumerate(top_fornecedores[:5], 1):
+        response += f"{i}. **{forn.get('nome', 'N/A')[:40]}** - {forn.get('contratos', 0)} contratos (média: R$ {forn.get('preco_medio', 0):,.2f})\n"
+
+    response += """
+
+---
+
+### 📋 Últimos Contratos
+
+"""
+    for i, contrato in enumerate(contratos[:10], 1):
+        objeto = contrato.get('objeto', contrato.get('titulo', 'N/A'))[:80]
+        fornecedor = contrato.get('fornecedor', 'N/A')[:30]
+        valor = contrato.get('valor', 0)
+        orgao = contrato.get('orgao', 'N/A')[:30]
+        data = contrato.get('data_assinatura', contrato.get('data_publicacao', 'N/A'))
+        url = contrato.get('url_pncp', '#')
+
+        response += f"""**{i}. {objeto}...**
+- 🏢 Órgão: {orgao}
+- 🏭 Fornecedor: {fornecedor}
+- 💵 Valor: **R$ {valor:,.2f}**
+- 📅 Data: {data}
+"""
+        if url and url != '#':
+            response += f"- 🔗 [Ver no PNCP]({url})\n"
+        response += "\n"
+
+    response += """
+---
+
+### 💡 Como usar esses dados:
+
+1. **Para definir preço de proposta:** Use o preço médio como referência
+2. **Para análise de concorrentes:** Veja os principais fornecedores
+3. **Para justificativa de preços:** Cite os contratos como referência
+
+📌 **Dica:** Para salvar esses preços no histórico, registre um resultado de edital!
 """
 
     return response, resultado

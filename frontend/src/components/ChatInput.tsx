@@ -95,12 +95,15 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "registrar_ata", nome: "✅ 💾 Registrar resultados da ata (PDF)", prompt: "Registre os resultados desta ata" },
 
   // =============================================================================
-  // 7. HISTÓRICO DE PREÇOS
+  // 7. HISTÓRICO DE PREÇOS - Funcionalidade 4 Sprint 1
   // =============================================================================
   { id: "sep_7", nome: "━━━ 7. HISTÓRICO DE PREÇOS ━━━", prompt: "" },
-  { id: "buscar_precos_pncp", nome: "❌ 💰 Buscar preços no PNCP", prompt: "Busque preços de [TERMO] no PNCP" },
+  { id: "buscar_precos_pncp", nome: "✅ 💰 Buscar preços no PNCP", prompt: "Busque preços de [TERMO] no PNCP" },
+  { id: "buscar_precos_pncp_2", nome: "✅ 💰 Preço de mercado", prompt: "Qual o preço de mercado para [TERMO]?" },
+  { id: "buscar_precos_pncp_3", nome: "✅ 💰 Quanto custa?", prompt: "Quanto custa um [EQUIPAMENTO/PRODUTO] em licitações?" },
+  { id: "buscar_precos_pncp_4", nome: "✅ 💰 Preços de contratos", prompt: "Busque preços de contratos de [TERMO]" },
   { id: "historico_precos", nome: "❌ 📈 Ver histórico de preços", prompt: "Mostre o histórico de preços para [TERMO/PRODUTO]" },
-  { id: "preco_medio", nome: "❌ 💵 Preço médio de mercado", prompt: "Qual o preço médio de mercado para [TERMO]?" },
+  { id: "preco_medio", nome: "❌ 💵 Preço médio histórico", prompt: "Qual o preço médio histórico para [TERMO]?" },
 
   // =============================================================================
   // 8. ANÁLISE DE CONCORRENTES

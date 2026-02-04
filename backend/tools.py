@@ -3003,3 +3003,176 @@ def tool_baixar_ata_pncp(url: str, user_id: str = None) -> Dict[str, Any]:
             "success": False,
             "error": f"Erro inesperado: {e}"
         }
+
+
+# ==================== SPRINT 1 - FUNCIONALIDADE 4: BUSCAR PREÇOS NO PNCP ====================
+
+def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca preços de contratos no PNCP para alimentar base de preços históricos.
+
+    Args:
+        termo: Termo de busca (ex: "hematologia", "analisador bioquímico")
+        meses: Período de busca em meses (padrão: 12)
+        user_id: ID do usuário
+
+    Returns:
+        Dict com contratos encontrados, preços e estatísticas
+    """
+    from datetime import datetime, timedelta
+    from config import SERPER_API_KEY, SERPER_API_URL
+
+    print(f"[PNCP-PRECOS] Buscando preços de '{termo}' nos últimos {meses} meses...")
+
+    data_inicio = (datetime.now() - timedelta(days=meses * 30)).strftime("%Y-%m-%d")
+    data_fim = datetime.now().strftime("%Y-%m-%d")
+
+    contratos = []
+    precos = []
+
+    # Método 1: Tentar API oficial do PNCP para contratos
+    try:
+        url_contratos = "https://pncp.gov.br/api/consulta/v1/contratos"
+        params = {
+            "q": termo,
+            "dataInicial": data_inicio,
+            "dataFinal": data_fim,
+            "pagina": 1,
+            "tamanhoPagina": 50
+        }
+
+        response = requests.get(url_contratos, params=params, timeout=30)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            for item in data.get("data", data.get("items", [])):
+                valor = item.get("valorInicial") or item.get("valor") or item.get("valorContrato")
+                if valor:
+                    contrato = {
+                        "id": item.get("id"),
+                        "numero": item.get("numeroContrato") or item.get("numero"),
+                        "objeto": item.get("objetoContrato") or item.get("objeto") or item.get("description"),
+                        "orgao": item.get("nomeOrgao") or item.get("orgao_nome"),
+                        "cnpj_orgao": item.get("cnpjOrgao") or item.get("orgao_cnpj"),
+                        "fornecedor": item.get("nomeRazaoSocialFornecedor") or item.get("fornecedor_nome"),
+                        "cnpj_fornecedor": item.get("cnpjCpfFornecedor") or item.get("fornecedor_cnpj"),
+                        "valor": float(valor),
+                        "data_assinatura": item.get("dataAssinatura") or item.get("data_assinatura"),
+                        "data_publicacao": item.get("dataPublicacaoPncp") or item.get("data_publicacao"),
+                        "uf": item.get("uf"),
+                        "municipio": item.get("municipio_nome"),
+                        "modalidade": item.get("modalidadeLicitacao") or item.get("modalidade"),
+                        "url_pncp": f"https://pncp.gov.br/app/contratos/{item.get('id', '')}" if item.get('id') else None,
+                        "fonte": "pncp_api"
+                    }
+                    contratos.append(contrato)
+                    precos.append(float(valor))
+
+            if contratos:
+                print(f"[PNCP-PRECOS] API PNCP retornou {len(contratos)} contratos")
+
+    except Exception as e:
+        print(f"[PNCP-PRECOS] Erro na API do PNCP: {e}")
+
+    # Método 2: Buscar via Serper (Google) se API não retornou resultados
+    if not contratos:
+        try:
+            search_query = f"site:pncp.gov.br contrato {termo} preço valor"
+            print(f"[PNCP-PRECOS] Buscando via Serper: {search_query}")
+
+            response = requests.post(
+                SERPER_API_URL,
+                headers={
+                    'X-API-KEY': SERPER_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'q': search_query,
+                    'num': 20,
+                    'gl': 'br',
+                    'hl': 'pt'
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            import re
+            for result in data.get('organic', []):
+                titulo = result.get('title', '')
+                link = result.get('link', '')
+                snippet = result.get('snippet', '')
+
+                # Tentar extrair valor do snippet
+                valores_encontrados = re.findall(r'R\$\s*([\d.,]+)', snippet)
+                if valores_encontrados:
+                    try:
+                        valor_str = valores_encontrados[0].replace('.', '').replace(',', '.')
+                        valor = float(valor_str)
+                        if valor > 1000:  # Ignorar valores muito pequenos
+                            contrato = {
+                                "titulo": titulo,
+                                "objeto": snippet[:200],
+                                "valor": valor,
+                                "url_pncp": link,
+                                "fonte": "serper"
+                            }
+                            contratos.append(contrato)
+                            precos.append(valor)
+                    except ValueError:
+                        pass
+
+            if contratos:
+                print(f"[PNCP-PRECOS] Serper retornou {len(contratos)} resultados com preços")
+
+        except Exception as e:
+            print(f"[PNCP-PRECOS] Erro no Serper: {e}")
+
+    # Calcular estatísticas
+    if not contratos:
+        return {
+            "success": False,
+            "error": f"Não foram encontrados preços para '{termo}' no PNCP",
+            "termo": termo,
+            "periodo_meses": meses
+        }
+
+    # Estatísticas de preços
+    preco_minimo = min(precos)
+    preco_maximo = max(precos)
+    preco_medio = sum(precos) / len(precos)
+    preco_mediano = sorted(precos)[len(precos) // 2]
+
+    # Agrupar por fornecedor
+    fornecedores = {}
+    for c in contratos:
+        fornecedor = c.get("fornecedor") or c.get("titulo", "Desconhecido")
+        if fornecedor not in fornecedores:
+            fornecedores[fornecedor] = {"count": 0, "valores": []}
+        fornecedores[fornecedor]["count"] += 1
+        fornecedores[fornecedor]["valores"].append(c.get("valor", 0))
+
+    # Top fornecedores
+    top_fornecedores = sorted(
+        [{"nome": k, "contratos": v["count"], "preco_medio": sum(v["valores"]) / len(v["valores"])}
+         for k, v in fornecedores.items()],
+        key=lambda x: x["contratos"],
+        reverse=True
+    )[:5]
+
+    return {
+        "success": True,
+        "termo": termo,
+        "periodo_meses": meses,
+        "total_contratos": len(contratos),
+        "contratos": contratos[:20],  # Limitar a 20 para resposta
+        "estatisticas": {
+            "preco_minimo": preco_minimo,
+            "preco_maximo": preco_maximo,
+            "preco_medio": preco_medio,
+            "preco_mediano": preco_mediano
+        },
+        "top_fornecedores": top_fornecedores,
+        "fonte": contratos[0].get("fonte", "pncp") if contratos else None
+    }
