@@ -351,10 +351,8 @@ def detectar_intencao_fallback(message: str) -> str:
     # 10.1 Buscar edital específico por número
     tem_numero_edital = re.search(r'(PE[-]?\d+|[Pp]reg[aã]o\s*n?[ºo°]?\s*\d+|\d{4,}[/]\d{4}|n[ºo°]\s*\d+)', msg, re.IGNORECASE)
     if any(p in msg for p in ["busque o edital", "encontre o edital", "buscar edital"]) or tem_numero_edital:
-        if busca_local:
-            return "listar_editais"  # Busca no banco local
-        else:
-            return "buscar_edital_numero"  # Busca na web (padrão)
+        # Sempre usa buscar_edital_numero - a função internamente decide banco/web
+        return "buscar_edital_numero"
 
     # 10.2 Buscar editais por termo
     if any(p in msg for p in ["busque editais", "buscar editais", "encontre editais", "encontrar editais"]):
@@ -1472,19 +1470,29 @@ JSON:"""
     return response, resultado
 
 
-def processar_buscar_edital_numero(message: str, user_id: str):
+def processar_buscar_edital_numero(message: str, user_id: str, buscar_apenas_banco: bool = False):
     """
-    Processa busca de um edital específico pelo número no PNCP.
+    Processa busca de um edital específico pelo número.
 
     Args:
         message: Mensagem do usuário contendo o número do edital
         user_id: ID do usuário
+        buscar_apenas_banco: Se True, busca APENAS no banco local. Se False, busca no banco e depois na web.
 
     Returns:
         Tuple (response_text, resultado)
     """
     import re
     import requests
+
+    # Detectar se é busca no banco ou na web
+    msg_lower = message.lower()
+    busca_local = any(p in msg_lower for p in ["no banco", "cadastrado", "salvo", "no sistema", "banco de dados",
+                                                "tenho o edital", "tenho edital", "já tenho", "ja tenho"])
+
+    # Se especificou banco na mensagem, força busca local
+    if busca_local:
+        buscar_apenas_banco = True
 
     # Extrair número do edital da mensagem
     # Padrões: PE-001/2026, PE0013/2025, 90186/2025, nº 123, número 456
@@ -1507,14 +1515,14 @@ def processar_buscar_edital_numero(message: str, user_id: str):
         return """❌ **Não consegui identificar o número do edital.**
 
 Por favor, informe o número no formato:
-- "Busque o edital PE-001/2026"
-- "Busque o edital 90186/2025"
-- "Encontre o pregão nº 123/2025"
+- "Busque o edital PE-001/2026 no banco"
+- "Busque o edital PE-001/2026 no PNCP"
+- "Tenho o edital PE-001/2026 cadastrado?"
 """, None
 
-    print(f"[BUSCA-EDITAL] Buscando edital: {numero_edital}")
+    print(f"[BUSCA-EDITAL] Buscando edital: {numero_edital} | Apenas banco: {buscar_apenas_banco}")
 
-    # 1. Primeiro verificar se já está salvo no sistema
+    # 1. Verificar se está salvo no sistema
     from models import Edital
     from database import SessionLocal
 
@@ -1551,10 +1559,22 @@ Por favor, informe o número no formato:
 """
             return response, {"edital": edital_local.numero, "encontrado_local": True}
 
+        # Se não encontrou no banco e é busca apenas local
+        if buscar_apenas_banco:
+            return f"""## ❌ Edital não encontrado no banco
+
+O edital **{numero_edital}** não está cadastrado no sistema.
+
+**Opções:**
+- Buscar na web: "Busque o edital {numero_edital} no PNCP"
+- Cadastrar manualmente: "Cadastre o edital {numero_edital}, órgão [ORGAO], objeto: [OBJETO]"
+- Buscar por termo: "Busque editais de [TERMO] no PNCP"
+""", {"numero": numero_edital, "encontrado": False}
+
     finally:
         db.close()
 
-    # 2. Buscar no PNCP
+    # 2. Buscar no PNCP (apenas se não for busca exclusiva no banco)
     try:
         # Limpar número para busca
         numero_limpo = re.sub(r'[^\d/]', '', numero_edital)
@@ -1573,7 +1593,7 @@ Por favor, informe o número no formato:
             resultados = dados.get("data", []) or dados.get("items", []) or []
 
             if resultados:
-                response = f"## 🔍 Resultados para: {numero_edital}\n\n"
+                response = f"## 🌐 Resultados da Web para: {numero_edital}\n\n"
                 response += f"Encontrados: **{len(resultados)}** edital(is)\n\n"
 
                 for i, ed in enumerate(resultados[:5], 1):
