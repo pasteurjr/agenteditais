@@ -3194,19 +3194,11 @@ def processar_buscar_atas_pncp(message: str, user_id: str):
     """
     from tools import tool_buscar_atas_pncp
 
-    # Extrair termo de busca da mensagem
-    import re
-    msg_lower = message.lower()
-
-    # Remover palavras comuns de comando
-    termo = msg_lower
-    for palavra in ["busque", "buscar", "encontre", "encontrar", "baixe", "baixar",
-                    "atas", "ata", "de", "do", "da", "no", "na", "pncp", "registro",
-                    "preço", "preco", "sessão", "sessao"]:
-        termo = termo.replace(palavra, " ")
-
-    # Limpar espaços extras
-    termo = " ".join(termo.split()).strip()
+    # Extrair termo de busca usando helper
+    palavras = ["busque", "buscar", "encontre", "encontrar", "baixe", "baixar",
+                "atas", "ata", "de", "do", "da", "no", "na", "pncp", "registro",
+                "preço", "preco", "sessão", "sessao"]
+    termo = extrair_termo(message, palavras)
 
     if not termo or len(termo) < 3:
         return """## ❓ Termo de Busca Necessário
@@ -3290,19 +3282,12 @@ def processar_buscar_precos_pncp(message: str, user_id: str):
     """
     from tools import tool_buscar_precos_pncp
 
-    # Extrair termo de busca da mensagem
-    msg_lower = message.lower()
-
-    # Remover palavras comuns de comando
-    termo = msg_lower
-    for palavra in ["busque", "buscar", "encontre", "encontrar", "preços", "precos",
-                    "de", "do", "da", "no", "na", "pncp", "mercado", "médio", "medio",
-                    "quanto", "custa", "valor", "valores", "contrato", "contratos",
-                    "praticado", "praticados", "histórico", "historico"]:
-        termo = termo.replace(palavra, " ")
-
-    # Limpar espaços extras
-    termo = " ".join(termo.split()).strip()
+    # Extrair termo de busca usando helper
+    palavras = ["busque", "buscar", "encontre", "encontrar", "preços", "precos",
+                "de", "do", "da", "no", "na", "pncp", "mercado", "médio", "medio",
+                "quanto", "custa", "valor", "valores", "contrato", "contratos",
+                "praticado", "praticados", "histórico", "historico", "qual", "o"]
+    termo = extrair_termo(message, palavras)
 
     if not termo or len(termo) < 3:
         return """## ❓ Termo de Busca Necessário
@@ -3399,19 +3384,48 @@ Por favor, especifique o produto/equipamento que deseja pesquisar. Exemplos:
     return response, resultado
 
 
+# ==================== HELPER: EXTRAÇÃO DE TERMOS ====================
+
+def extrair_termo(message: str, palavras_remover: list) -> str:
+    """
+    Extrai termo de busca removendo palavras-chave de comando.
+    Usa regex com word boundaries para não cortar partes de palavras.
+
+    Args:
+        message: Mensagem do usuário
+        palavras_remover: Lista de palavras a remover
+
+    Returns:
+        Termo extraído limpo
+    """
+    import re
+
+    texto = message.lower()
+
+    # Remover palavras usando word boundaries para não cortar partes de palavras
+    for palavra in palavras_remover:
+        # \b = word boundary - só casa com palavra completa
+        pattern = r'\b' + re.escape(palavra) + r'\b'
+        texto = re.sub(pattern, ' ', texto, flags=re.IGNORECASE)
+
+    # Limpar espaços extras e pontuação no início/fim
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    texto = re.sub(r'^[.,!?:;\s]+|[.,!?:;\s]+$', '', texto)
+
+    return texto
+
+
 # ==================== SPRINT 1 - FUNCIONALIDADE 5: HISTÓRICO DE PREÇOS ====================
 
 def processar_historico_precos(message: str, user_id: str):
     """Processa consulta de histórico de preços."""
     from tools import tool_historico_precos
 
-    # Extrair termo
-    msg_lower = message.lower()
-    termo = msg_lower
-    for palavra in ["histórico", "historico", "preços", "precos", "de", "do", "da",
-                    "registrados", "salvos", "mostre", "ver", "consultar"]:
-        termo = termo.replace(palavra, " ")
-    termo = " ".join(termo.split()).strip()
+    # Extrair termo usando helper
+    palavras = ["histórico", "historico", "preços", "precos", "de", "do", "da",
+                "registrados", "salvos", "mostre", "mostrar", "ver", "consultar",
+                "quais", "já", "ja"]
+    termo = extrair_termo(message, palavras)
 
     resultado = tool_historico_precos(termo=termo if termo else None, user_id=user_id)
 
@@ -3497,13 +3511,10 @@ def processar_analisar_concorrente(message: str, user_id: str):
     """Processa análise de concorrente específico."""
     from tools import tool_analisar_concorrente
 
-    # Extrair nome do concorrente
-    msg_lower = message.lower()
-    nome = msg_lower
-    for palavra in ["analise", "analisar", "análise", "concorrente", "o", "a", "do", "da",
-                    "empresa", "histórico", "historico", "como está", "como esta"]:
-        nome = nome.replace(palavra, " ")
-    nome = " ".join(nome.split()).strip()
+    # Extrair nome do concorrente usando helper
+    palavras = ["analise", "analisar", "análise", "concorrente", "o", "do", "da",
+                "empresa", "histórico", "historico", "como", "está", "esta"]
+    nome = extrair_termo(message, palavras)
 
     if not nome:
         return """## ❓ Nome do Concorrente
@@ -3569,13 +3580,10 @@ def processar_recomendar_preco(message: str, user_id: str):
     """Processa recomendação de preço."""
     from tools import tool_recomendar_preco
 
-    # Extrair termo
-    msg_lower = message.lower()
-    termo = msg_lower
-    for palavra in ["recomendar", "recomende", "sugerir", "sugira", "preço", "preco",
-                    "que", "qual", "colocar", "para", "de", "do", "da"]:
-        termo = termo.replace(palavra, " ")
-    termo = " ".join(termo.split()).strip()
+    # Extrair termo usando helper
+    palavras = ["recomendar", "recomende", "sugerir", "sugira", "preço", "preco",
+                "que", "qual", "colocar", "para", "de", "do", "da"]
+    termo = extrair_termo(message, palavras)
 
     if not termo:
         return """## ❓ Produto/Termo Necessário
@@ -3705,13 +3713,10 @@ def processar_verificar_completude(message: str, user_id: str):
     """Processa verificação de completude de produto."""
     from tools import tool_verificar_completude_produto
 
-    # Extrair nome do produto
-    msg_lower = message.lower()
-    nome = msg_lower
-    for palavra in ["verificar", "verifique", "completude", "produto", "está", "esta",
-                    "completo", "falta", "informação", "informacao", "faltando"]:
-        nome = nome.replace(palavra, " ")
-    nome = " ".join(nome.split()).strip()
+    # Extrair nome do produto usando helper
+    palavras = ["verificar", "verifique", "completude", "produto", "está", "esta",
+                "completo", "falta", "informação", "informacao", "faltando", "o", "do", "da"]
+    nome = extrair_termo(message, palavras)
 
     resultado = tool_verificar_completude_produto(nome_produto=nome if nome else None, user_id=user_id)
 

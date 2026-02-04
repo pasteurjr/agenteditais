@@ -1,6 +1,6 @@
 # Relatório de Testes - Sprint 1
 
-**Data:** 04/02/2026 01:21
+**Data:** 04/02/2026 01:29
 
 ## Resumo
 
@@ -24,7 +24,7 @@
 
 #### ✅ Teste: Busque preços de hematologia no PNCP
 
-**Tempo de resposta:** 4.39s
+**Tempo de resposta:** 4.42s
 
 **Resposta:**
 
@@ -45,20 +45,57 @@
 
 #### ✅ Teste: Qual o preço de mercado para analisador bioquímico?
 
-**Tempo de resposta:** 4.15s
+**Tempo de resposta:** 4.21s
 
 **Resposta:**
 
 ```
-## ❌ Nenhum Preço Encontrado
+## 💰 Preços de Mercado - PNCP
 
-**Termo:** qual o preço merca para a lisa r bioquímico?
-**Erro:** Não foram encontrados preços para 'qual o preço merca para a lisa r bioquímico?' no PNCP
+**Termo pesquisado:** preço para analisador bioquímico
+**Período:** Últimos 12 meses
+**Contratos encontrados:** 1
+**Fonte:** serper
 
-**Dica:** Tente termos mais específicos como:
-- "analisador hematológico"
-- "equipamento laboratório"
-- "reagentes diagnóstico"
+---
+
+### 📊 Estatísticas de Preços
+
+| Métrica | Valor |
+|---------|-------|
+| **Mínimo** | R$ 100,000.00 |
+| **Médio** | R$ 100,000.00 |
+| **Mediano** | R$ 100,000.00 |
+| **Máximo** | R$ 100,000.00 |
+
+---
+
+### 🏢 Principais Fornecedores
+
+1. **termo de referência** - 1 contratos (média: R$ 100,000.00)
+
+
+---
+
+### 📋 Últimos Contratos
+
+**1. Por exemplo: Caso no final do contrato, o valor mensal do contrato seja R$ 100.0...**
+- 🏢 Órgão: N/A
+- 🏭 Fornecedor: N/A
+- 💵 Valor: **R$ 100,000.00**
+- 📅 Data: N/A
+- 🔗 [Ver no PNCP](https://pncp.gov.br/pncp-api/v1/orgaos/10564953000136/compras/2025/29/arquivos/2)
+
+
+---
+
+### 💡 Como usar esses dados:
+
+1. **Para definir preço de proposta:** Use o preço médio como referência
+2. **Para análise de concorrentes:** Veja os principais fornecedores
+3. **Para justificativa de preços:** Cite os contratos como referência
+
+📌 **Dica:** Para salvar esses preços no histórico, registre um resultado de edital!
 
 ```
 
@@ -71,7 +108,7 @@
 
 #### ✅ Teste: Mostre o histórico de preços de hematologia
 
-**Tempo de resposta:** 2.75s
+**Tempo de resposta:** 3.19s
 
 **Resposta:**
 
@@ -88,14 +125,14 @@
 
 #### ✅ Teste: Quais preços já registramos?
 
-**Tempo de resposta:** 2.71s
+**Tempo de resposta:** 2.57s
 
 **Resposta:**
 
 ```
 ## ❌ Histórico de Preços
 
-**Erro:** Nenhum histórico de preços encontrado para 'quais já registramos?'
+**Erro:** Nenhum histórico de preços encontrado para 'registramos'
 
 **Dica:** Registre resultados de editais para criar histórico de preços.
 
@@ -110,7 +147,7 @@
 
 #### ✅ Teste: Liste os concorrentes conhecidos
 
-**Tempo de resposta:** 2.71s
+**Tempo de resposta:** 3.03s
 
 **Resposta:**
 
@@ -139,17 +176,40 @@
 
 #### ✅ Teste: Analise o concorrente MedLab
 
-**Tempo de resposta:** 2.80s
+**Tempo de resposta:** 3.09s
 
 **Resposta:**
 
 ```
-## ❌ Concorrente Não Encontrado
+## 🔍 Análise do Concorrente
 
-**Buscado:** medl b
-**Erro:** Concorrente 'medl b' não encontrado
+### MedLab
+**CNPJ:** None
 
-**Dica:** Use 'liste concorrentes' para ver os cadastrados
+---
+
+### 📊 Estatísticas
+
+| Métrica | Valor |
+|---------|-------|
+| **Editais Participados** | 3 |
+| **Editais Ganhos** | 2 |
+| **Taxa de Vitória** | 66.7% |
+
+### 💰 Preços Praticados
+
+| Métrica | Valor |
+|---------|-------|
+| **Mínimo** | R$ 50,000.00 |
+| **Médio** | R$ 50,000.00 |
+| **Máximo** | R$ 50,000.00 |
+
+---
+
+### 📋 Últimas Participações
+
+1. 🏆 90186 - R$ 50,000.00 (#1º)
+2. 🏆 90186 - R$ 50,000.00 (#1º)
 
 ```
 
@@ -162,15 +222,15 @@
 
 #### ✅ Teste: Recomende preço para analisador hematológico
 
-**Tempo de resposta:** 3.70s
+**Tempo de resposta:** 4.34s
 
 **Resposta:**
 
 ```
 ## ❌ Recomendação de Preço
 
-**Termo:** analisa r hematológico
-**Erro:** Não há dados suficientes para recomendar preço para 'analisa r hematológico'
+**Termo:** analisador hematológico
+**Erro:** Não há dados suficientes para recomendar preço para 'analisador hematológico'
 
 **Dica:** Registre mais resultados de editais ou busque preços no PNCP
 
@@ -180,15 +240,15 @@
 
 #### ✅ Teste: Qual preço sugerir para equipamento laboratorial?
 
-**Tempo de resposta:** 4.16s
+**Tempo de resposta:** 3.56s
 
 **Resposta:**
 
 ```
 ## ❌ Recomendação de Preço
 
-**Termo:** equipamento laboratorial?
-**Erro:** Não há dados suficientes para recomendar preço para 'equipamento laboratorial?'
+**Termo:** equipamento laboratorial
+**Erro:** Não há dados suficientes para recomendar preço para 'equipamento laboratorial'
 
 **Dica:** Registre mais resultados de editais ou busque preços no PNCP
 
@@ -203,7 +263,7 @@
 
 #### ✅ Teste: Classifique este edital: Aquisição de analisador hematológico automático
 
-**Tempo de resposta:** 2.66s
+**Tempo de resposta:** 2.59s
 
 **Resposta:**
 
@@ -230,7 +290,7 @@
 
 #### ✅ Teste: Que tipo de edital é: Locação de equipamento com fornecimento de reagentes
 
-**Tempo de resposta:** 2.97s
+**Tempo de resposta:** 3.04s
 
 **Resposta:**
 
@@ -264,16 +324,41 @@
 
 #### ✅ Teste: Verifique completude do produto Mindray
 
-**Tempo de resposta:** 2.96s
+**Tempo de resposta:** 2.97s
 
 **Resposta:**
 
 ```
-## ❌ Verificação de Completude
+## 📋 Verificação de Completude
 
-**Erro:** Produto não encontrado: do mindray
+### Produto: Monitor Multiparâmetros Mindray uMEC 12
 
-**Dica:** Informe o nome do produto. Exemplo: "Verifique completude do **Analisador XYZ**"
+| Campo | Valor |
+|-------|-------|
+| **Fabricante** | Mindray |
+| **Modelo** | uMEC 12 |
+| **Categoria** | equipamento |
+
+---
+
+### 📊 Status de Completude
+
+| Métrica | Valor |
+|---------|-------|
+| **Status** | ✅ Completo |
+| **Percentual** | 100.0% |
+| **Campos Preenchidos** | 4/4 |
+| **Especificações** | 11/5 recomendadas |
+
+---
+
+### ⚠️ Campos Faltantes
+
+
+
+### 💡 Recomendações
+
+- Adicione o registro ANVISA (se aplicável)
 
 ```
 
@@ -281,14 +366,14 @@
 
 #### ✅ Teste: O produto BC-5000 está completo?
 
-**Tempo de resposta:** 2.91s
+**Tempo de resposta:** 3.05s
 
 **Resposta:**
 
 ```
 ## ❌ Verificação de Completude
 
-**Erro:** Produto não encontrado: o bc-5000 ?
+**Erro:** Produto não encontrado: bc-5000
 
 **Dica:** Informe o nome do produto. Exemplo: "Verifique completude do **Analisador XYZ**"
 
