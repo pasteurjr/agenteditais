@@ -35,10 +35,13 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // 2. BUSCA E CADASTRO DE EDITAIS
   // =============================================================================
   { id: "sep_2", nome: "━━━ 2. BUSCA E CADASTRO DE EDITAIS ━━━", prompt: "" },
-  // -- BUSCA NA WEB (PNCP) --
-  { id: "buscar_editais_web", nome: "✅ 🌐 Buscar editais na web (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
+  // -- BUSCA NA WEB (PNCP) COM SCORE --
+  { id: "buscar_editais_web", nome: "✅ 🌐 Buscar editais (com score)", prompt: "Busque editais de [TERMO] no PNCP" },
   { id: "buscar_edital_numero_web", nome: "✅ 🌐 Buscar edital por número (web)", prompt: "Busque o edital [PE-001/2026] no PNCP" },
-  { id: "buscar_editais_web2", nome: "✅ 🌐 Encontrar editais na web", prompt: "Encontre editais de [TERMO] na web" },
+  { id: "buscar_editais_web2", nome: "✅ 🌐 Encontrar editais (com score)", prompt: "Encontre editais de [TERMO] na web" },
+  // -- BUSCA NA WEB SEM SCORE --
+  { id: "buscar_editais_simples", nome: "✅ 📋 Buscar editais (sem score)", prompt: "Busque editais de [TERMO] sem calcular score" },
+  { id: "buscar_editais_simples2", nome: "✅ 📋 Listar editais da web", prompt: "Busque editais de [TERMO] apenas listando" },
   // -- BUSCA NO BANCO LOCAL --
   { id: "buscar_editais_banco", nome: "✅ 💾 Buscar editais no banco", prompt: "Busque editais de [TERMO] no banco" },
   { id: "buscar_edital_numero_banco", nome: "✅ 💾 Buscar edital no sistema", prompt: "Busque o edital [PE-001/2026] no sistema" },
@@ -48,9 +51,34 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // -- CADASTRO E GESTÃO --
   { id: "cadastrar_edital", nome: "✅ ➕ Cadastrar edital manualmente", prompt: "Cadastre o edital [NUMERO], órgão [ORGAO], objeto: [OBJETO]" },
   { id: "salvar_editais", nome: "✅ 💾 Salvar editais da busca", prompt: "Salve os editais encontrados" },
+  { id: "salvar_editais_todos", nome: "✅ 💾 Salvar TODOS os editais", prompt: "Salvar todos os editais" },
+  { id: "salvar_editais_recomendados", nome: "✅ 💾 Salvar recomendados", prompt: "Salvar editais recomendados" },
+  { id: "salvar_edital_especifico", nome: "✅ 💾 Salvar edital específico", prompt: "Salvar edital [PE-001/2026]" },
   { id: "atualizar_edital", nome: "✅ ✏️ Atualizar/editar edital", prompt: "Atualize o edital [NUMERO] com status [novo/analisando/participar/ganho/perdido]" },
   { id: "excluir_edital", nome: "✅ 🗑️ Excluir edital", prompt: "Exclua o edital [NUMERO]" },
   { id: "excluir_todos_editais", nome: "✅ 🗑️ Excluir TODOS os editais", prompt: "Exclua todos os meus editais" },
+
+  // =============================================================================
+  // 2.1 ANÁLISE DE EDITAIS (Resumir e Perguntar)
+  // =============================================================================
+  { id: "sep_2_1", nome: "━━━ 2.1 ANÁLISE DE EDITAIS ━━━", prompt: "" },
+  // -- RESUMIR EDITAL --
+  { id: "resumir_edital", nome: "✅ 📋 Resumir edital", prompt: "Resuma o edital [PE-001/2026]" },
+  { id: "resumir_edital_2", nome: "✅ 📋 Resumo do edital", prompt: "Faça um resumo do edital [NUMERO]" },
+  { id: "resumir_edital_3", nome: "✅ 📋 Sintetizar edital", prompt: "Sintetize o edital [PE-001/2026]" },
+  // -- PERGUNTAR AO EDITAL --
+  { id: "perguntar_edital", nome: "✅ 💬 Perguntar ao edital", prompt: "O edital [PE-001/2026] exige [REQUISITO]?" },
+  { id: "perguntar_edital_2", nome: "✅ 💬 Prazo do edital", prompt: "Qual o prazo de entrega do edital [PE-001/2026]?" },
+  { id: "perguntar_edital_3", nome: "✅ 💬 Documentos exigidos", prompt: "Quais documentos são exigidos no edital [PE-001/2026]?" },
+  { id: "perguntar_edital_4", nome: "✅ 💬 Garantia exigida?", prompt: "O edital [PE-001/2026] exige garantia?" },
+  { id: "perguntar_edital_5", nome: "✅ 💬 Requisitos técnicos", prompt: "Quais são os requisitos técnicos do edital [PE-001/2026]?" },
+  { id: "perguntar_edital_6", nome: "✅ 💬 Itens do edital", prompt: "Quais itens o edital [PE-001/2026] comporta?" },
+  { id: "perguntar_edital_7", nome: "✅ 💬 Tudo sobre o edital", prompt: "Me conte tudo sobre o edital [PE-001/2026]" },
+  // -- BAIXAR PDF DO EDITAL --
+  { id: "baixar_pdf_edital", nome: "✅ 📥 Baixar PDF do edital", prompt: "Baixe o PDF do edital [PE-001/2026]" },
+  { id: "baixar_pdf_edital_2", nome: "✅ 📥 Download do edital", prompt: "Faça download do edital [PE-001/2026]" },
+  // -- ATUALIZAR URL DO EDITAL --
+  { id: "atualizar_url_edital", nome: "✅ 🔗 Atualizar URL do edital", prompt: "Atualize o edital [PE-001/2026] com URL: [https://url-do-pdf.pdf]" },
 
   // =============================================================================
   // 3. ANÁLISE DE ADERÊNCIA (Produto x Edital)

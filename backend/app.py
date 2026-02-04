@@ -3,7 +3,7 @@ Agente de Editais - Backend Flask
 MVP com 9 ações via Select + Prompt
 """
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital
@@ -99,9 +99,14 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
    Exemplos: "baixe o arquivo da URL: http://...", "baixe https://..."
    IMPORTANTE: Se contém URL (http:// ou https://), classifique como download_url!
 
-9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC) por TERMO/ÁREA
+9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC) por TERMO/ÁREA COM cálculo de score de aderência
    Exemplos: "busque editais de tecnologia", "editais da área médica", "busque editais de hematologia"
-   IMPORTANTE: Use quando buscar por TERMO genérico (área, categoria, produto)
+   IMPORTANTE: Use quando buscar por TERMO genérico (área, categoria, produto) E calcular score de aderência
+
+9b. **buscar_editais_simples**: Buscar EDITAIS SEM calcular score - apenas listar os editais encontrados
+   Exemplos: "busque editais de tecnologia sem score", "liste editais de hematologia sem calcular aderência", "busque editais de informática apenas listando"
+   Palavras-chave: sem score, sem calcular, sem aderência, apenas listar, só listar, listar editais
+   IMPORTANTE: Use quando o usuário quer apenas ver os editais sem análise de aderência
 
 10. **buscar_edital_numero**: Buscar UM edital específico pelo NÚMERO
    Exemplos: "busque o edital PE-001/2026", "encontre o edital 90186", "busque edital número 123/2025"
@@ -131,8 +136,9 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 15. **cadastrar_fonte**: Cadastrar nova fonte de editais
     Exemplos: "cadastre a fonte BEC-SP"
 
-16. **salvar_editais**: Salvar editais da última busca
-    Exemplos: "salve os editais", "salvar recomendados"
+16. **salvar_editais**: Salvar editais da última busca (um específico ou todos)
+    Exemplos: "salve os editais", "salvar recomendados", "salvar todos", "salvar edital 02223/2025", "salvar edital PE-001/2026"
+    IMPORTANTE: Use quando o usuário quer SALVAR editais que vieram de uma BUSCA anterior. Diferente de cadastrar_edital que é para criar um edital MANUALMENTE com dados informados.
 
 17. **reprocessar_produto**: Reprocessar/atualizar especificações de um produto
     Exemplos: "reprocesse o produto X", "atualize specs do produto X", "extraia novamente as especificações"
@@ -185,10 +191,11 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Exemplos: "produto X está completo?", "verifique completude do produto", "falta algo no produto?"
     Palavras-chave: verificar completude, produto completo, falta informação, completude produto
 
-29. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
-    Exemplos: "cadastre o edital PE-001/2026", "registre este edital", "adicione o edital número X", "salve este edital manualmente"
+29. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema COM DADOS INFORMADOS PELO USUÁRIO
+    Exemplos: "cadastre o edital PE-001/2026, órgão Ministério da Saúde, objeto: aquisição de equipamentos", "registre este edital com os dados...", "adicione o edital número X do órgão Y"
     Palavras-chave: cadastre edital, registre edital, adicione edital, cadastrar edital manualmente, inserir edital
-    IMPORTANTE: Use quando o usuário quer cadastrar UM edital manualmente (diferente de salvar vários da busca)
+    IMPORTANTE: Use APENAS quando o usuário quer CRIAR um edital MANUALMENTE informando dados (órgão, objeto, etc).
+    NÃO USE para "salvar edital NUMERO" que veio de uma busca - isso é salvar_editais!
 
 ### SPRINT 2 - ALERTAS E MONITORAMENTO:
 30. **configurar_alertas**: Configurar alertas de prazo para um edital
@@ -237,6 +244,27 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
 41. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
+
+### ANÁLISE DE EDITAIS:
+42. **resumir_edital**: Fazer um resumo de um edital cadastrado
+    Exemplos: "resuma o edital PE-001/2026", "faça um resumo do edital", "resumo do edital PE-001", "sintetize o edital"
+    Palavras-chave: resumir edital, resumo do edital, sintetize edital, resumo edital
+    IMPORTANTE: O usuário quer um resumo executivo do edital (objeto, valor, prazos, requisitos principais)
+
+43. **perguntar_edital**: Responder dúvidas/perguntas sobre um edital específico
+    Exemplos: "qual o prazo de entrega do edital PE-001?", "o edital PE-001 exige garantia?", "quais documentos são exigidos no PE-001?", "pergunte ao edital PE-001 sobre [DÚVIDA]"
+    Palavras-chave: perguntar ao edital, dúvida sobre edital, o edital exige, o edital pede, prazo do edital, requisitos do edital
+    IMPORTANTE: Use quando o usuário tem uma dúvida específica sobre um edital cadastrado
+
+44. **baixar_pdf_edital**: Baixar o PDF de um edital já cadastrado (a partir da URL salva)
+    Exemplos: "baixe o PDF do edital PE-001/2026", "faça download do edital PE-001", "baixar edital PE-001", "download do pdf do edital"
+    Palavras-chave: baixar pdf edital, download edital, baixar edital, baixe o edital, download pdf edital
+    IMPORTANTE: Use quando o usuário quer BAIXAR o arquivo PDF de um edital que já está cadastrado no sistema
+
+45. **atualizar_url_edital**: Atualizar a URL de um edital cadastrado
+    Exemplos: "atualize o edital PE-001 com URL: https://...", "mude a URL do edital PE-001 para https://...", "corrija a URL do edital PE-001", "atualize URL do edital"
+    Palavras-chave: atualizar url, atualize edital com url, mude url, corrija url, atualizar link edital
+    IMPORTANTE: Use quando o usuário quer ATUALIZAR/CORRIGIR a URL de download de um edital já cadastrado
 
 ## CONTEXTO IMPORTANTE:
 - **tem_arquivo**: {tem_arquivo} (true se usuário enviou um arquivo junto com a mensagem)
@@ -335,8 +363,14 @@ def detectar_intencao_fallback(message: str) -> str:
         if any(p in msg for p in [".pdf", "manual", "arquivo", "documento"]):
             return "download_url"
 
-    # 3. Salvar editais
-    if any(p in msg for p in ["salvar edital", "salvar editais", "salve", "guardar edital"]):
+    # 3. Salvar editais (da busca)
+    # Detecta: "salvar edital", "salvar editais", "salvar todos", "salvar recomendados"
+    # Também detecta "salvar edital NUMERO" (quando tem número de edital)
+    if any(p in msg for p in ["salvar edital", "salvar editais", "salvar todos", "salvar recomendados",
+                               "guardar edital", "guardar editais"]):
+        return "salvar_editais"
+    # "salve" sozinho ou com número de edital
+    if "salve" in msg and ("edital" in msg or "editais" in msg or re.search(r'\d{2,}[/]\d{4}', msg)):
         return "salvar_editais"
 
     # 4. Listar produtos
@@ -417,6 +451,30 @@ def detectar_intencao_fallback(message: str) -> str:
                                "esta completo", "informações faltando"]):
         return "verificar_completude"
 
+    # 5.4.8 Resumir edital
+    if any(p in msg for p in ["resumir edital", "resuma o edital", "resumo do edital", "resuma edital",
+                               "sintetize o edital", "sintetize edital", "resumo edital"]):
+        return "resumir_edital"
+
+    # 5.4.9 Perguntar ao edital
+    if any(p in msg for p in ["perguntar ao edital", "pergunte ao edital", "dúvida sobre edital",
+                               "duvida sobre edital", "o edital exige", "o edital pede",
+                               "prazo do edital", "requisitos do edital", "no edital pe-",
+                               "do edital pe-", "edital pe-"]) and "?" in msg:
+        return "perguntar_edital"
+
+    # 5.4.10 Baixar PDF do edital
+    if any(p in msg for p in ["baixar pdf edital", "baixe o pdf do edital", "download do edital",
+                               "baixar edital", "baixe o edital", "download pdf edital",
+                               "faça download do edital", "baixe edital"]):
+        return "baixar_pdf_edital"
+
+    # 5.4.11 Atualizar URL do edital
+    if any(p in msg for p in ["atualize o edital", "atualizar url", "atualize url", "mude a url",
+                               "corrija a url", "corrija url", "atualizar link", "atualize link"]):
+        if "url" in msg or "http" in msg:
+            return "atualizar_url_edital"
+
     # 5.5 Reprocessar produto
     if any(p in msg for p in ["reprocess", "atualize specs", "atualizar specs", "extraia novamente"]):
         return "reprocessar_produto"
@@ -474,8 +532,14 @@ def detectar_intencao_fallback(message: str) -> str:
     if any(p in msg for p in ["busque editais", "buscar editais", "encontre editais", "encontrar editais"]):
         if busca_local:
             return "listar_editais"  # Lista do banco
+        # Verificar se quer sem score
+        sem_score = any(p in msg for p in ["sem score", "sem calcular", "sem aderência", "sem aderencia",
+                                            "apenas listar", "só listar", "so listar", "apenas liste",
+                                            "só liste", "so liste", "sem análise", "sem analise"])
+        if sem_score:
+            return "buscar_editais_simples"  # Busca sem calcular score
         else:
-            return "buscar_editais"  # Busca na web (padrão)
+            return "buscar_editais"  # Busca na web com score (padrão)
 
     # 10.3 Buscar produtos
     if any(p in msg for p in ["busque produto", "buscar produto", "encontre produto", "encontrar produto"]):
@@ -927,6 +991,9 @@ def chat():
         elif action_type == "buscar_editais":
             response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
 
+        elif action_type == "buscar_editais_simples":
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
+
         elif action_type == "buscar_edital_numero":
             response_text, resultado = processar_buscar_edital_numero(message, user_id)
 
@@ -1038,13 +1105,28 @@ def chat():
         elif action_type == "cancelar_alerta":
             response_text = processar_cancelar_alerta(message, user_id)
 
+        # =============================================================================
+        # ANÁLISE DE EDITAIS (Resumir e Perguntar)
+        # =============================================================================
+        elif action_type == "resumir_edital":
+            response_text, resultado = processar_resumir_edital(message, user_id, intencao_resultado)
+
+        elif action_type == "perguntar_edital":
+            response_text, resultado = processar_perguntar_edital(message, user_id, intencao_resultado)
+
+        elif action_type == "baixar_pdf_edital":
+            response_text, resultado = processar_baixar_pdf_edital(message, user_id, intencao_resultado)
+
+        elif action_type == "atualizar_url_edital":
+            response_text, resultado = processar_atualizar_url_edital(message, user_id, intencao_resultado)
+
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
 
         # Salvar resposta do assistente
         # Se foi busca de editais, salvar os editais no sources_json para recuperar depois
         sources_data = None
-        if action_type == "buscar_editais" and resultado:
+        if action_type in ["buscar_editais", "buscar_editais_simples"] and resultado:
             # Salvar editais para uso posterior (salvar_editais)
             sources_data = {
                 "editais": resultado.get("editais", []),
@@ -1435,13 +1517,13 @@ Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
     return response, {"status": "aguardando_dados"}
 
 
-def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True):
     """
     Processa ação: Buscar editais
 
     Novo fluxo:
     1. Busca editais (sem salvar)
-    2. Calcula score de aderência para cada edital vs produtos do usuário
+    2. Calcula score de aderência para cada edital vs produtos do usuário (se calcular_score=True)
     3. Ordena por score
     4. Mostra recomendações (PARTICIPAR/AVALIAR/NÃO PARTICIPAR) com justificativas
     5. Oferece opção de salvar os recomendados
@@ -1450,6 +1532,7 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None):
         message: Mensagem original do usuário
         user_id: ID do usuário
         termo_ia: Termo de busca já extraído pelo agente classificador (opcional)
+        calcular_score: Se True, calcula score de aderência. Se False, apenas lista os editais.
     """
     import json
     import re
@@ -1615,21 +1698,27 @@ JSON:"""
             response += f"\n**Erros nas fontes:** {'; '.join(erros_fontes)}\n"
         return response, resultado
 
-    # ========== PASSO 2: Calcular score de aderência ==========
-    print(f"[APP] Calculando score de aderência para {len(editais)} editais...")
-    resultado_score = tool_calcular_score_aderencia(editais, user_id)
+    # ========== PASSO 2: Calcular score de aderência (se solicitado) ==========
+    aviso_produtos = None
+    if calcular_score:
+        print(f"[APP] Calculando score de aderência para {len(editais)} editais...")
+        resultado_score = tool_calcular_score_aderencia(editais, user_id)
 
-    if resultado_score.get("success"):
-        editais_com_score = resultado_score.get("editais_com_score", editais)
-        aviso_produtos = resultado_score.get("aviso")
+        if resultado_score.get("success"):
+            editais_com_score = resultado_score.get("editais_com_score", editais)
+            aviso_produtos = resultado_score.get("aviso")
+        else:
+            editais_com_score = editais
     else:
+        print(f"[APP] Busca SIMPLES (sem score) - {len(editais)} editais encontrados")
         editais_com_score = editais
-        aviso_produtos = None
 
-    # ========== PASSO 3: Formatar resposta com scores ==========
+    # ========== PASSO 3: Formatar resposta ==========
     fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else fonte
+    modo_busca = "com análise de aderência" if calcular_score else "listagem simples (sem score)"
     response = f"""**Busca realizada:** {termo}
 **Fontes consultadas:** {fontes_str}
+**Modo:** {modo_busca}
 **Resultados:** {len(editais_com_score)} edital(is) encontrado(s)
 
 """
@@ -1714,7 +1803,8 @@ JSON:"""
     qtd_avaliar = len(avaliar)
     qtd_recomendados = qtd_participar + qtd_avaliar
 
-    if qtd_recomendados > 0:
+    if calcular_score and qtd_recomendados > 0:
+        # Busca COM score - mostrar opções por recomendação
         response += f"\n---\n"
         response += f"## 💾 Deseja salvar os editais?\n\n"
         response += f"Encontrei **{qtd_recomendados} edital(is)** recomendado(s):\n"
@@ -1733,6 +1823,19 @@ JSON:"""
         response += f"<!-- /BOTOES_SALVAR -->\n\n"
 
         response += f"*Ou digite: \"salvar editais\", \"salvar recomendados\", \"salvar edital PE-2026/001\"*\n"
+
+    elif not calcular_score and len(editais_com_score) > 0:
+        # Busca SEM score - oferecer salvar todos
+        response += f"\n---\n"
+        response += f"## 💾 Deseja salvar os editais?\n\n"
+        response += f"Encontrei **{len(editais_com_score)} edital(is)**.\n\n"
+
+        # Botões de ação
+        response += f"<!-- BOTOES_SALVAR -->\n"
+        response += f"[[btn:salvar_todos:💾 Salvar Todos ({len(editais_com_score)})]]\n"
+        response += f"<!-- /BOTOES_SALVAR -->\n\n"
+
+        response += f"*Ou digite: \"salvar editais\", \"salvar todos\", \"salvar edital [NÚMERO]\"*\n"
 
     # Adicionar editais ao resultado para possível salvamento posterior
     resultado["editais_com_score"] = editais_com_score
@@ -1999,7 +2102,7 @@ def processar_excluir_edital(message: str, user_id: str):
     Processa ação: Excluir edital(is).
     Identifica editais por número, ID ou palavras-chave na mensagem.
     """
-    from backend.tools import tool_excluir_edital, tool_excluir_editais_multiplos, tool_listar_editais
+    from tools import tool_excluir_edital, tool_excluir_editais_multiplos, tool_listar_editais
 
     msg_lower = message.lower()
 
@@ -2061,7 +2164,7 @@ def processar_excluir_produto(message: str, user_id: str):
     Processa ação: Excluir produto.
     Identifica produto por nome ou ID na mensagem.
     """
-    from backend.tools import tool_excluir_produto, tool_listar_produtos
+    from tools import tool_excluir_produto, tool_listar_produtos
 
     msg_lower = message.lower()
 
@@ -2126,7 +2229,7 @@ def processar_atualizar_edital(message: str, user_id: str):
     Processa ação: Atualizar/Editar edital.
     Usa IA para extrair o que o usuário quer alterar.
     """
-    from backend.tools import tool_atualizar_edital, tool_listar_editais
+    from tools import tool_atualizar_edital, tool_listar_editais
 
     # Listar editais para identificar qual atualizar
     editais_resultado = tool_listar_editais(user_id)
@@ -2156,10 +2259,12 @@ def processar_atualizar_edital(message: str, user_id: str):
 
 Mensagem: "{message}"
 
-Campos possíveis: numero, orgao, objeto, modalidade, status, valor_referencia, data_abertura
+Campos possíveis: numero, orgao, objeto, modalidade, status, valor_referencia, data_abertura, url
 
 Status possíveis: novo, analisando, participar, nao_participar, proposta_enviada, ganho, perdido, cancelado
 Modalidades: pregao_eletronico, pregao_presencial, concorrencia, tomada_precos, convite, dispensa, inexigibilidade
+
+IMPORTANTE: Se a mensagem contém uma URL (http:// ou https://), extraia como campo "url".
 
 Retorne JSON com apenas os campos a alterar:
 {{"campo1": "novo_valor", "campo2": "novo_valor"}}
@@ -2188,10 +2293,12 @@ Dados atuais:
 - **Órgão:** {edital_a_editar.get('orgao')}
 - **Status:** {edital_a_editar.get('status')}
 - **Modalidade:** {edital_a_editar.get('modalidade')}
+- **URL:** {edital_a_editar.get('url') or 'Não cadastrada'}
 
 Por favor, especifique o que deseja alterar. Exemplos:
 - "alterar status para participar"
 - "mudar órgão para Prefeitura de SP"
+- "atualizar URL para https://exemplo.com/edital.pdf"
 """
         return response, {"success": False, "edital": edital_a_editar}
 
@@ -2222,7 +2329,7 @@ def processar_atualizar_produto(message: str, user_id: str):
     Processa ação: Atualizar/Editar produto.
     Usa IA para extrair o que o usuário quer alterar.
     """
-    from backend.tools import tool_atualizar_produto, tool_listar_produtos
+    from tools import tool_atualizar_produto, tool_listar_produtos
 
     # Listar produtos para identificar qual atualizar
     produtos_resultado = tool_listar_produtos(user_id)
@@ -2649,18 +2756,33 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
     # - "salvar recomendados" ou "salvar editais recomendados" → PARTICIPAR + AVALIAR
     # - "salvar para participar" ou "salvar participar" → só PARTICIPAR
     # - "salvar todos" → todos os editais
-    salvar_tipo = "recomendados"  # padrão
-    if "todos" in msg_lower:
+    # - "salvar edital NUMERO" → edital específico
+
+    # Primeiro verificar se tem número de edital específico na mensagem
+    numero_especifico = None
+    numero_match = re.search(r'edital\s+(\S+)', msg_lower)
+    if numero_match:
+        numero_especifico = numero_match.group(1).upper()
+        # Limpar caracteres especiais do número
+        numero_especifico = numero_especifico.strip('.,;:')
+
+    # Determinar tipo de salvamento
+    if numero_especifico:
+        salvar_tipo = "especifico"
+    elif "todos" in msg_lower:
         salvar_tipo = "todos"
     elif "participar" in msg_lower:
         salvar_tipo = "participar"
     elif "recomendados" in msg_lower or "recomendado" in msg_lower:
         salvar_tipo = "recomendados"
+    else:
+        salvar_tipo = "todos"  # Padrão para busca sem score
 
     # Buscar última mensagem de busca no histórico (com editais salvos em sources_json)
+    # Aceita tanto buscar_editais (com score) quanto buscar_editais_simples (sem score)
     ultima_busca = db.query(Message).filter(
         Message.session_id == session_id,
-        Message.action_type == "buscar_editais",
+        Message.action_type.in_(["buscar_editais", "buscar_editais_simples"]),
         Message.role == "assistant"
     ).order_by(Message.created_at.desc()).first()
 
@@ -2709,7 +2831,24 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
     print(f"[SALVAR] editais_participar: {len(editais_participar)}")
     print(f"[SALVAR] editais_recomendados: {len(editais_recomendados)}")
 
-    if salvar_tipo == "todos":
+    if salvar_tipo == "especifico" and numero_especifico:
+        # Salvar edital específico pelo número
+        print(f"[SALVAR] Buscando edital específico: {numero_especifico}")
+        for ed in editais_com_score:
+            numero_edital = ed.get("numero", "").upper()
+            # Tentar match exato ou parcial
+            if numero_especifico in numero_edital or numero_edital in numero_especifico:
+                editais_para_salvar.append(ed)
+                print(f"[SALVAR] Encontrado edital: {numero_edital}")
+                break
+            # Tentar match só com números
+            nums_busca = re.sub(r'[^\d]', '', numero_especifico)
+            nums_edital = re.sub(r'[^\d]', '', numero_edital)
+            if nums_busca and nums_edital and (nums_busca in nums_edital or nums_edital in nums_busca):
+                editais_para_salvar.append(ed)
+                print(f"[SALVAR] Encontrado edital (match numérico): {numero_edital}")
+                break
+    elif salvar_tipo == "todos":
         # Salvar TODOS os editais encontrados
         editais_para_salvar = editais_com_score
     elif salvar_tipo == "participar":
@@ -2723,18 +2862,12 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
         # Salvar PARTICIPAR + AVALIAR
         editais_para_salvar = editais_recomendados
         if not editais_para_salvar:
-            # Fallback: pegar os com score >= 50
+            # Fallback: pegar os com score >= 50 ou todos se busca foi sem score
             editais_para_salvar = [e for e in editais_com_score if e.get("score_tecnico", 0) >= 50]
-            print(f"[SALVAR] Fallback recomendados: {len(editais_para_salvar)} com score >= 50")
-    else:
-        # Tentar extrair número específico do edital
-        numero_match = re.search(r'edital\s+(\S+)', msg_lower)
-        if numero_match:
-            numero_busca = numero_match.group(1).upper()
-            for ed in editais_com_score:
-                if numero_busca in ed.get("numero", "").upper():
-                    editais_para_salvar.append(ed)
-                    break
+            if not editais_para_salvar:
+                # Se ainda não tem (busca sem score), pegar todos
+                editais_para_salvar = editais_com_score
+            print(f"[SALVAR] Fallback recomendados: {len(editais_para_salvar)} editais")
 
     print(f"[SALVAR] editais_para_salvar: {len(editais_para_salvar)}")
 
@@ -3941,8 +4074,8 @@ def processar_cadastrar_edital(message: str, user_id: str, intencao_resultado: d
     - Data de abertura (opcional)
     - UF (opcional)
     """
-    from backend.models import Edital
-    from backend.database import SessionLocal
+    from models import Edital
+    from database import SessionLocal
     import re
     from datetime import datetime
 
@@ -4174,19 +4307,40 @@ def processar_listar_alertas(message: str, user_id: str):
     )
 
     if resultado.get("success"):
-        alertas = resultado.get("alertas", [])
+        editais_com_alertas = resultado.get("editais", [])
+        total_alertas = resultado.get("total_alertas", 0)
 
-        if not alertas:
+        if total_alertas == 0:
             return "📭 Você não tem alertas configurados.\n\nPara criar alertas, diga algo como:\n*\"Configure alertas para o PE 123/2024 com 1 dia e 1 hora de antecedência\"*"
 
-        msg_resp = f"🔔 **Seus Alertas** ({len(alertas)} encontrados)\n\n"
+        msg_resp = f"🔔 **Seus Alertas** ({total_alertas} encontrados)\n\n"
 
-        for a in alertas:
-            status_icon = {"agendado": "⏳", "disparado": "✅", "lido": "👁️", "cancelado": "❌"}.get(a['status'], "📌")
-            msg_resp += f"{status_icon} **{a['edital_numero']}** - {a['tipo'].title()}\n"
-            msg_resp += f"   📅 Disparo: {a['data_disparo']}\n"
-            if a.get('tempo_antes'):
-                msg_resp += f"   ⏰ {a['tempo_antes']} antes\n"
+        for ed in editais_com_alertas:
+            edital_info = ed.get('edital', {})
+            alertas = ed.get('alertas', [])
+            numero = edital_info.get('numero', 'N/A')
+            orgao = edital_info.get('orgao', '')[:40]
+
+            msg_resp += f"📋 **{numero}** - {orgao}\n"
+
+            for a in alertas:
+                status_icon = {"agendado": "⏳", "disparado": "✅", "lido": "👁️", "cancelado": "❌"}.get(a.get('status', ''), "📌")
+                tipo = a.get('tipo', 'abertura').title()
+                data_disparo = a.get('data_disparo', 'N/A')
+                # Formatar data ISO para legível
+                if data_disparo and data_disparo != 'N/A':
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(data_disparo)
+                        data_disparo = dt.strftime("%d/%m/%Y %H:%M")
+                    except:
+                        pass
+                tempo_antes = a.get('tempo_antes', '')
+
+                msg_resp += f"   {status_icon} {tipo} - 📅 {data_disparo}\n"
+                if tempo_antes:
+                    msg_resp += f"      ⏰ {tempo_antes} antes da abertura\n"
+
             msg_resp += "\n"
 
         return msg_resp
@@ -4211,16 +4365,17 @@ def processar_dashboard_prazos(message: str, user_id: str):
 
     if resultado.get("success"):
         editais = resultado.get("editais", [])
-        resumo = resultado.get("resumo", {})
+        stats = resultado.get("estatisticas", {})
 
         msg_resp = f"📊 **Dashboard de Prazos** (próximos {dias} dias)\n\n"
 
-        # Resumo
+        # Resumo (estatísticas: total, criticos, altos, medios, normais)
         msg_resp += "### 📈 Resumo\n"
-        msg_resp += f"- Total: **{resumo.get('total', 0)}** editais\n"
-        msg_resp += f"- 🔴 Urgentes (< 24h): **{resumo.get('urgentes', 0)}**\n"
-        msg_resp += f"- 🟡 Próximos (1-3 dias): **{resumo.get('proximos', 0)}**\n"
-        msg_resp += f"- 🟢 Agendados (> 3 dias): **{resumo.get('agendados', 0)}**\n\n"
+        msg_resp += f"- Total: **{stats.get('total', 0)}** editais\n"
+        msg_resp += f"- 🔴 Críticos (< 1 dia): **{stats.get('criticos', 0)}**\n"
+        msg_resp += f"- 🟠 Altos (1-3 dias): **{stats.get('altos', 0)}**\n"
+        msg_resp += f"- 🟡 Médios (3-7 dias): **{stats.get('medios', 0)}**\n"
+        msg_resp += f"- 🟢 Normais (> 7 dias): **{stats.get('normais', 0)}**\n\n"
 
         if not editais:
             msg_resp += "ℹ️ Nenhum edital com prazo neste período.\n"
@@ -4228,20 +4383,23 @@ def processar_dashboard_prazos(message: str, user_id: str):
             msg_resp += "### 📋 Editais por Prazo\n\n"
 
             for e in editais[:10]:  # Limitar a 10
-                # Ícone baseado na urgência
-                horas = e.get('horas_restantes', 999)
-                if horas < 24:
-                    icon = "🔴"
-                elif horas < 72:
-                    icon = "🟡"
-                else:
-                    icon = "🟢"
+                # Estrutura: edital{id,numero,orgao,...}, datas{...}, tempo_restante{texto,dias,horas}, urgencia, emoji, alertas_configurados
+                edital_info = e.get('edital', {})
+                datas = e.get('datas', {})
+                tempo = e.get('tempo_restante', {})
+                icon = e.get('emoji', '🟢')
 
-                msg_resp += f"{icon} **{e['numero']}** - {e['orgao'][:40]}\n"
-                msg_resp += f"   📅 Abertura: {e['data_abertura']}\n"
-                msg_resp += f"   ⏱️ **{e['tempo_restante']}**\n"
-                if e.get('alertas_configurados'):
-                    msg_resp += f"   🔔 Alertas: {e['alertas_configurados']}\n"
+                numero = edital_info.get('numero', 'N/A')
+                orgao = edital_info.get('orgao', '')[:40]
+                data_abertura = datas.get('abertura_formatada', 'N/A')
+                tempo_texto = tempo.get('texto', 'N/A')
+                alertas_qtd = e.get('alertas_configurados', 0)
+
+                msg_resp += f"{icon} **{numero}** - {orgao}\n"
+                msg_resp += f"   📅 Abertura: {data_abertura}\n"
+                msg_resp += f"   ⏱️ **{tempo_texto}**\n"
+                if alertas_qtd:
+                    msg_resp += f"   🔔 Alertas: {alertas_qtd}\n"
                 msg_resp += "\n"
 
         return msg_resp
@@ -4644,6 +4802,734 @@ def processar_cancelar_alerta(message: str, user_id: str):
         return msg_resp
     else:
         return f"❌ {resultado.get('error', 'Erro ao cancelar alertas')}"
+
+
+# =============================================================================
+# ANÁLISE DE EDITAIS (Resumir e Perguntar)
+# =============================================================================
+
+def processar_resumir_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    """
+    Processa ação: Resumir um edital cadastrado no sistema.
+    Gera um resumo executivo com principais informações.
+
+    Returns: (response_text, resultado_dict)
+    """
+    import re
+    db = get_db()
+
+    try:
+        # Extrair número do edital da mensagem
+        edital_numero = None
+        if intencao_resultado and intencao_resultado.get("edital"):
+            edital_numero = intencao_resultado.get("edital")
+        else:
+            # Tentar extrair padrões como PE-001/2026, PE001/2026, 001/2026
+            padrao = re.search(r'(PE[-\s]?\d+[/\-]\d{4}|\d+[/\-]\d{4})', message, re.IGNORECASE)
+            if padrao:
+                edital_numero = padrao.group(1)
+
+        if not edital_numero:
+            return (
+                "## ❌ Número do Edital Não Informado\n\n"
+                "Por favor, informe o número do edital que deseja resumir.\n\n"
+                "**Exemplos:**\n"
+                "- \"Resuma o edital PE-001/2026\"\n"
+                "- \"Resumo do edital 123/2025\"\n"
+                "- \"Faça um resumo do edital PE-041/2026\"",
+                {"error": "Número do edital não informado"}
+            )
+
+        # Buscar edital no banco
+        edital = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
+        ).first()
+
+        if not edital:
+            return (
+                f"## ❌ Edital Não Encontrado\n\n"
+                f"O edital **{edital_numero}** não foi encontrado no seu cadastro.\n\n"
+                "**Dica:** Use \"Liste meus editais\" para ver os editais cadastrados.",
+                {"error": f"Edital {edital_numero} não encontrado"}
+            )
+
+        # Buscar requisitos do edital
+        from models import EditalRequisito
+        requisitos = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital.id
+        ).all()
+
+        # Montar contexto para o resumo
+        contexto = f"""
+EDITAL: {edital.numero}
+ÓRGÃO: {edital.orgao or 'Não informado'}
+OBJETO: {edital.objeto or 'Não informado'}
+MODALIDADE: {edital.modalidade or 'Não informada'}
+VALOR DE REFERÊNCIA: {f'R$ {edital.valor_referencia:,.2f}' if edital.valor_referencia else 'Não informado'}
+DATA DE ABERTURA: {edital.data_abertura.strftime('%d/%m/%Y %H:%M') if edital.data_abertura else 'Não informada'}
+DATA DE PUBLICAÇÃO: {edital.data_publicacao.strftime('%d/%m/%Y') if edital.data_publicacao else 'Não informada'}
+UF: {edital.uf or 'Não informada'}
+CIDADE: {edital.cidade or 'Não informada'}
+STATUS: {edital.status or 'novo'}
+
+REQUISITOS ({len(requisitos)} encontrados):
+"""
+        for req in requisitos[:20]:  # Limitar a 20 requisitos
+            obrig = "OBRIGATÓRIO" if req.obrigatorio else "Desejável"
+            contexto += f"- [{obrig}] {req.descricao[:200]}\n"
+
+        if len(requisitos) > 20:
+            contexto += f"\n... e mais {len(requisitos) - 20} requisitos"
+
+        # Chamar LLM para gerar resumo
+        prompt_resumo = f"""Faça um RESUMO EXECUTIVO do seguinte edital de licitação.
+
+O resumo deve ser objetivo e incluir:
+1. **Objeto**: O que está sendo licitado (em 1-2 frases)
+2. **Valor**: Valor de referência e observações
+3. **Prazos**: Data de abertura e prazos importantes
+4. **Principais Requisitos**: Os 3-5 requisitos mais importantes/restritivos
+5. **Alertas**: Pontos de atenção para participação
+
+DADOS DO EDITAL:
+{contexto}
+
+Formate a resposta em Markdown com emojis para facilitar a leitura."""
+
+        messages = [{"role": "user", "content": prompt_resumo}]
+
+        resumo = call_deepseek(messages, max_tokens=2000)
+
+        response_text = f"""## 📋 Resumo do Edital {edital.numero}
+
+{resumo}
+
+---
+📊 **Dados do Sistema:**
+- Status: {edital.status or 'novo'}
+- Requisitos cadastrados: {len(requisitos)}
+- URL: {edital.url or 'Não disponível'}
+"""
+
+        return response_text, {"success": True, "edital": edital.numero, "requisitos": len(requisitos)}
+
+    except Exception as e:
+        return f"## ❌ Erro ao Resumir Edital\n\n{str(e)}", {"error": str(e)}
+    finally:
+        db.close()
+
+
+def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    """
+    Processa ação: Responder dúvidas sobre um edital específico.
+
+    Fluxo:
+    1. Tenta responder com dados cadastrados no banco
+    2. Se LLM indicar que não encontrou a informação, verifica se tem PDF
+    3. Se tiver PDF, lê e responde
+    4. Se não tiver PDF, pede para o usuário fazer upload
+
+    Returns: (response_text, resultado_dict)
+    """
+    import re
+    import os
+    db = get_db()
+
+    try:
+        # Extrair número do edital da mensagem
+        edital_numero = None
+        if intencao_resultado and intencao_resultado.get("edital"):
+            edital_numero = intencao_resultado.get("edital")
+        else:
+            # Tentar extrair padrões como PE-001/2026, PE001/2026, 001/2026
+            padrao = re.search(r'(PE[-\s]?\d+[/\-]\d{4}|\d+[/\-]\d{4})', message, re.IGNORECASE)
+            if padrao:
+                edital_numero = padrao.group(1)
+
+        if not edital_numero:
+            return (
+                "## ❌ Número do Edital Não Informado\n\n"
+                "Por favor, informe o número do edital sobre o qual deseja perguntar.\n\n"
+                "**Exemplos:**\n"
+                "- \"Qual o prazo de entrega do edital PE-001/2026?\"\n"
+                "- \"O edital PE-001/2026 exige garantia?\"\n"
+                "- \"Quais documentos são exigidos no PE-041/2026?\"",
+                {"error": "Número do edital não informado"}
+            )
+
+        # Buscar edital no banco
+        edital = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
+        ).first()
+
+        if not edital:
+            return (
+                f"## ❌ Edital Não Encontrado\n\n"
+                f"O edital **{edital_numero}** não foi encontrado no seu cadastro.\n\n"
+                "**Dica:** Use \"Liste meus editais\" para ver os editais cadastrados.\n"
+                f"Ou busque o edital: \"Busque o edital {edital_numero} no PNCP\"",
+                {"error": f"Edital {edital_numero} não encontrado"}
+            )
+
+        # Buscar requisitos do edital
+        from models import EditalRequisito, EditalDocumento
+        requisitos = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital.id
+        ).all()
+
+        # Buscar documentos PDF do edital
+        documentos = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital.id
+        ).all()
+
+        # Montar contexto do edital com dados cadastrados
+        contexto_banco = f"""
+EDITAL: {edital.numero}
+ÓRGÃO: {edital.orgao or 'Não informado'}
+OBJETO: {edital.objeto or 'Não informado'}
+MODALIDADE: {edital.modalidade or 'Não informada'}
+VALOR DE REFERÊNCIA: {f'R$ {edital.valor_referencia:,.2f}' if edital.valor_referencia else 'Não informado'}
+DATA DE ABERTURA: {edital.data_abertura.strftime('%d/%m/%Y %H:%M') if edital.data_abertura else 'Não informada'}
+DATA DE PUBLICAÇÃO: {edital.data_publicacao.strftime('%d/%m/%Y') if edital.data_publicacao else 'Não informada'}
+UF: {edital.uf or 'Não informada'}
+CIDADE: {edital.cidade or 'Não informada'}
+STATUS: {edital.status or 'novo'}
+
+REQUISITOS DO EDITAL ({len(requisitos)} requisitos):
+"""
+        for req in requisitos:
+            obrig = "[OBRIGATÓRIO]" if req.obrigatorio else "[Desejável]"
+            tipo = f"({req.tipo})" if req.tipo else ""
+            contexto_banco += f"- {obrig} {tipo} {req.descricao}\n"
+
+        if not requisitos:
+            contexto_banco += "- Nenhum requisito cadastrado.\n"
+
+        # PASSO 1: Tentar responder com dados do banco
+        prompt_banco = f"""Você é um assistente especializado em licitações públicas.
+
+DADOS CADASTRADOS DO EDITAL:
+{contexto_banco}
+
+PERGUNTA DO USUÁRIO:
+{message}
+
+INSTRUÇÕES IMPORTANTES:
+1. Responda a pergunta usando os dados acima
+2. Para perguntas amplas como "tudo sobre", "informações", "detalhes", "resumo": apresente TODOS os dados disponíveis de forma organizada
+3. SOMENTE responda "INFORMACAO_NAO_ENCONTRADA_NO_CADASTRO" se a pergunta for sobre algo MUITO ESPECÍFICO que realmente não está nos dados (ex: cláusula específica, anexo, item de planilha)
+4. Se há dados relevantes para responder, mesmo que parcialmente, responda com o que tem
+5. Seja objetivo e organize a resposta em seções quando apropriado
+
+Responda em Markdown (ou a frase especial APENAS se realmente não houver dados relevantes)."""
+
+        messages = [{"role": "user", "content": prompt_banco}]
+        resposta_banco = call_deepseek(messages, max_tokens=2000)
+
+        # Verificar se encontrou a informação no banco
+        if "INFORMACAO_NAO_ENCONTRADA_NO_CADASTRO" not in resposta_banco.upper():
+            # Encontrou no banco - retornar resposta
+            response_text = f"""## 💬 Resposta sobre o Edital {edital.numero}
+
+{resposta_banco}
+
+---
+📋 **Edital:** {edital.numero}
+🏢 **Órgão:** {edital.orgao or 'N/I'}
+📊 **Fonte:** Dados cadastrados no sistema
+"""
+            return response_text, {"success": True, "edital": edital.numero, "fonte": "banco"}
+
+        # PASSO 2: Não encontrou no banco - verificar se tem PDF
+        print(f"[PERGUNTAR_EDITAL] Informação não encontrada no banco. Verificando PDFs...")
+
+        # Verificar se há documento com texto extraído
+        doc_com_texto = None
+        for doc in documentos:
+            if doc.texto_extraido and len(doc.texto_extraido) > 100:
+                doc_com_texto = doc
+                break
+            # Tentar ler do arquivo se não tiver texto extraído
+            elif doc.path_arquivo and os.path.exists(doc.path_arquivo):
+                try:
+                    from tools import tool_processar_upload
+                    texto = tool_processar_upload(doc.path_arquivo)
+                    if texto and len(texto) > 100:
+                        # Salvar texto extraído para próximas consultas
+                        doc.texto_extraido = texto[:50000]  # Limitar tamanho
+                        doc.processado = True
+                        db.commit()
+                        doc_com_texto = doc
+                        break
+                except Exception as e:
+                    print(f"[PERGUNTAR_EDITAL] Erro ao ler PDF {doc.nome_arquivo}: {e}")
+
+        if doc_com_texto and doc_com_texto.texto_extraido:
+            # PASSO 3: Tem PDF - ler e responder
+            print(f"[PERGUNTAR_EDITAL] Lendo PDF: {doc_com_texto.nome_arquivo}")
+
+            texto_pdf = doc_com_texto.texto_extraido[:30000]  # Limitar contexto
+
+            prompt_pdf = f"""Você é um assistente especializado em licitações públicas.
+
+CONTEÚDO DO EDITAL (extraído do PDF "{doc_com_texto.nome_arquivo}"):
+{texto_pdf}
+
+PERGUNTA DO USUÁRIO:
+{message}
+
+INSTRUÇÕES:
+1. Responda a pergunta com base no conteúdo do edital acima
+2. Cite trechos relevantes do edital quando possível
+3. Se mesmo assim não encontrar a informação, diga claramente
+4. Seja objetivo e direto
+
+Responda em Markdown."""
+
+            messages_pdf = [{"role": "user", "content": prompt_pdf}]
+            resposta_pdf = call_deepseek(messages_pdf, max_tokens=3000)
+
+            response_text = f"""## 💬 Resposta sobre o Edital {edital.numero}
+
+{resposta_pdf}
+
+---
+📋 **Edital:** {edital.numero}
+🏢 **Órgão:** {edital.orgao or 'N/I'}
+📄 **Fonte:** PDF do edital ({doc_com_texto.nome_arquivo})
+"""
+            return response_text, {"success": True, "edital": edital.numero, "fonte": "pdf", "arquivo": doc_com_texto.nome_arquivo}
+
+        # PASSO 4: Não tem PDF - pedir upload
+        print(f"[PERGUNTAR_EDITAL] Nenhum PDF encontrado para o edital {edital.numero}")
+
+        response_text = f"""## ⚠️ Informação Não Disponível
+
+A informação solicitada **não foi encontrada** nos dados cadastrados do edital **{edital.numero}**.
+
+Para responder sua pergunta, preciso do **PDF do edital**.
+
+### 📤 Como fazer:
+1. Faça upload do PDF do edital (arraste ou clique no 📎)
+2. Junto com o arquivo, envie sua pergunta novamente
+
+**Exemplo:** Envie o PDF e escreva:
+> "Qual o prazo de entrega exigido neste edital?"
+
+---
+📋 **Edital:** {edital.numero}
+🏢 **Órgão:** {edital.orgao or 'N/I'}
+📊 **Dados no sistema:** {len(requisitos)} requisitos cadastrados
+📄 **PDFs salvos:** Nenhum
+"""
+        return response_text, {
+            "success": False,
+            "edital": edital.numero,
+            "precisa_upload": True,
+            "mensagem": "PDF do edital necessário para responder esta pergunta"
+        }
+
+    except Exception as e:
+        return f"## ❌ Erro ao Processar Pergunta\n\n{str(e)}", {"error": str(e)}
+    finally:
+        db.close()
+
+
+def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    """
+    Processa ação: Baixar o PDF de um edital cadastrado.
+
+    Fluxo:
+    1. Identifica o edital pelo número
+    2. Verifica se já tem PDF salvo
+    3. Se não tem, usa a URL cadastrada para baixar
+    4. Extrai texto do PDF e salva na tabela editais_documentos
+
+    Returns: (response_text, resultado_dict)
+    """
+    import re
+    import os
+    import requests
+    from datetime import datetime
+    db = get_db()
+
+    try:
+        # Extrair número do edital da mensagem
+        edital_numero = None
+        if intencao_resultado and intencao_resultado.get("edital"):
+            edital_numero = intencao_resultado.get("edital")
+        else:
+            # Tentar extrair padrões como PE-001/2026, PE001/2026, 001/2026
+            padrao = re.search(r'(PE[-\s]?\d+[/\-]\d{4}|\d+[/\-]\d{4})', message, re.IGNORECASE)
+            if padrao:
+                edital_numero = padrao.group(1)
+
+        if not edital_numero:
+            return (
+                "## ❌ Número do Edital Não Informado\n\n"
+                "Por favor, informe o número do edital que deseja baixar.\n\n"
+                "**Exemplos:**\n"
+                "- \"Baixe o PDF do edital PE-001/2026\"\n"
+                "- \"Faça download do edital 90006/2026\"\n"
+                "- \"Baixar edital PE-041/2026\"",
+                {"error": "Número do edital não informado"}
+            )
+
+        # Buscar edital no banco
+        edital = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
+        ).first()
+
+        if not edital:
+            return (
+                f"## ❌ Edital Não Encontrado\n\n"
+                f"O edital **{edital_numero}** não foi encontrado no seu cadastro.\n\n"
+                "**Dica:** Use \"Liste meus editais\" para ver os editais cadastrados.",
+                {"error": f"Edital {edital_numero} não encontrado"}
+            )
+
+        # Verificar se já tem documento salvo
+        from models import EditalDocumento
+        doc_existente = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital.id
+        ).first()
+
+        # Verificar se existe registro E se o arquivo físico ainda existe
+        arquivo_existe = doc_existente and doc_existente.path_arquivo and os.path.exists(doc_existente.path_arquivo)
+
+        if doc_existente and doc_existente.texto_extraido and len(doc_existente.texto_extraido) > 100 and arquivo_existe:
+            return (
+                f"## ✅ PDF Já Disponível\n\n"
+                f"O edital **{edital.numero}** já possui PDF baixado e processado.\n\n"
+                f"📄 **Arquivo:** {doc_existente.nome_arquivo}\n"
+                f"📝 **Texto extraído:** {len(doc_existente.texto_extraido):,} caracteres\n\n"
+                "Você pode fazer perguntas sobre o edital:\n"
+                f"- \"Quais itens o edital {edital.numero} comporta?\"\n"
+                f"- \"Qual o prazo de entrega do edital {edital.numero}?\"",
+                {"success": True, "edital": edital.numero, "ja_existia": True, "arquivo": doc_existente.nome_arquivo, "edital_id": edital.id}
+            )
+
+        # Se o registro existe mas arquivo foi apagado, deletar o registro para recriar
+        if doc_existente and not arquivo_existe:
+            db.delete(doc_existente)
+            db.commit()
+            doc_existente = None  # Permitir re-download
+
+        # Verificar se tem URL do edital
+        if not edital.url:
+            return (
+                f"## ⚠️ URL do Edital Não Cadastrada\n\n"
+                f"O edital **{edital.numero}** não possui URL cadastrada para download.\n\n"
+                "**Opções:**\n"
+                f"1. Atualize o edital com a URL: \"Atualize o edital {edital.numero} com URL: [URL_DO_PDF]\"\n"
+                "2. Faça upload manual do PDF (arraste o arquivo para o chat)",
+                {"error": "URL não cadastrada", "edital": edital.numero}
+            )
+
+        # Tentar baixar o PDF
+        response_text = f"## ⏳ Baixando PDF do Edital {edital.numero}...\n\n"
+        response_text += f"🔗 **URL:** {edital.url}\n\n"
+
+        try:
+            # Baixar o arquivo
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(edital.url, headers=headers, timeout=60, allow_redirects=True)
+            response.raise_for_status()
+
+            # Determinar nome do arquivo
+            content_type = response.headers.get('Content-Type', '')
+            filename = f"edital_{edital.numero.replace('/', '_').replace('-', '_')}"
+
+            if 'pdf' in content_type.lower() or edital.url.lower().endswith('.pdf'):
+                filename += ".pdf"
+            elif 'html' in content_type.lower():
+                # É uma página HTML, não PDF direto - tentar encontrar link do PDF
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, 'html.parser')
+
+                # Procurar links de PDF na página
+                pdf_links = []
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if '.pdf' in href.lower():
+                        # Converter para URL absoluta se necessário
+                        if href.startswith('/'):
+                            from urllib.parse import urlparse
+                            parsed = urlparse(edital.url)
+                            href = f"{parsed.scheme}://{parsed.netloc}{href}"
+                        elif not href.startswith('http'):
+                            href = edital.url.rsplit('/', 1)[0] + '/' + href
+                        pdf_links.append(href)
+
+                if pdf_links:
+                    # Verificar se a URL cadastrada parece ser genérica (página inicial de portal)
+                    url_generica = any(x in edital.url.lower() for x in [
+                        '/pt-br', '/home', 'compras.gov', 'pncp.gov', 'bec.sp.gov'
+                    ]) and edital.url.count('/') <= 4
+
+                    if url_generica:
+                        # URL é genérica demais - pedir URL específica
+                        return (
+                            f"## ⚠️ URL Genérica Cadastrada\n\n"
+                            f"A URL cadastrada para o edital **{edital.numero}** parece ser a página inicial do portal:\n"
+                            f"`{edital.url}`\n\n"
+                            "Essa URL não aponta diretamente para o edital.\n\n"
+                            "**O que fazer:**\n"
+                            f"1. Acesse o portal e busque pelo edital {edital.numero}\n"
+                            "2. Copie a URL da página específica do edital (ou do PDF)\n"
+                            "3. Atualize com a URL correta:\n"
+                            f"   `Atualize o edital {edital.numero} com URL: [URL_DO_EDITAL]`\n\n"
+                            "Ou faça upload manual do PDF.",
+                            {"error": "URL genérica", "edital": edital.numero, "url_atual": edital.url}
+                        )
+
+                    # Filtrar links relevantes ao edital
+                    # Extrair apenas números do edital para comparação
+                    numero_limpo = re.sub(r'[^\d]', '', edital.numero)
+
+                    # Prioridade 1: Links que contenham o número do edital
+                    links_com_numero = [l for l in pdf_links if numero_limpo in l]
+
+                    # Prioridade 2: Links com palavras-chave do edital
+                    palavras_edital = ['edital', 'pregao', 'pregão', 'pe-', 'pe_', 'licitacao', 'licitação',
+                                       'termo_referencia', 'termo-referencia', 'tr_', 'tr-']
+                    links_com_palavra = [l for l in pdf_links if any(p in l.lower() for p in palavras_edital)]
+
+                    # Prioridade 3: Excluir links claramente não relacionados
+                    palavras_excluir = ['politica', 'policy', 'manual', 'regulamento', 'instrucao', 'normativa',
+                                        'template', 'modelo', 'anexo_unico', 'formulario', 'cadastro']
+                    links_filtrados = [l for l in pdf_links if not any(p in l.lower() for p in palavras_excluir)]
+
+                    # Escolher o melhor link
+                    pdf_url = None
+                    if links_com_numero:
+                        pdf_url = links_com_numero[0]
+                        response_text += f"🔍 **URL original era HTML.** Encontrado PDF com número do edital:\n`{pdf_url}`\n\n"
+                    elif links_com_palavra:
+                        pdf_url = links_com_palavra[0]
+                        response_text += f"🔍 **URL original era HTML.** Encontrado PDF de edital:\n`{pdf_url}`\n\n"
+                    elif links_filtrados:
+                        pdf_url = links_filtrados[0]
+                        response_text += f"🔍 **URL original era HTML.** Encontrado possível PDF:\n`{pdf_url}`\n\n"
+                    else:
+                        # Todos os links parecem não relacionados - listar para o usuário
+                        links_lista = "\n".join([f"- `{l}`" for l in pdf_links[:5]])
+                        return (
+                            f"## ⚠️ Nenhum PDF do Edital Encontrado\n\n"
+                            f"A página do edital **{edital.numero}** contém PDFs, mas nenhum parece ser o edital:\n\n"
+                            f"{links_lista}\n\n"
+                            "**O que fazer:**\n"
+                            "1. Acesse a URL no navegador e encontre o PDF correto\n"
+                            "2. Atualize com a URL direta do PDF:\n"
+                            f"   `Atualize o edital {edital.numero} com URL: [URL_DO_PDF]`\n\n"
+                            "Ou faça upload manual do PDF.",
+                            {"error": "PDF não identificado", "edital": edital.numero, "links_encontrados": pdf_links[:5]}
+                        )
+
+                    # Baixar o PDF encontrado
+                    response_pdf = requests.get(pdf_url, headers=headers, timeout=60, allow_redirects=True)
+                    response_pdf.raise_for_status()
+                    response = response_pdf  # Substituir o response pelo PDF
+                    filename += ".pdf"
+                else:
+                    # Não encontrou PDF - informar usuário
+                    return (
+                        f"## ⚠️ URL Não Contém PDF Direto\n\n"
+                        f"A URL cadastrada para o edital **{edital.numero}** aponta para uma página HTML, "
+                        f"não para o arquivo PDF:\n`{edital.url}`\n\n"
+                        "**O que fazer:**\n"
+                        "1. Acesse a URL acima no navegador\n"
+                        "2. Encontre o link do PDF do edital\n"
+                        "3. Atualize com a URL correta:\n"
+                        f"   `Atualize o edital {edital.numero} com URL: [URL_DO_PDF]`\n\n"
+                        "Ou faça upload manual do PDF (arraste o arquivo para o chat).",
+                        {"error": "URL não é PDF direto", "edital": edital.numero, "url_atual": edital.url}
+                    )
+            else:
+                filename += ".pdf"
+
+            # Salvar arquivo
+            upload_dir = os.path.join(os.path.dirname(__file__), 'uploads', user_id, 'editais')
+            os.makedirs(upload_dir, exist_ok=True)
+            filepath = os.path.join(upload_dir, filename)
+
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+
+            filesize = len(response.content)
+            response_text += f"✅ **Download concluído:** {filename} ({filesize/1024:.1f} KB)\n\n"
+
+            # Extrair texto do PDF
+            texto_extraido = ""
+            try:
+                if filename.endswith('.pdf'):
+                    from PyPDF2 import PdfReader
+                    reader = PdfReader(filepath)
+                    for page in reader.pages:
+                        texto_extraido += page.extract_text() or ""
+                elif filename.endswith('.html'):
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    texto_extraido = soup.get_text(separator='\n', strip=True)
+
+                response_text += f"📝 **Texto extraído:** {len(texto_extraido):,} caracteres\n\n"
+            except Exception as e:
+                response_text += f"⚠️ **Aviso:** Não foi possível extrair texto: {str(e)}\n\n"
+
+            # Salvar no banco
+            if doc_existente:
+                doc_existente.path_arquivo = filepath
+                doc_existente.nome_arquivo = filename
+                doc_existente.texto_extraido = texto_extraido[:100000] if texto_extraido else None
+                doc_existente.processado = True
+            else:
+                novo_doc = EditalDocumento(
+                    id=str(uuid.uuid4()),
+                    edital_id=edital.id,
+                    tipo='edital_principal',  # Valores: edital_principal, termo_referencia, anexo, planilha, outro
+                    nome_arquivo=filename,
+                    path_arquivo=filepath,
+                    texto_extraido=texto_extraido[:100000] if texto_extraido else None,
+                    processado=True,
+                    created_at=datetime.now()
+                )
+                db.add(novo_doc)
+
+            db.commit()
+
+            response_text += "## ✅ PDF Salvo com Sucesso!\n\n"
+            response_text += "Agora você pode fazer perguntas sobre o edital:\n"
+            response_text += f"- \"Quais itens o edital {edital.numero} comporta?\"\n"
+            response_text += f"- \"Qual o local de entrega do edital {edital.numero}?\"\n"
+            response_text += f"- \"Me conte tudo sobre o edital {edital.numero}\"\n"
+
+            return response_text, {
+                "success": True,
+                "edital": edital.numero,
+                "arquivo": filename,
+                "tamanho": filesize,
+                "texto_extraido": len(texto_extraido)
+            }
+
+        except requests.exceptions.RequestException as e:
+            return (
+                f"## ❌ Erro ao Baixar PDF\n\n"
+                f"Não foi possível baixar o arquivo da URL:\n`{edital.url}`\n\n"
+                f"**Erro:** {str(e)}\n\n"
+                "**Opções:**\n"
+                "1. Verifique se a URL está correta\n"
+                "2. Tente acessar a URL manualmente e baixar o PDF\n"
+                "3. Faça upload manual do PDF (arraste o arquivo para o chat)",
+                {"error": str(e), "edital": edital.numero}
+            )
+
+    except Exception as e:
+        return f"## ❌ Erro ao Processar Download\n\n{str(e)}", {"error": str(e)}
+    finally:
+        db.close()
+
+
+def processar_atualizar_url_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    """Atualiza a URL de um edital cadastrado"""
+    db = get_db()
+    try:
+        import re
+
+        # Extrair número do edital da mensagem
+        # Padrões: PE-001/2026, 02223/2025, PE001, etc.
+        edital_numero = None
+        if intencao_resultado and intencao_resultado.get("edital"):
+            edital_numero = intencao_resultado["edital"]
+        else:
+            # Tentar extrair da mensagem
+            patterns = [
+                r'edital\s+([A-Za-z]{0,3}[-]?\d+[/]\d{4})',  # edital PE-001/2026 ou 02223/2025
+                r'edital\s+([A-Za-z]{2,3}[-]?\d+)',  # edital PE-001 ou PE001
+                r'([A-Za-z]{2,3}[-]\d+[/]\d{4})',  # PE-001/2026
+                r'(\d{4,}[/]\d{4})',  # 02223/2025
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, message, re.IGNORECASE)
+                if match:
+                    edital_numero = match.group(1)
+                    break
+
+        if not edital_numero:
+            return (
+                "## ⚠️ Número do Edital Não Informado\n\n"
+                "Por favor, informe o número do edital que deseja atualizar.\n\n"
+                "**Formato:**\n"
+                "`Atualize o edital PE-001/2026 com URL: https://exemplo.com/edital.pdf`",
+                {"error": "Número do edital não informado"}
+            )
+
+        # Extrair a nova URL da mensagem
+        url_match = re.search(r'(https?://[^\s<>"]+)', message)
+        if not url_match:
+            return (
+                f"## ⚠️ URL Não Informada\n\n"
+                f"Por favor, informe a nova URL para o edital **{edital_numero}**.\n\n"
+                "**Formato:**\n"
+                f"`Atualize o edital {edital_numero} com URL: https://exemplo.com/edital.pdf`",
+                {"error": "URL não informada", "edital": edital_numero}
+            )
+
+        nova_url = url_match.group(1)
+
+        # Buscar edital no banco
+        editais = db.query(Edital).filter(Edital.user_id == user_id).all()
+
+        # Normalizar número para comparação
+        numero_busca = edital_numero.replace('-', '').replace('/', '').upper()
+
+        edital = None
+        for e in editais:
+            num_edital = e.numero.replace('-', '').replace('/', '').upper()
+            if num_edital == numero_busca or numero_busca in num_edital or num_edital in numero_busca:
+                edital = e
+                break
+
+        if not edital:
+            return (
+                f"## ❌ Edital Não Encontrado\n\n"
+                f"O edital **{edital_numero}** não foi encontrado no seu cadastro.\n\n"
+                "**Dica:** Use \"Liste meus editais\" para ver os editais cadastrados.",
+                {"error": f"Edital {edital_numero} não encontrado"}
+            )
+
+        # Atualizar a URL
+        url_antiga = edital.url
+        edital.url = nova_url
+        db.commit()
+
+        response_text = f"## ✅ URL Atualizada com Sucesso!\n\n"
+        response_text += f"**Edital:** {edital.numero}\n"
+        response_text += f"**Órgão:** {edital.orgao or 'N/A'}\n\n"
+
+        if url_antiga:
+            response_text += f"**URL anterior:** `{url_antiga}`\n"
+        response_text += f"**Nova URL:** `{nova_url}`\n\n"
+
+        response_text += "Agora você pode baixar o PDF:\n"
+        response_text += f"- `Baixe o PDF do edital {edital.numero}`"
+
+        return response_text, {
+            "success": True,
+            "edital": edital.numero,
+            "edital_id": edital.id,
+            "url_antiga": url_antiga,
+            "url_nova": nova_url
+        }
+
+    except Exception as e:
+        return f"## ❌ Erro ao Atualizar URL\n\n{str(e)}", {"error": str(e)}
+    finally:
+        db.close()
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
@@ -5288,6 +6174,98 @@ def get_edital(edital_id):
             return jsonify({"error": "Edital não encontrado"}), 404
 
         return jsonify(edital.to_dict(include_requisitos=True))
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/pdf", methods=["GET"])
+@require_auth
+def download_edital_pdf(edital_id):
+    """Download ou visualização do PDF do edital"""
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        # Buscar edital
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Buscar documento do edital
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.tipo == 'edital_principal'
+        ).first()
+
+        if not doc or not doc.path_arquivo:
+            return jsonify({"error": "PDF não disponível para este edital"}), 404
+
+        if not os.path.exists(doc.path_arquivo):
+            return jsonify({"error": "Arquivo não encontrado no servidor"}), 404
+
+        # Parâmetro para forçar download (ao invés de visualizar)
+        download = request.args.get('download', 'false').lower() == 'true'
+
+        return send_file(
+            doc.path_arquivo,
+            mimetype='application/pdf',
+            as_attachment=download,
+            download_name=doc.nome_arquivo or f"edital_{edital.numero}.pdf"
+        )
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/numero/<numero>/pdf", methods=["GET"])
+@require_auth
+def download_edital_pdf_by_numero(numero):
+    """Download ou visualização do PDF do edital pelo número"""
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        # Normalizar número para busca
+        numero_busca = numero.replace('_', '/').replace('-', '/').upper()
+
+        # Buscar edital pelo número
+        edital = db.query(Edital).filter(
+            Edital.user_id == user_id
+        ).all()
+
+        # Encontrar edital com número similar
+        edital_encontrado = None
+        for e in edital:
+            num_edital = e.numero.replace('-', '/').upper()
+            if num_edital == numero_busca or numero_busca in num_edital or num_edital in numero_busca:
+                edital_encontrado = e
+                break
+
+        if not edital_encontrado:
+            return jsonify({"error": f"Edital {numero} não encontrado"}), 404
+
+        # Buscar documento do edital
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_encontrado.id,
+            EditalDocumento.tipo == 'edital_principal'
+        ).first()
+
+        if not doc or not doc.path_arquivo:
+            return jsonify({"error": "PDF não disponível para este edital"}), 404
+
+        if not os.path.exists(doc.path_arquivo):
+            return jsonify({"error": "Arquivo não encontrado no servidor"}), 404
+
+        # Parâmetro para forçar download
+        download = request.args.get('download', 'false').lower() == 'true'
+
+        return send_file(
+            doc.path_arquivo,
+            mimetype='application/pdf',
+            as_attachment=download,
+            download_name=doc.nome_arquivo or f"edital_{edital_encontrado.numero}.pdf"
+        )
     finally:
         db.close()
 

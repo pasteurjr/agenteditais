@@ -1127,7 +1127,7 @@ def tool_atualizar_edital(edital_id: str, user_id: str, numero: str = None,
                           orgao: str = None, objeto: str = None,
                           modalidade: str = None, status: str = None,
                           valor_referencia: float = None,
-                          data_abertura: str = None) -> Dict[str, Any]:
+                          data_abertura: str = None, url: str = None) -> Dict[str, Any]:
     """
     Atualiza informações de um edital existente.
     """
@@ -1165,6 +1165,8 @@ def tool_atualizar_edital(edital_id: str, user_id: str, numero: str = None,
                 edital.data_abertura = datetime.strptime(data_abertura, "%Y-%m-%d")
             except:
                 pass  # Ignorar se formato inválido
+        if url:
+            edital.url = url
 
         db.commit()
 
@@ -1389,10 +1391,20 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     orgao_data = item.get('orgaoEntidade', {}) or {}
                     numero_pncp = item.get('numeroControlePNCP', '')
 
-                    # Construir link se não existir
-                    link = item.get('linkSistemaOrigem')
-                    if not link and numero_pncp:
+                    # Construir URL do PNCP usando CNPJ, ano e sequencial (mais confiável)
+                    # Formato: https://pncp.gov.br/app/editais/{cnpj}-{sequencial}-{ano}
+                    cnpj = (orgao_data.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+                    ano = item.get('anoCompra')
+                    seq = item.get('sequencialCompra')
+
+                    if cnpj and ano and seq:
+                        # URL direta para página do edital no PNCP
+                        link = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
+                    elif numero_pncp:
                         link = f"https://pncp.gov.br/app/editais/{numero_pncp}"
+                    else:
+                        # Fallback para linkSistemaOrigem se não tiver dados do PNCP
+                        link = item.get('linkSistemaOrigem')
 
                     # Mapear modalidade da API para ENUM do banco
                     modalidade_api = (item.get('modalidadeNome', '') or '').lower()
@@ -2391,20 +2403,58 @@ def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, A
         if not edital_numero:
             return {"success": False, "error": "Não identifiquei o número do edital. Informe o número (ex: PE-001/2026)"}
 
-        # Busca flexível pelo número
+        print(f"[TOOLS] Buscando edital: '{edital_numero}'")
+
+        # Busca exata primeiro
         edital = db.query(Edital).filter(
             Edital.numero.ilike(f"%{edital_numero}%"),
             Edital.user_id == user_id
         ).first()
 
         if not edital:
-            # Tentar busca mais flexível
+            # Tentar busca mais flexível, mas garantindo que match seja específico
+            # Extrair partes: PE, 001, 2026 de "PE-001/2026"
             partes = re.findall(r'[A-Za-z]+|\d+', edital_numero)
-            if partes:
-                edital = db.query(Edital).filter(
-                    Edital.numero.ilike(f"%{partes[-1]}%"),
+            print(f"[TOOLS] Partes extraídas: {partes}")
+
+            if len(partes) >= 2:
+                # Buscar usando as partes mais relevantes (tipo + número)
+                # Ex: PE e 001 para "PE-001/2026"
+                tipo_edital = partes[0]  # PE, PP, CC, etc.
+                num_edital = partes[1] if len(partes) > 1 else None
+
+                # Buscar editais que contenham tanto o tipo quanto o número
+                query = db.query(Edital).filter(
                     Edital.user_id == user_id
-                ).first()
+                )
+
+                # Adicionar filtro por tipo se parece ser tipo de edital
+                if tipo_edital.upper() in ['PE', 'PP', 'CC', 'TP', 'PREGAO', 'CONCORRENCIA']:
+                    query = query.filter(Edital.numero.ilike(f"%{tipo_edital}%"))
+
+                # Adicionar filtro por número
+                if num_edital:
+                    query = query.filter(Edital.numero.ilike(f"%{num_edital}%"))
+
+                editais_encontrados = query.all()
+
+                if len(editais_encontrados) == 1:
+                    edital = editais_encontrados[0]
+                elif len(editais_encontrados) > 1:
+                    # Múltiplos encontrados - tentar match mais específico
+                    # Ordenar por similaridade (o que contém mais partes)
+                    for ed in editais_encontrados:
+                        match_count = sum(1 for p in partes if p.lower() in ed.numero.lower())
+                        if match_count >= len(partes) - 1:  # Match quase completo
+                            edital = ed
+                            break
+
+                    if not edital:
+                        numeros = [e.numero for e in editais_encontrados[:5]]
+                        return {
+                            "success": False,
+                            "error": f"Encontrei múltiplos editais que podem corresponder a '{edital_numero}': {', '.join(numeros)}. Seja mais específico."
+                        }
 
         if not edital:
             return {"success": False, "error": f"Edital '{edital_numero}' não encontrado no seu cadastro."}
