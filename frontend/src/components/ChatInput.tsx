@@ -25,10 +25,11 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "mindsdb_resumo", nome: "📊 Resumo geral do banco", prompt: "Faça um resumo do banco: total de produtos, editais, análises e propostas" },
   // === AÇÕES DO SISTEMA ===
   { id: "listar_produtos", nome: "📦 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
-  { id: "listar_editais", nome: "📋 Listar editais abertos", prompt: "Quais editais estão abertos?" },
+  { id: "listar_editais", nome: "📋 Listar editais salvos", prompt: "Liste meus editais cadastrados" },
   { id: "calcular_aderencia", nome: "🎯 Calcular aderência", prompt: "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]" },
   { id: "gerar_proposta", nome: "📝 Gerar proposta", prompt: "Gere uma proposta do produto [NOME_PRODUTO] para o edital [NUMERO_EDITAL] com preço R$ [VALOR]" },
-  { id: "buscar_editais", nome: "🔍 Buscar editais", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "buscar_editais", nome: "🔍 Buscar editais na web", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "cadastrar_edital", nome: "➕ Cadastrar edital manual", prompt: "Cadastre o edital número [NUMERO], órgão [ORGAO], objeto: [OBJETO]" },
   { id: "cadastrar_fonte", nome: "➕ Cadastrar fonte", prompt: "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]" },
   { id: "listar_fontes", nome: "🌐 Listar fontes", prompt: "Quais são as fontes de editais cadastradas?" },
   { id: "ajuda", nome: "❓ O que posso fazer?", prompt: "O que você pode fazer? Quais são suas capacidades?" },

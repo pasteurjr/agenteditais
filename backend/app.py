@@ -150,7 +150,12 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: buscar atas, encontrar atas, baixar atas, atas de registro, atas de sessão, atas pncp
     IMPORTANTE: Use quando o usuário quer BUSCAR atas no portal PNCP (não quando já tem um arquivo)
 
-22. **chat_livre**: Dúvidas gerais, conversas
+22. **cadastrar_edital**: Cadastrar/registrar manualmente um edital no sistema
+    Exemplos: "cadastre o edital PE-001/2026", "registre este edital", "adicione o edital número X", "salve este edital manualmente"
+    Palavras-chave: cadastre edital, registre edital, adicione edital, cadastrar edital manualmente, inserir edital
+    IMPORTANTE: Use quando o usuário quer cadastrar UM edital manualmente (diferente de salvar vários da busca)
+
+23. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -324,7 +329,11 @@ def detectar_intencao_fallback(message: str) -> str:
             return "cadastrar_fonte"
         return "listar_fontes"
 
-    # 9. Buscar editais - por último, pois é genérico
+    # 9. Cadastrar edital manualmente - ANTES de buscar editais
+    if any(p in msg for p in ["cadastre o edital", "cadastrar edital", "registre o edital", "adicione o edital", "inserir edital"]):
+        return "cadastrar_edital"
+
+    # 10. Buscar editais - por último, pois é genérico
     if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
         return "buscar_editais"
 
@@ -712,6 +721,9 @@ def chat():
 
         elif action_type == "buscar_atas_pncp":
             response_text, resultado = processar_buscar_atas_pncp(message, user_id)
+
+        elif action_type == "cadastrar_edital":
+            response_text, resultado = processar_cadastrar_edital(message, user_id, intencao_resultado)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -2922,6 +2934,150 @@ O sistema irá extrair automaticamente os vencedores, preços e participantes!
 """
 
     return response, resultado
+
+
+def processar_cadastrar_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    """
+    Processa ação: Cadastrar edital manualmente no sistema.
+
+    Extrai dados da mensagem do usuário:
+    - Número do edital
+    - Órgão
+    - Objeto (descrição)
+    - Modalidade (opcional)
+    - Data de abertura (opcional)
+    - UF (opcional)
+    """
+    from backend.models import Edital
+    from backend.database import SessionLocal
+    import re
+    from datetime import datetime
+
+    # Usar LLM para extrair dados estruturados da mensagem
+    prompt_extracao = f"""Extraia os dados do edital da mensagem abaixo e retorne APENAS um JSON:
+
+MENSAGEM: "{message}"
+
+Extraia:
+- numero: número/identificador do edital (ex: PE-001/2026, Pregão 15/2026)
+- orgao: nome do órgão licitante
+- objeto: descrição/objeto da licitação
+- modalidade: uma de [pregao_eletronico, pregao_presencial, concorrencia, tomada_precos, convite, leilao, dispensa, inexigibilidade] (default: pregao_eletronico)
+- data_abertura: data no formato YYYY-MM-DD (se mencionada)
+- uf: sigla do estado (se mencionado)
+- cidade: nome da cidade (se mencionado)
+- valor_referencia: valor estimado (se mencionado, apenas número)
+
+Retorne APENAS o JSON, sem explicações:
+{{"numero": "...", "orgao": "...", "objeto": "...", "modalidade": "...", "data_abertura": null, "uf": null, "cidade": null, "valor_referencia": null}}"""
+
+    try:
+        resposta_llm = call_deepseek(
+            [{"role": "user", "content": prompt_extracao}],
+            max_tokens=500,
+            model_override="deepseek-chat"
+        )
+
+        # Extrair JSON da resposta
+        import json
+        json_match = re.search(r'\{[\s\S]*?\}', resposta_llm)
+        if not json_match:
+            return """❌ **Não consegui extrair os dados do edital.**
+
+Por favor, forneça pelo menos:
+- **Número do edital** (ex: PE-001/2026)
+- **Órgão** (ex: Hospital das Clínicas)
+- **Objeto** (ex: Aquisição de equipamentos)
+
+**Exemplo:**
+```
+Cadastre o edital PE-001/2026, órgão Hospital das Clínicas UFMG, objeto: Aquisição de analisadores hematológicos
+```""", None
+
+        dados = json.loads(json_match.group())
+
+        # Validar campos obrigatórios
+        if not dados.get("numero"):
+            return "❌ **Número do edital é obrigatório.** Informe o número (ex: PE-001/2026)", None
+
+        if not dados.get("orgao"):
+            return "❌ **Órgão é obrigatório.** Informe o órgão licitante.", None
+
+        if not dados.get("objeto"):
+            return "❌ **Objeto é obrigatório.** Informe a descrição/objeto da licitação.", None
+
+        # Criar edital no banco
+        db = SessionLocal()
+        try:
+            # Verificar se já existe
+            edital_existente = db.query(Edital).filter(
+                Edital.numero == dados["numero"],
+                Edital.user_id == user_id
+            ).first()
+
+            if edital_existente:
+                return f"""⚠️ **Edital já cadastrado!**
+
+**Número:** {edital_existente.numero}
+**Órgão:** {edital_existente.orgao}
+**Status:** {edital_existente.status}
+
+Se deseja atualizar, use: "Atualize o edital {dados['numero']} com..." """, None
+
+            # Criar novo edital
+            novo_edital = Edital(
+                user_id=user_id,
+                numero=dados["numero"],
+                orgao=dados["orgao"],
+                objeto=dados["objeto"],
+                modalidade=dados.get("modalidade", "pregao_eletronico"),
+                status="novo",
+                fonte="manual",
+                uf=dados.get("uf"),
+                cidade=dados.get("cidade"),
+                valor_referencia=float(dados["valor_referencia"]) if dados.get("valor_referencia") else None
+            )
+
+            # Converter data_abertura se existir
+            if dados.get("data_abertura"):
+                try:
+                    novo_edital.data_abertura = datetime.strptime(dados["data_abertura"], "%Y-%m-%d")
+                except:
+                    pass
+
+            db.add(novo_edital)
+            db.commit()
+            db.refresh(novo_edital)
+
+            response = f"""✅ **Edital cadastrado com sucesso!**
+
+📋 **Dados do Edital:**
+| Campo | Valor |
+|-------|-------|
+| **Número** | {novo_edital.numero} |
+| **Órgão** | {novo_edital.orgao} |
+| **Objeto** | {novo_edital.objeto[:100]}{'...' if len(novo_edital.objeto) > 100 else ''} |
+| **Modalidade** | {novo_edital.modalidade} |
+| **Status** | {novo_edital.status} |
+| **UF** | {novo_edital.uf or '-'} |
+| **Cidade** | {novo_edital.cidade or '-'} |
+
+---
+**Próximos passos:**
+- Calcule a aderência: "Calcule aderência do produto X ao edital {novo_edital.numero}"
+- Gere uma proposta: "Gere proposta para o edital {novo_edital.numero}"
+- Liste seus editais: "Liste meus editais"
+"""
+            return response, {"edital_id": str(novo_edital.id), "numero": novo_edital.numero}
+
+        finally:
+            db.close()
+
+    except json.JSONDecodeError as e:
+        return f"❌ Erro ao interpretar dados: {str(e)}", None
+    except Exception as e:
+        print(f"[ERRO] processar_cadastrar_edital: {e}")
+        return f"❌ Erro ao cadastrar edital: {str(e)}", None
 
 
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
