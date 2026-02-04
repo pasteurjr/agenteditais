@@ -99,8 +99,14 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
    Exemplos: "baixe o arquivo da URL: http://...", "baixe https://..."
    IMPORTANTE: Se contém URL (http:// ou https://), classifique como download_url!
 
-9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC)
-   Exemplos: "busque editais de tecnologia", "editais da área médica"
+9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC) por TERMO/ÁREA
+   Exemplos: "busque editais de tecnologia", "editais da área médica", "busque editais de hematologia"
+   IMPORTANTE: Use quando buscar por TERMO genérico (área, categoria, produto)
+
+10. **buscar_edital_numero**: Buscar UM edital específico pelo NÚMERO
+   Exemplos: "busque o edital PE-001/2026", "encontre o edital 90186", "busque edital número 123/2025"
+   Palavras-chave: busque o edital, encontre o edital, buscar edital número, edital PE-, edital nº
+   IMPORTANTE: Use quando o usuário menciona um NÚMERO específico de edital
 
 ### AÇÕES DE LISTAGEM:
 9. **listar_editais**: Ver editais JÁ SALVOS no sistema
@@ -333,7 +339,16 @@ def detectar_intencao_fallback(message: str) -> str:
     if any(p in msg for p in ["cadastre o edital", "cadastrar edital", "registre o edital", "adicione o edital", "inserir edital"]):
         return "cadastrar_edital"
 
-    # 10. Buscar editais - por último, pois é genérico
+    # 10. Buscar edital específico por número - ANTES de buscar_editais genérico
+    import re
+    # Detectar padrões de número de edital: PE-001/2026, PE0013/2025, 90186/2025, nº 123
+    if any(p in msg for p in ["busque o edital", "encontre o edital", "buscar edital nº", "buscar edital número"]):
+        return "buscar_edital_numero"
+    # Também detectar se tem padrão de número de edital na mensagem
+    if re.search(r'(busque|encontre|buscar)\s+(o\s+)?edital\s+\w*\d+', msg, re.IGNORECASE):
+        return "buscar_edital_numero"
+
+    # 11. Buscar editais por termo - genérico
     if any(p in msg for p in ["edital", "editais", "licitaç", "licitac", "pregão", "pregao"]):
         return "buscar_editais"
 
@@ -673,6 +688,9 @@ def chat():
 
         elif action_type == "buscar_editais":
             response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
+
+        elif action_type == "buscar_edital_numero":
+            response_text, resultado = processar_buscar_edital_numero(message, user_id)
 
         elif action_type == "listar_editais":
             response_text, resultado = processar_listar_editais(message, user_id)
@@ -1428,6 +1446,129 @@ JSON:"""
     resultado["editais_avaliar"] = avaliar
 
     return response, resultado
+
+
+def processar_buscar_edital_numero(message: str, user_id: str):
+    """
+    Processa busca de um edital específico pelo número no PNCP.
+
+    Args:
+        message: Mensagem do usuário contendo o número do edital
+        user_id: ID do usuário
+
+    Returns:
+        Tuple (response_text, resultado)
+    """
+    import re
+    import requests
+
+    # Extrair número do edital da mensagem
+    # Padrões: PE-001/2026, PE0013/2025, 90186/2025, nº 123, número 456
+    padroes = [
+        r'PE[-]?\d+[/]?\d*',  # PE-001/2026, PE0013/2025
+        r'[Pp]reg[aã]o\s*(?:n[ºo°]?\s*)?\d+[/]?\d*',  # Pregão nº 123/2025
+        r'[Ee]dital\s*(?:n[ºo°]?\s*)?\d+[/]?\d*',  # Edital nº 123/2025
+        r'\d{4,}[/]\d{4}',  # 90186/2025
+        r'n[ºo°]\s*\d+[/]?\d*',  # nº 123/2025
+    ]
+
+    numero_edital = None
+    for padrao in padroes:
+        match = re.search(padrao, message, re.IGNORECASE)
+        if match:
+            numero_edital = match.group().strip()
+            break
+
+    if not numero_edital:
+        return """❌ **Não consegui identificar o número do edital.**
+
+Por favor, informe o número no formato:
+- "Busque o edital PE-001/2026"
+- "Busque o edital 90186/2025"
+- "Encontre o pregão nº 123/2025"
+""", None
+
+    print(f"[BUSCA-EDITAL] Buscando edital: {numero_edital}")
+
+    # 1. Primeiro verificar se já está salvo no sistema
+    from backend.models import Edital
+    from backend.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        edital_local = db.query(Edital).filter(
+            Edital.numero.ilike(f"%{numero_edital}%"),
+            Edital.user_id == user_id
+        ).first()
+
+        if edital_local:
+            response = f"""## ✅ Edital Encontrado (já salvo no sistema)
+
+| Campo | Valor |
+|-------|-------|
+| **Número** | {edital_local.numero} |
+| **Órgão** | {edital_local.orgao} |
+| **Objeto** | {edital_local.objeto[:150]}{'...' if len(edital_local.objeto or '') > 150 else ''} |
+| **Status** | {edital_local.status} |
+| **Modalidade** | {edital_local.modalidade} |
+| **UF** | {edital_local.uf or '-'} |
+| **Data Abertura** | {edital_local.data_abertura.strftime('%d/%m/%Y') if edital_local.data_abertura else '-'} |
+| **Valor Referência** | R$ {edital_local.valor_referencia:,.2f} if edital_local.valor_referencia else '-' |
+
+---
+**Ações disponíveis:**
+- Calcular aderência: "Calcule aderência do produto X ao edital {edital_local.numero}"
+- Ver resultado: "Qual o resultado do edital {edital_local.numero}?"
+"""
+            return response, {"edital": edital_local.numero, "encontrado_local": True}
+
+    finally:
+        db.close()
+
+    # 2. Buscar no PNCP
+    try:
+        # Limpar número para busca
+        numero_limpo = re.sub(r'[^\d/]', '', numero_edital)
+
+        url = f"https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
+        params = {
+            "q": numero_edital,
+            "pagina": 1,
+            "tamanhoPagina": 10
+        }
+
+        response_api = requests.get(url, params=params, timeout=30)
+
+        if response_api.status_code == 200:
+            dados = response_api.json()
+            resultados = dados.get("data", []) or dados.get("items", []) or []
+
+            if resultados:
+                response = f"## 🔍 Resultados para: {numero_edital}\n\n"
+                response += f"Encontrados: **{len(resultados)}** edital(is)\n\n"
+
+                for i, ed in enumerate(resultados[:5], 1):
+                    orgao = ed.get("orgaoEntidade", {}).get("razaoSocial", ed.get("nomeOrgao", "N/A"))
+                    numero = ed.get("numeroControlePNCP", ed.get("numero", "N/A"))
+                    objeto = ed.get("objetoCompra", ed.get("objeto", "N/A"))[:150]
+
+                    response += f"""### {i}. {numero}
+- **Órgão:** {orgao}
+- **Objeto:** {objeto}...
+- **Modalidade:** {ed.get("modalidadeNome", "N/A")}
+
+"""
+
+                response += "\n---\n*Para salvar, use: \"Salve os editais encontrados\"*"
+                return response, {"editais": resultados, "termo": numero_edital}
+
+        # Se não encontrou na API principal, tentar busca genérica
+        return processar_buscar_editais(f"edital {numero_edital}", user_id)
+
+    except Exception as e:
+        print(f"[BUSCA-EDITAL] Erro na API PNCP: {e}")
+        # Fallback para busca genérica
+        return processar_buscar_editais(f"edital {numero_edital}", user_id)
 
 
 def processar_listar_produtos(message: str, user_id: str):
@@ -2798,6 +2939,24 @@ def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename:
 
 """
 
+    # Verificar se há aviso (sem itens extraídos)
+    if resultado.get("aviso"):
+        response += f"""⚠️ **{resultado['aviso']}**
+
+O documento foi processado mas não foram encontrados itens com vencedores/preços estruturados.
+
+**Possíveis causas:**
+- A ata pode estar incompleta ou ser de outra fase do pregão
+- O formato do PDF pode ser diferente do esperado
+- O texto pode estar escaneado (imagem) e não selecionável
+
+**Alternativa:** Registre o resultado manualmente:
+- "Perdemos o edital {resultado.get('edital', '[NUMERO]')} para [EMPRESA] com R$ [VALOR]"
+- "Ganhamos o edital {resultado.get('edital', '[NUMERO]')} com R$ [VALOR]"
+
+"""
+        return response, resultado
+
     for item in resultado.get("itens", []):
         emoji = "🏆" if item.get("vencedor") else "❓"
         response += f"""**Item {item.get('item', '?')}:** {item.get('descricao', 'N/A')[:100]}...
@@ -2830,12 +2989,20 @@ def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename:
         response += f"\n✅ **Edital {resultado['edital_encontrado']} encontrado no sistema - dados salvos no histórico!**\n"
     else:
         edital_num = resultado.get('edital', '[NUMERO]')
+        itens = resultado.get('itens', [])
+
+        # Obter dados do primeiro item de forma segura
+        primeiro_item = itens[0] if itens else {}
+        vencedor = primeiro_item.get('vencedor', 'EMPRESA')
+        preco = primeiro_item.get('preco_vencedor', 0)
+        objeto = resultado.get('objeto', 'equipamentos') or 'equipamentos'
+
         response += f"""
 ⚠️ **Edital não encontrado no sistema.**
 
 Para salvar os dados no histórico, primeiro cadastre o edital:
-- Busque editais: "busque editais de {resultado.get('objeto', 'equipamentos')[:30]}"
-- Ou registre manualmente o resultado: "Perdemos o edital {edital_num} para {resultado.get('itens', [{}])[0].get('vencedor', 'EMPRESA')} com R$ {resultado.get('itens', [{}])[0].get('preco_vencedor', 0):,.0f}"
+- Busque editais: "busque editais de {objeto[:30]}"
+- Ou registre manualmente o resultado: "Perdemos o edital {edital_num} para {vencedor} com R$ {preco:,.0f}"
 """
 
     return response, resultado

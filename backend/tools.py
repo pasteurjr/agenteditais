@@ -2560,40 +2560,38 @@ def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, A
 
 # ==================== EXTRAIR ATA DE SESSÃO ====================
 
-PROMPT_EXTRAIR_ATA = """Analise esta ata de sessão de pregão eletrônico e extraia TODOS os dados.
+PROMPT_EXTRAIR_ATA = """Analise este documento de licitação (pode ser Ata de Sessão ou Ata de Registro de Preços) e extraia TODOS os dados.
 
-TEXTO DA ATA:
+TEXTO DO DOCUMENTO:
 {texto_ata}
 
 EXTRAIA:
 
 1. **Dados Gerais:**
-   - Número do edital/pregão
+   - Número do edital/pregão (ex: PE0013/2025, PE-001/2026)
    - Órgão licitante
-   - Data da sessão
+   - Data da sessão ou assinatura
    - Objeto resumido
 
-2. **Para CADA ITEM/LOTE:**
+2. **Para CADA ITEM registrado:**
    - Número do item
-   - Descrição do objeto
-   - Empresa vencedora (nome completo)
-   - CNPJ do vencedor (se disponível)
-   - Valor/preço vencedor
-   - TODOS os participantes com seus lances finais
+   - Descrição do produto/serviço
+   - Empresa vencedora/fornecedora (nome completo)
+   - CNPJ (se disponível, mesmo parcialmente mascarado)
+   - Valor unitário e/ou total
+   - Outros participantes se houver
 
-3. **Empresas Desclassificadas:**
-   - Nome da empresa
-   - Motivo da desclassificação
+3. **Empresas Desclassificadas (se houver)**
 
 IMPORTANTE:
-- Valores monetários: converta para número (365.000,00 → 365000.00)
-- CNPJs: formato XX.XXX.XXX/XXXX-XX
-- Se não encontrar algum dado, use null
-- Extraia TODOS os itens/lotes da ata
+- Valores monetários: converta para número (R$ 300,0000 → 300.00, 365.000,00 → 365000.00)
+- Extraia TODOS os itens que encontrar
+- Em Atas de Registro de Preços, os itens geralmente estão no final do documento
+- Se encontrar tabela com itens, extraia cada linha
 
 Retorne APENAS um JSON válido:
 {{
-    "edital": "número do pregão/edital (ex: PE-001/2026, 90186)",
+    "edital": "número do pregão/edital",
     "orgao": "nome do órgão licitante",
     "data_sessao": "dd/mm/yyyy",
     "objeto": "descrição resumida do objeto",
@@ -2605,8 +2603,7 @@ Retorne APENAS um JSON válido:
             "cnpj_vencedor": "XX.XXX.XXX/XXXX-XX ou null",
             "preco_vencedor": 123456.78,
             "participantes": [
-                {{"empresa": "nome", "cnpj": "...", "lance_final": 123456.78, "posicao": 1}},
-                {{"empresa": "nome", "cnpj": "...", "lance_final": 130000.00, "posicao": 2}}
+                {{"empresa": "nome", "cnpj": "...", "lance_final": 123456.78, "posicao": 1}}
             ]
         }}
     ],
@@ -2643,8 +2640,13 @@ def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any
                 "error": "O documento não parece ser uma ata de sessão de pregão. Envie uma ata de licitação."
             }
 
-        # Limitar texto para não estourar contexto
-        texto_truncado = texto_pdf[:15000]
+        # Limitar texto mas pegar partes importantes (início e fim)
+        # Atas de Registro de Preços têm os itens/preços no final do documento
+        if len(texto_pdf) > 20000:
+            # Pegar início (dados gerais) + fim (itens e preços)
+            texto_truncado = texto_pdf[:8000] + "\n\n[...]\n\n" + texto_pdf[-12000:]
+        else:
+            texto_truncado = texto_pdf[:20000]
 
         # Enviar para LLM
         prompt = PROMPT_EXTRAIR_ATA.format(texto_ata=texto_truncado)
@@ -2663,6 +2665,24 @@ def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any
 
         dados = json.loads(json_match.group())
         print(f"[TOOLS] Dados extraídos: edital={dados.get('edital')}, itens={len(dados.get('itens', []))}")
+
+        # Verificar se extraiu algum item
+        if not dados.get("itens") or len(dados.get("itens", [])) == 0:
+            # Tentar extrair informações mesmo sem itens estruturados
+            return {
+                "success": True,
+                "edital": dados.get("edital"),
+                "orgao": dados.get("orgao"),
+                "data_sessao": dados.get("data_sessao"),
+                "objeto": dados.get("objeto"),
+                "itens": [],
+                "desclassificados": dados.get("desclassificados", []),
+                "concorrentes_novos": [],
+                "concorrentes_atualizados": [],
+                "edital_encontrado": None,
+                "dados_salvos": False,
+                "aviso": "Não foi possível extrair itens detalhados da ata. Verifique se o PDF contém o resultado do certame."
+            }
 
         # Buscar edital correspondente no banco (opcional)
         edital = None

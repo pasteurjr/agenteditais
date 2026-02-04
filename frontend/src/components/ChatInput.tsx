@@ -27,7 +27,8 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // 2. BUSCA E CADASTRO DE EDITAIS
   // =============================================================================
   { id: "sep_2", nome: "━━━ 2. BUSCA E CADASTRO DE EDITAIS ━━━", prompt: "" },
-  { id: "buscar_editais", nome: "✅ 🔍 Buscar editais na web (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "buscar_editais", nome: "✅ 🔍 Buscar editais por termo (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
+  { id: "buscar_edital_numero", nome: "✅ 🔍 Buscar edital por número", prompt: "Busque o edital [PE-001/2026]" },
   { id: "listar_editais", nome: "✅ 📋 Listar editais salvos", prompt: "Liste meus editais cadastrados" },
   { id: "listar_editais_status", nome: "✅ 📋 Listar editais por status", prompt: "Liste meus editais com status [novo/analisando/participar/ganho/perdido]" },
   { id: "cadastrar_edital", nome: "✅ ➕ Cadastrar edital manualmente", prompt: "Cadastre o edital [NUMERO], órgão [ORGAO], objeto: [OBJETO]" },
