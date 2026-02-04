@@ -190,7 +190,52 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Palavras-chave: cadastre edital, registre edital, adicione edital, cadastrar edital manualmente, inserir edital
     IMPORTANTE: Use quando o usuário quer cadastrar UM edital manualmente (diferente de salvar vários da busca)
 
-23. **chat_livre**: Dúvidas gerais, conversas
+### SPRINT 2 - ALERTAS E MONITORAMENTO:
+30. **configurar_alertas**: Configurar alertas de prazo para um edital
+    Exemplos: "configure alertas para PE-001", "avise-me 24h antes da abertura", "quero alerta de impugnação"
+    Palavras-chave: configurar alerta, avise-me, lembre-me, alertar antes, alertas para edital
+
+31. **listar_alertas**: Ver alertas configurados / próximos pregões
+    Exemplos: "quais alertas tenho?", "meus alertas", "próximos pregões", "alertas configurados"
+    Palavras-chave: listar alertas, meus alertas, alertas configurados, próximos pregões
+
+32. **dashboard_prazos**: Ver dashboard de prazos e contagem regressiva
+    Exemplos: "mostre dashboard de prazos", "quais editais abrem esta semana?", "timer dos editais"
+    Palavras-chave: dashboard prazos, editais abrem, contagem regressiva, timer editais
+
+33. **calendario_editais**: Ver calendário de editais
+    Exemplos: "calendário de fevereiro", "calendário de editais", "editais do mês"
+    Palavras-chave: calendário editais, calendário mês, ver calendário
+
+34. **configurar_monitoramento**: Configurar monitoramento automático de editais
+    Exemplos: "monitore editais de hematologia", "configure busca automática", "avise novos editais de X"
+    Palavras-chave: monitorar editais, monitoramento automático, busca automática, avisar novos
+
+35. **listar_monitoramentos**: Ver monitoramentos configurados
+    Exemplos: "quais monitoramentos tenho?", "monitoramentos ativos", "ver minhas buscas automáticas"
+    Palavras-chave: listar monitoramentos, monitoramentos ativos, minhas buscas
+
+36. **desativar_monitoramento**: Desativar um monitoramento
+    Exemplos: "desative monitoramento de hematologia", "pare de monitorar X", "cancele busca automática"
+    Palavras-chave: desativar monitoramento, parar monitorar, cancelar busca
+
+37. **configurar_notificacoes**: Configurar preferências de notificação
+    Exemplos: "configure meu email de notificação", "quero alertas das 8h às 18h", "preferências de alerta"
+    Palavras-chave: configurar notificação, email notificação, preferências alerta
+
+38. **historico_notificacoes**: Ver histórico de notificações
+    Exemplos: "histórico de notificações", "notificações não lidas", "ver notificações"
+    Palavras-chave: histórico notificações, notificações não lidas, ver notificações
+
+39. **extrair_datas_edital**: Extrair datas importantes de um edital (PDF)
+    Exemplos: "extraia as datas deste edital", "quando abre o edital?", "prazo de impugnação"
+    Palavras-chave: extrair datas, datas edital, quando abre, prazo impugnação
+
+40. **cancelar_alerta**: Cancelar alertas configurados
+    Exemplos: "cancele alertas do PE-001", "remova meus alertas", "desative alertas"
+    Palavras-chave: cancelar alerta, remover alerta, desativar alerta
+
+41. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
 ## CONTEXTO IMPORTANTE:
@@ -483,6 +528,74 @@ def detectar_intencao_fallback(message: str) -> str:
 
     if menciona_dados and eh_pergunta:
         return "consulta_mindsdb"
+
+    # =============================================================================
+    # SPRINT 2: ALERTAS E AUTOMAÇÃO
+    # =============================================================================
+
+    # 13.1 Configurar alertas de prazo
+    if any(p in msg for p in ["configurar alerta", "configure alerta", "criar alerta", "crie alerta",
+                               "avise-me", "lembre-me antes", "alerta para o edital", "alertar sobre",
+                               "quero ser avisado", "me avise quando", "notifique-me"]):
+        return "configurar_alertas"
+
+    # 13.2 Listar alertas
+    if any(p in msg for p in ["meus alertas", "listar alertas", "alertas configurados", "ver alertas",
+                               "quais alertas", "alertas ativos", "próximos pregões", "proximos pregoes"]):
+        return "listar_alertas"
+
+    # 13.3 Dashboard de prazos
+    if any(p in msg for p in ["dashboard de prazo", "dashboard prazos", "contagem regressiva",
+                               "prazos dos editais", "próximos prazos", "proximos prazos",
+                               "ver prazos", "mostre os prazos", "quais prazos"]):
+        return "dashboard_prazos"
+
+    # 13.4 Calendário de editais
+    if any(p in msg for p in ["calendário", "calendario", "calendário de editais", "calendario de editais",
+                               "editais do mês", "editais do mes", "editais da semana", "agenda de editais",
+                               "datas importantes", "próximas datas", "proximas datas"]):
+        return "calendario_editais"
+
+    # 13.5 Configurar monitoramento
+    if any(p in msg for p in ["configurar monitoramento", "configure monitoramento", "criar monitoramento",
+                               "monitorar editais", "monitore editais", "quero monitorar",
+                               "acompanhar editais", "busca automática", "busca automatica"]):
+        return "configurar_monitoramento"
+
+    # 13.6 Listar monitoramentos
+    if any(p in msg for p in ["meus monitoramentos", "listar monitoramentos", "monitoramentos ativos",
+                               "ver monitoramentos", "quais monitoramentos", "monitoramentos configurados"]):
+        return "listar_monitoramentos"
+
+    # 13.7 Desativar monitoramento
+    if any(p in msg for p in ["desativar monitoramento", "parar monitoramento", "cancelar monitoramento",
+                               "desative o monitoramento", "pare de monitorar", "remover monitoramento"]):
+        return "desativar_monitoramento"
+
+    # 13.8 Configurar notificações
+    if any(p in msg for p in ["configurar notificações", "configurar notificacoes", "preferências de notificação",
+                               "preferencias de notificacao", "email de notificação", "configurar email",
+                               "configurar preferências", "configurar preferencias"]):
+        return "configurar_notificacoes"
+
+    # 13.9 Histórico de notificações
+    if any(p in msg for p in ["histórico de notificações", "historico de notificacoes", "notificações recebidas",
+                               "notificacoes recebidas", "ver notificações", "ver notificacoes",
+                               "minhas notificações", "minhas notificacoes", "notificações não lidas",
+                               "notificacoes nao lidas"]):
+        return "historico_notificacoes"
+
+    # 13.10 Extrair datas de edital
+    if any(p in msg for p in ["extrair datas", "extraia as datas", "datas do edital", "prazos do edital",
+                               "quais são as datas", "quais sao as datas", "identifique as datas",
+                               "encontre as datas"]):
+        return "extrair_datas_edital"
+
+    # 13.11 Cancelar alerta
+    if any(p in msg for p in ["cancelar alerta", "cancele o alerta", "remover alerta", "remova o alerta",
+                               "excluir alerta", "desativar alerta", "não me avise mais",
+                               "nao me avise mais"]):
+        return "cancelar_alerta"
 
     return "chat_livre"
 
@@ -888,6 +1001,42 @@ def chat():
 
         elif action_type == "cadastrar_edital":
             response_text, resultado = processar_cadastrar_edital(message, user_id, intencao_resultado)
+
+        # =============================================================================
+        # SPRINT 2: ALERTAS E AUTOMAÇÃO
+        # =============================================================================
+        elif action_type == "configurar_alertas":
+            response_text = processar_configurar_alertas(message, user_id)
+
+        elif action_type == "listar_alertas":
+            response_text = processar_listar_alertas(message, user_id)
+
+        elif action_type == "dashboard_prazos":
+            response_text = processar_dashboard_prazos(message, user_id)
+
+        elif action_type == "calendario_editais":
+            response_text = processar_calendario_editais(message, user_id)
+
+        elif action_type == "configurar_monitoramento":
+            response_text = processar_configurar_monitoramento(message, user_id)
+
+        elif action_type == "listar_monitoramentos":
+            response_text = processar_listar_monitoramentos(message, user_id)
+
+        elif action_type == "desativar_monitoramento":
+            response_text = processar_desativar_monitoramento(message, user_id)
+
+        elif action_type == "configurar_notificacoes":
+            response_text = processar_configurar_notificacoes(message, user_id)
+
+        elif action_type == "historico_notificacoes":
+            response_text = processar_historico_notificacoes(message, user_id)
+
+        elif action_type == "extrair_datas_edital":
+            response_text = processar_extrair_datas_edital(message, user_id)
+
+        elif action_type == "cancelar_alerta":
+            response_text = processar_cancelar_alerta(message, user_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -3924,6 +4073,579 @@ Se deseja atualizar, use: "Atualize o edital {dados['numero']} com..." """, None
         return f"❌ Erro ao cadastrar edital: {str(e)}", None
 
 
+# =============================================================================
+# PROCESSADORES SPRINT 2: ALERTAS E AUTOMAÇÃO
+# =============================================================================
+
+def processar_configurar_alertas(message: str, user_id: str):
+    """Processa configuração de alertas de prazo para editais."""
+    import re
+    from tools import tool_configurar_alertas
+
+    msg = message.lower()
+
+    # Extrair número do edital
+    match_edital = re.search(r'(PE[-]?\d+[-/]?\d*|[Pp]reg[aã]o\s*n?[ºo°]?\s*[\d/]+|\d{1,5}[/]\d{4})', message, re.IGNORECASE)
+    edital_numero = match_edital.group(1) if match_edital else None
+
+    if not edital_numero:
+        return "⚠️ Para configurar alertas, preciso saber qual edital. Informe o número do edital, por exemplo:\n\n*\"Configure alertas para o PE 123/2024\"*"
+
+    # Extrair tempos (horas/minutos antes)
+    tempos_minutos = []
+
+    # Padrões de tempo
+    match_horas = re.findall(r'(\d+)\s*(?:hora|h)', msg)
+    match_dias = re.findall(r'(\d+)\s*(?:dia|d)', msg)
+    match_minutos = re.findall(r'(\d+)\s*(?:minuto|min|m\b)', msg)
+
+    for h in match_horas:
+        tempos_minutos.append(int(h) * 60)
+    for d in match_dias:
+        tempos_minutos.append(int(d) * 1440)
+    for m in match_minutos:
+        tempos_minutos.append(int(m))
+
+    # Se não especificou tempo, usar padrões
+    if not tempos_minutos:
+        tempos_minutos = [1440, 60, 15]  # 1 dia, 1 hora, 15 min
+
+    # Detectar tipo de alerta
+    tipo = "abertura"
+    if "impugna" in msg:
+        tipo = "impugnacao"
+    elif "recurso" in msg:
+        tipo = "recursos"
+    elif "proposta" in msg:
+        tipo = "proposta"
+
+    # Detectar canais
+    canais = {"email": True, "push": True}
+    if "apenas email" in msg or "só email" in msg:
+        canais = {"email": True, "push": False}
+    elif "apenas push" in msg or "só push" in msg:
+        canais = {"email": False, "push": True}
+
+    resultado = tool_configurar_alertas(
+        user_id=user_id,
+        edital_numero=edital_numero,
+        tempos_minutos=tempos_minutos,
+        tipo=tipo,
+        canais=canais
+    )
+
+    if resultado.get("success"):
+        alertas = resultado.get("alertas_criados", [])
+        msg_resp = f"✅ **Alertas configurados para {edital_numero}**\n\n"
+
+        if alertas:
+            msg_resp += "📋 **Alertas agendados:**\n"
+            for a in alertas:
+                msg_resp += f"- ⏰ {a['tempo_antes']} antes → {a['data_disparo']}\n"
+        else:
+            msg_resp += "ℹ️ Os alertas foram configurados com os tempos padrão.\n"
+
+        msg_resp += f"\n🔔 **Canais:** Email: {'✅' if canais['email'] else '❌'} | Push: {'✅' if canais['push'] else '❌'}"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao configurar alertas')}"
+
+
+def processar_listar_alertas(message: str, user_id: str):
+    """Processa listagem de alertas configurados."""
+    from tools import tool_listar_alertas
+    msg = message.lower()
+
+    apenas_agendados = "todos" not in msg and "histórico" not in msg and "historico" not in msg
+    periodo_dias = 30
+
+    if "semana" in msg:
+        periodo_dias = 7
+    elif "mês" in msg or "mes" in msg:
+        periodo_dias = 30
+    elif "ano" in msg:
+        periodo_dias = 365
+
+    resultado = tool_listar_alertas(
+        user_id=user_id,
+        apenas_agendados=apenas_agendados,
+        periodo_dias=periodo_dias
+    )
+
+    if resultado.get("success"):
+        alertas = resultado.get("alertas", [])
+
+        if not alertas:
+            return "📭 Você não tem alertas configurados.\n\nPara criar alertas, diga algo como:\n*\"Configure alertas para o PE 123/2024 com 1 dia e 1 hora de antecedência\"*"
+
+        msg_resp = f"🔔 **Seus Alertas** ({len(alertas)} encontrados)\n\n"
+
+        for a in alertas:
+            status_icon = {"agendado": "⏳", "disparado": "✅", "lido": "👁️", "cancelado": "❌"}.get(a['status'], "📌")
+            msg_resp += f"{status_icon} **{a['edital_numero']}** - {a['tipo'].title()}\n"
+            msg_resp += f"   📅 Disparo: {a['data_disparo']}\n"
+            if a.get('tempo_antes'):
+                msg_resp += f"   ⏰ {a['tempo_antes']} antes\n"
+            msg_resp += "\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao listar alertas')}"
+
+
+def processar_dashboard_prazos(message: str, user_id: str):
+    """Processa exibição do dashboard de prazos."""
+    from tools import tool_dashboard_prazos
+    msg = message.lower()
+
+    dias = 7  # Padrão: próximos 7 dias
+    if "mês" in msg or "mes" in msg or "30" in msg:
+        dias = 30
+    elif "15" in msg:
+        dias = 15
+    elif "semana" in msg or "7" in msg:
+        dias = 7
+
+    resultado = tool_dashboard_prazos(user_id=user_id, dias=dias)
+
+    if resultado.get("success"):
+        editais = resultado.get("editais", [])
+        resumo = resultado.get("resumo", {})
+
+        msg_resp = f"📊 **Dashboard de Prazos** (próximos {dias} dias)\n\n"
+
+        # Resumo
+        msg_resp += "### 📈 Resumo\n"
+        msg_resp += f"- Total: **{resumo.get('total', 0)}** editais\n"
+        msg_resp += f"- 🔴 Urgentes (< 24h): **{resumo.get('urgentes', 0)}**\n"
+        msg_resp += f"- 🟡 Próximos (1-3 dias): **{resumo.get('proximos', 0)}**\n"
+        msg_resp += f"- 🟢 Agendados (> 3 dias): **{resumo.get('agendados', 0)}**\n\n"
+
+        if not editais:
+            msg_resp += "ℹ️ Nenhum edital com prazo neste período.\n"
+        else:
+            msg_resp += "### 📋 Editais por Prazo\n\n"
+
+            for e in editais[:10]:  # Limitar a 10
+                # Ícone baseado na urgência
+                horas = e.get('horas_restantes', 999)
+                if horas < 24:
+                    icon = "🔴"
+                elif horas < 72:
+                    icon = "🟡"
+                else:
+                    icon = "🟢"
+
+                msg_resp += f"{icon} **{e['numero']}** - {e['orgao'][:40]}\n"
+                msg_resp += f"   📅 Abertura: {e['data_abertura']}\n"
+                msg_resp += f"   ⏱️ **{e['tempo_restante']}**\n"
+                if e.get('alertas_configurados'):
+                    msg_resp += f"   🔔 Alertas: {e['alertas_configurados']}\n"
+                msg_resp += "\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao carregar dashboard')}"
+
+
+def processar_calendario_editais(message: str, user_id: str):
+    """Processa exibição do calendário de editais."""
+    from datetime import datetime
+    from tools import tool_calendario_editais
+    import re
+
+    msg = message.lower()
+    hoje = datetime.now()
+
+    # Detectar mês/ano
+    mes = hoje.month
+    ano = hoje.year
+
+    # Padrões para mês
+    meses_pt = {
+        "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4,
+        "maio": 5, "junho": 6, "julho": 7, "agosto": 8, "setembro": 9,
+        "outubro": 10, "novembro": 11, "dezembro": 12
+    }
+
+    for nome, num in meses_pt.items():
+        if nome in msg:
+            mes = num
+            break
+
+    # Detectar ano
+    match_ano = re.search(r'20\d{2}', msg)
+    if match_ano:
+        ano = int(match_ano.group())
+
+    resultado = tool_calendario_editais(user_id=user_id, mes=mes, ano=ano)
+
+    if resultado.get("success"):
+        calendario = resultado.get("calendario", {})
+        mes_nome = resultado.get("mes_nome", "")
+        total = resultado.get("total_editais", 0)
+
+        msg_resp = f"📅 **Calendário de Editais - {mes_nome} {ano}**\n\n"
+        msg_resp += f"Total: **{total}** editais no mês\n\n"
+
+        if not calendario:
+            msg_resp += "ℹ️ Nenhum edital com data neste mês.\n"
+        else:
+            # Ordenar por dia
+            for dia in sorted(calendario.keys(), key=int):
+                editais_dia = calendario[dia]
+                msg_resp += f"### 📆 Dia {dia}\n"
+
+                for e in editais_dia:
+                    status_icon = {"novo": "🆕", "analisando": "🔍", "participar": "✅", "proposta_enviada": "📤"}.get(e['status'], "📌")
+                    msg_resp += f"{status_icon} **{e['numero']}** - {e['orgao'][:35]}\n"
+                    if e.get('horario'):
+                        msg_resp += f"   ⏰ {e['horario']}\n"
+                msg_resp += "\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao carregar calendário')}"
+
+
+def processar_configurar_monitoramento(message: str, user_id: str):
+    """Processa configuração de monitoramento automático de editais."""
+    import re
+    from tools import tool_configurar_monitoramento
+
+    msg = message.lower()
+
+    # Extrair termo de busca - geralmente vem após "monitore" ou "monitorar"
+    match_termo = re.search(r'monitor[ea]?\s+(?:editais\s+(?:de|para|sobre)\s+)?(.+?)(?:\s+(?:no|na|em|com|para)|$)', msg)
+    termo = match_termo.group(1).strip() if match_termo else None
+
+    if not termo:
+        # Tentar extrair de outra forma
+        match_termo2 = re.search(r'(?:busca automática|acompanhar)\s+(?:de\s+)?(.+?)(?:\s+(?:no|na|em)|$)', msg)
+        termo = match_termo2.group(1).strip() if match_termo2 else None
+
+    if not termo:
+        return "⚠️ Para configurar um monitoramento, preciso saber o que monitorar.\n\nExemplos:\n- *\"Monitore editais de equipamentos laboratoriais\"*\n- *\"Configure monitoramento para reagentes em SP e MG\"*"
+
+    # Detectar fontes
+    fontes = []
+    if "pncp" in msg:
+        fontes.append("pncp")
+    if "comprasnet" in msg:
+        fontes.append("comprasnet")
+    if "bec" in msg:
+        fontes.append("bec")
+    if not fontes:
+        fontes = ["pncp"]  # Padrão
+
+    # Detectar UFs
+    ufs = []
+    ufs_validas = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+                   "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+                   "SP", "SE", "TO"]
+    for uf in ufs_validas:
+        if uf.lower() in msg or uf in message:
+            ufs.append(uf)
+
+    # Detectar frequência
+    frequencia_horas = 4  # Padrão
+    if "hora em hora" in msg or "1 hora" in msg:
+        frequencia_horas = 1
+    elif "2 hora" in msg:
+        frequencia_horas = 2
+    elif "6 hora" in msg:
+        frequencia_horas = 6
+    elif "12 hora" in msg:
+        frequencia_horas = 12
+    elif "diário" in msg or "diario" in msg or "24 hora" in msg:
+        frequencia_horas = 24
+
+    # Detectar score mínimo
+    score_minimo = 70
+    match_score = re.search(r'score\s*(?:mínimo|minimo)?\s*(?:de\s+)?(\d+)', msg)
+    if match_score:
+        score_minimo = int(match_score.group(1))
+
+    resultado = tool_configurar_monitoramento(
+        user_id=user_id,
+        termo=termo,
+        fontes=fontes,
+        ufs=ufs if ufs else None,
+        frequencia_horas=frequencia_horas,
+        score_minimo=score_minimo
+    )
+
+    if resultado.get("success"):
+        mon = resultado.get("monitoramento", {})
+        msg_resp = f"✅ **Monitoramento Configurado**\n\n"
+        msg_resp += f"🔍 **Termo:** {mon.get('termo', termo)}\n"
+        msg_resp += f"📡 **Fontes:** {', '.join(mon.get('fontes', fontes))}\n"
+        msg_resp += f"📍 **UFs:** {', '.join(mon.get('ufs', ufs)) if mon.get('ufs') else 'Todas'}\n"
+        msg_resp += f"⏱️ **Frequência:** A cada {mon.get('frequencia_horas', frequencia_horas)} hora(s)\n"
+        msg_resp += f"📊 **Score mínimo para alerta:** {mon.get('score_minimo', score_minimo)}%\n"
+        msg_resp += f"\n🆔 ID: `{mon.get('id', 'N/A')}`"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao configurar monitoramento')}"
+
+
+def processar_listar_monitoramentos(message: str, user_id: str):
+    """Processa listagem de monitoramentos configurados."""
+    from tools import tool_listar_monitoramentos
+    msg = message.lower()
+    apenas_ativos = "todos" not in msg and "inativos" not in msg
+
+    resultado = tool_listar_monitoramentos(user_id=user_id, apenas_ativos=apenas_ativos)
+
+    if resultado.get("success"):
+        monitoramentos = resultado.get("monitoramentos", [])
+
+        if not monitoramentos:
+            return "📭 Você não tem monitoramentos configurados.\n\nPara criar um monitoramento, diga algo como:\n*\"Monitore editais de equipamentos laboratoriais no PNCP\"*"
+
+        msg_resp = f"🔍 **Seus Monitoramentos** ({len(monitoramentos)} encontrados)\n\n"
+
+        for m in monitoramentos:
+            status_icon = "✅" if m.get('ativo') else "⏸️"
+            msg_resp += f"{status_icon} **{m['termo']}**\n"
+            msg_resp += f"   📡 Fontes: {', '.join(m.get('fontes', []))}\n"
+            msg_resp += f"   📍 UFs: {', '.join(m.get('ufs', [])) if m.get('ufs') else 'Todas'}\n"
+            msg_resp += f"   ⏱️ A cada {m.get('frequencia_horas', 4)}h\n"
+            msg_resp += f"   📊 Score mínimo: {m.get('score_minimo', 70)}%\n"
+            if m.get('ultima_execucao'):
+                msg_resp += f"   🕐 Última execução: {m['ultima_execucao']}\n"
+            if m.get('editais_encontrados'):
+                msg_resp += f"   📋 Editais encontrados: {m['editais_encontrados']}\n"
+            msg_resp += "\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao listar monitoramentos')}"
+
+
+def processar_desativar_monitoramento(message: str, user_id: str):
+    """Processa desativação de monitoramento."""
+    import re
+    from tools import tool_desativar_monitoramento
+
+    msg = message.lower()
+
+    # Tentar extrair termo do monitoramento
+    match_termo = re.search(r'(?:desativ|par|cancel|remov)[ea]?\s+(?:o\s+)?monitoramento\s+(?:de\s+)?(.+)', msg)
+    termo = match_termo.group(1).strip() if match_termo else None
+
+    # Tentar extrair ID
+    match_id = re.search(r'id[:\s]+([a-f0-9-]+)', msg, re.IGNORECASE)
+    monitoramento_id = match_id.group(1) if match_id else None
+
+    if not termo and not monitoramento_id:
+        return "⚠️ Para desativar um monitoramento, informe o termo ou ID.\n\nExemplos:\n- *\"Desative o monitoramento de equipamentos laboratoriais\"*\n- *\"Pare de monitorar reagentes\"*"
+
+    resultado = tool_desativar_monitoramento(
+        user_id=user_id,
+        termo=termo,
+        monitoramento_id=monitoramento_id
+    )
+
+    if resultado.get("success"):
+        return f"✅ Monitoramento desativado com sucesso!\n\n🔍 **Termo:** {resultado.get('termo', termo or 'N/A')}"
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao desativar monitoramento')}"
+
+
+def processar_configurar_notificacoes(message: str, user_id: str):
+    """Processa configuração de preferências de notificação."""
+    import re
+    from tools import tool_configurar_preferencias_notificacao
+
+    msg = message.lower()
+
+    # Extrair email
+    match_email = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', message)
+    email = match_email.group() if match_email else None
+
+    # Detectar habilitação
+    email_habilitado = True
+    push_habilitado = True
+
+    if "desativar email" in msg or "sem email" in msg:
+        email_habilitado = False
+    if "desativar push" in msg or "sem push" in msg:
+        push_habilitado = False
+
+    # Detectar horários
+    horario_inicio = None
+    horario_fim = None
+
+    match_horario = re.search(r'(?:das|entre)\s+(\d{1,2})(?:h|:00)?\s+(?:às|e|até)\s+(\d{1,2})(?:h|:00)?', msg)
+    if match_horario:
+        horario_inicio = f"{int(match_horario.group(1)):02d}:00"
+        horario_fim = f"{int(match_horario.group(2)):02d}:00"
+
+    resultado = tool_configurar_preferencias_notificacao(
+        user_id=user_id,
+        email_habilitado=email_habilitado,
+        push_habilitado=push_habilitado,
+        email_notificacao=email,
+        horario_inicio=horario_inicio,
+        horario_fim=horario_fim
+    )
+
+    if resultado.get("success"):
+        prefs = resultado.get("preferencias", {})
+        msg_resp = "✅ **Preferências de Notificação Atualizadas**\n\n"
+        msg_resp += f"📧 **Email:** {'✅ Habilitado' if prefs.get('email_habilitado') else '❌ Desabilitado'}\n"
+        if prefs.get('email_notificacao'):
+            msg_resp += f"   Enviar para: {prefs['email_notificacao']}\n"
+        msg_resp += f"🔔 **Push:** {'✅ Habilitado' if prefs.get('push_habilitado') else '❌ Desabilitado'}\n"
+
+        if prefs.get('horario_inicio') and prefs.get('horario_fim'):
+            msg_resp += f"⏰ **Horário:** {prefs['horario_inicio']} às {prefs['horario_fim']}\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao configurar notificações')}"
+
+
+def processar_historico_notificacoes(message: str, user_id: str):
+    """Processa listagem do histórico de notificações."""
+    from tools import tool_historico_notificacoes
+    msg = message.lower()
+
+    apenas_nao_lidas = "não lida" in msg or "nao lida" in msg or "pendente" in msg
+
+    limite = 20
+    if "últimas 10" in msg or "ultimas 10" in msg:
+        limite = 10
+    elif "últimas 50" in msg or "ultimas 50" in msg:
+        limite = 50
+
+    resultado = tool_historico_notificacoes(
+        user_id=user_id,
+        limite=limite,
+        apenas_nao_lidas=apenas_nao_lidas
+    )
+
+    if resultado.get("success"):
+        notificacoes = resultado.get("notificacoes", [])
+        nao_lidas = resultado.get("nao_lidas", 0)
+
+        if not notificacoes:
+            return "📭 Você não tem notificações.\n\nAs notificações aparecem quando:\n- Alertas de prazo são disparados\n- Novos editais são encontrados pelo monitoramento\n- O sistema precisa informar algo importante"
+
+        msg_resp = f"📬 **Suas Notificações** ({len(notificacoes)} exibidas"
+        if nao_lidas > 0:
+            msg_resp += f", {nao_lidas} não lidas"
+        msg_resp += ")\n\n"
+
+        for n in notificacoes:
+            tipo_icon = {
+                "alerta_prazo": "⏰",
+                "novo_edital": "📋",
+                "alta_aderencia": "⭐",
+                "resultado": "📊",
+                "sistema": "🔧"
+            }.get(n.get('tipo'), "📌")
+
+            lida_icon = "👁️" if n.get('lida') else "🔵"
+
+            msg_resp += f"{lida_icon} {tipo_icon} **{n['titulo']}**\n"
+            msg_resp += f"   {n['mensagem'][:100]}{'...' if len(n.get('mensagem', '')) > 100 else ''}\n"
+            msg_resp += f"   🕐 {n['created_at']}\n\n"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao carregar notificações')}"
+
+
+def processar_extrair_datas_edital(message: str, user_id: str, texto_pdf: str = None):
+    """Processa extração de datas importantes de um edital."""
+    import re
+    from tools import tool_extrair_datas_edital
+
+    # Se não tem texto PDF, informar como usar
+    if not texto_pdf:
+        # Verificar se há número de edital para buscar
+        match_edital = re.search(r'(PE[-]?\d+[-/]?\d*|[Pp]reg[aã]o\s*n?[ºo°]?\s*[\d/]+|\d{1,5}[/]\d{4})', message, re.IGNORECASE)
+
+        if match_edital:
+            edital_numero = match_edital.group(1)
+            return f"⚠️ Para extrair as datas do edital **{edital_numero}**, faça upload do PDF do edital.\n\nApós o upload, direi:\n*\"Extraia as datas do edital {edital_numero}\"*"
+        else:
+            return "⚠️ Para extrair datas de um edital, faça upload do PDF primeiro.\n\nApós o upload, diga:\n*\"Extraia as datas do edital PE 123/2024\"*"
+
+    # Se temos texto PDF, extrair datas
+    resultado = tool_extrair_datas_edital(
+        user_id=user_id,
+        texto_edital=texto_pdf
+    )
+
+    if resultado.get("success"):
+        datas = resultado.get("datas", {})
+        msg_resp = "📅 **Datas Extraídas do Edital**\n\n"
+
+        if datas.get("data_abertura"):
+            msg_resp += f"📆 **Data de Abertura:** {datas['data_abertura']}\n"
+        if datas.get("horario_abertura"):
+            msg_resp += f"⏰ **Horário:** {datas['horario_abertura']}\n"
+        if datas.get("data_limite_propostas"):
+            msg_resp += f"📝 **Limite para Propostas:** {datas['data_limite_propostas']}\n"
+        if datas.get("data_impugnacao"):
+            msg_resp += f"⚠️ **Prazo Impugnação:** {datas['data_impugnacao']}\n"
+        if datas.get("data_recursos"):
+            msg_resp += f"📑 **Prazo Recursos:** {datas['data_recursos']}\n"
+        if datas.get("data_publicacao"):
+            msg_resp += f"📰 **Data Publicação:** {datas['data_publicacao']}\n"
+
+        msg_resp += "\n💡 *Deseja configurar alertas para estas datas?*"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao extrair datas')}"
+
+
+def processar_cancelar_alerta(message: str, user_id: str):
+    """Processa cancelamento de alertas."""
+    import re
+    from tools import tool_cancelar_alerta
+
+    msg = message.lower()
+
+    # Extrair número do edital
+    match_edital = re.search(r'(PE[-]?\d+[-/]?\d*|[Pp]reg[aã]o\s*n?[ºo°]?\s*[\d/]+|\d{1,5}[/]\d{4})', message, re.IGNORECASE)
+    edital_numero = match_edital.group(1) if match_edital else None
+
+    # Extrair ID do alerta
+    match_id = re.search(r'alerta[:\s]+([a-f0-9-]+)', msg, re.IGNORECASE)
+    alerta_id = match_id.group(1) if match_id else None
+
+    # Cancelar todos?
+    cancelar_todos = "todos" in msg
+
+    if not edital_numero and not alerta_id and not cancelar_todos:
+        return "⚠️ Para cancelar alertas, informe o edital ou o ID do alerta.\n\nExemplos:\n- *\"Cancele os alertas do PE 123/2024\"*\n- *\"Cancele todos os alertas\"*"
+
+    resultado = tool_cancelar_alerta(
+        user_id=user_id,
+        alerta_id=alerta_id,
+        edital_numero=edital_numero,
+        cancelar_todos=cancelar_todos
+    )
+
+    if resultado.get("success"):
+        qtd = resultado.get("cancelados", 0)
+        msg_resp = f"✅ **{qtd} alerta(s) cancelado(s)**\n\n"
+
+        if edital_numero:
+            msg_resp += f"📋 Edital: {edital_numero}"
+
+        return msg_resp
+    else:
+        return f"❌ {resultado.get('error', 'Erro ao cancelar alertas')}"
+
+
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
     """Processa chat livre sobre licitações"""
     # Buscar histórico
@@ -4670,6 +5392,14 @@ if __name__ == "__main__":
 
     print("Inicializando banco de dados...")
     init_db()
+
+    # Iniciar scheduler para alertas e monitoramentos (Sprint 2)
+    try:
+        from scheduler import iniciar_scheduler
+        print("Iniciando scheduler de alertas e monitoramentos...")
+        iniciar_scheduler()
+    except Exception as e:
+        print(f"[AVISO] Scheduler não iniciado: {e}")
 
     print("Servidor pronto na porta 5007!")
     print("=" * 50)

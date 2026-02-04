@@ -3699,3 +3699,874 @@ def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str 
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
+
+# ==================== SPRINT 2: ALERTAS E MONITORAMENTO ====================
+
+from models import Alerta, Monitoramento, Notificacao, PreferenciasNotificacao
+from datetime import timedelta
+
+
+def formatar_tempo(minutos: int) -> str:
+    """Converte minutos para texto legível."""
+    if minutos >= 1440:
+        dias = minutos // 1440
+        return f"{dias} dia(s)" if dias > 1 else "1 dia"
+    elif minutos >= 60:
+        horas = minutos // 60
+        return f"{horas} hora(s)" if horas > 1 else "1 hora"
+    else:
+        return f"{minutos} minutos"
+
+
+def formatar_tempo_restante(delta: timedelta) -> str:
+    """Formata timedelta para texto legível."""
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 0:
+        return "Já passou"
+
+    dias = total_seconds // 86400
+    horas = (total_seconds % 86400) // 3600
+    minutos = (total_seconds % 3600) // 60
+
+    partes = []
+    if dias > 0:
+        partes.append(f"{dias}d")
+    if horas > 0:
+        partes.append(f"{horas}h")
+    if minutos > 0 and dias == 0:
+        partes.append(f"{minutos}min")
+
+    return " ".join(partes) if partes else "menos de 1 minuto"
+
+
+def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: List[int] = None,
+                            tipo: str = "abertura", canais: List[str] = None) -> Dict:
+    """
+    Configura alertas de prazo para um edital.
+
+    Args:
+        user_id: ID do usuário
+        edital_numero: Número do edital (ex: PE-001/2026)
+        tempos_minutos: Lista de tempos em minutos antes do evento [4320, 1440, 60, 15]
+        tipo: Tipo de alerta (abertura, impugnacao, recursos, proposta)
+        canais: Lista de canais ["email", "push"]
+    """
+    db = get_db()
+    try:
+        # Buscar edital
+        edital = db.query(Edital).filter(
+            Edital.numero.ilike(f"%{edital_numero}%"),
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            return {"success": False, "error": f"Edital '{edital_numero}' não encontrado."}
+
+        # Determinar data base conforme tipo
+        if tipo == "abertura":
+            data_evento = edital.data_abertura
+        elif tipo == "impugnacao":
+            data_evento = edital.data_limite_impugnacao
+        elif tipo == "recursos":
+            data_evento = edital.data_recursos
+        elif tipo == "proposta":
+            data_evento = edital.data_limite_proposta
+        else:
+            data_evento = edital.data_abertura
+
+        if not data_evento:
+            return {"success": False, "error": f"Edital não possui data de {tipo} cadastrada."}
+
+        # Buscar preferências do usuário
+        prefs = db.query(PreferenciasNotificacao).filter(
+            PreferenciasNotificacao.user_id == user_id
+        ).first()
+
+        # Tempos padrão se não especificado
+        if not tempos_minutos:
+            tempos_minutos = prefs.alertas_padrao if prefs else [4320, 1440, 60, 15]
+
+        # Canais padrão
+        if not canais:
+            canais = ["email", "push"]
+
+        alertas_criados = []
+        agora = datetime.now()
+
+        for tempo in tempos_minutos:
+            data_disparo = data_evento - timedelta(minutes=tempo)
+
+            # Não criar alerta se já passou
+            if data_disparo <= agora:
+                continue
+
+            # Verificar se já existe alerta similar
+            existente = db.query(Alerta).filter(
+                Alerta.user_id == user_id,
+                Alerta.edital_id == edital.id,
+                Alerta.tipo == tipo,
+                Alerta.tempo_antes_minutos == tempo,
+                Alerta.status == 'agendado'
+            ).first()
+
+            if existente:
+                continue
+
+            alerta = Alerta(
+                user_id=user_id,
+                edital_id=edital.id,
+                tipo=tipo,
+                data_disparo=data_disparo,
+                tempo_antes_minutos=tempo,
+                canal_email="email" in canais,
+                canal_push="push" in canais,
+                titulo=f"⏰ {edital.numero} - {formatar_tempo(tempo)} para {tipo}",
+                mensagem=f"O edital {edital.numero} - {edital.orgao} tem {tipo} em {formatar_tempo(tempo)}."
+            )
+            db.add(alerta)
+            alertas_criados.append({
+                "tempo_antes": tempo,
+                "tempo_formatado": formatar_tempo(tempo),
+                "data_disparo": data_disparo.isoformat(),
+                "canais": canais
+            })
+
+        db.commit()
+
+        return {
+            "success": True,
+            "edital": {
+                "numero": edital.numero,
+                "orgao": edital.orgao,
+                "data_evento": data_evento.isoformat(),
+                "tipo_evento": tipo
+            },
+            "alertas_criados": alertas_criados,
+            "total_criados": len(alertas_criados)
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_listar_alertas(user_id: str, apenas_agendados: bool = True,
+                        periodo_dias: int = 30) -> Dict:
+    """
+    Lista alertas do usuário.
+
+    Args:
+        user_id: ID do usuário
+        apenas_agendados: Se True, lista apenas alertas agendados
+        periodo_dias: Período em dias para buscar alertas
+    """
+    db = get_db()
+    try:
+        data_limite = datetime.now() + timedelta(days=periodo_dias)
+
+        query = db.query(Alerta).filter(
+            Alerta.user_id == user_id
+        )
+
+        if apenas_agendados:
+            query = query.filter(
+                Alerta.status == 'agendado',
+                Alerta.data_disparo >= datetime.now(),
+                Alerta.data_disparo <= data_limite
+            )
+
+        alertas = query.order_by(Alerta.data_disparo).all()
+
+        # Agrupar por edital
+        editais_alertas = {}
+        for alerta in alertas:
+            edital = db.query(Edital).filter(Edital.id == alerta.edital_id).first()
+            if not edital:
+                continue
+
+            if edital.id not in editais_alertas:
+                tempo_restante = edital.data_abertura - datetime.now() if edital.data_abertura else None
+                editais_alertas[edital.id] = {
+                    "edital": {
+                        "id": edital.id,
+                        "numero": edital.numero,
+                        "orgao": edital.orgao,
+                        "objeto": edital.objeto[:100] + "..." if edital.objeto and len(edital.objeto) > 100 else edital.objeto,
+                        "data_abertura": edital.data_abertura.isoformat() if edital.data_abertura else None,
+                        "tempo_restante": formatar_tempo_restante(tempo_restante) if tempo_restante else None,
+                        "status": edital.status
+                    },
+                    "alertas": []
+                }
+
+            editais_alertas[edital.id]["alertas"].append({
+                "id": alerta.id,
+                "tipo": alerta.tipo,
+                "tempo_antes": formatar_tempo(alerta.tempo_antes_minutos) if alerta.tempo_antes_minutos else None,
+                "data_disparo": alerta.data_disparo.isoformat() if alerta.data_disparo else None,
+                "status": alerta.status,
+                "canais": {
+                    "email": alerta.canal_email,
+                    "push": alerta.canal_push
+                }
+            })
+
+        return {
+            "success": True,
+            "total_alertas": len(alertas),
+            "total_editais": len(editais_alertas),
+            "editais": list(editais_alertas.values())
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_dashboard_prazos(user_id: str, dias: int = 30) -> Dict:
+    """
+    Retorna dashboard de prazos com editais próximos.
+
+    Args:
+        user_id: ID do usuário
+        dias: Quantidade de dias para frente a considerar
+    """
+    db = get_db()
+    try:
+        agora = datetime.now()
+        data_limite = agora + timedelta(days=dias)
+
+        # Buscar editais com data de abertura no período
+        editais = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.data_abertura != None,
+            Edital.data_abertura >= agora,
+            Edital.data_abertura <= data_limite,
+            Edital.status.in_(['novo', 'analisando', 'participando', 'proposta_enviada'])
+        ).order_by(Edital.data_abertura).all()
+
+        resultado = []
+        for edital in editais:
+            tempo_restante = edital.data_abertura - agora
+
+            # Buscar alertas configurados
+            alertas = db.query(Alerta).filter(
+                Alerta.edital_id == edital.id,
+                Alerta.user_id == user_id,
+                Alerta.status == 'agendado'
+            ).all()
+
+            # Determinar urgência
+            dias_restantes = tempo_restante.days
+            if dias_restantes <= 1:
+                urgencia = "critico"
+                emoji = "🔴"
+            elif dias_restantes <= 3:
+                urgencia = "alto"
+                emoji = "🟠"
+            elif dias_restantes <= 7:
+                urgencia = "medio"
+                emoji = "🟡"
+            else:
+                urgencia = "normal"
+                emoji = "🟢"
+
+            resultado.append({
+                "edital": {
+                    "id": edital.id,
+                    "numero": edital.numero,
+                    "orgao": edital.orgao,
+                    "objeto": edital.objeto[:80] + "..." if edital.objeto and len(edital.objeto) > 80 else edital.objeto,
+                    "valor_referencia": float(edital.valor_referencia) if edital.valor_referencia else None,
+                    "status": edital.status
+                },
+                "datas": {
+                    "abertura": edital.data_abertura.isoformat() if edital.data_abertura else None,
+                    "abertura_formatada": edital.data_abertura.strftime("%d/%m/%Y %H:%M") if edital.data_abertura else None,
+                    "impugnacao": edital.data_limite_impugnacao.strftime("%d/%m/%Y %H:%M") if edital.data_limite_impugnacao else None,
+                    "proposta": edital.data_limite_proposta.strftime("%d/%m/%Y %H:%M") if edital.data_limite_proposta else None
+                },
+                "tempo_restante": {
+                    "texto": formatar_tempo_restante(tempo_restante),
+                    "dias": tempo_restante.days,
+                    "horas": tempo_restante.seconds // 3600
+                },
+                "urgencia": urgencia,
+                "emoji": emoji,
+                "alertas_configurados": len(alertas),
+                "alertas": [formatar_tempo(a.tempo_antes_minutos) for a in alertas if a.tempo_antes_minutos]
+            })
+
+        # Estatísticas
+        stats = {
+            "total": len(resultado),
+            "criticos": len([e for e in resultado if e["urgencia"] == "critico"]),
+            "altos": len([e for e in resultado if e["urgencia"] == "alto"]),
+            "medios": len([e for e in resultado if e["urgencia"] == "medio"]),
+            "normais": len([e for e in resultado if e["urgencia"] == "normal"])
+        }
+
+        return {
+            "success": True,
+            "periodo_dias": dias,
+            "data_consulta": agora.isoformat(),
+            "estatisticas": stats,
+            "editais": resultado
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_calendario_editais(user_id: str, mes: int = None, ano: int = None) -> Dict:
+    """
+    Retorna calendário de editais do mês.
+
+    Args:
+        user_id: ID do usuário
+        mes: Mês (1-12), padrão = mês atual
+        ano: Ano, padrão = ano atual
+    """
+    db = get_db()
+    try:
+        agora = datetime.now()
+        if not mes:
+            mes = agora.month
+        if not ano:
+            ano = agora.year
+
+        # Início e fim do mês
+        inicio = datetime(ano, mes, 1)
+        if mes == 12:
+            fim = datetime(ano + 1, 1, 1)
+        else:
+            fim = datetime(ano, mes + 1, 1)
+
+        # Buscar editais no período
+        editais = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.data_abertura != None,
+            Edital.data_abertura >= inicio,
+            Edital.data_abertura < fim
+        ).order_by(Edital.data_abertura).all()
+
+        # Organizar por dia
+        calendario = {}
+        for edital in editais:
+            dia = edital.data_abertura.day
+            if dia not in calendario:
+                calendario[dia] = []
+
+            calendario[dia].append({
+                "numero": edital.numero,
+                "orgao": edital.orgao[:30] + "..." if len(edital.orgao) > 30 else edital.orgao,
+                "horario": edital.data_abertura.strftime("%H:%M"),
+                "status": edital.status,
+                "valor": float(edital.valor_referencia) if edital.valor_referencia else None
+            })
+
+        # Nomes dos meses
+        meses = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+        return {
+            "success": True,
+            "mes": mes,
+            "ano": ano,
+            "mes_nome": meses[mes],
+            "total_editais": len(editais),
+            "dias_com_editais": len(calendario),
+            "calendario": calendario
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_configurar_monitoramento(user_id: str, termo: str, fontes: List[str] = None,
+                                   ufs: List[str] = None, frequencia_horas: int = 4,
+                                   score_minimo: int = 70, valor_minimo: float = None,
+                                   valor_maximo: float = None) -> Dict:
+    """
+    Configura monitoramento automático de editais.
+
+    Args:
+        user_id: ID do usuário
+        termo: Termo de busca (ex: "hematologia", "equipamento laboratorial")
+        fontes: Lista de fontes ["pncp", "comprasnet", "bec"]
+        ufs: Lista de UFs ["SP", "RJ"] ou None para todas
+        frequencia_horas: Frequência de busca em horas
+        score_minimo: Score mínimo para alertar
+        valor_minimo: Valor mínimo do edital
+        valor_maximo: Valor máximo do edital
+    """
+    db = get_db()
+    try:
+        # Verificar se já existe monitoramento similar
+        existente = db.query(Monitoramento).filter(
+            Monitoramento.user_id == user_id,
+            Monitoramento.termo == termo.lower(),
+            Monitoramento.ativo == True
+        ).first()
+
+        if existente:
+            return {"success": False, "error": f"Já existe monitoramento ativo para '{termo}'."}
+
+        # Criar monitoramento
+        monitoramento = Monitoramento(
+            user_id=user_id,
+            termo=termo.lower(),
+            fontes=fontes or ["pncp"],
+            ufs=ufs,
+            valor_minimo=valor_minimo,
+            valor_maximo=valor_maximo,
+            frequencia_horas=frequencia_horas,
+            score_minimo_alerta=score_minimo,
+            proximo_check=datetime.now() + timedelta(hours=frequencia_horas),
+            notificar_email=True,
+            notificar_push=True,
+            ativo=True
+        )
+        db.add(monitoramento)
+        db.commit()
+
+        return {
+            "success": True,
+            "monitoramento": {
+                "id": monitoramento.id,
+                "termo": termo,
+                "fontes": fontes or ["pncp"],
+                "ufs": ufs,
+                "frequencia_horas": frequencia_horas,
+                "score_minimo": score_minimo,
+                "proximo_check": monitoramento.proximo_check.isoformat()
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_listar_monitoramentos(user_id: str, apenas_ativos: bool = True) -> Dict:
+    """
+    Lista monitoramentos do usuário.
+
+    Args:
+        user_id: ID do usuário
+        apenas_ativos: Se True, lista apenas monitoramentos ativos
+    """
+    db = get_db()
+    try:
+        query = db.query(Monitoramento).filter(
+            Monitoramento.user_id == user_id
+        )
+
+        if apenas_ativos:
+            query = query.filter(Monitoramento.ativo == True)
+
+        monitoramentos = query.order_by(Monitoramento.created_at.desc()).all()
+
+        resultado = []
+        for m in monitoramentos:
+            # Contar notificações geradas
+            notifs = db.query(Notificacao).filter(
+                Notificacao.monitoramento_id == m.id
+            ).count()
+
+            resultado.append({
+                "id": m.id,
+                "termo": m.termo,
+                "fontes": m.fontes,
+                "ufs": m.ufs,
+                "frequencia_horas": m.frequencia_horas,
+                "score_minimo": m.score_minimo_alerta,
+                "ativo": m.ativo,
+                "ultimo_check": m.ultimo_check.isoformat() if m.ultimo_check else None,
+                "proximo_check": m.proximo_check.isoformat() if m.proximo_check else None,
+                "notificacoes_geradas": notifs,
+                "created_at": m.created_at.isoformat() if m.created_at else None
+            })
+
+        return {
+            "success": True,
+            "total": len(resultado),
+            "monitoramentos": resultado
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_desativar_monitoramento(user_id: str, termo: str = None,
+                                  monitoramento_id: str = None) -> Dict:
+    """
+    Desativa um monitoramento.
+
+    Args:
+        user_id: ID do usuário
+        termo: Termo do monitoramento a desativar
+        monitoramento_id: ID do monitoramento (alternativa ao termo)
+    """
+    db = get_db()
+    try:
+        query = db.query(Monitoramento).filter(
+            Monitoramento.user_id == user_id,
+            Monitoramento.ativo == True
+        )
+
+        if monitoramento_id:
+            query = query.filter(Monitoramento.id == monitoramento_id)
+        elif termo:
+            query = query.filter(Monitoramento.termo.ilike(f"%{termo}%"))
+        else:
+            return {"success": False, "error": "Informe o termo ou ID do monitoramento."}
+
+        monitoramento = query.first()
+        if not monitoramento:
+            return {"success": False, "error": "Monitoramento não encontrado."}
+
+        monitoramento.ativo = False
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Monitoramento de '{monitoramento.termo}' desativado.",
+            "monitoramento_id": monitoramento.id
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_configurar_preferencias_notificacao(user_id: str, email_habilitado: bool = None,
+                                              push_habilitado: bool = None,
+                                              email_notificacao: str = None,
+                                              horario_inicio: str = None,
+                                              horario_fim: str = None,
+                                              alertas_padrao: List[int] = None) -> Dict:
+    """
+    Configura preferências de notificação do usuário.
+
+    Args:
+        user_id: ID do usuário
+        email_habilitado: Habilitar notificações por email
+        push_habilitado: Habilitar notificações push
+        email_notificacao: Email alternativo para notificações
+        horario_inicio: Horário início permitido (HH:MM)
+        horario_fim: Horário fim permitido (HH:MM)
+        alertas_padrao: Lista de minutos para alertas padrão
+    """
+    db = get_db()
+    try:
+        # Buscar ou criar preferências
+        prefs = db.query(PreferenciasNotificacao).filter(
+            PreferenciasNotificacao.user_id == user_id
+        ).first()
+
+        if not prefs:
+            prefs = PreferenciasNotificacao(user_id=user_id)
+            db.add(prefs)
+
+        # Atualizar campos informados
+        if email_habilitado is not None:
+            prefs.email_habilitado = email_habilitado
+        if push_habilitado is not None:
+            prefs.push_habilitado = push_habilitado
+        if email_notificacao:
+            prefs.email_notificacao = email_notificacao
+        if horario_inicio:
+            prefs.horario_inicio = horario_inicio
+        if horario_fim:
+            prefs.horario_fim = horario_fim
+        if alertas_padrao:
+            prefs.alertas_padrao = alertas_padrao
+
+        db.commit()
+
+        return {
+            "success": True,
+            "preferencias": prefs.to_dict()
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_historico_notificacoes(user_id: str, limite: int = 50,
+                                 apenas_nao_lidas: bool = False) -> Dict:
+    """
+    Retorna histórico de notificações do usuário.
+
+    Args:
+        user_id: ID do usuário
+        limite: Quantidade máxima de notificações
+        apenas_nao_lidas: Se True, retorna apenas não lidas
+    """
+    db = get_db()
+    try:
+        query = db.query(Notificacao).filter(
+            Notificacao.user_id == user_id
+        )
+
+        if apenas_nao_lidas:
+            query = query.filter(Notificacao.lida == False)
+
+        notificacoes = query.order_by(Notificacao.created_at.desc()).limit(limite).all()
+
+        # Contar não lidas
+        nao_lidas = db.query(Notificacao).filter(
+            Notificacao.user_id == user_id,
+            Notificacao.lida == False
+        ).count()
+
+        resultado = []
+        for n in notificacoes:
+            edital = None
+            if n.edital_id:
+                ed = db.query(Edital).filter(Edital.id == n.edital_id).first()
+                if ed:
+                    edital = {"numero": ed.numero, "orgao": ed.orgao}
+
+            resultado.append({
+                "id": n.id,
+                "tipo": n.tipo,
+                "titulo": n.titulo,
+                "mensagem": n.mensagem,
+                "edital": edital,
+                "lida": n.lida,
+                "created_at": n.created_at.isoformat() if n.created_at else None
+            })
+
+        return {
+            "success": True,
+            "total": len(resultado),
+            "nao_lidas": nao_lidas,
+            "notificacoes": resultado
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_marcar_notificacao_lida(user_id: str, notificacao_id: str = None,
+                                  marcar_todas: bool = False) -> Dict:
+    """
+    Marca notificação(ões) como lida(s).
+
+    Args:
+        user_id: ID do usuário
+        notificacao_id: ID da notificação específica
+        marcar_todas: Se True, marca todas como lidas
+    """
+    db = get_db()
+    try:
+        if marcar_todas:
+            db.query(Notificacao).filter(
+                Notificacao.user_id == user_id,
+                Notificacao.lida == False
+            ).update({"lida": True, "lida_em": datetime.now()})
+            db.commit()
+            return {"success": True, "mensagem": "Todas as notificações marcadas como lidas."}
+
+        if notificacao_id:
+            notif = db.query(Notificacao).filter(
+                Notificacao.id == notificacao_id,
+                Notificacao.user_id == user_id
+            ).first()
+
+            if not notif:
+                return {"success": False, "error": "Notificação não encontrada."}
+
+            notif.lida = True
+            notif.lida_em = datetime.now()
+            db.commit()
+            return {"success": True, "mensagem": "Notificação marcada como lida."}
+
+        return {"success": False, "error": "Informe o ID da notificação ou use marcar_todas=True."}
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_extrair_datas_edital(user_id: str, texto_edital: str = None,
+                               edital_numero: str = None) -> Dict:
+    """
+    Extrai datas importantes de um edital usando IA.
+
+    Args:
+        user_id: ID do usuário
+        texto_edital: Texto extraído do PDF do edital
+        edital_numero: Número do edital para atualizar
+    """
+    db = get_db()
+    try:
+        if not texto_edital:
+            return {"success": False, "error": "Texto do edital não fornecido."}
+
+        # Prompt para extração de datas
+        prompt = f"""Analise este edital de licitação e extraia TODAS as datas importantes.
+
+TEXTO DO EDITAL:
+{texto_edital[:8000]}
+
+INSTRUÇÕES:
+- Converta todas as datas para o formato dd/mm/yyyy HH:MM (se houver horário) ou dd/mm/yyyy (se só data)
+- Horários geralmente estão em horário de Brasília
+- A "sessão pública" ou "abertura" é a data mais importante
+- Impugnação geralmente é 3 dias antes da abertura
+- Recursos geralmente é até 3 dias após a sessão
+
+Retorne APENAS um JSON válido:
+{{
+    "numero": "número do edital (ex: PE-001/2026)",
+    "data_publicacao": "dd/mm/yyyy ou null",
+    "data_abertura": "dd/mm/yyyy HH:MM ou null",
+    "data_impugnacao": "dd/mm/yyyy HH:MM ou null",
+    "data_proposta": "dd/mm/yyyy HH:MM ou null",
+    "data_recursos": "dd/mm/yyyy HH:MM ou null",
+    "fuso": "Brasília",
+    "observacoes": "qualquer observação relevante"
+}}"""
+
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500)
+
+        # Extrair JSON da resposta
+        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        if not json_match:
+            return {"success": False, "error": "Não foi possível extrair datas do texto."}
+
+        dados = json.loads(json_match.group())
+
+        # Função para parsear datas
+        def parse_data(data_str):
+            if not data_str or data_str == "null":
+                return None
+            formatos = ["%d/%m/%Y %H:%M", "%d/%m/%Y"]
+            for fmt in formatos:
+                try:
+                    return datetime.strptime(data_str, fmt)
+                except:
+                    continue
+            return None
+
+        # Se tiver número do edital, atualizar no banco
+        edital = None
+        if edital_numero or dados.get("numero"):
+            numero = edital_numero or dados.get("numero")
+            edital = db.query(Edital).filter(
+                Edital.numero.ilike(f"%{numero}%"),
+                Edital.user_id == user_id
+            ).first()
+
+            if edital:
+                if dados.get("data_abertura"):
+                    edital.data_abertura = parse_data(dados["data_abertura"])
+                if dados.get("data_impugnacao"):
+                    edital.data_limite_impugnacao = parse_data(dados["data_impugnacao"])
+                if dados.get("data_proposta"):
+                    edital.data_limite_proposta = parse_data(dados["data_proposta"])
+                if dados.get("data_recursos"):
+                    edital.data_recursos = parse_data(dados["data_recursos"])
+                if dados.get("data_publicacao"):
+                    dt = parse_data(dados["data_publicacao"])
+                    if dt:
+                        edital.data_publicacao = dt.date()
+
+                db.commit()
+
+        return {
+            "success": True,
+            "datas_extraidas": dados,
+            "edital_atualizado": edital.numero if edital else None
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
+                          edital_numero: str = None, cancelar_todos: bool = False) -> Dict:
+    """
+    Cancela alerta(s).
+
+    Args:
+        user_id: ID do usuário
+        alerta_id: ID do alerta específico
+        edital_numero: Cancelar todos alertas do edital
+        cancelar_todos: Cancelar todos alertas agendados
+    """
+    db = get_db()
+    try:
+        if cancelar_todos:
+            count = db.query(Alerta).filter(
+                Alerta.user_id == user_id,
+                Alerta.status == 'agendado'
+            ).update({"status": "cancelado"})
+            db.commit()
+            return {"success": True, "mensagem": f"{count} alertas cancelados."}
+
+        if alerta_id:
+            alerta = db.query(Alerta).filter(
+                Alerta.id == alerta_id,
+                Alerta.user_id == user_id,
+                Alerta.status == 'agendado'
+            ).first()
+
+            if not alerta:
+                return {"success": False, "error": "Alerta não encontrado."}
+
+            alerta.status = 'cancelado'
+            db.commit()
+            return {"success": True, "mensagem": "Alerta cancelado."}
+
+        if edital_numero:
+            edital = db.query(Edital).filter(
+                Edital.numero.ilike(f"%{edital_numero}%"),
+                Edital.user_id == user_id
+            ).first()
+
+            if not edital:
+                return {"success": False, "error": "Edital não encontrado."}
+
+            count = db.query(Alerta).filter(
+                Alerta.edital_id == edital.id,
+                Alerta.user_id == user_id,
+                Alerta.status == 'agendado'
+            ).update({"status": "cancelado"})
+            db.commit()
+            return {"success": True, "mensagem": f"{count} alertas do edital {edital.numero} cancelados."}
+
+        return {"success": False, "error": "Informe alerta_id, edital_numero ou cancelar_todos."}
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()

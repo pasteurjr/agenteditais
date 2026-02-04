@@ -124,6 +124,7 @@ function AppContent() {
           onRenameSession={handleRenameSession}
           user={user}
           onLogout={handleLogout}
+          onMenuAction={(prompt) => handleSend(prompt)}
         />
       </div>
       <ChatArea

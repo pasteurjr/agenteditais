@@ -2372,3 +2372,87 @@ body {
   width: auto;
   padding: 12px 24px;
 }
+
+/* =============================================================================
+   Sprint 2: Menus de Alertas e Automação
+   ============================================================================= */
+
+.sprint2-menus {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.menu-group {
+  margin-bottom: 4px;
+}
+
+.menu-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.menu-group-header:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.menu-group-header.expanded {
+  color: var(--accent);
+}
+
+.menu-group-header span {
+  flex: 1;
+}
+
+.menu-items {
+  margin-left: 16px;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.menu-item svg {
+  flex-shrink: 0;
+}
+
+.menu-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

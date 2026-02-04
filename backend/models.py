@@ -250,7 +250,11 @@ class Edital(Base):
     data_abertura = Column(DateTime, nullable=True)
     data_limite_proposta = Column(DateTime, nullable=True)
     data_limite_impugnacao = Column(DateTime, nullable=True)
-    status = Column(Enum('novo', 'analisando', 'participando', 'proposta_enviada', 'em_pregao', 'vencedor', 'perdedor', 'cancelado', 'desistido', 'aberto', 'fechado', 'suspenso'), default='novo')
+    data_recursos = Column(DateTime, nullable=True)  # Sprint 2
+    data_homologacao_prevista = Column(Date, nullable=True)  # Sprint 2
+    horario_abertura = Column(String(5), nullable=True)  # HH:MM - Sprint 2
+    fuso_horario = Column(String(50), default='America/Sao_Paulo')  # Sprint 2
+    status = Column(Enum('novo', 'analisando', 'participando', 'proposta_enviada', 'em_pregao', 'vencedor', 'perdedor', 'cancelado', 'desistido', 'aberto', 'fechado', 'suspenso', 'ganho', 'perdido'), default='novo')
     fonte = Column(String(50), nullable=True)
     url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -275,6 +279,12 @@ class Edital(Base):
             "valor_referencia": float(self.valor_referencia) if self.valor_referencia else None,
             "data_publicacao": self.data_publicacao.isoformat() if self.data_publicacao else None,
             "data_abertura": self.data_abertura.isoformat() if self.data_abertura else None,
+            "data_limite_proposta": self.data_limite_proposta.isoformat() if self.data_limite_proposta else None,
+            "data_limite_impugnacao": self.data_limite_impugnacao.isoformat() if self.data_limite_impugnacao else None,
+            "data_recursos": self.data_recursos.isoformat() if self.data_recursos else None,
+            "data_homologacao_prevista": self.data_homologacao_prevista.isoformat() if self.data_homologacao_prevista else None,
+            "horario_abertura": self.horario_abertura,
+            "fuso_horario": self.fuso_horario,
             "status": self.status,
             "fonte": self.fonte,
             "url": self.url,
@@ -582,6 +592,215 @@ class ParticipacaoEdital(Base):
             "desclassificado": self.desclassificado,
             "motivo_desclassificacao": self.motivo_desclassificacao,
             "fonte": self.fonte,
+        }
+
+
+# ==================== SPRINT 2: ALERTAS E MONITORAMENTO ====================
+
+class Alerta(Base):
+    """Alertas agendados para editais"""
+    __tablename__ = 'alertas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+
+    # Tipo de alerta
+    tipo = Column(Enum('abertura', 'impugnacao', 'recursos', 'proposta', 'personalizado'), nullable=False, default='abertura')
+
+    # Quando disparar
+    data_disparo = Column(DateTime, nullable=False)
+    tempo_antes_minutos = Column(Integer, nullable=True)  # 1440 = 24h, 60 = 1h, etc.
+
+    # Status
+    status = Column(Enum('agendado', 'disparado', 'lido', 'cancelado'), default='agendado')
+
+    # Canais
+    canal_email = Column(Boolean, default=True)
+    canal_push = Column(Boolean, default=True)
+    canal_sms = Column(Boolean, default=False)
+
+    # Mensagem
+    titulo = Column(String(255), nullable=True)
+    mensagem = Column(Text, nullable=True)
+
+    # Metadados
+    disparado_em = Column(DateTime, nullable=True)
+    lido_em = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", backref="alertas")
+    edital = relationship("Edital", backref="alertas")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "tipo": self.tipo,
+            "data_disparo": self.data_disparo.isoformat() if self.data_disparo else None,
+            "tempo_antes_minutos": self.tempo_antes_minutos,
+            "status": self.status,
+            "canal_email": self.canal_email,
+            "canal_push": self.canal_push,
+            "titulo": self.titulo,
+            "mensagem": self.mensagem,
+            "disparado_em": self.disparado_em.isoformat() if self.disparado_em else None,
+            "lido_em": self.lido_em.isoformat() if self.lido_em else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Monitoramento(Base):
+    """Configurações de monitoramento automático de editais"""
+    __tablename__ = 'monitoramentos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+
+    # Filtros de busca
+    termo = Column(String(255), nullable=False)  # "hematologia", "equipamento laboratorial"
+    fontes = Column(JSON, nullable=True)  # ["pncp", "comprasnet", "bec"]
+    ufs = Column(JSON, nullable=True)  # ["SP", "RJ", "MG"] ou null = todas
+    valor_minimo = Column(DECIMAL(15, 2), nullable=True)
+    valor_maximo = Column(DECIMAL(15, 2), nullable=True)
+
+    # Frequência
+    frequencia_horas = Column(Integer, default=4)  # A cada X horas
+    ultimo_check = Column(DateTime, nullable=True)
+    proximo_check = Column(DateTime, nullable=True)
+
+    # Notificações
+    notificar_email = Column(Boolean, default=True)
+    notificar_push = Column(Boolean, default=True)
+    score_minimo_alerta = Column(Integer, default=70)  # Alertar se score >= 70%
+
+    # Status
+    ativo = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", backref="monitoramentos")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "termo": self.termo,
+            "fontes": self.fontes,
+            "ufs": self.ufs,
+            "valor_minimo": float(self.valor_minimo) if self.valor_minimo else None,
+            "valor_maximo": float(self.valor_maximo) if self.valor_maximo else None,
+            "frequencia_horas": self.frequencia_horas,
+            "ultimo_check": self.ultimo_check.isoformat() if self.ultimo_check else None,
+            "proximo_check": self.proximo_check.isoformat() if self.proximo_check else None,
+            "notificar_email": self.notificar_email,
+            "notificar_push": self.notificar_push,
+            "score_minimo_alerta": self.score_minimo_alerta,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Notificacao(Base):
+    """Notificações enviadas (histórico)"""
+    __tablename__ = 'notificacoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+
+    # Referência
+    tipo = Column(Enum('alerta_prazo', 'novo_edital', 'alta_aderencia', 'resultado', 'sistema'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    alerta_id = Column(String(36), ForeignKey('alertas.id', ondelete='SET NULL'), nullable=True)
+    monitoramento_id = Column(String(36), ForeignKey('monitoramentos.id', ondelete='SET NULL'), nullable=True)
+
+    # Conteúdo
+    titulo = Column(String(255), nullable=False)
+    mensagem = Column(Text, nullable=False)
+    dados = Column(JSON, nullable=True)  # Dados adicionais em JSON
+
+    # Canais
+    enviado_email = Column(Boolean, default=False)
+    enviado_push = Column(Boolean, default=False)
+    enviado_sms = Column(Boolean, default=False)
+
+    # Status
+    lida = Column(Boolean, default=False)
+    lida_em = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", backref="notificacoes")
+    edital = relationship("Edital", backref="notificacoes")
+    alerta = relationship("Alerta", backref="notificacoes")
+    monitoramento = relationship("Monitoramento", backref="notificacoes")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "tipo": self.tipo,
+            "edital_id": self.edital_id,
+            "alerta_id": self.alerta_id,
+            "monitoramento_id": self.monitoramento_id,
+            "titulo": self.titulo,
+            "mensagem": self.mensagem,
+            "dados": self.dados,
+            "enviado_email": self.enviado_email,
+            "enviado_push": self.enviado_push,
+            "lida": self.lida,
+            "lida_em": self.lida_em.isoformat() if self.lida_em else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PreferenciasNotificacao(Base):
+    """Preferências do usuário para notificações"""
+    __tablename__ = 'preferencias_notificacao'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
+
+    # Canais habilitados
+    email_habilitado = Column(Boolean, default=True)
+    push_habilitado = Column(Boolean, default=True)
+    sms_habilitado = Column(Boolean, default=False)
+
+    # Email
+    email_notificacao = Column(String(255), nullable=True)  # Email alternativo para notificações
+
+    # Horários permitidos
+    horario_inicio = Column(String(5), default='07:00')  # HH:MM
+    horario_fim = Column(String(5), default='22:00')
+    dias_semana = Column(JSON, default=lambda: ["seg", "ter", "qua", "qui", "sex"])
+
+    # Tipos de alerta padrão (minutos antes)
+    alertas_padrao = Column(JSON, default=lambda: [4320, 1440, 60, 15])  # 3 dias, 24h, 1h, 15min
+
+    # Filtros
+    score_minimo_notificacao = Column(Integer, default=60)
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", backref="preferencias_notificacao")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "email_habilitado": self.email_habilitado,
+            "push_habilitado": self.push_habilitado,
+            "sms_habilitado": self.sms_habilitado,
+            "email_notificacao": self.email_notificacao,
+            "horario_inicio": self.horario_inicio,
+            "horario_fim": self.horario_fim,
+            "dias_semana": self.dias_semana,
+            "alertas_padrao": self.alertas_padrao,
+            "score_minimo_notificacao": self.score_minimo_notificacao,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 

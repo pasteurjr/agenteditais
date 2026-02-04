@@ -174,6 +174,54 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "mindsdb_taxa_sucesso", nome: "✅ 📊 Taxa de sucesso", prompt: "Qual nossa taxa de sucesso em licitações?" },
 
   // =============================================================================
+  // 13. ALERTAS E PRAZOS - Sprint 2
+  // =============================================================================
+  { id: "sep_13", nome: "━━━ 13. ALERTAS E PRAZOS (Sprint 2) ━━━", prompt: "" },
+  { id: "dashboard_prazos", nome: "✅ 📊 Dashboard de prazos", prompt: "Mostre o dashboard de prazos dos editais" },
+  { id: "dashboard_prazos_mes", nome: "✅ 📊 Prazos do mês", prompt: "Mostre o dashboard de prazos dos próximos 30 dias" },
+  { id: "proximos_pregoes", nome: "✅ 📅 Próximos pregões", prompt: "Quais editais abrem esta semana?" },
+  { id: "configurar_alertas", nome: "✅ 🔔 Configurar alertas", prompt: "Configure alertas para o edital PE-[NUMERO]/2026 com 1 dia, 1 hora e 15 minutos de antecedência" },
+  { id: "configurar_alertas_2", nome: "✅ 🔔 Avise-me antes", prompt: "Avise-me 24 horas antes do edital PE-[NUMERO]/2026" },
+  { id: "listar_alertas", nome: "✅ 🔔 Meus alertas", prompt: "Quais alertas tenho configurados?" },
+  { id: "cancelar_alerta", nome: "✅ ❌ Cancelar alerta", prompt: "Cancele os alertas do edital PE-[NUMERO]/2026" },
+  { id: "cancelar_todos_alertas", nome: "✅ ❌ Cancelar todos alertas", prompt: "Cancele todos os meus alertas" },
+
+  // =============================================================================
+  // 14. CALENDÁRIO DE EDITAIS - Sprint 2
+  // =============================================================================
+  { id: "sep_14", nome: "━━━ 14. CALENDÁRIO DE EDITAIS (Sprint 2) ━━━", prompt: "" },
+  { id: "calendario_mes", nome: "✅ 📅 Calendário do mês", prompt: "Mostre o calendário de editais deste mês" },
+  { id: "calendario_semana", nome: "✅ 📅 Esta semana", prompt: "Mostre o calendário de editais desta semana" },
+  { id: "calendario_proximo_mes", nome: "✅ 📅 Calendário março", prompt: "Mostre o calendário de editais de março" },
+  { id: "datas_importantes", nome: "✅ 📅 Datas importantes", prompt: "Quais são as próximas datas importantes dos meus editais?" },
+
+  // =============================================================================
+  // 15. MONITORAMENTO AUTOMÁTICO - Sprint 2
+  // =============================================================================
+  { id: "sep_15", nome: "━━━ 15. MONITORAMENTO AUTOMÁTICO (Sprint 2) ━━━", prompt: "" },
+  { id: "configurar_monitoramento", nome: "✅ 👁️ Criar monitoramento", prompt: "Monitore editais de [TERMO] no PNCP" },
+  { id: "configurar_monitoramento_uf", nome: "✅ 👁️ Monitorar por UF", prompt: "Monitore editais de [TERMO] em SP e MG" },
+  { id: "configurar_monitoramento_freq", nome: "✅ 👁️ Monitorar a cada X horas", prompt: "Monitore editais de [TERMO] a cada 2 horas" },
+  { id: "listar_monitoramentos", nome: "✅ 📋 Meus monitoramentos", prompt: "Quais monitoramentos tenho ativos?" },
+  { id: "desativar_monitoramento", nome: "✅ ⏸️ Parar monitoramento", prompt: "Desative o monitoramento de [TERMO]" },
+
+  // =============================================================================
+  // 16. NOTIFICAÇÕES - Sprint 2
+  // =============================================================================
+  { id: "sep_16", nome: "━━━ 16. NOTIFICAÇÕES (Sprint 2) ━━━", prompt: "" },
+  { id: "configurar_notificacoes", nome: "✅ ⚙️ Configurar notificações", prompt: "Configure minhas preferências de notificação" },
+  { id: "configurar_email", nome: "✅ 📧 Configurar email", prompt: "Configure notificações para o email [MEU@EMAIL.COM]" },
+  { id: "historico_notificacoes", nome: "✅ 📜 Histórico de notificações", prompt: "Mostre o histórico de notificações" },
+  { id: "notificacoes_nao_lidas", nome: "✅ 🔵 Notificações não lidas", prompt: "Quais notificações não li?" },
+
+  // =============================================================================
+  // 17. EXTRAÇÃO DE DATAS - Sprint 2
+  // =============================================================================
+  { id: "sep_17", nome: "━━━ 17. EXTRAÇÃO DE DATAS (Sprint 2) ━━━", prompt: "" },
+  { id: "extrair_datas", nome: "✅ 📅 Extrair datas do edital (PDF)", prompt: "Extraia as datas deste edital" },
+  { id: "extrair_datas_2", nome: "✅ 📅 Identificar prazos (PDF)", prompt: "Quais são os prazos deste edital?" },
+
+  // =============================================================================
   // OUTROS / AJUDA
   // =============================================================================
   { id: "sep_outros", nome: "━━━ OUTROS / AJUDA ━━━", prompt: "" },
