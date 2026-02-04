@@ -3192,8 +3192,8 @@ def tool_historico_precos(termo: str = None, produto_id: int = None, user_id: st
     Returns:
         Dict com histórico de preços, estatísticas e tendências
     """
-    from backend.database import SessionLocal
-    from backend.models import PrecoHistorico, Edital, Produto
+    from database import SessionLocal
+    from models import PrecoHistorico, Edital, Produto
     from sqlalchemy import func, desc
 
     db = SessionLocal()
@@ -3282,8 +3282,8 @@ def tool_listar_concorrentes(user_id: str = None) -> Dict[str, Any]:
     Returns:
         Dict com lista de concorrentes e estatísticas
     """
-    from backend.database import SessionLocal
-    from backend.models import Concorrente
+    from database import SessionLocal
+    from models import Concorrente
     from sqlalchemy import desc
 
     db = SessionLocal()
@@ -3335,8 +3335,8 @@ def tool_analisar_concorrente(nome_concorrente: str, user_id: str = None) -> Dic
     Returns:
         Dict com análise detalhada do concorrente
     """
-    from backend.database import SessionLocal
-    from backend.models import Concorrente, ParticipacaoEdital, PrecoHistorico, Edital
+    from database import SessionLocal
+    from models import Concorrente, ParticipacaoEdital, PrecoHistorico, Edital
     from sqlalchemy import desc
 
     db = SessionLocal()
@@ -3418,8 +3418,8 @@ def tool_recomendar_preco(termo: str, edital_id: int = None, user_id: str = None
     Returns:
         Dict com recomendação de preço e justificativa
     """
-    from backend.database import SessionLocal
-    from backend.models import PrecoHistorico, Concorrente, Edital
+    from database import SessionLocal
+    from models import PrecoHistorico, Concorrente, Edital
     from sqlalchemy import desc
 
     db = SessionLocal()
@@ -3525,8 +3525,8 @@ def tool_classificar_edital(edital_id: int = None, texto_edital: str = None, use
     Returns:
         Dict com categoria identificada e confiança
     """
-    from backend.database import SessionLocal
-    from backend.models import Edital
+    from database import SessionLocal
+    from models import Edital
 
     # Categorias e suas keywords
     CATEGORIAS = {
@@ -3606,8 +3606,8 @@ def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str 
     Returns:
         Dict com análise de completude e recomendações
     """
-    from backend.database import SessionLocal
-    from backend.models import Produto, ProdutoEspecificacao
+    from database import SessionLocal
+    from models import Produto, ProdutoEspecificacao
 
     db = SessionLocal()
 
