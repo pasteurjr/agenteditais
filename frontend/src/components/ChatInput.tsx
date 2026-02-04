@@ -18,8 +18,10 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "upload_manual", nome: "✅ 📎 Cadastrar produto (upload PDF)", prompt: "Cadastre este produto" },
   { id: "download_url", nome: "✅ 🔗 Cadastrar produto de URL", prompt: "Baixe o manual de [URL] e cadastre o produto" },
   { id: "listar_produtos", nome: "✅ 📦 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
-  { id: "reprocessar_produto", nome: "✅ 🔄 Reprocessar produto", prompt: "Reprocesse as especificações do produto [NOME_PRODUTO]" },
+  { id: "reprocessar_produto", nome: "✅ 🔄 Reprocessar especificações", prompt: "Reprocesse as especificações do produto [NOME_PRODUTO]" },
+  { id: "atualizar_produto", nome: "✅ ✏️ Atualizar/editar produto", prompt: "Atualize o produto [NOME_PRODUTO] com [NOVOS_DADOS]" },
   { id: "excluir_produto", nome: "✅ 🗑️ Excluir produto", prompt: "Exclua o produto [NOME_PRODUTO]" },
+  { id: "excluir_todos_produtos", nome: "✅ 🗑️ Excluir TODOS os produtos", prompt: "Exclua todos os meus produtos" },
 
   // =============================================================================
   // 2. BUSCA E CADASTRO DE EDITAIS
@@ -27,16 +29,19 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_2", nome: "━━━ 2. BUSCA E CADASTRO DE EDITAIS ━━━", prompt: "" },
   { id: "buscar_editais", nome: "✅ 🔍 Buscar editais na web (PNCP)", prompt: "Busque editais de [TERMO] no PNCP" },
   { id: "listar_editais", nome: "✅ 📋 Listar editais salvos", prompt: "Liste meus editais cadastrados" },
+  { id: "listar_editais_status", nome: "✅ 📋 Listar editais por status", prompt: "Liste meus editais com status [novo/analisando/participar/ganho/perdido]" },
   { id: "cadastrar_edital", nome: "✅ ➕ Cadastrar edital manualmente", prompt: "Cadastre o edital [NUMERO], órgão [ORGAO], objeto: [OBJETO]" },
   { id: "salvar_editais", nome: "✅ 💾 Salvar editais da busca", prompt: "Salve os editais encontrados" },
+  { id: "atualizar_edital", nome: "✅ ✏️ Atualizar/editar edital", prompt: "Atualize o edital [NUMERO] com status [novo/analisando/participar/ganho/perdido]" },
   { id: "excluir_edital", nome: "✅ 🗑️ Excluir edital", prompt: "Exclua o edital [NUMERO]" },
-  { id: "atualizar_edital", nome: "✅ ✏️ Atualizar edital", prompt: "Atualize o status do edital [NUMERO] para [STATUS]" },
+  { id: "excluir_todos_editais", nome: "✅ 🗑️ Excluir TODOS os editais", prompt: "Exclua todos os meus editais" },
 
   // =============================================================================
   // 3. ANÁLISE DE ADERÊNCIA (Produto x Edital)
   // =============================================================================
   { id: "sep_3", nome: "━━━ 3. ANÁLISE DE ADERÊNCIA ━━━", prompt: "" },
   { id: "calcular_aderencia", nome: "✅ 🎯 Calcular aderência", prompt: "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]" },
+  { id: "listar_analises", nome: "✅ 📊 Listar análises realizadas", prompt: "Liste minhas análises de aderência" },
   { id: "verificar_completude", nome: "❌ 📝 Verificar completude do produto", prompt: "Verifique se o produto [NOME_PRODUTO] está completo para participar de editais" },
 
   // =============================================================================
@@ -45,6 +50,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_4", nome: "━━━ 4. GERAÇÃO DE PROPOSTAS ━━━", prompt: "" },
   { id: "gerar_proposta", nome: "✅ 📝 Gerar proposta técnica", prompt: "Gere uma proposta do produto [NOME_PRODUTO] para o edital [NUMERO_EDITAL] com preço R$ [VALOR]" },
   { id: "listar_propostas", nome: "✅ 📄 Listar propostas geradas", prompt: "Liste minhas propostas geradas" },
+  { id: "excluir_proposta", nome: "✅ 🗑️ Excluir proposta", prompt: "Exclua a proposta do edital [NUMERO]" },
 
   // =============================================================================
   // 5. REGISTRO DE RESULTADOS
@@ -52,7 +58,10 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_5", nome: "━━━ 5. REGISTRO DE RESULTADOS ━━━", prompt: "" },
   { id: "registrar_vitoria", nome: "✅ 🏆 Registrar vitória", prompt: "Ganhamos o edital [NUMERO] com R$ [VALOR]" },
   { id: "registrar_derrota", nome: "✅ 📉 Registrar derrota", prompt: "Perdemos o edital [NUMERO] para [EMPRESA] com R$ [VALOR_VENCEDOR], nosso preço foi R$ [NOSSO_VALOR]" },
-  { id: "registrar_cancelado", nome: "✅ ⛔ Edital cancelado/deserto", prompt: "O edital [NUMERO] foi cancelado" },
+  { id: "registrar_derrota_motivo", nome: "✅ 📉 Registrar derrota com motivo", prompt: "Perdemos o edital [NUMERO] por [preço/técnica/documentação/prazo]" },
+  { id: "registrar_cancelado", nome: "✅ ⛔ Edital cancelado", prompt: "O edital [NUMERO] foi cancelado" },
+  { id: "registrar_deserto", nome: "✅ ⛔ Edital deserto", prompt: "O edital [NUMERO] foi deserto" },
+  { id: "registrar_revogado", nome: "✅ ⛔ Edital revogado", prompt: "O edital [NUMERO] foi revogado" },
   { id: "consultar_resultado", nome: "✅ 🔎 Consultar resultado de edital", prompt: "Qual o resultado do edital [NUMERO]?" },
   { id: "consultar_todos_resultados", nome: "✅ 📊 Ver todos os resultados", prompt: "Mostre os resultados de todos os editais" },
 
@@ -62,6 +71,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_6", nome: "━━━ 6. EXTRAÇÃO DE ATAS ━━━", prompt: "" },
   { id: "buscar_atas", nome: "✅ 🔍 Buscar atas no PNCP", prompt: "Busque atas de [TERMO]" },
   { id: "extrair_ata", nome: "✅ 📄 Extrair resultados de ata (PDF)", prompt: "Extraia os resultados desta ata" },
+  { id: "extrair_vencedor", nome: "✅ 🏆 Quem ganhou este pregão?", prompt: "Quem ganhou este pregão?" },
 
   // =============================================================================
   // 7. HISTÓRICO DE PREÇOS
@@ -69,6 +79,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_7", nome: "━━━ 7. HISTÓRICO DE PREÇOS ━━━", prompt: "" },
   { id: "buscar_precos_pncp", nome: "❌ 💰 Buscar preços no PNCP", prompt: "Busque preços de [TERMO] no PNCP" },
   { id: "historico_precos", nome: "❌ 📈 Ver histórico de preços", prompt: "Mostre o histórico de preços para [TERMO/PRODUTO]" },
+  { id: "preco_medio", nome: "❌ 💵 Preço médio de mercado", prompt: "Qual o preço médio de mercado para [TERMO]?" },
 
   // =============================================================================
   // 8. ANÁLISE DE CONCORRENTES
@@ -76,18 +87,23 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_8", nome: "━━━ 8. ANÁLISE DE CONCORRENTES ━━━", prompt: "" },
   { id: "listar_concorrentes", nome: "❌ 👥 Listar concorrentes", prompt: "Liste os concorrentes conhecidos" },
   { id: "analisar_concorrente", nome: "❌ 🔍 Analisar concorrente", prompt: "Analise o concorrente [NOME_EMPRESA]" },
+  { id: "taxa_vitoria_concorrente", nome: "❌ 📊 Taxa de vitória do concorrente", prompt: "Qual a taxa de vitória do concorrente [NOME_EMPRESA]?" },
+  { id: "historico_concorrente", nome: "❌ 📜 Histórico do concorrente", prompt: "Mostre o histórico de participações do concorrente [NOME_EMPRESA]" },
 
   // =============================================================================
   // 9. RECOMENDAÇÃO DE PREÇOS
   // =============================================================================
   { id: "sep_9", nome: "━━━ 9. RECOMENDAÇÃO DE PREÇOS ━━━", prompt: "" },
   { id: "recomendar_preco", nome: "❌ 💡 Recomendar preço", prompt: "Recomende um preço para o produto [NOME_PRODUTO] no edital [NUMERO]" },
+  { id: "faixa_preco", nome: "❌ 📊 Faixa de preço sugerida", prompt: "Qual a faixa de preço sugerida para [TERMO]?" },
 
   // =============================================================================
   // 10. CLASSIFICAÇÃO DE EDITAIS
   // =============================================================================
   { id: "sep_10", nome: "━━━ 10. CLASSIFICAÇÃO DE EDITAIS ━━━", prompt: "" },
   { id: "classificar_edital", nome: "❌ 🏷️ Classificar edital", prompt: "Classifique o edital [NUMERO] (comodato, venda, aluguel...)" },
+  { id: "editais_comodato", nome: "❌ 🏷️ Editais de comodato", prompt: "Liste editais classificados como comodato" },
+  { id: "editais_venda", nome: "❌ 🏷️ Editais de venda", prompt: "Liste editais classificados como venda de equipamento" },
 
   // =============================================================================
   // 11. FONTES DE EDITAIS
@@ -95,6 +111,8 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_11", nome: "━━━ 11. FONTES DE EDITAIS ━━━", prompt: "" },
   { id: "cadastrar_fonte", nome: "✅ ➕ Cadastrar fonte de editais", prompt: "Cadastre a fonte [NOME], tipo [api/scraper], URL [URL]" },
   { id: "listar_fontes", nome: "✅ 🌐 Listar fontes de editais", prompt: "Quais são as fontes de editais cadastradas?" },
+  { id: "ativar_fonte", nome: "✅ ✅ Ativar fonte", prompt: "Ative a fonte [NOME]" },
+  { id: "desativar_fonte", nome: "✅ ❌ Desativar fonte", prompt: "Desative a fonte [NOME]" },
 
   // =============================================================================
   // 12. CONSULTAS ANALÍTICAS (MindsDB)
@@ -115,13 +133,18 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "mindsdb_vitorias_derrotas", nome: "✅ 📊 Vitórias e derrotas", prompt: "Quantas vitórias e derrotas temos registradas?" },
   { id: "mindsdb_concorrentes_frequentes", nome: "✅ 📊 Concorrentes frequentes", prompt: "Quais concorrentes aparecem mais nos editais?" },
   { id: "mindsdb_preco_medio_categoria", nome: "✅ 📊 Preço médio por categoria", prompt: "Qual o preço médio dos editais por categoria?" },
+  { id: "mindsdb_editais_valor", nome: "✅ 📊 Editais por faixa de valor", prompt: "Quantos editais temos em cada faixa de valor?" },
+  { id: "mindsdb_taxa_sucesso", nome: "✅ 📊 Taxa de sucesso", prompt: "Qual nossa taxa de sucesso em licitações?" },
 
   // =============================================================================
-  // OUTROS
+  // OUTROS / AJUDA
   // =============================================================================
-  { id: "sep_outros", nome: "━━━ OUTROS ━━━", prompt: "" },
+  { id: "sep_outros", nome: "━━━ OUTROS / AJUDA ━━━", prompt: "" },
   { id: "ajuda", nome: "✅ ❓ O que posso fazer?", prompt: "O que você pode fazer? Quais são suas capacidades?" },
   { id: "chat_livre", nome: "✅ 💬 Perguntar sobre licitações", prompt: "O que é pregão eletrônico?" },
+  { id: "chat_lei", nome: "✅ 💬 Dúvida sobre legislação", prompt: "O que diz a Lei 14.133/2021 sobre [TEMA]?" },
+  { id: "chat_impugnacao", nome: "✅ 💬 Como fazer impugnação", prompt: "Como faço uma impugnação de edital?" },
+  { id: "chat_recurso", nome: "✅ 💬 Como fazer recurso", prompt: "Como faço um recurso administrativo?" },
 ];
 
 interface ChatInputProps {
