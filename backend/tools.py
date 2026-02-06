@@ -2751,6 +2751,403 @@ def _enriquecer_edital_pncp(edital_data: Dict) -> Dict:
     return edital_data
 
 
+# ==================== PARSERS PARA OUTRAS FONTES ====================
+
+def _extrair_dados_pagina_edital(url: str) -> Dict[str, Any]:
+    """
+    Acessa a página do edital e extrai dados estruturados.
+    Identifica a fonte pelo domínio e usa o parser apropriado.
+
+    Returns:
+        Dict com dados extraídos: numero, orgao, objeto, valor, data_abertura, pdf_url, fonte
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        print("[PARSER] BeautifulSoup não instalado. pip install beautifulsoup4")
+        return {}
+
+    try:
+        print(f"[PARSER] Extraindo dados de: {url}")
+
+        # Fazer request com User-Agent de navegador
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        url_lower = url.lower()
+
+        # Identificar fonte e usar parser apropriado
+        if 'comprasnet.gov.br' in url_lower or 'compras.gov.br' in url_lower:
+            return _parse_comprasnet(soup, url)
+        elif 'bec.sp.gov.br' in url_lower:
+            return _parse_bec_sp(soup, url)
+        elif 'licitacoes-e.com.br' in url_lower:
+            return _parse_licitacoes_e(soup, url)
+        elif 'compras.mg.gov.br' in url_lower:
+            return _parse_compras_mg(soup, url)
+        elif 'portaldecompraspublicas.com.br' in url_lower:
+            return _parse_portal_compras_publicas(soup, url)
+        else:
+            # Parser genérico
+            return _parse_generico(soup, url)
+
+    except Exception as e:
+        print(f"[PARSER] Erro ao extrair dados de {url}: {e}")
+        return {}
+
+
+def _parse_comprasnet(soup, url: str) -> Dict[str, Any]:
+    """Parser para ComprasNet (gov.br/compras)"""
+    dados = {
+        'fonte': 'ComprasNet',
+        'fonte_tipo': 'scraper',
+        'url': url,
+    }
+
+    try:
+        # Tentar extrair título/objeto
+        for selector in ['h1', '.titulo-licitacao', '.objeto', '[data-objeto]', '.descricao-objeto']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['objeto'] = elem.text.strip()[:500]
+                break
+
+        # Número da licitação
+        for selector in ['.numero-licitacao', '.numero', '[data-numero]', 'span:contains("Nº")']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                match = re.search(r'(\d+[/-]\d{4})', elem.text)
+                if match:
+                    dados['numero'] = match.group(1)
+                    break
+
+        # Órgão
+        for selector in ['.orgao', '.entidade', '[data-orgao]', '.nome-orgao']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['orgao'] = elem.text.strip()[:200]
+                break
+
+        # Valor estimado
+        for selector in ['.valor', '.valor-estimado', '[data-valor]']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                match = re.search(r'R\$\s*([\d.,]+)', elem.text)
+                if match:
+                    valor_str = match.group(1).replace('.', '').replace(',', '.')
+                    try:
+                        dados['valor_referencia'] = float(valor_str)
+                    except:
+                        pass
+                    break
+
+        # Data de abertura
+        for selector in ['.data-abertura', '.data-sessao', '[data-abertura]']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['data_abertura'] = elem.text.strip()
+                break
+
+        # Link do PDF/Edital
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            text = link.text.lower()
+            if '.pdf' in href or 'edital' in text or 'documento' in text:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                dados['pdf_titulo'] = link.text.strip() or 'Edital'
+                break
+
+        print(f"[PARSER] ComprasNet extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser ComprasNet: {e}")
+
+    return dados
+
+
+def _parse_bec_sp(soup, url: str) -> Dict[str, Any]:
+    """Parser para BEC São Paulo"""
+    dados = {
+        'fonte': 'BEC-SP',
+        'fonte_tipo': 'scraper',
+        'url': url,
+        'uf': 'SP',
+    }
+
+    try:
+        # Número da OC/Pregão
+        for selector in ['.numero-oc', '#numeroOC', 'span:contains("OC")', 'td:contains("Número")']:
+            elem = soup.select_one(selector)
+            if elem:
+                text = elem.text.strip()
+                match = re.search(r'(\d+[/-]?\d*)', text)
+                if match:
+                    dados['numero'] = match.group(1)
+                    break
+
+        # Objeto
+        for selector in ['.objeto', '#objeto', '.descricao', 'td:contains("Objeto") + td']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['objeto'] = elem.text.strip()[:500]
+                break
+
+        # Órgão
+        for selector in ['.orgao', '#orgao', '.uge', 'td:contains("UGE") + td']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['orgao'] = elem.text.strip()[:200]
+                break
+
+        # Valor
+        for elem in soup.find_all(string=re.compile(r'R\$\s*[\d.,]+')):
+            match = re.search(r'R\$\s*([\d.,]+)', elem)
+            if match:
+                valor_str = match.group(1).replace('.', '').replace(',', '.')
+                try:
+                    dados['valor_referencia'] = float(valor_str)
+                    break
+                except:
+                    pass
+
+        # PDF
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            if '.pdf' in href or 'edital' in href:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                break
+
+        print(f"[PARSER] BEC-SP extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser BEC-SP: {e}")
+
+    return dados
+
+
+def _parse_licitacoes_e(soup, url: str) -> Dict[str, Any]:
+    """Parser para Licitações-e (Banco do Brasil)"""
+    dados = {
+        'fonte': 'Licitações-e',
+        'fonte_tipo': 'scraper',
+        'url': url,
+    }
+
+    try:
+        # Número do pregão
+        for elem in soup.find_all(['span', 'td', 'div']):
+            text = elem.text.strip()
+            if 'pregão' in text.lower() or 'edital' in text.lower():
+                match = re.search(r'(\d+[/-]\d{4})', text)
+                if match:
+                    dados['numero'] = match.group(1)
+                    break
+
+        # Objeto
+        obj_elem = soup.find(string=re.compile('objeto', re.I))
+        if obj_elem:
+            parent = obj_elem.find_parent()
+            if parent:
+                next_elem = parent.find_next_sibling()
+                if next_elem:
+                    dados['objeto'] = next_elem.text.strip()[:500]
+
+        # Órgão
+        for elem in soup.find_all(['h1', 'h2', '.entidade', '.comprador']):
+            text = elem.text.strip()
+            if len(text) > 10 and len(text) < 200:
+                dados['orgao'] = text
+                break
+
+        # PDF
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            text = link.text.lower()
+            if '.pdf' in href or 'edital' in text:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                break
+
+        print(f"[PARSER] Licitações-e extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser Licitações-e: {e}")
+
+    return dados
+
+
+def _parse_compras_mg(soup, url: str) -> Dict[str, Any]:
+    """Parser para Portal de Compras de Minas Gerais"""
+    dados = {
+        'fonte': 'Compras MG',
+        'fonte_tipo': 'scraper',
+        'url': url,
+        'uf': 'MG',
+    }
+
+    try:
+        # Estrutura similar a outros portais
+        for selector in ['h1', '.titulo', '#titulo']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                text = elem.text.strip()
+                # Extrair número
+                match = re.search(r'(\d+[/-]\d{4})', text)
+                if match:
+                    dados['numero'] = match.group(1)
+                dados['objeto'] = text[:500]
+                break
+
+        # Órgão
+        for selector in ['.orgao', '.entidade', '#orgao']:
+            elem = soup.select_one(selector)
+            if elem:
+                dados['orgao'] = elem.text.strip()[:200]
+                break
+
+        # PDF
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            if '.pdf' in href:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                break
+
+        print(f"[PARSER] Compras MG extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser Compras MG: {e}")
+
+    return dados
+
+
+def _parse_portal_compras_publicas(soup, url: str) -> Dict[str, Any]:
+    """Parser para Portal de Compras Públicas"""
+    dados = {
+        'fonte': 'Portal Compras Públicas',
+        'fonte_tipo': 'scraper',
+        'url': url,
+    }
+
+    try:
+        # Número
+        for elem in soup.find_all(['h1', 'h2', '.titulo', '.numero']):
+            text = elem.text.strip()
+            match = re.search(r'(\d+[/-]\d{4})', text)
+            if match:
+                dados['numero'] = match.group(1)
+                break
+
+        # Objeto
+        for selector in ['.objeto', '.descricao', '#objeto', 'p.objeto']:
+            elem = soup.select_one(selector)
+            if elem:
+                dados['objeto'] = elem.text.strip()[:500]
+                break
+
+        # Órgão
+        for selector in ['.orgao', '.comprador', '.entidade']:
+            elem = soup.select_one(selector)
+            if elem:
+                dados['orgao'] = elem.text.strip()[:200]
+                break
+
+        # PDF
+        for link in soup.find_all('a', href=True):
+            if '.pdf' in link.get('href', '').lower():
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                break
+
+        print(f"[PARSER] Portal Compras Públicas extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser Portal Compras Públicas: {e}")
+
+    return dados
+
+
+def _parse_generico(soup, url: str) -> Dict[str, Any]:
+    """Parser genérico para outras fontes"""
+    dados = {
+        'fonte': 'Web',
+        'fonte_tipo': 'scraper',
+        'url': url,
+    }
+
+    try:
+        # Tentar extrair título da página
+        title = soup.find('title')
+        if title:
+            titulo = title.text.strip()
+            match = re.search(r'(\d+[/-]\d{4})', titulo)
+            if match:
+                dados['numero'] = match.group(1)
+            if len(titulo) > 10:
+                dados['objeto'] = titulo[:500]
+
+        # Tentar h1
+        h1 = soup.find('h1')
+        if h1:
+            text = h1.text.strip()
+            if 'objeto' not in dados and len(text) > 10:
+                dados['objeto'] = text[:500]
+            if 'numero' not in dados:
+                match = re.search(r'(\d+[/-]\d{4})', text)
+                if match:
+                    dados['numero'] = match.group(1)
+
+        # Buscar valor R$
+        for elem in soup.find_all(string=re.compile(r'R\$\s*[\d.,]+')):
+            match = re.search(r'R\$\s*([\d.,]+)', elem)
+            if match:
+                valor_str = match.group(1).replace('.', '').replace(',', '.')
+                try:
+                    dados['valor_referencia'] = float(valor_str)
+                    break
+                except:
+                    pass
+
+        # Buscar PDF
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            if '.pdf' in href:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                break
+
+        print(f"[PARSER] Genérico extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser genérico: {e}")
+
+    return dados
+
+
 def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[str, Any]:
     """
     Salva editais selecionados no banco, verificando duplicatas.
@@ -2848,6 +3245,30 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                         })
                     else:
                         print(f"[SALVAR] Não encontrou dados PNCP para {numero}")
+                        # Tentar extrair dados da página HTML
+                        url_edital = edital_data.get('url') or edital_data.get('link')
+                        if url_edital:
+                            print(f"[SALVAR] Tentando extrair dados da página: {url_edital}")
+                            dados_pagina = _extrair_dados_pagina_edital(url_edital)
+                            if dados_pagina:
+                                # Mesclar dados extraídos
+                                if dados_pagina.get('numero') and not numero.startswith('SCR-'):
+                                    pass  # Manter o número já extraído
+                                elif dados_pagina.get('numero'):
+                                    numero = dados_pagina['numero']
+                                if dados_pagina.get('orgao'):
+                                    orgao = dados_pagina['orgao']
+                                edital_data.update({
+                                    'objeto': dados_pagina.get('objeto') or edital_data.get('objeto'),
+                                    'valor_referencia': dados_pagina.get('valor_referencia') or edital_data.get('valor_referencia'),
+                                    'data_abertura': dados_pagina.get('data_abertura') or edital_data.get('data_abertura'),
+                                    'pdf_url': dados_pagina.get('pdf_url'),
+                                    'pdf_titulo': dados_pagina.get('pdf_titulo'),
+                                    'fonte': dados_pagina.get('fonte') or edital_data.get('fonte'),
+                                    'fonte_tipo': 'scraper',
+                                    'uf': dados_pagina.get('uf') or edital_data.get('uf'),
+                                })
+                                print(f"[SALVAR] Dados extraídos da página: numero={numero}, pdf={dados_pagina.get('pdf_url', 'não encontrado')}")
                         edital_data['dados_completos'] = False  # Marcar como incompleto
 
                 # Validar modalidade - deve ser um dos valores do ENUM
