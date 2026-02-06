@@ -43,8 +43,8 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "buscar_editais_simples", nome: "✅ 📋 Buscar editais (sem score)", prompt: "Busque editais de [TERMO] sem calcular score" },
   { id: "buscar_editais_simples2", nome: "✅ 📋 Listar editais da web", prompt: "Busque editais de [TERMO] apenas listando" },
   // -- BUSCA INCLUINDO ENCERRADOS --
-  { id: "buscar_editais_todos", nome: "✅ 📋 Buscar TODOS editais (incl. encerrados)", prompt: "Busque todos os editais de [TERMO] incluindo encerrados" },
-  { id: "buscar_editais_todos_score", nome: "✅ 🌐 Buscar TODOS com score (incl. encerrados)", prompt: "Busque todos os editais de [TERMO] incluindo encerrados com score" },
+  { id: "buscar_editais_todos", nome: "✅ 📋 Buscar TODOS editais (incl. encerrados)", prompt: "Busque todos os editais de [TERMO] incluindo encerrados sem calcular score" },
+  { id: "buscar_editais_todos_score", nome: "✅ 🌐 Buscar TODOS com score (incl. encerrados)", prompt: "Busque todos os editais de [TERMO] incluindo encerrados" },
   // -- LINKS DE EDITAIS --
   { id: "buscar_links_editais", nome: "✅ 🔗 Links de editais por área", prompt: "Retorne os links para os editais na área [TERMO/ÁREA]" },
   { id: "buscar_links_editais2", nome: "✅ 🔗 Links editais (equipamentos)", prompt: "Retorne os links para os editais na área equipamentos médicos" },
