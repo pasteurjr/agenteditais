@@ -1742,7 +1742,7 @@ JSON:"""
     sem_score = [e for e in editais_com_score if not e.get('recomendacao')]
 
     def formatar_edital(ed, i):
-        """Formata um edital para exibição"""
+        """Formata um edital para exibição com botões de ação"""
         numero = ed.get('numero', 'N/A')
         orgao = ed.get('orgao', 'N/A')
         uf_ed = ed.get('uf', '')
@@ -1757,24 +1757,61 @@ JSON:"""
         score = ed.get('score_tecnico')
         justificativa = ed.get('justificativa', '')
         fonte_edital = ed.get('fonte', '')
+        pdf_url = ed.get('pdf_url', '')
+        total_itens = ed.get('total_itens', 0)
+        cnpj = ed.get('cnpj_orgao', '')
+        ano = ed.get('ano_compra', '')
+        seq = ed.get('seq_compra', '')
+        dados_completos = ed.get('dados_completos', False)
+
+        # Badge de fonte com cor
+        fonte_badge = ""
+        if 'PNCP' in fonte_edital:
+            fonte_badge = f"🟢 {fonte_edital}"
+        elif 'ComprasNet' in fonte_edital:
+            fonte_badge = f"🔵 {fonte_edital}"
+        elif 'BEC' in fonte_edital:
+            fonte_badge = f"🟡 {fonte_edital}"
+        elif 'Scraper' in fonte_edital:
+            fonte_badge = f"🟠 {fonte_edital}"
+        else:
+            fonte_badge = f"⚪ {fonte_edital}" if fonte_edital else ""
 
         texto = f"---\n"
         texto += f"### {i}. {numero}"
         if score is not None:
             texto += f" | Score: **{score:.0f}%**"
+        if fonte_badge:
+            texto += f" | {fonte_badge}"
         texto += "\n"
         texto += f"**Órgão:** {orgao} ({local})\n"
-        if fonte_edital:
-            texto += f"**Fonte:** {fonte_edital}\n"
         texto += f"**Modalidade:** {modalidade}\n"
         texto += f"**Valor estimado:** {valor_str}\n"
         texto += f"**Data abertura:** {data_abertura}\n"
+        if total_itens > 0:
+            texto += f"**Itens:** {total_itens} item(ns)\n"
+        if dados_completos:
+            texto += f"**Dados:** ✅ Completos (PNCP)\n"
         texto += f"**Objeto:** {objeto}\n"
         if justificativa:
             texto += f"\n**Análise:** {justificativa}\n"
+
+        # Botões de ação
+        texto += f"\n"
         if url:
-            texto += f"\n🔗 [Acessar edital]({url})\n"
-        texto += "\n"
+            texto += f"🔗 [Acessar Portal]({url}) "
+
+        # Botão PDF - se tem pdf_url direta ou dados PNCP para construir
+        if pdf_url:
+            texto += f"| 📄 [Ver PDF]({pdf_url}) "
+            texto += f"| ⬇️ [Baixar PDF]({pdf_url}?download=true) "
+        elif cnpj and ano and seq:
+            # Construir URL do PDF via API do PNCP
+            pdf_api_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/1"
+            texto += f"| 📄 [Ver PDF]({pdf_api_url}) "
+            texto += f"| ⬇️ [Baixar PDF]({pdf_api_url}) "
+
+        texto += "\n\n"
         return texto
 
     contador = 1
@@ -2660,11 +2697,42 @@ def processar_listar_editais(message: str, user_id: str):
             response += "\n\n"
 
             for i, ed in enumerate(editais_mostrar, 1):
-                response += f"{i}. **{ed['numero']}** ({ed['status']})\n"
+                fonte = ed.get('fonte', '')
+                fonte_badge = ""
+                if 'PNCP' in fonte:
+                    fonte_badge = "🟢"
+                elif 'ComprasNet' in fonte:
+                    fonte_badge = "🔵"
+                elif 'BEC' in fonte:
+                    fonte_badge = "🟡"
+                else:
+                    fonte_badge = "⚪"
+
+                response += f"{i}. **{ed['numero']}** ({ed['status']}) {fonte_badge} {fonte}\n"
                 response += f"   {ed['orgao']} - {ed['uf'] or 'N/A'}\n"
                 response += f"   {ed['objeto'][:80]}...\n"
+
+                # Botões de ação
+                botoes = []
                 if ed.get('url'):
-                    response += f"   🔗 [Acessar edital]({ed['url']})\n"
+                    botoes.append(f"[🔗 Portal]({ed['url']})")
+
+                # PDF - verificar se tem pdf_url ou dados PNCP
+                pdf_url = ed.get('pdf_url')
+                cnpj = ed.get('cnpj_orgao')
+                ano = ed.get('ano_compra')
+                seq = ed.get('seq_compra')
+
+                if pdf_url:
+                    botoes.append(f"[📄 Ver PDF]({pdf_url})")
+                    botoes.append(f"[⬇️ Baixar]({pdf_url}?download=true)")
+                elif cnpj and ano and seq:
+                    pdf_api = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/1"
+                    botoes.append(f"[📄 Ver PDF]({pdf_api})")
+                    botoes.append(f"[⬇️ Baixar]({pdf_api})")
+
+                if botoes:
+                    response += f"   {' | '.join(botoes)}\n"
                 response += "\n"
 
             if total > limite:
