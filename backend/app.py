@@ -1653,16 +1653,45 @@ JSON:"""
                     continue
 
                 # Padronizar campos
+                numero_edital = ed.get('numero', ed.get('titulo', '')[:50])
                 ed_normalizado = {
-                    'numero': ed.get('numero', ed.get('titulo', '')[:50]),
+                    'numero': numero_edital,
                     'orgao': ed.get('orgao', 'Não identificado'),
                     'objeto': ed.get('descricao', ed.get('titulo', '')),
                     'url': ed.get('link'),
                     'fonte': f"{ed.get('fonte', 'Web')} (Scraper)",
+                    'fonte_tipo': 'scraper',
                     'modalidade': 'Identificar no portal',
                     'valor_referencia': None,
                     'data_abertura': 'Ver no portal'
                 }
+
+                # Tentar enriquecer com dados do PNCP se tiver número válido
+                if numero_edital and '/' in numero_edital:
+                    try:
+                        from tools import _buscar_edital_pncp_por_numero
+                        dados_pncp = _buscar_edital_pncp_por_numero(numero_edital)
+                        if dados_pncp:
+                            ed_normalizado.update({
+                                'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
+                                'ano_compra': dados_pncp.get('ano_compra'),
+                                'seq_compra': dados_pncp.get('seq_compra'),
+                                'numero_pncp': dados_pncp.get('numero_pncp'),
+                                'valor_referencia': dados_pncp.get('valor_referencia'),
+                                'data_abertura': dados_pncp.get('data_abertura'),
+                                'uf': dados_pncp.get('uf'),
+                                'cidade': dados_pncp.get('cidade'),
+                                'orgao': dados_pncp.get('orgao') or ed_normalizado['orgao'],
+                                'objeto': dados_pncp.get('objeto') or ed_normalizado['objeto'],
+                                'url': dados_pncp.get('url') or ed_normalizado['url'],
+                                'fonte': f"{ed.get('fonte', 'Web')} → PNCP",  # Indica que veio do scraper mas enriqueceu
+                                'fonte_tipo': 'api',
+                                'dados_completos': True,
+                            })
+                            print(f"[BUSCA] Edital {numero_edital} enriquecido com dados PNCP")
+                    except Exception as e:
+                        print(f"[BUSCA] Erro ao enriquecer {numero_edital}: {e}")
+
                 editais_novos.append(ed_normalizado)
         editais.extend(editais_novos)
         fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
