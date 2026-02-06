@@ -22,9 +22,8 @@ export function useSessions() {
     }
   }, []);
 
-  useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+  // Não carrega automaticamente - deixa o App.tsx controlar via refreshSessions
+  // após o token estar configurado
 
   const addSession = async (name?: string) => {
     const session = await createSession(name);

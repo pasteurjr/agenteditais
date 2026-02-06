@@ -496,6 +496,261 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
     }
 
 
+def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca editais e retorna links formatados para exibição.
+    Usa PNCP API como fonte principal para garantir links válidos.
+
+    Args:
+        termo: Área/categoria de busca (ex: "equipamentos médicos", "reagentes")
+        user_id: ID do usuário
+
+    Returns:
+        Dict com links formatados em texto
+    """
+    from config import PNCP_BASE_URL
+
+    print(f"[LINKS] Buscando links de editais para: {termo}")
+
+    links_texto = []
+    editais_encontrados = []
+    hoje = datetime.now()
+
+    try:
+        # Buscar na API PNCP (fonte oficial) - mesmos parâmetros que tool_buscar_editais_fonte
+        data_final = datetime.now()
+        data_inicial = data_final - timedelta(days=180)
+
+        params = {
+            "dataInicial": data_inicial.strftime("%Y%m%d"),
+            "dataFinal": data_final.strftime("%Y%m%d"),
+            "codigoModalidadeContratacao": 6,  # Pregão Eletrônico
+            "tamanhoPagina": 50,
+            "pagina": 1
+        }
+
+        url = f"{PNCP_BASE_URL}/contratacoes/publicacao"
+        print(f"[LINKS] URL: {url}")
+        print(f"[LINKS] Params: {params}")
+
+        response = requests.get(
+            url,
+            params=params,
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
+
+        print(f"[LINKS] Response status: {response.status_code}")
+
+        # Expandir termos de busca
+        termo_lower = termo.lower()
+        termos_busca = [termo_lower]
+
+        # Expandir termos médicos/hospitalares
+        if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
+                                           'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
+                                           'laborat', 'diagnóstic', 'diagnostic', 'hematolog']):
+            termos_busca.extend([
+                'médico', 'medico', 'médica', 'medica', 'hospitalar', 'hospital',
+                'clínica', 'clinica', 'saúde', 'saude', 'reagente', 'reagentes',
+                'laboratorio', 'laboratório', 'equipamento médico', 'equipamento hospitalar',
+                'material hospitalar', 'insumo hospitalar', 'hematologia', 'hematológico',
+                'analisador', 'diagnóstico', 'diagnostico'
+            ])
+
+        # Expandir termos de TI
+        if any(t in termo_lower for t in ['tecnologia', 'ti', 'informática', 'informatica', 'computador']):
+            termos_busca.extend([
+                'tecnologia da informação', 'informática', 'informatica',
+                'computador', 'computadores', 'desktop', 'notebook',
+                'software', 'hardware', 'servidor', 'rede'
+            ])
+
+        # Buscar múltiplas páginas do PNCP
+        all_items = []
+        if response.status_code == 200 and response.text:
+            data = response.json()
+            items = data.get("data", [])
+            all_items.extend(items)
+            print(f"[LINKS] Página 1: {len(items)} itens")
+
+            # Buscar mais páginas se necessário
+            for pagina in range(2, 4):  # Páginas 2 e 3
+                params["pagina"] = pagina
+                resp = requests.get(url, params=params, headers={"Accept": "application/json"}, timeout=30)
+                if resp.status_code == 200 and resp.text:
+                    data = resp.json()
+                    items = data.get("data", [])
+                    if items:
+                        all_items.extend(items)
+                        print(f"[LINKS] Página {pagina}: +{len(items)} itens")
+                    else:
+                        break
+                else:
+                    break
+
+            print(f"[LINKS] Total itens PNCP: {len(all_items)}")
+
+            for item in all_items:
+                # FILTRO 1: Verificar se edital está EM ABERTO
+                data_abertura_str = item.get('dataAberturaProposta')
+                if data_abertura_str:
+                    try:
+                        data_abertura = datetime.fromisoformat(data_abertura_str.replace('Z', ''))
+                        if data_abertura < hoje:
+                            continue  # Pular editais já encerrados
+                    except (ValueError, TypeError):
+                        pass
+
+                objeto = (item.get('objetoCompra', '') or '').lower()
+
+                # FILTRO 2: Verificar se algum termo está no objeto
+                match = any(t in objeto for t in termos_busca)
+                if termo and not match:
+                    continue
+
+                # Extrair dados
+                orgao_data = item.get('orgaoEntidade', {}) or {}
+                unidade_data = item.get('unidadeOrgao', {}) or {}
+
+                orgao = orgao_data.get('razaoSocial', 'Órgão não informado')
+                objeto_texto = item.get('objetoCompra', '')[:100]
+                modalidade = item.get('modalidadeNome', 'Pregão')
+                numero = item.get('numeroCompra', '')
+                ano = item.get('anoCompra', '')
+                seq = item.get('sequencialCompra')
+                uf = unidade_data.get('ufSigla', '')
+                cidade = unidade_data.get('municipioNome', '')
+                valor = item.get('valorTotalEstimado', 0)
+                cnpj = (orgao_data.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+
+                # Construir URL correta do PNCP
+                if cnpj and ano and seq:
+                    url_edital = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
+                else:
+                    numero_pncp = item.get('numeroControlePNCP', '')
+                    if numero_pncp:
+                        url_edital = f"https://pncp.gov.br/app/editais/{numero_pncp}"
+                    else:
+                        url_edital = item.get('linkSistemaOrigem', 'URL não disponível')
+
+                # Formatar número do edital
+                if numero and ano:
+                    numero_formatado = f"{modalidade} {numero}/{ano}"
+                else:
+                    numero_formatado = item.get('numeroControlePNCP', 'S/N')
+
+                # Formatar localização
+                localizacao = f"{cidade}/{uf}" if cidade and uf else (uf or "Brasil")
+
+                # Formatar valor
+                valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if valor else "Não informado"
+
+                # Formatar data
+                if data_abertura_str:
+                    try:
+                        dt = datetime.fromisoformat(data_abertura_str.replace("Z", ""))
+                        data_fmt = dt.strftime("%d/%m/%Y às %H:%M")
+                    except:
+                        data_fmt = data_abertura_str[:10]
+                else:
+                    data_fmt = "Não informada"
+
+                edital_info = {
+                    "numero": numero_formatado,
+                    "orgao": orgao,
+                    "objeto": objeto_texto,
+                    "localizacao": localizacao,
+                    "valor": valor_fmt,
+                    "data_abertura": data_fmt,
+                    "url": url_edital
+                }
+                editais_encontrados.append(edital_info)
+
+                # Formatar texto do link
+                texto_link = f"""
+📋 **{numero_formatado}**
+   📍 {orgao} - {localizacao}
+   📝 {objeto_texto}
+   💰 Valor: {valor_fmt}
+   📅 Abertura: {data_fmt}
+   🔗 Link: {url_edital}
+"""
+                links_texto.append(texto_link)
+
+                # Limitar a 15 resultados
+                if len(editais_encontrados) >= 15:
+                    break
+
+        # Se não encontrou nada no PNCP, tentar Serper
+        if not editais_encontrados:
+            print("[LINKS] PNCP não retornou resultados, tentando Serper...")
+            resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
+
+            if resultado_scraper.get("success") and resultado_scraper.get("editais"):
+                for item in resultado_scraper["editais"][:10]:
+                    numero = item.get("numero", "S/N")
+                    orgao = item.get("orgao", "Não informado")
+                    titulo = item.get("titulo", "")
+                    descricao = item.get("descricao", "")
+                    url_edital = item.get("link", "")
+
+                    # Filtrar links que são PDFs ou atas (não são links de editais)
+                    if url_edital.lower().endswith('.pdf'):
+                        continue
+
+                    edital_info = {
+                        "numero": numero,
+                        "orgao": orgao,
+                        "objeto": descricao[:100] if descricao else titulo[:100],
+                        "url": url_edital
+                    }
+                    editais_encontrados.append(edital_info)
+
+                    texto_link = f"""
+📋 **{numero}** - {orgao}
+   📝 {descricao[:100] if descricao else titulo[:100]}
+   🔗 Link: {url_edital}
+"""
+                    links_texto.append(texto_link)
+
+    except Exception as e:
+        print(f"[LINKS] Erro na busca: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "texto": f"Erro ao buscar editais: {e}"
+        }
+
+    # Montar resposta formatada
+    if editais_encontrados:
+        texto_resposta = f"""🔍 **Editais encontrados para "{termo}"**
+
+{chr(10).join(links_texto)}
+
+---
+Total: {len(editais_encontrados)} editais encontrados
+Fonte: PNCP - Portal Nacional de Contratações Públicas
+"""
+    else:
+        texto_resposta = f"""⚠️ Nenhum edital encontrado para "{termo}" nos últimos 90 dias.
+
+Tente:
+- Usar termos mais genéricos (ex: "laboratorio" em vez de "analisador hematológico")
+- Buscar por categoria ampla (ex: "equipamentos médicos", "reagentes")
+"""
+
+    return {
+        "success": True,
+        "termo": termo,
+        "total": len(editais_encontrados),
+        "editais": editais_encontrados,
+        "texto": texto_resposta
+    }
+
+
 def _extrair_numero_edital(texto: str) -> str:
     """Extrai número do edital do texto."""
     import re
@@ -1657,8 +1912,105 @@ def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str) -> Di
             EditalRequisito.edital_id == edital_id
         ).all()
 
+        # Se não tem requisitos cadastrados, calcular aderência via IA
         if not requisitos:
-            return {"success": False, "error": "Edital não possui requisitos cadastrados"}
+            # Buscar itens do edital
+            itens = db.query(EditalItem).filter(
+                EditalItem.edital_id == edital_id
+            ).all()
+
+            # Montar contexto do edital
+            contexto_edital = f"""
+EDITAL: {edital.numero}
+ÓRGÃO: {edital.orgao}
+OBJETO: {edital.objeto}
+MODALIDADE: {edital.modalidade}
+"""
+            if itens:
+                contexto_edital += "\nITENS DO EDITAL:\n"
+                for item in itens:
+                    contexto_edital += f"- Item {item.numero_item}: {item.descricao}\n"
+
+            # Montar contexto do produto
+            contexto_produto = f"""
+PRODUTO: {produto.nome}
+FABRICANTE: {produto.fabricante or 'N/I'}
+MODELO: {produto.modelo or 'N/I'}
+CATEGORIA: {produto.categoria or 'N/I'}
+DESCRIÇÃO: {produto.descricao or 'N/I'}
+"""
+            if specs:
+                contexto_produto += "\nESPECIFICAÇÕES TÉCNICAS:\n"
+                for spec in specs[:20]:  # Limitar a 20 specs
+                    contexto_produto += f"- {spec.nome_especificacao}: {spec.valor}\n"
+
+            # Usar IA para calcular aderência
+            prompt = f"""Analise a aderência do produto ao edital.
+
+{contexto_edital}
+
+{contexto_produto}
+
+INSTRUÇÕES:
+1. Compare o produto com o objeto e itens do edital
+2. Determine se o produto é compatível com o que o edital solicita
+3. Retorne um JSON com:
+   - score: número de 0 a 100 (0 = totalmente incompatível, 100 = perfeita aderência)
+   - recomendacao: "RECOMENDADO", "AVALIAR" ou "NAO_RECOMENDADO"
+   - justificativa: breve explicação (max 200 caracteres)
+   - compativel: true/false
+
+Retorne APENAS o JSON, sem texto adicional.
+
+Exemplo:
+{{"score": 15, "recomendacao": "NAO_RECOMENDADO", "justificativa": "Produto é equipamento médico, edital é para material hidráulico", "compativel": false}}
+"""
+            try:
+                resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500)
+                # Extrair JSON da resposta
+                import json
+                # Limpar resposta
+                resposta_limpa = resposta.strip()
+                if resposta_limpa.startswith("```"):
+                    resposta_limpa = resposta_limpa.split("```")[1]
+                    if resposta_limpa.startswith("json"):
+                        resposta_limpa = resposta_limpa[4:]
+                resposta_limpa = resposta_limpa.strip()
+
+                resultado_ia = json.loads(resposta_limpa)
+
+                score = resultado_ia.get("score", 0)
+                recomendacao = resultado_ia.get("recomendacao", "AVALIAR")
+                justificativa = resultado_ia.get("justificativa", "Análise via IA")
+
+                return {
+                    "success": True,
+                    "produto": produto.nome,
+                    "edital": edital.numero,
+                    "score_tecnico": score,
+                    "recomendacao": recomendacao,
+                    "justificativa": justificativa,
+                    "metodo": "ia_sem_requisitos",
+                    "requisitos_total": 0,
+                    "requisitos_atendidos": 0,
+                    "requisitos_parciais": 0,
+                    "requisitos_nao_atendidos": 0
+                }
+            except Exception as e:
+                print(f"[ADERENCIA] Erro na análise via IA: {e}")
+                return {
+                    "success": True,
+                    "produto": produto.nome,
+                    "edital": edital.numero,
+                    "score_tecnico": 0,
+                    "recomendacao": "AVALIAR",
+                    "justificativa": f"Não foi possível calcular (edital sem requisitos). Erro: {str(e)[:50]}",
+                    "metodo": "erro_ia",
+                    "requisitos_total": 0,
+                    "requisitos_atendidos": 0,
+                    "requisitos_parciais": 0,
+                    "requisitos_nao_atendidos": 0
+                }
 
         # Criar análise
         analise = Analise(
@@ -2130,6 +2482,120 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str
         db.close()
 
 
+def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dict[str, Any]:
+    """
+    Busca dados completos de um edital no PNCP pelo número.
+    Retorna dict com dados ou None se não encontrar.
+    """
+    import re
+    from datetime import datetime, timedelta
+    from config import PNCP_BASE_URL
+
+    print(f"[PNCP] Buscando edital {numero_edital} no PNCP...")
+
+    # Extrair número e ano do edital (ex: "90039/2025" -> numero=90039, ano=2025)
+    match = re.search(r'(\d+)[/-](\d{4})', numero_edital)
+    if not match:
+        print(f"[PNCP] Não conseguiu extrair número/ano de {numero_edital}")
+        return None
+
+    numero = match.group(1)
+    ano = match.group(2)
+
+    try:
+        # Buscar no PNCP com filtro de data (últimos 365 dias)
+        data_final = datetime.now()
+        data_inicial = data_final - timedelta(days=365)
+
+        params = {
+            "dataInicial": data_inicial.strftime("%Y%m%d"),
+            "dataFinal": data_final.strftime("%Y%m%d"),
+            "codigoModalidadeContratacao": 6,  # Pregão Eletrônico
+            "tamanhoPagina": 50,
+            "pagina": 1
+        }
+
+        # Buscar múltiplas páginas até encontrar o edital
+        all_items = []
+        for pagina in range(1, 6):  # Até 5 páginas (250 editais)
+            params["pagina"] = pagina
+            response = requests.get(
+                f"{PNCP_BASE_URL}/contratacoes/publicacao",
+                params=params,
+                headers={"Accept": "application/json"},
+                timeout=30
+            )
+
+            if response.status_code != 200:
+                print(f"[PNCP] Erro na API página {pagina}: {response.status_code}")
+                break
+
+            data = response.json()
+            items = data.get('data', [])
+            if not items:
+                break
+            all_items.extend(items)
+
+            # Verificar se já encontrou o edital nesta página
+            for item in items:
+                numero_compra = str(item.get('numeroCompra', ''))
+                seq_compra = str(item.get('sequencialCompra', ''))
+                if numero in numero_compra or numero in seq_compra or numero_compra == numero:
+                    print(f"[PNCP] Encontrado na página {pagina}!")
+                    break
+            else:
+                continue
+            break
+
+        print(f"[PNCP] Buscando entre {len(all_items)} editais...")
+        items = all_items
+
+        # Procurar pelo número
+        for item in items:
+            numero_compra = str(item.get('numeroCompra', ''))
+            seq_compra = str(item.get('sequencialCompra', ''))
+
+            # Match por número ou sequencial
+            if numero in numero_compra or numero in seq_compra or numero_compra == numero:
+                orgao_data = item.get('orgaoEntidade', {}) or {}
+                unidade_data = item.get('unidadeOrgao', {}) or {}
+                cnpj = (orgao_data.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+
+                # Construir URL do PNCP
+                ano_compra = item.get('anoCompra')
+                seq = item.get('sequencialCompra')
+                if cnpj and ano_compra and seq:
+                    url_pncp = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano_compra}"
+                else:
+                    url_pncp = item.get('linkSistemaOrigem', '')
+
+                print(f"[PNCP] Encontrado! CNPJ: {cnpj}, Ano: {ano_compra}, Seq: {seq}")
+
+                return {
+                    'cnpj_orgao': cnpj,
+                    'ano_compra': ano_compra,
+                    'seq_compra': seq,
+                    'numero_pncp': item.get('numeroControlePNCP'),
+                    'objeto': item.get('objetoCompra'),
+                    'valor_referencia': item.get('valorTotalEstimado'),
+                    'data_abertura': item.get('dataAberturaProposta'),
+                    'data_publicacao': item.get('dataPublicacaoPncp'),
+                    'uf': unidade_data.get('ufSigla'),
+                    'cidade': unidade_data.get('municipioNome'),
+                    'orgao': orgao_data.get('razaoSocial'),
+                    'url': url_pncp,
+                    'srp': item.get('srp', False),
+                    'situacao': item.get('situacaoCompraNome'),
+                }
+
+        print(f"[PNCP] Edital {numero_edital} não encontrado no PNCP")
+        return None
+
+    except Exception as e:
+        print(f"[PNCP] Erro ao buscar: {e}")
+        return None
+
+
 def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[str, Any]:
     """
     Salva editais selecionados no banco, verificando duplicatas.
@@ -2139,19 +2605,40 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
         salvos = []
         duplicados = []
         erros = []
+        incompletos = []  # Editais salvos sem dados completos do PNCP
 
         for edital_data in editais:
+            import re
             numero = edital_data.get('numero')
             orgao = edital_data.get('orgao')
             numero_pncp = edital_data.get('numero_pncp')
 
             # Validar numero - campo obrigatório
             if not numero:
-                # Tentar extrair da URL ou gerar um identificador único
+                # Tentar extrair do título ou objeto
+                titulo = edital_data.get('titulo', '') or ''
+                objeto = edital_data.get('objeto', '') or ''
+                texto_busca = f"{titulo} {objeto}"
+
+                # Padrões de número de edital
+                padroes_numero = [
+                    r'(?:PE|Pregão|PREGÃO)\s*(?:Eletrônico\s*)?(?:N[ºo°]?\s*)?(\d+[/-]\d{4})',
+                    r'(?:Edital|EDITAL)\s*(?:N[ºo°]?\s*)?(\d+[/-]\d{4})',
+                    r'(\d{4,}[/-]\d{4})',  # 90004/2026
+                    r'(\d{3,}[/-]\d{4})',  # 004/2026
+                ]
+
+                for padrao in padroes_numero:
+                    match = re.search(padrao, texto_busca, re.IGNORECASE)
+                    if match:
+                        numero = match.group(1)
+                        print(f"[SALVAR] Extraído número '{numero}' do título/objeto")
+                        break
+
+            # Se ainda não tem número, tentar extrair da URL
+            if not numero:
                 url = edital_data.get('url', '')
                 if url:
-                    # Extrair identificador da URL
-                    import re
                     match = re.search(r'/(\d+[-_/]\d+)/?', url)
                     if match:
                         numero = match.group(1).replace('/', '-').replace('_', '-')
@@ -2180,6 +2667,34 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                 continue
 
             try:
+                # Se edital veio do Scraper (sem dados PNCP), tentar buscar dados completos
+                fonte_str = str(edital_data.get('fonte', '')).lower()
+                if not edital_data.get('cnpj_orgao') and ('scraper' in fonte_str or 'gov.br' in fonte_str or 'compras' in fonte_str):
+                    print(f"[SALVAR] Edital {numero} veio do Scraper, tentando enriquecer com PNCP...")
+                    dados_pncp = _buscar_edital_pncp_por_numero(numero, edital_data.get('orgao'))
+                    if dados_pncp:
+                        print(f"[SALVAR] Dados PNCP encontrados para {numero}")
+                        # Mesclar dados do PNCP com os existentes
+                        edital_data.update({
+                            'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
+                            'ano_compra': dados_pncp.get('ano_compra'),
+                            'seq_compra': dados_pncp.get('seq_compra'),
+                            'numero_pncp': dados_pncp.get('numero_pncp'),
+                            'objeto': dados_pncp.get('objeto') or edital_data.get('objeto'),
+                            'valor_referencia': dados_pncp.get('valor_referencia') or edital_data.get('valor_referencia'),
+                            'data_abertura': dados_pncp.get('data_abertura') or edital_data.get('data_abertura'),
+                            'data_publicacao': dados_pncp.get('data_publicacao') or edital_data.get('data_publicacao'),
+                            'uf': dados_pncp.get('uf') or edital_data.get('uf'),
+                            'cidade': dados_pncp.get('cidade') or edital_data.get('cidade'),
+                            'url': dados_pncp.get('url') or edital_data.get('url'),
+                            'srp': dados_pncp.get('srp', False),
+                            'situacao': dados_pncp.get('situacao'),
+                            'dados_completos': True
+                        })
+                    else:
+                        print(f"[SALVAR] Não encontrou dados PNCP para {numero}")
+                        edital_data['dados_completos'] = False  # Marcar como incompleto
+
                 # Validar modalidade - deve ser um dos valores do ENUM
                 modalidades_validas = ['pregao_eletronico', 'pregao_presencial', 'concorrencia',
                                        'tomada_precos', 'convite', 'dispensa', 'inexigibilidade']
@@ -2219,6 +2734,10 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                 db.add(edital)
                 db.flush()  # Para obter o ID
                 salvos.append(numero)
+
+                # Marcar como incompleto se não tem dados PNCP
+                if edital_data.get('dados_completos') == False:
+                    incompletos.append(numero)
 
                 # Buscar itens do edital no PNCP automaticamente
                 if edital_data.get('cnpj_orgao') and edital_data.get('ano_compra') and edital_data.get('seq_compra'):
@@ -2267,6 +2786,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
             "salvos": salvos,
             "duplicados": duplicados,
             "erros": erros,
+            "incompletos": incompletos,
             "total_salvos": len(salvos)
         }
 
@@ -3223,6 +3743,199 @@ def tool_buscar_itens_edital_pncp(edital_id: str = None, cnpj: str = None, ano: 
         }
     finally:
         db.close()
+
+
+def tool_buscar_arquivos_edital_pncp(edital_id: str = None, cnpj: str = None, ano: int = None, seq: int = None, user_id: str = None) -> Dict[str, Any]:
+    """
+    Busca os arquivos/documentos de um edital na API do PNCP.
+
+    Args:
+        edital_id: ID do edital no banco (se já existe)
+        cnpj: CNPJ do órgão (sem formatação)
+        ano: Ano da compra
+        seq: Sequencial da compra
+        user_id: ID do usuário
+
+    Returns:
+        Dict com arquivos encontrados e URLs para download
+    """
+    db = get_db()
+    try:
+        edital = None
+
+        # Se passou edital_id, buscar dados do PNCP do edital
+        if edital_id:
+            edital = db.query(Edital).filter(Edital.id == edital_id).first()
+            if edital:
+                cnpj = edital.cnpj_orgao
+                ano = edital.ano_compra
+                seq = edital.seq_compra
+
+        if not cnpj or not ano or not seq:
+            return {
+                "success": False,
+                "error": "Dados insuficientes para buscar arquivos (cnpj, ano, seq)"
+            }
+
+        print(f"[PNCP-ARQUIVOS] Buscando arquivos: CNPJ={cnpj}, Ano={ano}, Seq={seq}")
+
+        # API de arquivos do PNCP
+        # Formato: /api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos
+        url_arquivos = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos"
+
+        response = requests.get(
+            url_arquivos,
+            timeout=30,
+            headers={"Accept": "application/json"}
+        )
+
+        if response.status_code == 404:
+            return {
+                "success": True,
+                "arquivos": [],
+                "message": "Nenhum arquivo encontrado para este edital"
+            }
+
+        response.raise_for_status()
+        arquivos_api = response.json()
+
+        print(f"[PNCP-ARQUIVOS] Encontrados {len(arquivos_api)} arquivos")
+
+        arquivos_processados = []
+        for arq in arquivos_api:
+            # O campo correto é 'sequencialDocumento' (não 'sequencialArquivo')
+            sequencial = arq.get('sequencialDocumento') or arq.get('sequencialArquivo') or 1
+
+            # URL para download direto do arquivo
+            url_download = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/{sequencial}"
+
+            arquivo_data = {
+                "sequencial": sequencial,
+                "titulo": arq.get('titulo', f'Documento {sequencial}'),
+                "tipo": arq.get('tipoDocumentoNome', 'Documento'),
+                "url": arq.get('uri', url_download),
+                "url_download": url_download,
+            }
+            arquivos_processados.append(arquivo_data)
+
+        # Identificar o arquivo principal do edital (geralmente o primeiro ou que contém "edital" no título)
+        arquivo_edital = None
+        for arq in arquivos_processados:
+            titulo_lower = arq['titulo'].lower()
+            if any(termo in titulo_lower for termo in ['edital', 'pregão', 'pregao', 'pe ']):
+                arquivo_edital = arq
+                break
+
+        # Se não encontrou por título, usar o primeiro
+        if not arquivo_edital and arquivos_processados:
+            arquivo_edital = arquivos_processados[0]
+
+        return {
+            "success": True,
+            "total_arquivos": len(arquivos_processados),
+            "arquivos": arquivos_processados,
+            "arquivo_edital": arquivo_edital,
+            "edital_id": edital.id if edital else None
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"[PNCP-ARQUIVOS] Erro na requisição: {e}")
+        return {
+            "success": False,
+            "error": f"Erro ao buscar arquivos no PNCP: {str(e)}"
+        }
+    except Exception as e:
+        print(f"[PNCP-ARQUIVOS] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"Erro: {str(e)}"
+        }
+    finally:
+        db.close()
+
+
+def tool_baixar_pdf_pncp(cnpj: str, ano: int, seq: int, sequencial_arquivo: int = 1, user_id: str = None, edital_id: str = None) -> Dict[str, Any]:
+    """
+    Baixa um arquivo PDF específico do PNCP.
+
+    Args:
+        cnpj: CNPJ do órgão
+        ano: Ano da compra
+        seq: Sequencial da compra
+        sequencial_arquivo: Número sequencial do arquivo (padrão: 1)
+        user_id: ID do usuário (para salvar na pasta correta)
+        edital_id: ID do edital no banco (opcional, para vincular)
+
+    Returns:
+        Dict com caminho do arquivo baixado
+    """
+    import os
+    from config import UPLOAD_FOLDER
+
+    try:
+        # URL de download do PNCP
+        url_download = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/{sequencial_arquivo}"
+
+        print(f"[PNCP-DOWNLOAD] Baixando: {url_download}")
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/pdf, application/octet-stream, */*'
+        }
+
+        response = requests.get(url_download, headers=headers, timeout=60, allow_redirects=True)
+        response.raise_for_status()
+
+        # Determinar nome do arquivo
+        content_disp = response.headers.get('Content-Disposition', '')
+        if 'filename=' in content_disp:
+            filename = content_disp.split('filename=')[1].strip('"\'')
+        else:
+            filename = f"edital_{cnpj}_{ano}_{seq}.pdf"
+
+        # Sanitizar nome do arquivo
+        filename = re.sub(r'[^\w\-_\.]', '_', filename)
+        if not filename.endswith('.pdf'):
+            filename += '.pdf'
+
+        # Criar diretório de destino
+        if user_id:
+            upload_dir = os.path.join(UPLOAD_FOLDER, user_id, 'editais')
+        else:
+            upload_dir = os.path.join(UPLOAD_FOLDER, 'editais')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        filepath = os.path.join(upload_dir, filename)
+
+        # Salvar arquivo
+        with open(filepath, 'wb') as f:
+            f.write(response.content)
+
+        filesize = len(response.content)
+        print(f"[PNCP-DOWNLOAD] Salvo: {filepath} ({filesize/1024:.1f} KB)")
+
+        return {
+            "success": True,
+            "filepath": filepath,
+            "filename": filename,
+            "filesize": filesize,
+            "url": url_download
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"[PNCP-DOWNLOAD] Erro ao baixar: {e}")
+        return {
+            "success": False,
+            "error": f"Erro ao baixar arquivo do PNCP: {str(e)}"
+        }
+    except Exception as e:
+        print(f"[PNCP-DOWNLOAD] Erro: {e}")
+        return {
+            "success": False,
+            "error": f"Erro: {str(e)}"
+        }
 
 
 # ==================== SPRINT 1 - FUNCIONALIDADE 4: BUSCAR PREÇOS NO PNCP ====================

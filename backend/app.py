@@ -15,6 +15,7 @@ from tools import (
     tool_listar_editais, tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
     tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
     tool_reprocessar_produto, tool_atualizar_produto,
+    tool_buscar_links_editais,
     execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
@@ -265,6 +266,11 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Exemplos: "atualize o edital PE-001 com URL: https://...", "mude a URL do edital PE-001 para https://...", "corrija a URL do edital PE-001", "atualize URL do edital"
     Palavras-chave: atualizar url, atualize edital com url, mude url, corrija url, atualizar link edital
     IMPORTANTE: Use quando o usuário quer ATUALIZAR/CORRIGIR a URL de download de um edital já cadastrado
+
+46. **buscar_links_editais**: Retornar links de editais em uma área/categoria específica
+    Exemplos: "retorne os links para os editais na área de hematologia", "links de editais de equipamentos médicos", "mostre links de editais de TI", "links para editais de laboratório"
+    Palavras-chave: links de editais, links para editais, retorne os links, mostre links editais
+    IMPORTANTE: Use quando o usuário quer VER LINKS clicáveis de editais, não calcular score
 
 ## CONTEXTO IMPORTANTE:
 - **tem_arquivo**: {tem_arquivo} (true se usuário enviou um arquivo junto com a mensagem)
@@ -1120,6 +1126,9 @@ def chat():
         elif action_type == "atualizar_url_edital":
             response_text, resultado = processar_atualizar_url_edital(message, user_id, intencao_resultado)
 
+        elif action_type == "buscar_links_editais":
+            response_text, resultado = processar_buscar_links_editais(message, user_id)
+
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
 
@@ -1846,6 +1855,55 @@ JSON:"""
     return response, resultado
 
 
+def processar_buscar_links_editais(message: str, user_id: str):
+    """
+    Processa ação: Retornar links de editais em uma área.
+    Retorna links formatados para o usuário clicar.
+    """
+    import re
+
+    # Extrair termo/área da mensagem
+    termo = None
+
+    # Padrões comuns
+    padroes = [
+        r'links?\s+(?:para\s+)?(?:os\s+)?editais?\s+(?:na\s+|da\s+|de\s+)?(?:área|area)\s+(.+)',
+        r'links?\s+(?:de\s+)?editais?\s+(?:de\s+|para\s+|em\s+)?(.+)',
+        r'editais?\s+(?:de\s+|para\s+|em\s+|na\s+área\s+)?(.+)',
+        r'busca.+links?\s+(.+)',
+        r'(?:retorne|mostre|liste)\s+(?:os\s+)?links?\s+(?:para\s+|de\s+)?(.+)',
+    ]
+
+    msg_lower = message.lower()
+    for padrao in padroes:
+        match = re.search(padrao, msg_lower, re.IGNORECASE)
+        if match:
+            termo = match.group(1).strip()
+            # Limpar palavras desnecessárias
+            palavras_remover = ['por favor', 'obrigado', 'pncp', 'web', 'internet']
+            for p in palavras_remover:
+                termo = termo.replace(p, '').strip()
+            break
+
+    # Fallback: usar toda a mensagem após limpeza
+    if not termo:
+        palavras_ignorar = ['retorne', 'mostre', 'liste', 'busque', 'links', 'link', 'editais',
+                           'edital', 'para', 'os', 'de', 'da', 'do', 'na', 'no', 'área', 'area']
+        palavras = msg_lower.split()
+        termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
+        termo = ' '.join(termos) if termos else "equipamentos"
+
+    print(f"[LINKS] Buscando links para área: '{termo}'")
+
+    # Chamar a função de busca de links
+    resultado = tool_buscar_links_editais(termo, user_id=user_id)
+
+    if resultado.get("success"):
+        return resultado.get("texto", "Nenhum resultado"), resultado
+    else:
+        return f"❌ Erro ao buscar links: {resultado.get('error', 'Erro desconhecido')}", resultado
+
+
 def processar_buscar_edital_numero(message: str, user_id: str, buscar_apenas_banco: bool = False):
     """
     Processa busca de um edital específico pelo número.
@@ -1871,13 +1929,13 @@ def processar_buscar_edital_numero(message: str, user_id: str, buscar_apenas_ban
         buscar_apenas_banco = True
 
     # Extrair número do edital da mensagem
-    # Padrões: PE-001/2026, PE0013/2025, 90186/2025, nº 123, número 456
+    # Padrões: PE-001/2026, PE0013/2025, PE 050/2025, 90186/2025, nº 123, número 456
     padroes = [
-        r'PE[-]?\d+[/]?\d*',  # PE-001/2026, PE0013/2025
-        r'[Pp]reg[aã]o\s*(?:n[ºo°]?\s*)?\d+[/]?\d*',  # Pregão nº 123/2025
-        r'[Ee]dital\s*(?:n[ºo°]?\s*)?\d+[/]?\d*',  # Edital nº 123/2025
-        r'\d{4,}[/]\d{4}',  # 90186/2025
-        r'n[ºo°]\s*\d+[/]?\d*',  # nº 123/2025
+        r'PE[-\s]?\d+[/\-]?\d*',  # PE-001/2026, PE0013/2025, PE 050/2025
+        r'[Pp]reg[aã]o\s*(?:n[ºo°]?\s*)?\d+[/\-]?\d*',  # Pregão nº 123/2025
+        r'[Ee]dital\s*(?:n[ºo°]?\s*)?\d+[/\-]?\d*',  # Edital nº 123/2025
+        r'\d{3,}[/\-]\d{4}',  # 90186/2025, 050/2025
+        r'n[ºo°]\s*\d+[/\-]?\d*',  # nº 123/2025
     ]
 
     numero_edital = None
@@ -1885,6 +1943,8 @@ def processar_buscar_edital_numero(message: str, user_id: str, buscar_apenas_ban
         match = re.search(padrao, message, re.IGNORECASE)
         if match:
             numero_edital = match.group().strip()
+            # Limpar prefixos comuns que não fazem parte do número
+            numero_edital = re.sub(r'^(edital|pregão|pregao|pe|nº|no|n°)\s*', '', numero_edital, flags=re.IGNORECASE).strip()
             break
 
     if not numero_edital:
@@ -1910,30 +1970,76 @@ Por favor, informe o número no formato:
         ).first()
 
         if edital_local:
+            from models import EditalItem, EditalDocumento
+
             valor_ref = f"R$ {edital_local.valor_referencia:,.2f}" if edital_local.valor_referencia else '-'
-            data_ab = edital_local.data_abertura.strftime('%d/%m/%Y') if edital_local.data_abertura else '-'
-            objeto_texto = (edital_local.objeto or '')[:150]
-            objeto_sufixo = '...' if len(edital_local.objeto or '') > 150 else ''
+            data_ab = edital_local.data_abertura.strftime('%d/%m/%Y %H:%M') if edital_local.data_abertura else '-'
+            data_pub = edital_local.data_publicacao.strftime('%d/%m/%Y') if edital_local.data_publicacao else '-'
+            objeto_texto = (edital_local.objeto or '')[:200]
+            objeto_sufixo = '...' if len(edital_local.objeto or '') > 200 else ''
 
-            response = f"""## ✅ Edital Encontrado (já salvo no sistema)
+            response = f"""## ✅ Edital Encontrado no Sistema
 
+### Dados Gerais
 | Campo | Valor |
 |-------|-------|
 | **Número** | {edital_local.numero} |
 | **Órgão** | {edital_local.orgao} |
-| **Objeto** | {objeto_texto}{objeto_sufixo} |
-| **Status** | {edital_local.status} |
-| **Modalidade** | {edital_local.modalidade} |
-| **UF** | {edital_local.uf or '-'} |
-| **Data Abertura** | {data_ab} |
+| **UF/Cidade** | {edital_local.uf or '-'} / {edital_local.cidade or '-'} |
+| **Modalidade** | {edital_local.modalidade or '-'} |
+| **Status** | {edital_local.status or '-'} |
 | **Valor Referência** | {valor_ref} |
+| **Data Publicação** | {data_pub} |
+| **Data Abertura** | {data_ab} |
 
----
-**Ações disponíveis:**
-- Calcular aderência: "Calcule aderência do produto X ao edital {edital_local.numero}"
-- Ver resultado: "Qual o resultado do edital {edital_local.numero}?"
+### Objeto
+{objeto_texto}{objeto_sufixo}
+
 """
-            return response, {"edital": edital_local.numero, "encontrado_local": True}
+            # Buscar itens do edital
+            itens = db.query(EditalItem).filter(EditalItem.edital_id == edital_local.id).order_by(EditalItem.numero_item).all()
+            if itens:
+                response += f"### Itens ({len(itens)})\n"
+                response += "| Item | Descrição | Qtd | Valor Total |\n"
+                response += "|------|-----------|-----|-------------|\n"
+                for item in itens:
+                    desc = (item.descricao or '')[:50]
+                    desc_sufixo = '...' if len(item.descricao or '') > 50 else ''
+                    qtd = f"{item.quantidade:,.0f} {item.unidade_medida or ''}" if item.quantidade else '-'
+                    valor = f"R$ {item.valor_total_estimado:,.2f}" if item.valor_total_estimado else '-'
+                    response += f"| {item.numero_item or '-'} | {desc}{desc_sufixo} | {qtd} | {valor} |\n"
+                response += "\n"
+
+            # Verificar se tem PDF
+            doc = db.query(EditalDocumento).filter(EditalDocumento.edital_id == edital_local.id).first()
+            if doc and doc.path_arquivo:
+                import os
+                if os.path.exists(doc.path_arquivo):
+                    response += f"### Documento\n"
+                    response += f"📄 **{doc.nome_arquivo}** ({len(doc.texto_extraido or ''):,} caracteres extraídos)\n\n"
+                else:
+                    response += f"### Documento\n"
+                    response += f"⚠️ PDF não disponível (arquivo removido)\n\n"
+
+            # Dados PNCP
+            if edital_local.cnpj_orgao:
+                response += f"### Dados PNCP\n"
+                response += f"- **CNPJ Órgão:** {edital_local.cnpj_orgao}\n"
+                response += f"- **Nº PNCP:** {edital_local.numero_pncp or '-'}\n"
+                response += f"- **Situação:** {edital_local.situacao_pncp or '-'}\n"
+                response += f"- **SRP:** {'Sim' if edital_local.srp else 'Não'}\n\n"
+
+            # URL
+            if edital_local.url:
+                response += f"### Link\n🔗 {edital_local.url}\n\n"
+
+            response += f"""---
+**Ações disponíveis:**
+- Baixar PDF: "Baixe o PDF do edital {edital_local.numero}"
+- Fazer perguntas: "Qual o prazo de entrega do edital {edital_local.numero}?"
+- Calcular aderência: "Calcule aderência do produto X ao edital {edital_local.numero}"
+"""
+            return response, {"edital": edital_local.numero, "encontrado_local": True, "id": edital_local.id}
 
         # Se não encontrou no banco e é busca apenas local
         if buscar_apenas_banco:
@@ -2639,20 +2745,38 @@ def processar_calcular_aderencia(message: str, user_id: str):
         )
 
         if resultado.get("success"):
-            response = f"""**Análise de Aderência**
+            response = f"""## Análise de Aderência
 
 **Produto:** {resultado.get('produto')}
 **Edital:** {resultado.get('edital')}
 
-**Score Técnico:** {resultado.get('score_tecnico', 0):.1f}%
+### Score Técnico: {resultado.get('score_tecnico', 0):.1f}%
 
-**Requisitos:**
+"""
+            # Se tem requisitos cadastrados
+            if resultado.get('requisitos_total', 0) > 0:
+                response += f"""**Requisitos:**
 - Total: {resultado.get('requisitos_total', 0)}
 - Atendidos: {resultado.get('requisitos_atendidos', 0)}
 - Parciais: {resultado.get('requisitos_parciais', 0)}
 - Não atendidos: {resultado.get('requisitos_nao_atendidos', 0)}
 
-**Recomendação:** {resultado.get('recomendacao', '')}
+"""
+            # Justificativa (da análise via IA)
+            if resultado.get('justificativa'):
+                response += f"""**Análise:** {resultado.get('justificativa')}
+
+"""
+            # Recomendação com emoji
+            recomendacao = resultado.get('recomendacao', '')
+            if 'RECOMENDADO' in recomendacao and 'NAO' not in recomendacao:
+                emoji = "✅"
+            elif 'AVALIAR' in recomendacao:
+                emoji = "⚠️"
+            else:
+                emoji = "❌"
+
+            response += f"""### {emoji} Recomendação: {recomendacao}
 """
             return response, resultado
 
@@ -2835,7 +2959,7 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
         # Salvar edital específico pelo número
         print(f"[SALVAR] Buscando edital específico: {numero_especifico}")
         for ed in editais_com_score:
-            numero_edital = ed.get("numero", "").upper()
+            numero_edital = (ed.get("numero") or "").upper()
             # Tentar match exato ou parcial
             if numero_especifico in numero_edital or numero_edital in numero_especifico:
                 editais_para_salvar.append(ed)
@@ -2887,6 +3011,7 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
         salvos = resultado_salvar.get("salvos", [])
         duplicados = resultado_salvar.get("duplicados", [])
         erros = resultado_salvar.get("erros", [])
+        incompletos = resultado_salvar.get("incompletos", [])
 
         response = "## 💾 Resultado do Salvamento\n\n"
 
@@ -2897,6 +3022,13 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
             if len(salvos) > 5:
                 response += f"- ... e mais {len(salvos) - 5}\n"
             response += "\n"
+
+        if incompletos:
+            response += f"**⚠️ Salvos com dados incompletos:** {len(incompletos)} edital(is)\n"
+            response += "Estes editais não foram encontrados no PNCP e têm informações limitadas:\n"
+            for num in incompletos[:3]:
+                response += f"- {num}\n"
+            response += "\n**Dica:** Para obter dados completos, acesse o link do edital e faça upload do PDF manualmente.\n\n"
 
         if duplicados:
             response += f"**⚠️ Já existentes (ignorados):** {len(duplicados)} edital(is)\n"
@@ -5007,8 +5139,49 @@ REQUISITOS DO EDITAL ({len(requisitos)} requisitos):
         if not requisitos:
             contexto_banco += "- Nenhum requisito cadastrado.\n"
 
-        # PASSO 1: Tentar responder com dados do banco
-        prompt_banco = f"""Você é um assistente especializado em licitações públicas.
+        # Detectar se é pergunta específica que provavelmente está no PDF
+        msg_lower = message.lower()
+        perguntas_especificas = [
+            'prazo de entrega', 'prazo entrega', 'dias para entrega', 'entregar em',
+            'garantia', 'garantir',
+            'local de entrega', 'onde entregar', 'endereço de entrega',
+            'forma de pagamento', 'pagamento', 'pagar',
+            'penalidade', 'multa', 'sanção', 'sanções',
+            'documentos de habilitação', 'habilitação', 'documentos exigidos',
+            'qualificação técnica', 'atestado', 'certidão',
+            'termo de referência', 'anexo', 'especificação técnica',
+            'cláusula', 'item', 'subitem',
+            'critério de julgamento', 'desempate', 'lance',
+            'contrato', 'vigência', 'aditivo',
+            'reajuste', 'índice', 'igpm', 'ipca'
+        ]
+        eh_pergunta_especifica = any(p in msg_lower for p in perguntas_especificas)
+
+        # Verificar se tem PDF disponível ANTES de tentar banco
+        doc_com_texto = None
+        for doc in documentos:
+            if doc.texto_extraido and len(doc.texto_extraido) > 100:
+                doc_com_texto = doc
+                break
+            elif doc.path_arquivo and os.path.exists(doc.path_arquivo):
+                try:
+                    from tools import tool_processar_upload
+                    texto = tool_processar_upload(doc.path_arquivo)
+                    if texto and len(texto) > 100:
+                        doc.texto_extraido = texto[:200000]  # Aumentar limite
+                        doc.processado = True
+                        db.commit()
+                        doc_com_texto = doc
+                        break
+                except Exception as e:
+                    print(f"[PERGUNTAR_EDITAL] Erro ao ler PDF {doc.nome_arquivo}: {e}")
+
+        # Se é pergunta específica E tem PDF, ir direto pro PDF
+        if eh_pergunta_especifica and doc_com_texto:
+            print(f"[PERGUNTAR_EDITAL] Pergunta específica detectada. Indo direto pro PDF...")
+        else:
+            # PASSO 1: Tentar responder com dados do banco (perguntas gerais)
+            prompt_banco = f"""Você é um assistente especializado em licitações públicas.
 
 DADOS CADASTRADOS DO EDITAL:
 {contexto_banco}
@@ -5025,13 +5198,13 @@ INSTRUÇÕES IMPORTANTES:
 
 Responda em Markdown (ou a frase especial APENAS se realmente não houver dados relevantes)."""
 
-        messages = [{"role": "user", "content": prompt_banco}]
-        resposta_banco = call_deepseek(messages, max_tokens=2000)
+            messages = [{"role": "user", "content": prompt_banco}]
+            resposta_banco = call_deepseek(messages, max_tokens=2000)
 
-        # Verificar se encontrou a informação no banco
-        if "INFORMACAO_NAO_ENCONTRADA_NO_CADASTRO" not in resposta_banco.upper():
-            # Encontrou no banco - retornar resposta
-            response_text = f"""## 💬 Resposta sobre o Edital {edital.numero}
+            # Verificar se encontrou a informação no banco
+            if "INFORMACAO_NAO_ENCONTRADA" not in resposta_banco.upper() and "NÃO ENCONTRADA" not in resposta_banco.upper() and "NÃO CONSTA" not in resposta_banco.upper():
+                # Encontrou no banco - retornar resposta
+                response_text = f"""## 💬 Resposta sobre o Edital {edital.numero}
 
 {resposta_banco}
 
@@ -5040,39 +5213,92 @@ Responda em Markdown (ou a frase especial APENAS se realmente não houver dados 
 🏢 **Órgão:** {edital.orgao or 'N/I'}
 📊 **Fonte:** Dados cadastrados no sistema
 """
-            return response_text, {"success": True, "edital": edital.numero, "fonte": "banco"}
+                return response_text, {"success": True, "edital": edital.numero, "fonte": "banco"}
 
-        # PASSO 2: Não encontrou no banco - verificar se tem PDF
-        print(f"[PERGUNTAR_EDITAL] Informação não encontrada no banco. Verificando PDFs...")
+            print(f"[PERGUNTAR_EDITAL] Informação não encontrada no banco. Verificando PDFs...")
 
-        # Verificar se há documento com texto extraído
-        doc_com_texto = None
-        for doc in documentos:
-            if doc.texto_extraido and len(doc.texto_extraido) > 100:
-                doc_com_texto = doc
-                break
-            # Tentar ler do arquivo se não tiver texto extraído
-            elif doc.path_arquivo and os.path.exists(doc.path_arquivo):
-                try:
-                    from tools import tool_processar_upload
-                    texto = tool_processar_upload(doc.path_arquivo)
-                    if texto and len(texto) > 100:
-                        # Salvar texto extraído para próximas consultas
-                        doc.texto_extraido = texto[:50000]  # Limitar tamanho
-                        doc.processado = True
-                        db.commit()
-                        doc_com_texto = doc
-                        break
-                except Exception as e:
-                    print(f"[PERGUNTAR_EDITAL] Erro ao ler PDF {doc.nome_arquivo}: {e}")
-
+        # doc_com_texto já foi verificado antes
         if doc_com_texto and doc_com_texto.texto_extraido:
             # PASSO 3: Tem PDF - ler e responder
             print(f"[PERGUNTAR_EDITAL] Lendo PDF: {doc_com_texto.nome_arquivo}")
 
-            texto_pdf = doc_com_texto.texto_extraido[:30000]  # Limitar contexto
+            texto_completo = doc_com_texto.texto_extraido
+            print(f"[PERGUNTAR_EDITAL] Texto total: {len(texto_completo)} caracteres")
 
-            prompt_pdf = f"""Você é um assistente especializado em licitações públicas.
+            # Extrair palavras-chave da pergunta para busca inteligente
+            msg_lower = message.lower()
+            palavras_busca = []
+
+            # Mapeamento de termos comuns em editais
+            if any(p in msg_lower for p in ['prazo', 'entrega', 'entregar']):
+                palavras_busca.extend(['prazo', 'entrega', 'dias', 'úteis', 'corridos', 'fornecimento'])
+            if any(p in msg_lower for p in ['garantia', 'garantir']):
+                palavras_busca.extend(['garantia', 'garantir', 'meses', 'anos', 'cobertura'])
+            if any(p in msg_lower for p in ['pagamento', 'pagar', 'valor']):
+                palavras_busca.extend(['pagamento', 'pagar', 'fatura', 'nota fiscal', 'dias'])
+            if any(p in msg_lower for p in ['local', 'onde', 'endereço']):
+                palavras_busca.extend(['local', 'entrega', 'endereço', 'sede', 'almoxarifado'])
+            if any(p in msg_lower for p in ['documento', 'habilitação', 'exigência', 'exige']):
+                palavras_busca.extend(['habilitação', 'documento', 'certidão', 'atestado', 'declaração'])
+            if any(p in msg_lower for p in ['penalidade', 'multa', 'sanção']):
+                palavras_busca.extend(['penalidade', 'multa', 'sanção', 'advertência', 'suspensão'])
+
+            # Chunkar o documento (chunks de 2000 caracteres com overlap de 300)
+            chunk_size = 2000
+            overlap = 300
+            chunks = []
+            for i in range(0, len(texto_completo), chunk_size - overlap):
+                chunk = texto_completo[i:i + chunk_size]
+                chunks.append((i, chunk))  # (posição, texto)
+
+            print(f"[PERGUNTAR_EDITAL] Documento dividido em {len(chunks)} chunks")
+
+            # Criar frases de busca combinadas (mais específicas)
+            frases_exatas = []
+            if any(p in msg_lower for p in ['prazo', 'entrega']):
+                frases_exatas.extend(['prazo de entrega', 'prazo para entrega', 'entrega do objeto',
+                                      'prazo de fornecimento', 'dias para entrega', 'dias após'])
+            if any(p in msg_lower for p in ['garantia']):
+                frases_exatas.extend(['prazo de garantia', 'garantia de', 'meses de garantia', 'anos de garantia'])
+            if any(p in msg_lower for p in ['pagamento']):
+                frases_exatas.extend(['prazo de pagamento', 'pagamento será', 'dias após', 'nota fiscal'])
+            if any(p in msg_lower for p in ['local']):
+                frases_exatas.extend(['local de entrega', 'endereço de entrega', 'entregar no', 'entregue no'])
+
+            # Buscar nos chunks - priorizar frases exatas
+            chunks_relevantes = []
+            for pos, chunk in chunks:
+                chunk_lower = chunk.lower()
+
+                # Score alto para frases exatas
+                score_exato = sum(3 for f in frases_exatas if f in chunk_lower)
+                # Score menor para palavras individuais
+                score_palavras = sum(1 for p in palavras_busca if p in chunk_lower)
+
+                score_total = score_exato + score_palavras
+                if score_total > 0:
+                    chunks_relevantes.append((score_total, pos, chunk))
+
+            # Ordenar por relevância (maior score primeiro)
+            chunks_relevantes.sort(key=lambda x: -x[0])
+
+            # Pegar os 12 chunks mais relevantes
+            chunks_relevantes = chunks_relevantes[:12]
+            print(f"[PERGUNTAR_EDITAL] {len(chunks_relevantes)} chunks relevantes encontrados")
+            if chunks_relevantes:
+                print(f"[PERGUNTAR_EDITAL] Top scores: {[c[0] for c in chunks_relevantes[:5]]}")
+
+            # Montar contexto com chunks relevantes
+            if chunks_relevantes:
+                texto_pdf = f"=== TRECHOS RELEVANTES DO EDITAL ===\n\n"
+                for i, (score, pos, chunk) in enumerate(chunks_relevantes, 1):
+                    texto_pdf += f"--- Trecho {i} (posição {pos}) ---\n{chunk}\n\n"
+            else:
+                # Sem chunks relevantes, pegar documento inteiro até limite
+                texto_pdf = texto_completo[:60000]
+                print(f"[PERGUNTAR_EDITAL] Sem chunks relevantes, usando primeiros 60K caracteres")
+
+            prompt_pdf = f"""Você é um assistente especializado em licitações públicas brasileiras.
 
 CONTEÚDO DO EDITAL (extraído do PDF "{doc_com_texto.nome_arquivo}"):
 {texto_pdf}
@@ -5082,9 +5308,10 @@ PERGUNTA DO USUÁRIO:
 
 INSTRUÇÕES:
 1. Responda a pergunta com base no conteúdo do edital acima
-2. Cite trechos relevantes do edital quando possível
-3. Se mesmo assim não encontrar a informação, diga claramente
-4. Seja objetivo e direto
+2. CITE O TRECHO EXATO do edital que contém a resposta (entre aspas)
+3. Se a informação estiver em um Anexo ou Termo de Referência, indique qual
+4. Se não encontrar a informação específica, diga claramente e sugira onde pode estar
+5. Seja objetivo e direto
 
 Responda em Markdown."""
 
@@ -5218,6 +5445,91 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
             db.commit()
             doc_existente = None  # Permitir re-download
 
+        # ========== MÉTODO 1: Tentar baixar via API do PNCP (se tiver dados) ==========
+        if edital.cnpj_orgao and edital.ano_compra and edital.seq_compra:
+            from tools import tool_buscar_arquivos_edital_pncp, tool_baixar_pdf_pncp
+
+            response_text = f"## ⏳ Baixando PDF do Edital {edital.numero}...\n\n"
+            response_text += f"🔍 **Fonte:** API do PNCP\n"
+            response_text += f"📌 **CNPJ:** {edital.cnpj_orgao} | **Ano:** {edital.ano_compra} | **Seq:** {edital.seq_compra}\n\n"
+
+            # Buscar lista de arquivos
+            arquivos_result = tool_buscar_arquivos_edital_pncp(edital_id=edital.id, user_id=user_id)
+
+            if arquivos_result.get('success') and arquivos_result.get('arquivos'):
+                arquivos = arquivos_result['arquivos']
+                arquivo_edital = arquivos_result.get('arquivo_edital') or arquivos[0]
+
+                response_text += f"📁 **Arquivos encontrados:** {len(arquivos)}\n"
+                for arq in arquivos:
+                    response_text += f"   - {arq['titulo']}\n"
+                response_text += f"\n📥 **Baixando:** {arquivo_edital['titulo']}...\n\n"
+
+                # Baixar o arquivo principal
+                download_result = tool_baixar_pdf_pncp(
+                    cnpj=edital.cnpj_orgao,
+                    ano=edital.ano_compra,
+                    seq=edital.seq_compra,
+                    sequencial_arquivo=arquivo_edital['sequencial'],
+                    user_id=user_id,
+                    edital_id=edital.id
+                )
+
+                if download_result.get('success'):
+                    filepath = download_result['filepath']
+                    filename = download_result['filename']
+                    filesize = download_result['filesize']
+
+                    response_text += f"✅ **Download concluído:** {filename} ({filesize/1024:.1f} KB)\n\n"
+
+                    # Extrair texto do PDF
+                    texto_extraido = ""
+                    try:
+                        from PyPDF2 import PdfReader
+                        reader = PdfReader(filepath)
+                        for page in reader.pages:
+                            texto_extraido += page.extract_text() or ""
+                        response_text += f"📝 **Texto extraído:** {len(texto_extraido):,} caracteres\n\n"
+                    except Exception as e:
+                        response_text += f"⚠️ **Aviso:** Não foi possível extrair texto: {str(e)}\n\n"
+
+                    # Salvar no banco
+                    novo_doc = EditalDocumento(
+                        id=str(uuid.uuid4()),
+                        edital_id=edital.id,
+                        tipo='edital_principal',
+                        nome_arquivo=filename,
+                        path_arquivo=filepath,
+                        texto_extraido=texto_extraido[:100000] if texto_extraido else None,
+                        processado=True,
+                        created_at=datetime.now()
+                    )
+                    db.add(novo_doc)
+                    db.commit()
+
+                    response_text += "## ✅ PDF Salvo com Sucesso!\n\n"
+                    response_text += "Agora você pode fazer perguntas sobre o edital:\n"
+                    response_text += f"- \"Quais itens o edital {edital.numero} comporta?\"\n"
+                    response_text += f"- \"Qual o local de entrega do edital {edital.numero}?\"\n"
+
+                    return response_text, {
+                        "success": True,
+                        "edital": edital.numero,
+                        "arquivo": filename,
+                        "tamanho": filesize,
+                        "texto_extraido": len(texto_extraido),
+                        "fonte": "PNCP"
+                    }
+                else:
+                    response_text += f"⚠️ **Erro no download via PNCP:** {download_result.get('error', 'Erro desconhecido')}\n\n"
+                    response_text += "Tentando método alternativo...\n\n"
+            else:
+                response_text = f"## ⏳ Baixando PDF do Edital {edital.numero}...\n\n"
+                response_text += f"⚠️ **PNCP:** Nenhum arquivo encontrado via API\n"
+                response_text += "Tentando método alternativo...\n\n"
+
+        # ========== MÉTODO 2: Tentar baixar da URL cadastrada ==========
+
         # Verificar se tem URL do edital
         if not edital.url:
             return (
@@ -5229,8 +5541,9 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
                 {"error": "URL não cadastrada", "edital": edital.numero}
             )
 
-        # Tentar baixar o PDF
-        response_text = f"## ⏳ Baixando PDF do Edital {edital.numero}...\n\n"
+        # Tentar baixar o PDF da URL
+        if 'response_text' not in locals():
+            response_text = f"## ⏳ Baixando PDF do Edital {edital.numero}...\n\n"
         response_text += f"🔗 **URL:** {edital.url}\n\n"
 
         try:

@@ -42,6 +42,10 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // -- BUSCA NA WEB SEM SCORE --
   { id: "buscar_editais_simples", nome: "✅ 📋 Buscar editais (sem score)", prompt: "Busque editais de [TERMO] sem calcular score" },
   { id: "buscar_editais_simples2", nome: "✅ 📋 Listar editais da web", prompt: "Busque editais de [TERMO] apenas listando" },
+  // -- LINKS DE EDITAIS --
+  { id: "buscar_links_editais", nome: "✅ 🔗 Links de editais por área", prompt: "Retorne os links para os editais na área [TERMO/ÁREA]" },
+  { id: "buscar_links_editais2", nome: "✅ 🔗 Links editais (equipamentos)", prompt: "Retorne os links para os editais na área equipamentos médicos" },
+  { id: "buscar_links_editais3", nome: "✅ 🔗 Links editais (laboratório)", prompt: "Retorne os links para os editais na área laboratório" },
   // -- BUSCA NO BANCO LOCAL --
   { id: "buscar_editais_banco", nome: "✅ 💾 Buscar editais no banco", prompt: "Busque editais de [TERMO] no banco" },
   { id: "buscar_edital_numero_banco", nome: "✅ 💾 Buscar edital no sistema", prompt: "Busque o edital [PE-001/2026] no sistema" },
@@ -86,7 +90,7 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "sep_3", nome: "━━━ 3. ANÁLISE DE ADERÊNCIA ━━━", prompt: "" },
   { id: "calcular_aderencia", nome: "✅ 🎯 Calcular aderência", prompt: "Calcule a aderência do produto [NOME_PRODUTO] ao edital [NUMERO_EDITAL]" },
   { id: "listar_analises", nome: "✅ 📊 Listar análises realizadas", prompt: "Liste minhas análises de aderência" },
-  { id: "verificar_completude", nome: "❌ 📝 Verificar completude do produto", prompt: "Verifique se o produto [NOME_PRODUTO] está completo para participar de editais" },
+  { id: "verificar_completude_aderencia", nome: "❌ 📝 Verificar completude do produto", prompt: "Verifique se o produto [NOME_PRODUTO] está completo para participar de editais" },
 
   // =============================================================================
   // 4. GERAÇÃO DE PROPOSTAS

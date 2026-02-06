@@ -9,7 +9,8 @@ interface SourcesPanelProps {
 export function SourcesPanel({ sources }: SourcesPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!sources || sources.length === 0) return null;
+  // Garantir que sources é um array válido
+  if (!sources || !Array.isArray(sources) || sources.length === 0) return null;
 
   // Separar fontes locais (RAG) de jurisprudência web
   const fontesLocais = sources.filter(s => s.doc_type !== "jurisprudencia");
