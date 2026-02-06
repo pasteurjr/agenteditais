@@ -6507,27 +6507,84 @@ def download_edital_pdf(edital_id):
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
-        # Buscar documento do edital
+        # Parâmetro para forçar download (ao invés de visualizar)
+        download = request.args.get('download', 'false').lower() == 'true'
+
+        # Opção 1: Arquivo local já baixado (pdf_path)
+        if edital.pdf_path and os.path.exists(edital.pdf_path):
+            return send_file(
+                edital.pdf_path,
+                mimetype='application/pdf',
+                as_attachment=download,
+                download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
+            )
+
+        # Opção 2: Buscar documento salvo localmente (EditalDocumento)
         doc = db.query(EditalDocumento).filter(
             EditalDocumento.edital_id == edital_id,
             EditalDocumento.tipo == 'edital_principal'
         ).first()
 
-        if not doc or not doc.path_arquivo:
-            return jsonify({"error": "PDF não disponível para este edital"}), 404
+        if doc and doc.path_arquivo and os.path.exists(doc.path_arquivo):
+            return send_file(
+                doc.path_arquivo,
+                mimetype='application/pdf',
+                as_attachment=download,
+                download_name=doc.nome_arquivo or f"edital_{edital.numero}.pdf"
+            )
 
-        if not os.path.exists(doc.path_arquivo):
-            return jsonify({"error": "Arquivo não encontrado no servidor"}), 404
+        # Opção 3: Fazer proxy do PDF da URL do PNCP
+        if edital.pdf_url:
+            try:
+                import requests as req
+                print(f"[PDF] Fazendo proxy de: {edital.pdf_url}")
+                resp = req.get(edital.pdf_url, timeout=60, stream=True)
+                if resp.status_code == 200:
+                    from io import BytesIO
+                    pdf_content = BytesIO(resp.content)
+                    return send_file(
+                        pdf_content,
+                        mimetype='application/pdf',
+                        as_attachment=download,
+                        download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
+                    )
+                else:
+                    print(f"[PDF] Erro ao baixar: {resp.status_code}")
+            except Exception as e:
+                print(f"[PDF] Erro no proxy: {e}")
 
-        # Parâmetro para forçar download (ao invés de visualizar)
-        download = request.args.get('download', 'false').lower() == 'true'
+        # Opção 4: Se tem dados do PNCP, buscar arquivos dinamicamente
+        if edital.cnpj_orgao and edital.ano_compra and edital.seq_compra:
+            try:
+                from tools import tool_buscar_arquivos_edital_pncp
+                resultado = tool_buscar_arquivos_edital_pncp(
+                    cnpj=edital.cnpj_orgao,
+                    ano=edital.ano_compra,
+                    seq=edital.seq_compra
+                )
+                if resultado.get('success') and resultado.get('arquivo_edital'):
+                    pdf_url = resultado['arquivo_edital'].get('url_download') or resultado['arquivo_edital'].get('url')
+                    if pdf_url:
+                        import requests as req
+                        resp = req.get(pdf_url, timeout=60, stream=True)
+                        if resp.status_code == 200:
+                            # Salvar URL para próxima vez
+                            edital.pdf_url = pdf_url
+                            edital.pdf_titulo = resultado['arquivo_edital'].get('titulo')
+                            db.commit()
 
-        return send_file(
-            doc.path_arquivo,
-            mimetype='application/pdf',
-            as_attachment=download,
-            download_name=doc.nome_arquivo or f"edital_{edital.numero}.pdf"
-        )
+                            from io import BytesIO
+                            pdf_content = BytesIO(resp.content)
+                            return send_file(
+                                pdf_content,
+                                mimetype='application/pdf',
+                                as_attachment=download,
+                                download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
+                            )
+            except Exception as e:
+                print(f"[PDF] Erro ao buscar arquivos PNCP: {e}")
+
+        return jsonify({"error": "PDF não disponível para este edital"}), 404
     finally:
         db.close()
 

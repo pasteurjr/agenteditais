@@ -264,6 +264,12 @@ class Edital(Base):
     seq_compra = Column(Integer, nullable=True)
     srp = Column(Boolean, default=False)  # Sistema de Registro de Preços
     situacao_pncp = Column(String(100), nullable=True)  # Divulgada, Suspensa, etc.
+    # URLs de PDF e arquivos
+    pdf_url = Column(String(500), nullable=True)  # URL para download do PDF do edital
+    pdf_titulo = Column(String(255), nullable=True)  # Título do arquivo PDF
+    pdf_path = Column(String(500), nullable=True)  # Caminho local se baixado
+    dados_completos = Column(Boolean, default=False)  # Se tem todos os dados do PNCP
+    fonte_tipo = Column(String(20), nullable=True)  # 'api' ou 'scraper'
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -295,7 +301,15 @@ class Edital(Base):
             "fuso_horario": self.fuso_horario,
             "status": self.status,
             "fonte": self.fonte,
+            "fonte_tipo": self.fonte_tipo,
             "url": self.url,
+            "pdf_url": self.pdf_url,
+            "pdf_titulo": self.pdf_titulo,
+            "pdf_path": self.pdf_path,
+            "dados_completos": self.dados_completos,
+            "cnpj_orgao": self.cnpj_orgao,
+            "ano_compra": self.ano_compra,
+            "seq_compra": self.seq_compra,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_requisitos:
