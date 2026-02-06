@@ -1526,7 +1526,7 @@ Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
     return response, {"status": "aguardando_dados"}
 
 
-def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None):
     """
     Processa ação: Buscar editais
 
@@ -1542,12 +1542,18 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
         user_id: ID do usuário
         termo_ia: Termo de busca já extraído pelo agente classificador (opcional)
         calcular_score: Se True, calcula score de aderência. Se False, apenas lista os editais.
+        incluir_encerrados: Se True, inclui editais já encerrados. Se None, detecta da mensagem.
     """
     import json
     import re
 
     fonte = "PNCP"
     uf = None
+
+    # Detectar se deve incluir editais encerrados
+    if incluir_encerrados is None:
+        msg_lower = message.lower()
+        incluir_encerrados = any(p in msg_lower for p in ['todos', 'incluindo encerrados', 'encerrados', 'all'])
 
     # Usar termo da IA se disponível, senão extrair da mensagem
     if termo_ia:
@@ -1607,8 +1613,8 @@ JSON:"""
     erros_fontes = []
 
     # 1.1 Buscar no PNCP (API oficial)
-    print(f"[BUSCA] Consultando PNCP via API...")
-    resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf)
+    print(f"[BUSCA] Consultando PNCP via API... (incluir_encerrados={incluir_encerrados})")
+    resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf, incluir_encerrados=incluir_encerrados)
     if resultado_pncp.get("success"):
         editais_pncp = resultado_pncp.get("editais", [])
         # Marcar fonte
@@ -1763,6 +1769,7 @@ JSON:"""
         ano = ed.get('ano_compra', '')
         seq = ed.get('seq_compra', '')
         dados_completos = ed.get('dados_completos', False)
+        encerrado = ed.get('encerrado', False)
 
         # Badge de fonte com cor
         fonte_badge = ""
@@ -1777,10 +1784,15 @@ JSON:"""
         else:
             fonte_badge = f"⚪ {fonte_edital}" if fonte_edital else ""
 
+        # Badge de status (encerrado ou aberto)
+        status_badge = "🔴 ENCERRADO" if encerrado else ""
+
         texto = f"---\n"
         texto += f"### {i}. {numero}"
         if score is not None:
             texto += f" | Score: **{score:.0f}%**"
+        if status_badge:
+            texto += f" | {status_badge}"
         if fonte_badge:
             texto += f" | {fonte_badge}"
         texto += "\n"

@@ -1512,12 +1512,14 @@ def tool_listar_fontes() -> Dict[str, Any]:
 
 def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                                uf: str = None, modalidade: str = None,
-                               buscar_detalhes: bool = True) -> Dict[str, Any]:
+                               buscar_detalhes: bool = True,
+                               incluir_encerrados: bool = False) -> Dict[str, Any]:
     """
     Busca editais em uma fonte específica (PNCP).
 
     Args:
         buscar_detalhes: Se True, busca itens e PDF para cada edital (mais lento, mais completo)
+        incluir_encerrados: Se True, inclui editais já encerrados (data abertura no passado)
     """
     from datetime import timedelta
 
@@ -1626,14 +1628,18 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
                 for item in items:
                     # FILTRO 1: Verificar se edital está EM ABERTO (data de abertura futura)
+                    # Se incluir_encerrados=True, não filtra por data
+                    edital_encerrado = False
                     data_abertura_str = item.get('dataAberturaProposta')
                     if data_abertura_str:
                         try:
                             # Formato: "2025-11-03T08:00:00"
                             data_abertura = datetime.fromisoformat(data_abertura_str.replace('Z', ''))
                             if data_abertura < hoje:
+                                edital_encerrado = True
                                 editais_encerrados += 1
-                                continue  # Pular editais já encerrados
+                                if not incluir_encerrados:
+                                    continue  # Pular editais já encerrados (se não incluir_encerrados)
                         except (ValueError, TypeError):
                             pass  # Se não conseguir parsear, inclui mesmo assim
 
@@ -1723,6 +1729,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         "situacao": item.get('situacaoCompraNome'),
                         "fonte": "PNCP (API)",  # Deixar claro de onde veio
                         "fonte_tipo": "api",
+                        "encerrado": edital_encerrado,  # Flag se já encerrou
                     }
 
                     # Enriquecer com itens e PDF (apenas para primeiros 5 para não sobrecarregar)
@@ -1730,12 +1737,16 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         edital_data = _enriquecer_edital_pncp(edital_data)
 
                     editais_encontrados.append(edital_data)
-                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]} (itens: {edital_data.get('total_itens', 0)}, PDF: {'sim' if edital_data.get('pdf_url') else 'não'})")
+                    status_edital = "ENCERRADO" if edital_encerrado else "ABERTO"
+                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]} ({status_edital}, itens: {edital_data.get('total_itens', 0)}, PDF: {'sim' if edital_data.get('pdf_url') else 'não'})")
 
                     if len(editais_encontrados) >= 10:
                         break
 
-                print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais EM ABERTO (filtrados {editais_encerrados} já encerrados)")
+                if incluir_encerrados:
+                    print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais (incluindo {editais_encerrados} encerrados)")
+                else:
+                    print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais EM ABERTO (filtrados {editais_encerrados} já encerrados)")
 
             except Exception as e:
                 print(f"[TOOLS] Erro ao buscar PNCP: {e}")
