@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ExternalLink,
-  FileText,
   Download,
   Save,
   MapPin,

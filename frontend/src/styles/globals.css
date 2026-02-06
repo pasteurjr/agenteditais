@@ -391,6 +391,41 @@ body {
   min-width: 500px;
 }
 
+/* Links no chat */
+.assistant-bubble a {
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  transition: all 0.15s ease;
+}
+
+.assistant-bubble a:hover {
+  background: rgba(59, 130, 246, 0.3);
+  text-decoration: underline;
+}
+
+/* Botões de ação de editais */
+.assistant-bubble a[href*="pncp.gov.br"],
+.assistant-bubble a[href*="/api/editais/"],
+.assistant-bubble a[href*="compras.gov.br"],
+.assistant-bubble a[href*="comprasnet"],
+.assistant-bubble a[href*="bec.sp.gov.br"] {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.15);
+  font-weight: 600;
+}
+
+.assistant-bubble a[href*="pncp.gov.br"]:hover,
+.assistant-bubble a[href*="/api/editais/"]:hover,
+.assistant-bubble a[href*="compras.gov.br"]:hover,
+.assistant-bubble a[href*="comprasnet"]:hover,
+.assistant-bubble a[href*="bec.sp.gov.br"]:hover {
+  background: rgba(34, 211, 238, 0.3);
+}
+
 /* Links na tabela */
 .assistant-bubble td a {
   color: var(--accent);

@@ -64,6 +64,17 @@ export function MessageBubble({ message, onAction }: MessageBubbleProps) {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
+              components={{
+                a: ({ href, children }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {children}
+                  </a>
+                ),
+              }}
             >
               {cleanContent}
             </ReactMarkdown>

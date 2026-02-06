@@ -1842,15 +1842,18 @@ JSON:"""
         if url:
             texto += f"🔗 [Acessar Portal]({url}) "
 
-        # Botão PDF - se tem pdf_url direta ou dados PNCP para construir
-        if pdf_url:
+        # Botão PDF - usar proxy local para visualização inline
+        # URL absoluta do backend (porta 5007)
+        backend_url = "http://localhost:5007"
+        if cnpj and ano and seq:
+            # URL do proxy local que permite visualização no navegador
+            proxy_url = f"{backend_url}/api/proxy/pdf/pncp/{cnpj}/{ano}/{seq}"
+            texto += f"| 📄 [Ver PDF]({proxy_url}) "
+            texto += f"| ⬇️ [Baixar PDF]({proxy_url}?download=true) "
+        elif pdf_url:
+            # Se tem pdf_url mas não tem dados PNCP, usa direto (com fallback)
             texto += f"| 📄 [Ver PDF]({pdf_url}) "
             texto += f"| ⬇️ [Baixar PDF]({pdf_url}?download=true) "
-        elif cnpj and ano and seq:
-            # Construir URL do PDF via API do PNCP
-            pdf_api_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/1"
-            texto += f"| 📄 [Ver PDF]({pdf_api_url}) "
-            texto += f"| ⬇️ [Baixar PDF]({pdf_api_url}) "
 
         texto += "\n\n"
         return texto
@@ -6747,6 +6750,93 @@ def download_edital_pdf_by_numero(numero):
         )
     finally:
         db.close()
+
+
+@app.route("/api/proxy/pdf/pncp/<cnpj>/<int:ano>/<int:seq>", methods=["GET"])
+@app.route("/api/proxy/pdf/pncp/<cnpj>/<int:ano>/<int:seq>/<int:arquivo_id>", methods=["GET"])
+def proxy_pdf_pncp(cnpj, ano, seq, arquivo_id=1):
+    """
+    Proxy para visualizar PDFs do PNCP no navegador.
+    Busca o arquivo da API do PNCP, extrai PDF do ZIP se necessário,
+    e retorna com headers corretos para visualização inline.
+    """
+    import requests as req
+    from io import BytesIO
+    import zipfile
+
+    # Construir URL do PNCP
+    pdf_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos/{arquivo_id}"
+
+    try:
+        print(f"[PDF PROXY] Buscando: {pdf_url}")
+        resp = req.get(pdf_url, timeout=60)
+
+        if resp.status_code == 200:
+            content = resp.content
+            content_type = resp.headers.get('Content-Type', '')
+            content_disp = resp.headers.get('Content-Disposition', '')
+
+            # Detectar nome do arquivo
+            filename = f"edital_pncp_{ano}_{seq}.pdf"
+            if 'filename=' in content_disp:
+                import re
+                match = re.search(r'filename[^;=\n]*=(([\'"]).*?\2|[^;\n]*)', content_disp)
+                if match:
+                    filename = match.group(1).strip('"\'')
+
+            # Verificar se é um ZIP (PNCP frequentemente retorna ZIP com PDFs dentro)
+            is_zip = (
+                filename.lower().endswith('.zip') or
+                'zip' in content_type.lower() or
+                content[:4] == b'PK\x03\x04'  # Magic bytes do ZIP
+            )
+
+            if is_zip:
+                print(f"[PDF PROXY] Arquivo é ZIP, extraindo PDF...")
+                try:
+                    zip_buffer = BytesIO(content)
+                    with zipfile.ZipFile(zip_buffer, 'r') as zf:
+                        # Listar arquivos no ZIP
+                        pdf_files = [f for f in zf.namelist() if f.lower().endswith('.pdf')]
+                        print(f"[PDF PROXY] PDFs no ZIP: {pdf_files}")
+
+                        if pdf_files:
+                            # Priorizar arquivo com "Edital" no nome, senão pega o primeiro
+                            pdf_to_extract = pdf_files[0]
+                            for pf in pdf_files:
+                                if 'edital' in pf.lower():
+                                    pdf_to_extract = pf
+                                    break
+
+                            print(f"[PDF PROXY] Extraindo: {pdf_to_extract}")
+                            pdf_content = zf.read(pdf_to_extract)
+                            filename = pdf_to_extract
+                            content = pdf_content
+                        else:
+                            print(f"[PDF PROXY] Nenhum PDF encontrado no ZIP")
+                            return jsonify({"error": "ZIP não contém arquivos PDF"}), 404
+                except zipfile.BadZipFile:
+                    print(f"[PDF PROXY] Arquivo não é ZIP válido, tentando como PDF")
+
+            # Parâmetro para forçar download
+            download = request.args.get('download', 'false').lower() == 'true'
+
+            pdf_buffer = BytesIO(content)
+            return send_file(
+                pdf_buffer,
+                mimetype='application/pdf',
+                as_attachment=download,
+                download_name=filename if filename.lower().endswith('.pdf') else f"{filename}.pdf"
+            )
+        else:
+            print(f"[PDF PROXY] Erro PNCP: {resp.status_code}")
+            return jsonify({"error": f"PDF não encontrado no PNCP (status {resp.status_code})"}), 404
+
+    except Exception as e:
+        print(f"[PDF PROXY] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Erro ao buscar PDF: {str(e)}"}), 500
 
 
 # =============================================================================
