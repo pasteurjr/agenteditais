@@ -30,3 +30,39 @@ export interface ChatResponse {
   sources: Source[];
   session_id: string;
 }
+
+export interface Edital {
+  id?: string;
+  numero: string;
+  orgao: string;
+  orgao_tipo?: string;
+  uf?: string;
+  cidade?: string;
+  objeto: string;
+  modalidade?: string;
+  categoria?: string;
+  valor_referencia?: number;
+  data_publicacao?: string;
+  data_abertura?: string;
+  status?: string;
+  fonte: string;
+  fonte_tipo?: 'api' | 'scraper';
+  url?: string;
+  pdf_url?: string;
+  pdf_titulo?: string;
+  dados_completos?: boolean;
+  cnpj_orgao?: string;
+  ano_compra?: number;
+  seq_compra?: number;
+  itens?: EditalItem[];
+  total_itens?: number;
+}
+
+export interface EditalItem {
+  numero?: number;
+  descricao: string;
+  quantidade?: number;
+  unidade?: string;
+  valor_unitario?: number;
+  valor_total?: number;
+}
