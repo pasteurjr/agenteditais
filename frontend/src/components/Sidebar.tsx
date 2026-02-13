@@ -1,9 +1,10 @@
 import { useState } from "react";
-import type { Session } from "../types";
 import {
-  Plus, Trash2, Pencil, MessageSquare, Check, X, LogOut, User as UserIcon,
-  Bell, Calendar, Clock, Search, Settings, ChevronDown, ChevronRight,
-  Timer, Mail, Eye, History, Radar
+  LogOut, User as UserIcon, ChevronDown, ChevronRight,
+  LayoutDashboard, Search, CheckCircle, DollarSign, FileText, Send,
+  Gavel, Clock, AlertCircle, Package, BarChart2, Flag, Eye, Users,
+  TrendingUp, Scale, AlertTriangle, XCircle, Settings, Building,
+  Briefcase, Sliders, GitBranch
 } from "lucide-react";
 
 interface User {
@@ -13,241 +14,148 @@ interface User {
   picture_url: string | null;
 }
 
-// Menu items para Sprint 2 - Alertas e Automação
 interface MenuItem {
   id: string;
   icon: React.ReactNode;
   label: string;
-  prompt: string;
+  page: string;
 }
 
-interface MenuGroup {
+interface MenuSection {
   id: string;
   icon: React.ReactNode;
   label: string;
   items: MenuItem[];
 }
 
-const SPRINT2_MENUS: MenuGroup[] = [
+const SIDEBAR_SECTIONS: MenuSection[] = [
   {
-    id: "alertas",
-    icon: <Bell size={16} />,
-    label: "Alertas e Prazos",
+    id: "fluxo",
+    icon: <GitBranch size={18} />,
+    label: "Fluxo Comercial",
     items: [
-      { id: "dashboard_prazos", icon: <Timer size={14} />, label: "Dashboard de Prazos", prompt: "Mostre o dashboard de prazos dos editais" },
-      { id: "proximos_pregoes", icon: <Clock size={14} />, label: "Próximos Pregões", prompt: "Quais editais abrem esta semana?" },
-      { id: "meus_alertas", icon: <Bell size={14} />, label: "Meus Alertas", prompt: "Quais alertas tenho configurados?" },
-      { id: "configurar_alerta", icon: <Settings size={14} />, label: "Configurar Alerta", prompt: "Configure alertas para o edital " },
+      { id: "captacao", icon: <Search size={16} />, label: "Captacao", page: "captacao" },
+      { id: "validacao", icon: <CheckCircle size={16} />, label: "Validacao", page: "validacao" },
+      { id: "impugnacao", icon: <AlertCircle size={16} />, label: "Impugnacao", page: "impugnacao" },
+      { id: "precificacao", icon: <DollarSign size={16} />, label: "Precificacao", page: "precificacao" },
+      { id: "proposta", icon: <FileText size={16} />, label: "Proposta", page: "proposta" },
+      { id: "submissao", icon: <Send size={16} />, label: "Submissao", page: "submissao" },
+      { id: "lances", icon: <Gavel size={16} />, label: "Disputa Lances", page: "lances" },
+      { id: "followup", icon: <Clock size={16} />, label: "Followup", page: "followup" },
+      { id: "crm", icon: <Users size={16} />, label: "CRM", page: "crm" },
+      { id: "producao", icon: <Package size={16} />, label: "Execucao Contrato", page: "producao" },
     ]
   },
   {
-    id: "monitoramento",
-    icon: <Radar size={16} />,
-    label: "Monitoramento",
+    id: "indicadores",
+    icon: <BarChart2 size={18} />,
+    label: "Indicadores",
     items: [
-      { id: "monitoramentos_ativos", icon: <Eye size={14} />, label: "Monitoramentos Ativos", prompt: "Quais monitoramentos tenho ativos?" },
-      { id: "novo_monitoramento", icon: <Plus size={14} />, label: "Novo Monitoramento", prompt: "Monitore editais de " },
-      { id: "resultados_monitoramento", icon: <Search size={14} />, label: "Resultados Recentes", prompt: "Mostre os últimos editais encontrados pelo monitoramento" },
+      { id: "flags", icon: <Flag size={16} />, label: "Flags", page: "flags" },
+      { id: "monitoria", icon: <Eye size={16} />, label: "Monitoria", page: "monitoria" },
+      { id: "concorrencia", icon: <Users size={16} />, label: "Concorrencia", page: "concorrencia" },
+      { id: "mercado", icon: <TrendingUp size={16} />, label: "Mercado", page: "mercado" },
+      { id: "contratado", icon: <Scale size={16} />, label: "Contratado X Realizado", page: "contratado" },
+      { id: "atrasos", icon: <AlertTriangle size={16} />, label: "Pedidos em Atraso", page: "atrasos" },
+      { id: "perdas", icon: <XCircle size={16} />, label: "Perdas", page: "perdas" },
     ]
   },
   {
-    id: "calendario",
-    icon: <Calendar size={16} />,
-    label: "Calendário",
+    id: "config",
+    icon: <Settings size={18} />,
+    label: "Configuracoes",
     items: [
-      { id: "calendario_mes", icon: <Calendar size={14} />, label: "Calendário do Mês", prompt: "Mostre o calendário de editais deste mês" },
-      { id: "calendario_semana", icon: <Calendar size={14} />, label: "Esta Semana", prompt: "Mostre o calendário de editais desta semana" },
-      { id: "datas_importantes", icon: <Clock size={14} />, label: "Datas Importantes", prompt: "Quais são as próximas datas importantes dos meus editais?" },
+      { id: "empresa", icon: <Building size={16} />, label: "Empresa", page: "empresa" },
+      { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio", page: "portfolio" },
+      { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes", page: "parametros" },
     ]
-  },
-  {
-    id: "notificacoes",
-    icon: <Mail size={16} />,
-    label: "Notificações",
-    items: [
-      { id: "config_notificacoes", icon: <Settings size={14} />, label: "Configurar Email", prompt: "Configure minhas preferências de notificação" },
-      { id: "historico_notificacoes", icon: <History size={14} />, label: "Histórico", prompt: "Mostre o histórico de notificações" },
-      { id: "notificacoes_pendentes", icon: <Bell size={14} />, label: "Não Lidas", prompt: "Quais notificações não li?" },
-    ]
-  },
+  }
 ];
 
 interface SidebarProps {
-  sessions: Session[];
-  activeSessionId: string | null;
-  onSelectSession: (sessionId: string) => void;
-  onNewSession: () => void;
-  onDeleteSession: (sessionId: string) => void;
-  onRenameSession: (sessionId: string, name: string) => void;
+  currentPage: string;
+  onNavigate: (page: string) => void;
   user?: User | null;
   onLogout?: () => void;
-  onMenuAction?: (prompt: string) => void;
 }
 
 export function Sidebar({
-  sessions,
-  activeSessionId,
-  onSelectSession,
-  onNewSession,
-  onDeleteSession,
-  onRenameSession,
+  currentPage,
+  onNavigate,
   user,
   onLogout,
-  onMenuAction,
 }: SidebarProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["fluxo"]));
 
-  const toggleMenu = (menuId: string) => {
-    setExpandedMenus(prev => {
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(menuId)) {
-        newSet.delete(menuId);
+      if (newSet.has(sectionId)) {
+        newSet.delete(sectionId);
       } else {
-        newSet.add(menuId);
+        newSet.add(sectionId);
       }
       return newSet;
     });
   };
 
-  const handleMenuItemClick = (prompt: string) => {
-    if (onMenuAction) {
-      onMenuAction(prompt);
-    }
-  };
-
-  const startRename = (session: Session) => {
-    setEditingId(session.session_id);
-    setEditName(session.name);
-  };
-
-  const confirmRename = (sessionId: string) => {
-    if (editName.trim()) {
-      onRenameSession(sessionId, editName.trim());
-    }
-    setEditingId(null);
-  };
-
-  const cancelRename = () => {
-    setEditingId(null);
+  const handleItemClick = (page: string) => {
+    onNavigate(page);
   };
 
   return (
     <div className="sidebar">
+      {/* Header com logo */}
       <div className="sidebar-header">
-        <h1>Agente Editais</h1>
-        <button className="new-session-btn" onClick={onNewSession}>
-          <Plus size={18} />
-          <span>Nova conversa</span>
-        </button>
+        <div className="sidebar-logo" onClick={() => onNavigate('dashboard')}>
+          <span className="logo-icon">F</span>
+          <h1>facilicita.ia</h1>
+        </div>
       </div>
-      {/* Sprint 2: Menus de Alertas e Automação */}
-      <div className="sprint2-menus">
-        {SPRINT2_MENUS.map((group) => (
-          <div key={group.id} className="menu-group">
+
+      {/* Navegacao */}
+      <nav className="sidebar-nav">
+        {/* Dashboard - item fixo fora dos menus */}
+        <button
+          className={`nav-item nav-item-main ${currentPage === 'dashboard' ? 'active' : ''}`}
+          onClick={() => handleItemClick('dashboard')}
+        >
+          <span className="nav-item-icon"><LayoutDashboard size={18} /></span>
+          <span className="nav-item-label">Dashboard</span>
+        </button>
+
+        {SIDEBAR_SECTIONS.map((section) => (
+          <div key={section.id} className="nav-section">
             <button
-              className={`menu-group-header ${expandedMenus.has(group.id) ? 'expanded' : ''}`}
-              onClick={() => toggleMenu(group.id)}
+              className={`nav-section-header ${expandedSections.has(section.id) ? 'expanded' : ''}`}
+              onClick={() => toggleSection(section.id)}
             >
-              {group.icon}
-              <span>{group.label}</span>
-              {expandedMenus.has(group.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span className="nav-section-icon">{section.icon}</span>
+              <span className="nav-section-label">{section.label}</span>
+              <span className="nav-section-chevron">
+                {expandedSections.has(section.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </span>
             </button>
-            {expandedMenus.has(group.id) && (
-              <div className="menu-items">
-                {group.items.map((item) => (
+
+            {expandedSections.has(section.id) && (
+              <div className="nav-section-items">
+                {section.items.map((item) => (
                   <button
                     key={item.id}
-                    className="menu-item"
-                    onClick={() => handleMenuItemClick(item.prompt)}
+                    className={`nav-item ${currentPage === item.page ? 'active' : ''}`}
+                    onClick={() => handleItemClick(item.page)}
                   >
-                    {item.icon}
-                    <span>{item.label}</span>
+                    <span className="nav-item-icon">{item.icon}</span>
+                    <span className="nav-item-label">{item.label}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
         ))}
-      </div>
+      </nav>
 
-      <div className="sessions-list">
-        {sessions.map((session) => (
-          <div
-            key={session.session_id}
-            className={`session-item ${
-              session.session_id === activeSessionId ? "active" : ""
-            }`}
-            onClick={() => {
-              if (editingId !== session.session_id) {
-                onSelectSession(session.session_id);
-              }
-            }}
-          >
-            <MessageSquare size={16} />
-            {editingId === session.session_id ? (
-              <div className="rename-input-group">
-                <input
-                  className="rename-input"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") confirmRename(session.session_id);
-                    if (e.key === "Escape") cancelRename();
-                  }}
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <button
-                  className="icon-btn confirm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    confirmRename(session.session_id);
-                  }}
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  className="icon-btn cancel"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    cancelRename();
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <>
-                <span className="session-name">{session.name}</span>
-                <div className="session-actions">
-                  <button
-                    className="icon-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startRename(session);
-                    }}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    className="icon-btn danger"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.session_id);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* User profile section */}
+      {/* Footer com perfil */}
       {user && (
         <div className="sidebar-footer">
           <div className="user-profile">
