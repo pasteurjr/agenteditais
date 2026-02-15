@@ -7535,3 +7535,242 @@ body {
     flex-wrap: nowrap;
   }
 }
+
+/* =============================================================================
+   SIDEBAR - Sub-sections (Cadastros com 3 níveis)
+   ============================================================================= */
+
+.nav-subsection {
+  margin-left: 0;
+}
+
+.nav-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px 6px 28px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.nav-subsection-header:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-subsection-header.expanded {
+  color: var(--text-primary);
+}
+
+.nav-subsection-header .nav-section-chevron {
+  margin-left: auto;
+  opacity: 0.5;
+}
+
+.nav-subsection-items {
+  padding-left: 12px;
+}
+
+.nav-item.nav-item-sub {
+  padding-left: 42px;
+  font-size: 12px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  gap: 6px;
+}
+
+.nav-item.nav-item-sub .nav-item-icon {
+  opacity: 0.6;
+}
+
+.nav-item.nav-item-sub.active .nav-item-icon {
+  opacity: 1;
+}
+
+/* =============================================================================
+   CRUD Page Styles
+   ============================================================================= */
+
+.crud-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.crud-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  transition: border-color 0.2s;
+}
+
+.crud-search-box:focus-within {
+  border-color: var(--accent);
+}
+
+.crud-search-box svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.crud-search-box input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.crud-search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.crud-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.crud-search-clear:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.crud-message {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.crud-message-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.crud-message-success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.crud-back-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.crud-back-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.form-field-full {
+  grid-column: 1 / -1;
+}
+
+/* =============================================================================
+   CRUD Parent Selector (for child tables)
+   ============================================================================= */
+
+.crud-parent-selector {
+  margin-bottom: 16px;
+}
+
+.crud-parent-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.crud-parent-search-row {
+  margin-bottom: 8px;
+}
+
+.crud-parent-search-row .crud-search-box {
+  max-width: 400px;
+}
+
+.crud-parent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.crud-parent-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.crud-parent-item:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.crud-parent-item.active {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.crud-parent-check {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.crud-parent-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.crud-parent-empty {
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}

@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM models for the Editais IA system.
 """
-from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, create_engine
+from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, create_engine, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -31,6 +31,25 @@ class User(Base):
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     produtos = relationship("Produto", back_populates="user", cascade="all, delete-orphan")
     editais = relationship("Edital", back_populates="user", cascade="all, delete-orphan")
+    # Relationships existentes convertidos de backref
+    alertas = relationship("Alerta", back_populates="user", cascade="all, delete-orphan")
+    monitoramentos = relationship("Monitoramento", back_populates="user", cascade="all, delete-orphan")
+    notificacoes = relationship("Notificacao", back_populates="user", cascade="all, delete-orphan")
+    preferencias_notificacao = relationship("PreferenciasNotificacao", back_populates="user", cascade="all, delete-orphan", uselist=False)
+    documentos_gerados = relationship("Documento", back_populates="user", cascade="all, delete-orphan")
+    propostas = relationship("Proposta", back_populates="user", cascade="all, delete-orphan")
+    precos_historicos = relationship("PrecoHistorico", back_populates="user")
+    # Relationships para novas tabelas
+    empresas = relationship("Empresa", back_populates="user", cascade="all, delete-orphan")
+    contratos = relationship("Contrato", back_populates="user", cascade="all, delete-orphan")
+    recursos = relationship("Recurso", back_populates="user", cascade="all, delete-orphan")
+    leads_crm = relationship("LeadCRM", back_populates="user", cascade="all, delete-orphan")
+    acoes_pos_perda = relationship("AcaoPosPerda", back_populates="user", cascade="all, delete-orphan")
+    auditoria_logs = relationship("AuditoriaLog", back_populates="user")
+    aprendizado_feedback = relationship("AprendizadoFeedback", back_populates="user", cascade="all, delete-orphan")
+    parametro_score = relationship("ParametroScore", back_populates="user", cascade="all, delete-orphan", uselist=False)
+    dispensas = relationship("Dispensa", back_populates="user", cascade="all, delete-orphan")
+    estrategias = relationship("EstrategiaEdital", back_populates="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -68,6 +87,8 @@ class Session(Base):
 
     user = relationship("User", back_populates="sessions")
     messages = relationship("Message", back_populates="session", cascade="all, delete-orphan", order_by="Message.created_at")
+    documentos = relationship("Documento", back_populates="session")
+    auditoria_logs = relationship("AuditoriaLog", back_populates="session")
 
     def to_dict(self, include_messages=False):
         result = {
@@ -127,6 +148,7 @@ class Produto(Base):
     especificacoes = relationship("ProdutoEspecificacao", back_populates="produto", cascade="all, delete-orphan")
     documentos = relationship("ProdutoDocumento", back_populates="produto", cascade="all, delete-orphan")
     analises = relationship("Analise", back_populates="produto", cascade="all, delete-orphan")
+    propostas = relationship("Proposta", back_populates="produto", cascade="all, delete-orphan")
 
     def to_dict(self, include_specs=False):
         result = {
@@ -278,6 +300,17 @@ class Edital(Base):
     documentos = relationship("EditalDocumento", back_populates="edital", cascade="all, delete-orphan")
     analises = relationship("Analise", back_populates="edital", cascade="all, delete-orphan")
     itens = relationship("EditalItem", back_populates="edital", cascade="all, delete-orphan")
+    # Relationships convertidos de backref + novas tabelas
+    propostas = relationship("Proposta", back_populates="edital", cascade="all, delete-orphan")
+    alertas = relationship("Alerta", back_populates="edital", cascade="all, delete-orphan")
+    participacoes = relationship("ParticipacaoEdital", back_populates="edital", cascade="all, delete-orphan")
+    notificacoes = relationship("Notificacao", back_populates="edital")
+    contratos = relationship("Contrato", back_populates="edital")
+    recursos = relationship("Recurso", back_populates="edital", cascade="all, delete-orphan")
+    leads_crm = relationship("LeadCRM", back_populates="edital")
+    acoes_pos_perda = relationship("AcaoPosPerda", back_populates="edital")
+    dispensas = relationship("Dispensa", back_populates="edital", cascade="all, delete-orphan")
+    estrategias = relationship("EstrategiaEdital", back_populates="edital", cascade="all, delete-orphan")
 
     def to_dict(self, include_requisitos=False):
         result = {
@@ -440,6 +473,7 @@ class Analise(Base):
     edital = relationship("Edital", back_populates="analises")
     produto = relationship("Produto", back_populates="analises")
     detalhes = relationship("AnaliseDetalhe", back_populates="analise", cascade="all, delete-orphan")
+    propostas = relationship("Proposta", back_populates="analise")
 
     def to_dict(self, include_detalhes=False):
         result = {
@@ -469,8 +503,8 @@ class AnaliseDetalhe(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     analise_id = Column(String(36), ForeignKey('analises.id', ondelete='CASCADE'), nullable=False)
-    requisito_id = Column(String(36), ForeignKey('editais_requisitos.id'), nullable=False)
-    especificacao_id = Column(String(36), nullable=True)
+    requisito_id = Column(String(36), ForeignKey('editais_requisitos.id', ondelete='CASCADE'), nullable=False)
+    especificacao_id = Column(String(36), ForeignKey('produtos_especificacoes.id', ondelete='SET NULL'), nullable=True)
 
     status = Column(Enum('atendido', 'parcial', 'nao_atendido', 'nao_aplicavel'), nullable=False)
     valor_exigido = Column(String(500), nullable=True)
@@ -501,7 +535,7 @@ class Proposta(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
     produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
-    analise_id = Column(String(36), ForeignKey('analises.id'), nullable=True)
+    analise_id = Column(String(36), ForeignKey('analises.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
     texto_tecnico = Column(Text, nullable=True)
@@ -514,6 +548,11 @@ class Proposta(Base):
 
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", back_populates="propostas")
+    produto = relationship("Produto", back_populates="propostas")
+    analise = relationship("Analise", back_populates="propostas")
+    user = relationship("User", back_populates="propostas")
 
     def to_dict(self):
         return {
@@ -600,6 +639,7 @@ class PrecoHistorico(Base):
     fonte = Column(Enum('manual', 'pncp', 'ata_pdf', 'painel_precos'), nullable=True)
 
     concorrente = relationship("Concorrente", back_populates="precos_historicos")
+    user = relationship("User", back_populates="precos_historicos")
 
     def to_dict(self):
         return {
@@ -634,6 +674,7 @@ class ParticipacaoEdital(Base):
     fonte = Column(Enum('manual', 'pncp', 'ata_pdf'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
+    edital = relationship("Edital", back_populates="participacoes")
     concorrente = relationship("Concorrente", back_populates="participacoes")
 
     def to_dict(self):
@@ -683,8 +724,9 @@ class Alerta(Base):
     lido_em = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
-    user = relationship("User", backref="alertas")
-    edital = relationship("Edital", backref="alertas")
+    user = relationship("User", back_populates="alertas")
+    edital = relationship("Edital", back_populates="alertas")
+    notificacoes = relationship("Notificacao", back_populates="alerta")
 
     def to_dict(self):
         return {
@@ -731,11 +773,14 @@ class Monitoramento(Base):
 
     # Status
     ativo = Column(Boolean, default=True)
+    editais_encontrados = Column(Integer, default=0)
+    ultima_execucao = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    user = relationship("User", backref="monitoramentos")
+    user = relationship("User", back_populates="monitoramentos")
+    notificacoes = relationship("Notificacao", back_populates="monitoramento")
 
     def to_dict(self):
         return {
@@ -786,10 +831,10 @@ class Notificacao(Base):
 
     created_at = Column(DateTime, default=datetime.now)
 
-    user = relationship("User", backref="notificacoes")
-    edital = relationship("Edital", backref="notificacoes")
-    alerta = relationship("Alerta", backref="notificacoes")
-    monitoramento = relationship("Monitoramento", backref="notificacoes")
+    user = relationship("User", back_populates="notificacoes")
+    edital = relationship("Edital", back_populates="notificacoes")
+    alerta = relationship("Alerta", back_populates="notificacoes")
+    monitoramento = relationship("Monitoramento", back_populates="notificacoes")
 
     def to_dict(self):
         return {
@@ -839,7 +884,7 @@ class PreferenciasNotificacao(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    user = relationship("User", backref="preferencias_notificacao")
+    user = relationship("User", back_populates="preferencias_notificacao")
 
     def to_dict(self):
         return {
@@ -871,12 +916,12 @@ class Documento(Base):
     conteudo_md = Column(Text, nullable=False)
     dados_json = Column(JSON, nullable=True)
     versao = Column(Integer, default=1)
-    documento_pai_id = Column(String(36), nullable=True)
+    documento_pai_id = Column(String(36), ForeignKey('documentos.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    user = relationship("User", backref="documentos_gerados")
-    session = relationship("Session", backref="documentos")
+    user = relationship("User", back_populates="documentos_gerados")
+    session = relationship("Session", back_populates="documentos")
 
     def to_dict(self, include_content=True):
         result = {
@@ -894,6 +939,556 @@ class Documento(Base):
             result["conteudo_md"] = self.conteudo_md
             result["dados_json"] = self.dados_json
         return result
+
+
+# ==================== EMPRESA (Dados da empresa do usuário) ====================
+
+class Empresa(Base):
+    """Dados cadastrais da empresa do usuário"""
+    __tablename__ = 'empresas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    cnpj = Column(String(20), unique=True, nullable=False)
+    razao_social = Column(String(255), nullable=False)
+    nome_fantasia = Column(String(255), nullable=True)
+    inscricao_estadual = Column(String(20), nullable=True)
+    inscricao_municipal = Column(String(20), nullable=True)
+    regime_tributario = Column(Enum('simples', 'lucro_presumido', 'lucro_real'), nullable=True)
+    endereco = Column(Text, nullable=True)
+    cidade = Column(String(100), nullable=True)
+    uf = Column(String(2), nullable=True)
+    cep = Column(String(10), nullable=True)
+    telefone = Column(String(20), nullable=True)
+    email = Column(String(255), nullable=True)
+    porte = Column(Enum('me', 'epp', 'medio', 'grande'), nullable=True)
+    areas_atuacao = Column(JSON, nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="empresas")
+    documentos = relationship("EmpresaDocumento", back_populates="empresa", cascade="all, delete-orphan")
+    certidoes = relationship("EmpresaCertidao", back_populates="empresa", cascade="all, delete-orphan")
+    responsaveis = relationship("EmpresaResponsavel", back_populates="empresa", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "cnpj": self.cnpj,
+            "razao_social": self.razao_social,
+            "nome_fantasia": self.nome_fantasia,
+            "inscricao_estadual": self.inscricao_estadual,
+            "inscricao_municipal": self.inscricao_municipal,
+            "regime_tributario": self.regime_tributario,
+            "endereco": self.endereco,
+            "cidade": self.cidade,
+            "uf": self.uf,
+            "cep": self.cep,
+            "telefone": self.telefone,
+            "email": self.email,
+            "porte": self.porte,
+            "areas_atuacao": self.areas_atuacao,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EmpresaDocumento(Base):
+    """Documentos da empresa (contrato social, atestados, etc)"""
+    __tablename__ = 'empresa_documentos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(Enum('contrato_social', 'atestado_capacidade', 'balanco', 'alvara', 'registro_conselho', 'procuracao', 'outro'), nullable=False)
+    nome_arquivo = Column(String(255), nullable=False)
+    path_arquivo = Column(String(500), nullable=False)
+    data_emissao = Column(Date, nullable=True)
+    data_vencimento = Column(Date, nullable=True)
+    texto_extraido = Column(LONGTEXT, nullable=True)
+    processado = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", back_populates="documentos")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "nome_arquivo": self.nome_arquivo,
+            "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
+            "data_vencimento": self.data_vencimento.isoformat() if self.data_vencimento else None,
+            "processado": self.processado,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EmpresaCertidao(Base):
+    """Certidões da empresa (CND, FGTS, trabalhista, etc)"""
+    __tablename__ = 'empresa_certidoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(Enum('cnd_federal', 'cnd_estadual', 'cnd_municipal', 'fgts', 'trabalhista', 'outro'), nullable=False)
+    orgao_emissor = Column(String(255), nullable=True)
+    numero = Column(String(100), nullable=True)
+    data_emissao = Column(Date, nullable=True)
+    data_vencimento = Column(Date, nullable=False)
+    path_arquivo = Column(String(500), nullable=True)
+    status = Column(Enum('valida', 'vencida', 'pendente'), default='valida')
+    url_consulta = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", back_populates="certidoes")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "orgao_emissor": self.orgao_emissor,
+            "numero": self.numero,
+            "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
+            "data_vencimento": self.data_vencimento.isoformat() if self.data_vencimento else None,
+            "status": self.status,
+            "url_consulta": self.url_consulta,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EmpresaResponsavel(Base):
+    """Responsáveis/representantes da empresa"""
+    __tablename__ = 'empresa_responsaveis'
+    __table_args__ = (UniqueConstraint('empresa_id', 'cpf', name='uq_empresa_responsavel_cpf'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
+    nome = Column(String(255), nullable=False)
+    cargo = Column(String(100), nullable=True)
+    cpf = Column(String(14), nullable=True)
+    email = Column(String(255), nullable=True)
+    telefone = Column(String(20), nullable=True)
+    tipo = Column(Enum('representante_legal', 'preposto', 'tecnico'), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", back_populates="responsaveis")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "nome": self.nome,
+            "cargo": self.cargo,
+            "cpf": self.cpf,
+            "email": self.email,
+            "telefone": self.telefone,
+            "tipo": self.tipo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== CONTRATOS ====================
+
+class Contrato(Base):
+    """Contratos firmados após ganho de licitação"""
+    __tablename__ = 'contratos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    proposta_id = Column(String(36), ForeignKey('propostas.id', ondelete='SET NULL'), nullable=True)
+    numero_contrato = Column(String(100), nullable=True)
+    orgao = Column(String(255), nullable=True)
+    objeto = Column(Text, nullable=True)
+    valor_total = Column(DECIMAL(15, 2), nullable=True)
+    data_assinatura = Column(Date, nullable=True)
+    data_inicio = Column(Date, nullable=True)
+    data_fim = Column(Date, nullable=True)
+    status = Column(Enum('vigente', 'encerrado', 'rescindido', 'suspenso'), default='vigente')
+    arquivo_path = Column(String(500), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="contratos")
+    edital = relationship("Edital", back_populates="contratos")
+    proposta = relationship("Proposta")
+    entregas = relationship("ContratoEntrega", back_populates="contrato", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "proposta_id": self.proposta_id,
+            "numero_contrato": self.numero_contrato,
+            "orgao": self.orgao,
+            "objeto": self.objeto,
+            "valor_total": float(self.valor_total) if self.valor_total else None,
+            "data_assinatura": self.data_assinatura.isoformat() if self.data_assinatura else None,
+            "data_inicio": self.data_inicio.isoformat() if self.data_inicio else None,
+            "data_fim": self.data_fim.isoformat() if self.data_fim else None,
+            "status": self.status,
+            "arquivo_path": self.arquivo_path,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ContratoEntrega(Base):
+    """Entregas de itens do contrato (contratado x realizado)"""
+    __tablename__ = 'contrato_entregas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contrato_id = Column(String(36), ForeignKey('contratos.id', ondelete='CASCADE'), nullable=False)
+    produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='SET NULL'), nullable=True)
+    descricao = Column(Text, nullable=True)
+    quantidade = Column(DECIMAL(15, 4), nullable=True)
+    valor_unitario = Column(DECIMAL(15, 2), nullable=True)
+    valor_total = Column(DECIMAL(15, 2), nullable=True)
+    data_prevista = Column(Date, nullable=False)
+    data_realizada = Column(Date, nullable=True)
+    nota_fiscal = Column(String(100), nullable=True)
+    numero_empenho = Column(String(100), nullable=True)
+    status = Column(Enum('pendente', 'entregue', 'atrasado', 'cancelado'), default='pendente')
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    contrato = relationship("Contrato", back_populates="entregas")
+    produto = relationship("Produto")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "contrato_id": self.contrato_id,
+            "produto_id": self.produto_id,
+            "descricao": self.descricao,
+            "quantidade": float(self.quantidade) if self.quantidade else None,
+            "valor_unitario": float(self.valor_unitario) if self.valor_unitario else None,
+            "valor_total": float(self.valor_total) if self.valor_total else None,
+            "data_prevista": self.data_prevista.isoformat() if self.data_prevista else None,
+            "data_realizada": self.data_realizada.isoformat() if self.data_realizada else None,
+            "nota_fiscal": self.nota_fiscal,
+            "numero_empenho": self.numero_empenho,
+            "status": self.status,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== RECURSOS E IMPUGNAÇÕES ====================
+
+class Recurso(Base):
+    """Recursos, contra-razões e impugnações"""
+    __tablename__ = 'recursos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(Enum('recurso', 'contra_razao', 'impugnacao'), nullable=False)
+    motivo = Column(Text, nullable=True)
+    texto_minuta = Column(LONGTEXT, nullable=True)
+    fundamentacao_legal = Column(Text, nullable=True)
+    data_protocolo = Column(DateTime, nullable=True)
+    prazo_limite = Column(DateTime, nullable=False)
+    status = Column(Enum('rascunho', 'protocolado', 'deferido', 'indeferido', 'pendente'), default='rascunho')
+    resultado = Column(Text, nullable=True)
+    arquivo_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="recursos")
+    edital = relationship("Edital", back_populates="recursos")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "tipo": self.tipo,
+            "motivo": self.motivo,
+            "fundamentacao_legal": self.fundamentacao_legal,
+            "data_protocolo": self.data_protocolo.isoformat() if self.data_protocolo else None,
+            "prazo_limite": self.prazo_limite.isoformat() if self.prazo_limite else None,
+            "status": self.status,
+            "resultado": self.resultado,
+            "arquivo_path": self.arquivo_path,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== CRM ====================
+
+class LeadCRM(Base):
+    """Leads para CRM de órgãos públicos"""
+    __tablename__ = 'leads_crm'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    orgao = Column(String(255), nullable=False)
+    cnpj_orgao = Column(String(20), nullable=True)
+    contato_nome = Column(String(255), nullable=True)
+    contato_cargo = Column(String(100), nullable=True)
+    contato_telefone = Column(String(20), nullable=True)
+    contato_email = Column(String(255), nullable=True)
+    status_pipeline = Column(Enum('prospeccao', 'contato', 'proposta', 'negociacao', 'ganho', 'perdido', 'inativo'), default='prospeccao')
+    origem = Column(String(100), nullable=True)
+    valor_potencial = Column(DECIMAL(15, 2), nullable=True)
+    proxima_acao = Column(Text, nullable=True)
+    data_proxima_acao = Column(Date, nullable=True)
+    ultima_interacao = Column(DateTime, nullable=True)
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="leads_crm")
+    edital = relationship("Edital", back_populates="leads_crm")
+    acoes_pos_perda = relationship("AcaoPosPerda", back_populates="lead_crm")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "orgao": self.orgao,
+            "cnpj_orgao": self.cnpj_orgao,
+            "contato_nome": self.contato_nome,
+            "contato_cargo": self.contato_cargo,
+            "contato_telefone": self.contato_telefone,
+            "contato_email": self.contato_email,
+            "status_pipeline": self.status_pipeline,
+            "origem": self.origem,
+            "valor_potencial": float(self.valor_potencial) if self.valor_potencial else None,
+            "proxima_acao": self.proxima_acao,
+            "data_proxima_acao": self.data_proxima_acao.isoformat() if self.data_proxima_acao else None,
+            "ultima_interacao": self.ultima_interacao.isoformat() if self.ultima_interacao else None,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AcaoPosPerda(Base):
+    """Ações pós-perda para reconquista"""
+    __tablename__ = 'acoes_pos_perda'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    lead_crm_id = Column(String(36), ForeignKey('leads_crm.id', ondelete='SET NULL'), nullable=True)
+    tipo_acao = Column(Enum('reprocessar_oferta', 'visita_tecnica', 'nova_proposta', 'recurso', 'acompanhar'), nullable=True)
+    descricao = Column(Text, nullable=True)
+    responsavel = Column(String(255), nullable=True)
+    data_prevista = Column(Date, nullable=True)
+    data_realizada = Column(Date, nullable=True)
+    resultado = Column(Text, nullable=True)
+    status = Column(Enum('pendente', 'em_andamento', 'concluida', 'cancelada'), default='pendente')
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="acoes_pos_perda")
+    edital = relationship("Edital", back_populates="acoes_pos_perda")
+    lead_crm = relationship("LeadCRM", back_populates="acoes_pos_perda")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "lead_crm_id": self.lead_crm_id,
+            "tipo_acao": self.tipo_acao,
+            "descricao": self.descricao,
+            "responsavel": self.responsavel,
+            "data_prevista": self.data_prevista.isoformat() if self.data_prevista else None,
+            "data_realizada": self.data_realizada.isoformat() if self.data_realizada else None,
+            "resultado": self.resultado,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== AUDITORIA E APRENDIZADO ====================
+
+class AuditoriaLog(Base):
+    """Log de auditoria de ações do sistema"""
+    __tablename__ = 'auditoria_log'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    session_id = Column(String(36), ForeignKey('sessions.id', ondelete='SET NULL'), nullable=True)
+    user_email = Column(String(255), nullable=True)
+    acao = Column(String(50), nullable=False)
+    entidade = Column(String(50), nullable=False)
+    entidade_id = Column(String(36), nullable=True)
+    dados_antes = Column(JSON, nullable=True)
+    dados_depois = Column(JSON, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", back_populates="auditoria_logs")
+    session = relationship("Session", back_populates="auditoria_logs")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "session_id": self.session_id,
+            "user_email": self.user_email,
+            "acao": self.acao,
+            "entidade": self.entidade,
+            "entidade_id": self.entidade_id,
+            "dados_antes": self.dados_antes,
+            "dados_depois": self.dados_depois,
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AprendizadoFeedback(Base):
+    """Feedback e aprendizado do sistema para melhoria contínua"""
+    __tablename__ = 'aprendizado_feedback'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo_evento = Column(Enum('resultado_edital', 'score_ajustado', 'preco_ajustado', 'feedback_usuario'), nullable=False)
+    entidade = Column(String(50), nullable=True)
+    entidade_id = Column(String(36), nullable=True)
+    dados_entrada = Column(JSON, nullable=True)
+    resultado_real = Column(JSON, nullable=True)
+    delta = Column(JSON, nullable=True)
+    aplicado = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", back_populates="aprendizado_feedback")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "tipo_evento": self.tipo_evento,
+            "entidade": self.entidade,
+            "entidade_id": self.entidade_id,
+            "dados_entrada": self.dados_entrada,
+            "resultado_real": self.resultado_real,
+            "delta": self.delta,
+            "aplicado": self.aplicado,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== PARAMETRIZAÇÕES ====================
+
+class ParametroScore(Base):
+    """Parâmetros de score e pesos configuráveis por usuário"""
+    __tablename__ = 'parametros_score'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
+    peso_tecnico = Column(DECIMAL(5, 2), default=0.40)
+    peso_comercial = Column(DECIMAL(5, 2), default=0.25)
+    peso_participacao = Column(DECIMAL(5, 2), default=0.20)
+    peso_ganho = Column(DECIMAL(5, 2), default=0.15)
+    limiar_go = Column(DECIMAL(5, 2), default=70.0)
+    limiar_nogo = Column(DECIMAL(5, 2), default=40.0)
+    margem_minima = Column(DECIMAL(5, 2), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="parametro_score")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "peso_tecnico": float(self.peso_tecnico) if self.peso_tecnico else None,
+            "peso_comercial": float(self.peso_comercial) if self.peso_comercial else None,
+            "peso_participacao": float(self.peso_participacao) if self.peso_participacao else None,
+            "peso_ganho": float(self.peso_ganho) if self.peso_ganho else None,
+            "limiar_go": float(self.limiar_go) if self.limiar_go else None,
+            "limiar_nogo": float(self.limiar_nogo) if self.limiar_nogo else None,
+            "margem_minima": float(self.margem_minima) if self.margem_minima else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Dispensa(Base):
+    """Dispensas de licitação"""
+    __tablename__ = 'dispensas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    artigo = Column(String(50), nullable=True)
+    valor_limite = Column(DECIMAL(15, 2), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    cotacao_texto = Column(LONGTEXT, nullable=True)
+    fornecedores_cotados = Column(JSON, nullable=True)
+    status = Column(Enum('aberta', 'cotacao_enviada', 'adjudicada', 'encerrada'), default='aberta')
+    data_limite = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="dispensas")
+    edital = relationship("Edital", back_populates="dispensas")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "artigo": self.artigo,
+            "valor_limite": float(self.valor_limite) if self.valor_limite else None,
+            "justificativa": self.justificativa,
+            "fornecedores_cotados": self.fornecedores_cotados,
+            "status": self.status,
+            "data_limite": self.data_limite.isoformat() if self.data_limite else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EstrategiaEdital(Base):
+    """Estratégia e decisão go/nogo por edital"""
+    __tablename__ = 'estrategias_editais'
+    __table_args__ = (UniqueConstraint('user_id', 'edital_id', name='uq_estrategia_user_edital'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    decisao = Column(Enum('go', 'nogo', 'acompanhar'), nullable=True)
+    prioridade = Column(Enum('alta', 'media', 'baixa'), nullable=True)
+    margem_desejada = Column(DECIMAL(5, 2), nullable=True)
+    agressividade_preco = Column(Enum('conservador', 'moderado', 'agressivo'), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    data_decisao = Column(DateTime, nullable=True)
+    decidido_por = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="estrategias")
+    edital = relationship("Edital", back_populates="estrategias")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "edital_id": self.edital_id,
+            "decisao": self.decisao,
+            "prioridade": self.prioridade,
+            "margem_desejada": float(self.margem_desejada) if self.margem_desejada else None,
+            "agressividade_preco": self.agressividade_preco,
+            "justificativa": self.justificativa,
+            "data_decisao": self.data_decisao.isoformat() if self.data_decisao else None,
+            "decidido_por": self.decidido_por,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 # ==================== DATABASE ====================

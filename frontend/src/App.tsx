@@ -23,10 +23,13 @@ import { EmpresaPage } from "./pages/EmpresaPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ParametrizacoesPage } from "./pages/ParametrizacoesPage";
 import { CRMPage } from "./pages/CRMPage";
+import { CrudPage } from "./components/CrudPage";
+import { ALL_CRUD_CONFIGS } from "./config/crudTables";
 import { useSessions } from "./hooks/useSessions";
 import { useChat } from "./hooks/useChat";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
 import { setTokenGetter } from "./api/client";
+import { setCrudTokenGetter } from "./api/crud";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
 import "./styles/globals.css";
 
@@ -43,6 +46,7 @@ function AppContent() {
   // Set token getter for API client
   useEffect(() => {
     setTokenGetter(getAccessToken);
+    setCrudTokenGetter(getAccessToken);
   }, [getAccessToken]);
 
   // Reload sessions when authenticated
@@ -119,6 +123,15 @@ function AppContent() {
 
   // Renderiza a pagina baseado no estado atual
   const renderPage = () => {
+    // Check if it's a CRUD page (format: "crud:table-slug")
+    if (currentPage.startsWith("crud:")) {
+      const tableSlug = currentPage.slice(5);
+      const config = ALL_CRUD_CONFIGS[tableSlug];
+      if (config) {
+        return <CrudPage key={tableSlug} config={config} />;
+      }
+    }
+
     switch (currentPage) {
       case "dashboard":
         return <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;

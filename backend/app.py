@@ -29,6 +29,10 @@ from functools import wraps
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"])
 
+# Registrar blueprint CRUD genérico
+from crud_routes import crud_bp
+app.register_blueprint(crud_bp)
+
 # JWT Config
 JWT_SECRET = "editais-ia-secret-key-change-in-production-2024"
 JWT_EXPIRY_HOURS = 24

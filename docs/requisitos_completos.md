@@ -756,9 +756,19 @@ Este documento consolida TODOS os requisitos funcionais e nao funcionais do sist
 
 ---
 
-## 5. Tabelas Sugeridas (14 novas tabelas)
+## 5. Tabelas Criadas (14 novas tabelas) — IMPLEMENTADO
 
-Baseado na analise dos gaps identificados nos requisitos funcionais:
+As 14 tabelas abaixo foram **criadas no banco MySQL** e seus **models SQLAlchemy adicionados** em `backend/models.py`.
+Total de tabelas ativas: **37** (23 existentes + 14 novas).
+
+Correcoes de integridade referencial tambem aplicadas:
+- `analises_detalhes.requisito_id` — adicionado `ON DELETE CASCADE`
+- `analises_detalhes.especificacao_id` — adicionada FK → `produtos_especificacoes.id ON DELETE SET NULL`
+- `propostas.analise_id` — adicionado `ON DELETE SET NULL`
+- `documentos.documento_pai_id` — adicionada FK self-referential → `documentos.id ON DELETE SET NULL`
+- `editais.status` enum — adicionados valores `ganho` e `perdido`
+- Todos os `backref` convertidos para `back_populates` (padronizacao)
+- Relationships adicionados em User (20), Edital (10), Produto, Analise, Session, etc.
 
 ### 5.1 Empresa
 
