@@ -3846,6 +3846,21 @@ body {
   gap: 16px;
 }
 
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
 .card-title {
   display: flex;
   align-items: center;
@@ -7773,4 +7788,113 @@ body {
   color: var(--text-muted);
   font-size: 13px;
   font-style: italic;
+}
+
+/* =============================================================================
+   Action Buttons (CRUD: Novo, Salvar, Excluir, Cancelar)
+   ============================================================================= */
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.action-button svg {
+  flex-shrink: 0;
+}
+
+.action-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.action-button:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+/* ─── Primary (Novo, Salvar) ─── */
+
+.action-button-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.action-button-primary:not(:disabled):hover {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* ─── Danger (Excluir) ─── */
+
+.action-button-danger {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.1);
+}
+
+.action-button-danger:not(:disabled):hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Secondary (Cancelar) ─── */
+
+.action-button-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.action-button-secondary:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+/* ─── Success ─── */
+
+.action-button-success {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.action-button-success:not(:disabled):hover {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  border-color: rgba(74, 222, 128, 0.6);
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* ─── Icon inside button ─── */
+
+.action-button-icon {
+  display: flex;
+  align-items: center;
 }
