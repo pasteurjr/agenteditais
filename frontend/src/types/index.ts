@@ -11,11 +11,17 @@ export interface Source {
   data?: string;
 }
 
+export interface PageProps {
+  onSendToChat?: (message: string, file?: File) => void;
+}
+
 export interface Message {
   role: "user" | "assistant";
   content: string;
   sources?: Source[] | null;
   created_at?: string;
+  action_type?: string;
+  resultado?: Record<string, unknown>;
 }
 
 export interface Session {

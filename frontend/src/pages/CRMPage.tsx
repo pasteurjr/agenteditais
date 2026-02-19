@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Users, Target, TrendingUp, Award, Phone, Mail, Plus, Eye, MessageSquare } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, FormField, SelectInput, Modal, TextInput } from "../components/common";
 import type { Column } from "../components/common";
@@ -60,7 +61,7 @@ const mockAcoesPosPerda: AcaoPosPerda[] = [
   { id: "3", edital: "PE-015/2026", orgao: "UFOP", motivo: "Requisito tecnico nao atendido", acao: "Avaliar inclusao de novo produto no portfolio", responsavel: "Tecnico", prazo: "10/03/2026", status: "pendente" },
 ];
 
-export function CRMPage() {
+export function CRMPage(_props?: PageProps) {
   const [leads] = useState<Lead[]>(mockLeads);
   const [metas] = useState<Meta[]>(mockMetas);
   const [acoes] = useState<AcaoPosPerda[]>(mockAcoesPosPerda);

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Gavel, Clock, Trophy, XCircle, ExternalLink } from "lucide-react";
 import { Card, DataTable, ActionButton } from "../components/common";
 import type { Column } from "../components/common";
@@ -37,7 +38,7 @@ const mockHistorico: HistoricoLance[] = [
   { id: "4", edital: "PE-020/2026", orgao: "UNESP", data: "25/01/2026", nossoLance: 35000, lanceVencedor: 35000, vencedor: "Aquila", resultado: "vitoria" },
 ];
 
-export function LancesPage() {
+export function LancesPage(_props?: PageProps) {
   const [pregoesHoje] = useState<PregaoHoje[]>(mockPregoesHoje);
   const [historico] = useState<HistoricoLance[]>(mockHistorico);
 

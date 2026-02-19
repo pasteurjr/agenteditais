@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Flag, Bell, Clock, AlertTriangle, Plus, Trash2, CheckCircle } from "lucide-react";
 import { Card, DataTable, ActionButton, Modal, FormField, SelectInput, Checkbox } from "../components/common";
 import type { Column } from "../components/common";
@@ -33,7 +34,7 @@ const mockAlertas: Alerta[] = [
   { id: "4", edital: "CC-012/2025", tipo: "abertura", antecedencia: ["24h"], status: "expirado" },
 ];
 
-export function FlagsPage() {
+export function FlagsPage(_props?: PageProps) {
   const [alertasAtivos] = useState<AlertaAtivo[]>(mockAlertasAtivos);
   const [alertas, setAlertas] = useState<Alerta[]>(mockAlertas);
   const [showCriarModal, setShowCriarModal] = useState(false);

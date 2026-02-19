@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { BarChart2, TrendingUp, TrendingDown, Clock, AlertTriangle } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
@@ -41,7 +42,7 @@ const mockProximosVencimentos: PedidoAtraso[] = [
   { id: "3", contrato: "PE-025/2026", orgao: "UFOP", prazo: "22/02/2026", diasAtraso: -12 },
 ];
 
-export function ContratadoRealizadoPage() {
+export function ContratadoRealizadoPage(_props?: PageProps) {
   const [contratos] = useState<ContratoComparativo[]>(mockContratos);
   const [atrasos] = useState<PedidoAtraso[]>(mockAtrasos);
   const [proximosVencimentos] = useState<PedidoAtraso[]>(mockProximosVencimentos);

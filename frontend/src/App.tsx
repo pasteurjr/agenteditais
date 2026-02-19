@@ -30,6 +30,7 @@ import { useChat } from "./hooks/useChat";
 import { useAuth, AuthProvider } from "./contexts/AuthContext";
 import { setTokenGetter } from "./api/client";
 import { setCrudTokenGetter } from "./api/crud";
+import { setDashboardTokenGetter } from "./components/Dashboard";
 import { PanelLeftClose, PanelLeft } from "lucide-react";
 import "./styles/globals.css";
 
@@ -47,6 +48,7 @@ function AppContent() {
   useEffect(() => {
     setTokenGetter(getAccessToken);
     setCrudTokenGetter(getAccessToken);
+    setDashboardTokenGetter(getAccessToken);
   }, [getAccessToken]);
 
   // Reload sessions when authenticated
@@ -55,6 +57,16 @@ function AppContent() {
       refreshSessions();
     }
   }, [isAuthenticated, refreshSessions]);
+
+  // Listen for navigation events from pages (e.g., CaptacaoPage → ValidacaoPage)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { page } = (e as CustomEvent).detail;
+      if (page) setCurrentPage(page);
+    };
+    window.addEventListener('navigate-to', handler);
+    return () => window.removeEventListener('navigate-to', handler);
+  }, []);
 
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
@@ -136,45 +148,45 @@ function AppContent() {
       case "dashboard":
         return <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
       case "captacao":
-        return <CaptacaoPage />;
+        return <CaptacaoPage onSendToChat={handleSendToChat} />;
       case "validacao":
-        return <ValidacaoPage />;
+        return <ValidacaoPage onSendToChat={handleSendToChat} />;
       case "precificacao":
-        return <PrecificacaoPage />;
+        return <PrecificacaoPage onSendToChat={handleSendToChat} />;
       case "proposta":
-        return <PropostaPage />;
+        return <PropostaPage onSendToChat={handleSendToChat} />;
       case "submissao":
-        return <SubmissaoPage />;
+        return <SubmissaoPage onSendToChat={handleSendToChat} />;
       case "lances":
-        return <LancesPage />;
+        return <LancesPage onSendToChat={handleSendToChat} />;
       case "followup":
-        return <FollowupPage />;
+        return <FollowupPage onSendToChat={handleSendToChat} />;
       case "impugnacao":
-        return <ImpugnacaoPage />;
+        return <ImpugnacaoPage onSendToChat={handleSendToChat} />;
       case "producao":
-        return <ProducaoPage />;
+        return <ProducaoPage onSendToChat={handleSendToChat} />;
       case "crm":
-        return <CRMPage />;
+        return <CRMPage onSendToChat={handleSendToChat} />;
       case "flags":
-        return <FlagsPage />;
+        return <FlagsPage onSendToChat={handleSendToChat} />;
       case "monitoria":
-        return <MonitoriaPage />;
+        return <MonitoriaPage onSendToChat={handleSendToChat} />;
       case "concorrencia":
-        return <ConcorrenciaPage />;
+        return <ConcorrenciaPage onSendToChat={handleSendToChat} />;
       case "mercado":
-        return <MercadoPage />;
+        return <MercadoPage onSendToChat={handleSendToChat} />;
       case "contratado":
-        return <ContratadoRealizadoPage />;
+        return <ContratadoRealizadoPage onSendToChat={handleSendToChat} />;
       case "atrasos":
-        return <ContratadoRealizadoPage />; // Atrasos esta integrado na pagina Contratado X Realizado
+        return <ContratadoRealizadoPage onSendToChat={handleSendToChat} />; // Atrasos esta integrado na pagina Contratado X Realizado
       case "perdas":
-        return <PerdasPage />;
+        return <PerdasPage onSendToChat={handleSendToChat} />;
       case "empresa":
-        return <EmpresaPage />;
+        return <EmpresaPage onSendToChat={handleSendToChat} />;
       case "portfolio":
         return <PortfolioPage onSendToChat={handleSendToChat} />;
       case "parametros":
-        return <ParametrizacoesPage />;
+        return <ParametrizacoesPage onSendToChat={handleSendToChat} />;
       default:
         return <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
     }

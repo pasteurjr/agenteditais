@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { TrendingUp, BarChart2, PieChart, Calendar } from "lucide-react";
 import { Card, ActionButton, FormField, SelectInput } from "../components/common";
 
@@ -32,7 +33,7 @@ const mockCategorias: CategoriaDemanda[] = [
   { categoria: "Reagentes e Insumos", quantidade: 20, valorMedio: 45000, percentual: 15 },
 ];
 
-export function MercadoPage() {
+export function MercadoPage(_props?: PageProps) {
   const [tendencias] = useState<TendenciaMes[]>(mockTendencias);
   const [categorias] = useState<CategoriaDemanda[]>(mockCategorias);
   const [periodoPreco, setPeriodoPreco] = useState("6m");

@@ -58,6 +58,8 @@ export function useChat() {
           role: "assistant",
           content: response.response,
           sources: response.sources,
+          action_type: response.action_type,
+          resultado: response.resultado,
         };
         setMessages((prev) => [...prev, assistantMessage]);
         return response;

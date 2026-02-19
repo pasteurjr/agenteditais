@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import type { PageProps } from "../types";
+import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle } from "lucide-react";
 import {
   Card, StatCard, DataTable, ActionButton, FormField, TextInput, Checkbox,
   SelectInput, ScoreCircle, ScoreBar, RadioGroup, StatusBadge,
 } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList, crudCreate, crudUpdate } from "../api/crud";
 
 // --- Interfaces ---
 
@@ -39,6 +41,20 @@ interface EditalBusca {
   margemExpectativa: number;
   gaps: GapItem[];
   selected?: boolean;
+  url?: string;
+  fonte?: string;
+  // IDs de registros salvos (para update)
+  editalSalvoId?: string;
+  estrategiaId?: string;
+}
+
+interface MonitoramentoInfo {
+  id: string;
+  termo: string;
+  ativo: boolean;
+  ultimo_check?: string;
+  editais_encontrados?: number;
+  ufs?: string[];
 }
 
 // --- UFs brasileiras ---
@@ -56,107 +72,83 @@ const UFS = [
   { value: "SP", label: "Sao Paulo" }, { value: "SE", label: "Sergipe" }, { value: "TO", label: "Tocantins" },
 ];
 
-// --- Dados mock ---
-const mockResultados: EditalBusca[] = [
-  {
-    id: "1", numero: "PE-001/2026", orgao: "UFMG", uf: "MG",
-    objeto: "Aquisicao de microscopios opticos para laboratorio de biologia",
-    valor: 150000, dataAbertura: "15/02/2026", diasRestantes: 5, score: 92, status: "aberto",
-    scores: { tecnico: 95, comercial: 88, recomendacao: 92 },
-    produtoCorrespondente: "Microscopio Nikon Eclipse Ei",
-    classificacaoTipo: "Equipamentos", classificacaoOrigem: "Universidade",
-    potencialGanho: "elevado", intencaoEstrategica: "estrategico", margemExpectativa: 18,
-    gaps: [
-      { item: "Especificacao optica 40x-1000x", tipo: "atendido" },
-      { item: "Camera acoplada 5MP", tipo: "atendido" },
-      { item: "Software de analise de imagens", tipo: "parcial" },
-    ],
-  },
-  {
-    id: "2", numero: "PE-045/2026", orgao: "CEMIG", uf: "MG",
-    objeto: "Equipamentos de laboratorio para analises quimicas",
-    valor: 89000, dataAbertura: "20/02/2026", diasRestantes: 10, score: 88, status: "aberto",
-    scores: { tecnico: 90, comercial: 85, recomendacao: 88 },
-    produtoCorrespondente: "Espectrofotometro UV-VIS Shimadzu",
-    classificacaoTipo: "Equipamentos", classificacaoOrigem: "Estadual",
-    potencialGanho: "elevado", intencaoEstrategica: "estrategico", margemExpectativa: 15,
-    gaps: [
-      { item: "Faixa UV-VIS 190-1100nm", tipo: "atendido" },
-      { item: "Certificado de calibracao RBC", tipo: "atendido" },
-      { item: "Cubetas de quartzo incluidas", tipo: "nao_atendido" },
-    ],
-  },
-  {
-    id: "3", numero: "CC-012/2026", orgao: "Pref. BH", uf: "MG",
-    objeto: "Material de laboratorio e reagentes para diagnostico",
-    valor: 320000, dataAbertura: "25/02/2026", diasRestantes: 15, score: 65, status: "aberto",
-    scores: { tecnico: 60, comercial: 72, recomendacao: 65 },
-    produtoCorrespondente: "Kit Reagentes Diagnostico Labtest",
-    classificacaoTipo: "Reagentes", classificacaoOrigem: "Municipal",
-    potencialGanho: "medio", intencaoEstrategica: "defensivo", margemExpectativa: 12,
-    gaps: [
-      { item: "Reagentes para bioquimica", tipo: "atendido" },
-      { item: "Reagentes para hematologia", tipo: "parcial" },
-      { item: "Registro ANVISA vigente", tipo: "atendido" },
-      { item: "Reagentes para imunologia", tipo: "nao_atendido" },
-    ],
-  },
-  {
-    id: "4", numero: "PE-088/2026", orgao: "USP", uf: "SP",
-    objeto: "Reagentes para diagnostico molecular PCR",
-    valor: 75000, dataAbertura: "18/02/2026", diasRestantes: 8, score: 58, status: "aberto",
-    scores: { tecnico: 55, comercial: 62, recomendacao: 58 },
-    produtoCorrespondente: null,
-    classificacaoTipo: "Reagentes", classificacaoOrigem: "Universidade",
-    potencialGanho: "baixo", intencaoEstrategica: "acompanhamento", margemExpectativa: 8,
-    gaps: [
-      { item: "Kit PCR real-time", tipo: "nao_atendido" },
-      { item: "Primers customizados", tipo: "nao_atendido" },
-      { item: "Mastermix SYBR Green", tipo: "parcial" },
-    ],
-  },
-  {
-    id: "5", numero: "DP-003/2026", orgao: "UFOP", uf: "MG",
-    objeto: "Centrifuga de bancada refrigerada",
-    valor: 45000, dataAbertura: "10/02/2026", diasRestantes: 0, score: 85, status: "encerrado",
-    scores: { tecnico: 88, comercial: 80, recomendacao: 85 },
-    produtoCorrespondente: "Centrifuga Eppendorf 5430R",
-    classificacaoTipo: "Equipamentos", classificacaoOrigem: "Universidade",
-    potencialGanho: "medio", intencaoEstrategica: "defensivo", margemExpectativa: 14,
-    gaps: [
-      { item: "Velocidade max 30.000 rpm", tipo: "atendido" },
-      { item: "Refrigeracao -10 a 40C", tipo: "atendido" },
-    ],
-  },
-  {
-    id: "6", numero: "PE-110/2026", orgao: "LACEN-MG", uf: "MG",
-    objeto: "Equipamento de comodato para automacao laboratorial",
-    valor: 520000, dataAbertura: "12/02/2026", diasRestantes: 2, score: 78, status: "aberto",
-    scores: { tecnico: 82, comercial: 70, recomendacao: 78 },
-    produtoCorrespondente: "Automacao Roche Cobas c311",
-    classificacaoTipo: "Comodato", classificacaoOrigem: "LACEN",
-    potencialGanho: "elevado", intencaoEstrategica: "estrategico", margemExpectativa: 22,
-    gaps: [
-      { item: "Capacidade 200 testes/hora", tipo: "atendido" },
-      { item: "Interface LIS/HCIS", tipo: "parcial" },
-      { item: "Manutencao preventiva inclusa", tipo: "atendido" },
-    ],
-  },
-  {
-    id: "7", numero: "PE-200/2026", orgao: "Hospital de Clinicas UFPR", uf: "PR",
-    objeto: "Oferta de preco para reagentes de hemoglobina glicada",
-    valor: 180000, dataAbertura: "22/02/2026", diasRestantes: 12, score: 42, status: "aberto",
-    scores: { tecnico: 40, comercial: 48, recomendacao: 42 },
-    produtoCorrespondente: null,
-    classificacaoTipo: "Oferta Preco", classificacaoOrigem: "Hospital",
-    potencialGanho: "baixo", intencaoEstrategica: "aprendizado", margemExpectativa: 5,
-    gaps: [
-      { item: "Metodologia HPLC", tipo: "nao_atendido" },
-      { item: "Calibradores rastreados NGSP", tipo: "nao_atendido" },
-      { item: "Controles internos", tipo: "parcial" },
-    ],
-  },
-];
+// --- Helpers ---
+
+function calcularDiasRestantes(dataAbertura: string): number {
+  if (!dataAbertura) return 0;
+  try {
+    // Tenta parsear tanto "DD/MM/YYYY" quanto "YYYY-MM-DD" ou ISO
+    let data: Date;
+    if (dataAbertura.includes("/")) {
+      const [d, m, y] = dataAbertura.split("/").map(Number);
+      data = new Date(y, m - 1, d);
+    } else {
+      data = new Date(dataAbertura);
+    }
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((data.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function formatarDataBr(dataStr: string): string {
+  if (!dataStr) return "—";
+  try {
+    if (dataStr.includes("/")) return dataStr;
+    const data = new Date(dataStr);
+    if (isNaN(data.getTime())) return dataStr;
+    return data.toLocaleDateString("pt-BR");
+  } catch {
+    return dataStr;
+  }
+}
+
+function inferirPotencialGanho(score: number): "elevado" | "medio" | "baixo" {
+  if (score >= 80) return "elevado";
+  if (score >= 50) return "medio";
+  return "baixo";
+}
+
+// Mapeia dados do endpoint /api/editais/buscar para EditalBusca
+function normalizarEditalDaBusca(e: Record<string, unknown>): EditalBusca {
+  const score = Number(e.score_tecnico ?? 0);
+  const dataAbertura = formatarDataBr(String(e.data_abertura ?? ""));
+  const diasRestantes = calcularDiasRestantes(String(e.data_abertura ?? ""));
+
+  // Extrair produto correspondente da lista de produtos aderentes
+  const produtos = e.produtos_aderentes as string[] | undefined;
+  const produtoCorrespondente = produtos && produtos.length > 0 ? produtos[0] : null;
+
+  return {
+    id: String(e.id ?? ""),
+    numero: String(e.numero ?? "—"),
+    orgao: String(e.orgao ?? "—"),
+    uf: String(e.uf ?? "—"),
+    objeto: String(e.objeto ?? "—"),
+    valor: Number(e.valor_estimado ?? 0),
+    dataAbertura,
+    diasRestantes,
+    score,
+    scores: {
+      tecnico: score,
+      comercial: score,
+      recomendacao: Number(e.recomendacao ?? score),
+    },
+    status: Boolean(e.encerrado) ? "encerrado" : (diasRestantes > 0 ? "aberto" : "encerrado"),
+    produtoCorrespondente,
+    classificacaoTipo: String(e.modalidade ?? "—"),
+    classificacaoOrigem: String(e.fonte ?? "—"),
+    potencialGanho: inferirPotencialGanho(score),
+    intencaoEstrategica: "acompanhamento",
+    margemExpectativa: 15,
+    gaps: [],
+    url: String(e.url ?? ""),
+    fonte: String(e.fonte ?? ""),
+  };
+}
 
 // --- Contagens de prazos ---
 function contarPrazos(editais: EditalBusca[]) {
@@ -171,7 +163,7 @@ function contarPrazos(editais: EditalBusca[]) {
 
 // --- Componente ---
 
-export function CaptacaoPage() {
+export function CaptacaoPage(_props?: PageProps) {
   const [termo, setTermo] = useState("");
   const [uf, setUf] = useState("todas");
   const [fonte, setFonte] = useState("pncp");
@@ -182,40 +174,211 @@ export function CaptacaoPage() {
 
   const [resultados, setResultados] = useState<EditalBusca[]>([]);
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [painelEdital, setPainelEdital] = useState<EditalBusca | null>(null);
   const [intencaoLocal, setIntencaoLocal] = useState("estrategico");
   const [margemLocal, setMargemLocal] = useState(15);
+  const [salvandoEstrategia, setSalvandoEstrategia] = useState(false);
+  const [estrategiaSalva, setEstrategiaSalva] = useState(false);
 
+  const [monitoramentos, setMonitoramentos] = useState<MonitoramentoInfo[]>([]);
+  const [loadingMonitoramentos, setLoadingMonitoramentos] = useState(false);
+
+  // Carrega monitoramentos ao montar (T17)
+  useEffect(() => {
+    carregarMonitoramentos();
+  }, []);
+
+  const carregarMonitoramentos = async () => {
+    setLoadingMonitoramentos(true);
+    try {
+      const res = await crudList("monitoramentos", { limit: 10 });
+      const items = res.items as Record<string, unknown>[];
+      setMonitoramentos(items.map(m => ({
+        id: String(m.id ?? ""),
+        termo: String(m.termo ?? ""),
+        ativo: Boolean(m.ativo ?? true),
+        ultimo_check: m.ultima_execucao ? formatarDataBr(String(m.ultima_execucao)) : undefined,
+        editais_encontrados: Number(m.editais_encontrados ?? 0),
+        ufs: m.ufs as string[] | undefined,
+      })));
+    } catch {
+      // Silencioso - monitoramentos são opcionais
+    } finally {
+      setLoadingMonitoramentos(false);
+    }
+  };
+
+  // T13: Busca real via REST
   const handleBuscar = async () => {
+    if (!termo.trim()) {
+      setErro("Informe um termo de busca");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      let res = [...mockResultados];
-      if (!incluirEncerrados) res = res.filter(e => e.status === "aberto");
-      if (classificacaoTipo !== "todos") res = res.filter(e => e.classificacaoTipo === classificacaoTipo);
-      if (classificacaoOrigem !== "todos") res = res.filter(e => e.classificacaoOrigem === classificacaoOrigem);
-      if (uf !== "todas") res = res.filter(e => e.uf === uf);
-      setResultados(res);
+    setErro(null);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const params = new URLSearchParams({
+        termo: termo.trim(),
+        calcularScore: String(calcularScore),
+        incluirEncerrados: String(incluirEncerrados),
+        limite: "30",
+      });
+      if (uf !== "todas") params.append("uf", uf);
+      if (fonte !== "todas") params.append("fontes", fonte);
+
+      const res = await fetch(`/api/editais/buscar?${params}`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as Record<string, string>).error || "Erro ao buscar editais");
+      }
+
+      const data = await res.json() as { success: boolean; editais?: Record<string, unknown>[]; error?: string };
+
+      if (!data.success) {
+        throw new Error(data.error || "Busca sem resultados");
+      }
+
+      let editais = (data.editais ?? []).map(normalizarEditalDaBusca);
+
+      // Filtros client-side por tipo e origem (mapeados dos campos retornados)
+      if (classificacaoTipo !== "todos") {
+        editais = editais.filter(e => e.classificacaoTipo.toLowerCase() === classificacaoTipo.toLowerCase());
+      }
+      if (classificacaoOrigem !== "todos") {
+        editais = editais.filter(e => e.classificacaoOrigem.toLowerCase() === classificacaoOrigem.toLowerCase());
+      }
+
+      setResultados(editais);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao buscar editais");
+      setResultados([]);
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
-  const handleSalvarTodos = () => {
-    console.log("Salvando todos os editais");
+  // T14: Salvar edital via CRUD
+  const salvarEditalNoBanco = async (edital: EditalBusca): Promise<string | null> => {
+    try {
+      const payload: Record<string, unknown> = {
+        numero: edital.numero,
+        orgao: edital.orgao,
+        orgao_tipo: edital.classificacaoOrigem,
+        uf: edital.uf,
+        objeto: edital.objeto,
+        modalidade: edital.classificacaoTipo,
+        valor_referencia: edital.valor || null,
+        data_abertura: edital.dataAbertura || null,
+        status: "novo",
+        fonte: edital.fonte || "pncp",
+        url: edital.url || null,
+      };
+      // Se já tem ID do backend, reutiliza (não duplica)
+      if (edital.id && edital.id.length === 36) {
+        // Edital já salvo no banco (UUID completo)
+        return edital.id;
+      }
+      const criado = await crudCreate("editais", payload);
+      return String(criado.id ?? "");
+    } catch {
+      return null;
+    }
   };
 
-  const handleSalvarRecomendados = () => {
+  const handleSalvarEdital = async (edital: EditalBusca) => {
+    const editalId = await salvarEditalNoBanco(edital);
+    if (!editalId) {
+      alert("Erro ao salvar edital");
+      return;
+    }
+    // Atualiza ID local
+    setResultados(prev => prev.map(e =>
+      e.id === edital.id ? { ...e, editalSalvoId: editalId } : e
+    ));
+    if (painelEdital?.id === edital.id) {
+      setPainelEdital(prev => prev ? { ...prev, editalSalvoId: editalId } : prev);
+    }
+  };
+
+  const handleSalvarTodos = async () => {
+    for (const edital of resultados) {
+      await salvarEditalNoBanco(edital);
+    }
+    alert(`${resultados.length} edital(is) salvo(s)`);
+  };
+
+  const handleSalvarRecomendados = async () => {
     const recomendados = resultados.filter(e => e.score >= 70);
-    console.log("Salvando recomendados:", recomendados.length);
+    for (const edital of recomendados) {
+      await salvarEditalNoBanco(edital);
+    }
+    alert(`${recomendados.length} edital(is) recomendado(s) salvo(s)`);
   };
 
-  const handleSalvarEdital = (edital: EditalBusca) => {
-    console.log("Salvando edital:", edital.numero);
+  // T15: Persistir intenção estratégica e margem
+  const handleSalvarEstrategia = async () => {
+    if (!painelEdital) return;
+    setSalvandoEstrategia(true);
+    setEstrategiaSalva(false);
+    try {
+      // Garante que o edital está salvo primeiro
+      let editalId = painelEdital.editalSalvoId || (painelEdital.id.length === 36 ? painelEdital.id : null);
+      if (!editalId) {
+        editalId = await salvarEditalNoBanco(painelEdital);
+      }
+      if (!editalId) throw new Error("Não foi possível salvar o edital");
+
+      // Mapa intenção -> decisao/prioridade do modelo
+      const decisaoMap: Record<string, string> = {
+        estrategico: "go",
+        defensivo: "acompanhar",
+        acompanhamento: "acompanhar",
+        aprendizado: "nogo",
+      };
+      const prioridadeMap: Record<string, string> = {
+        estrategico: "alta",
+        defensivo: "media",
+        acompanhamento: "baixa",
+        aprendizado: "baixa",
+      };
+
+      const payload: Record<string, unknown> = {
+        edital_id: editalId,
+        decisao: decisaoMap[intencaoLocal] ?? "acompanhar",
+        prioridade: prioridadeMap[intencaoLocal] ?? "media",
+        margem_desejada: margemLocal,
+        justificativa: `Intenção: ${intencaoLocal}`,
+      };
+
+      if (painelEdital.estrategiaId) {
+        await crudUpdate("estrategias-editais", painelEdital.estrategiaId, payload);
+      } else {
+        const criada = await crudCreate("estrategias-editais", payload);
+        const novoId = String(criada.id ?? "");
+        setResultados(prev => prev.map(e =>
+          e.id === painelEdital.id ? { ...e, estrategiaId: novoId, editalSalvoId: editalId ?? undefined } : e
+        ));
+        setPainelEdital(prev => prev ? { ...prev, estrategiaId: novoId, editalSalvoId: editalId ?? undefined } : prev);
+      }
+      setEstrategiaSalva(true);
+      setTimeout(() => setEstrategiaSalva(false), 3000);
+    } catch (e) {
+      alert("Erro ao salvar estratégia: " + (e instanceof Error ? e.message : ""));
+    } finally {
+      setSalvandoEstrategia(false);
+    }
   };
 
   const handleAbrirPainel = (edital: EditalBusca) => {
     setPainelEdital(edital);
     setIntencaoLocal(edital.intencaoEstrategica);
     setMargemLocal(edital.margemExpectativa);
+    setEstrategiaSalva(false);
   };
 
   const handleToggleSelect = (id: string) => {
@@ -224,7 +387,17 @@ export function CaptacaoPage() {
     ));
   };
 
+  // T16: Navegação para ValidacaoPage com edital_id
+  const handleIrParaValidacao = (edital: EditalBusca) => {
+    const editalId = edital.editalSalvoId || (edital.id.length === 36 ? edital.id : null);
+    // Dispara evento customizado para o App.tsx capturar
+    window.dispatchEvent(new CustomEvent("navigate-to", {
+      detail: { page: "validacao", edital_id: editalId }
+    }));
+  };
+
   const formatCurrency = (value: number) => {
+    if (!value) return "—";
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
   };
 
@@ -246,7 +419,7 @@ export function CaptacaoPage() {
     return "Nao atendido";
   };
 
-  const prazos = contarPrazos(resultados.length > 0 ? resultados : mockResultados);
+  const prazos = contarPrazos(resultados.length > 0 ? resultados : []);
 
   const columns: Column<EditalBusca>[] = [
     {
@@ -452,6 +625,12 @@ export function CaptacaoPage() {
               label="Incluir editais encerrados"
             />
           </div>
+
+          {erro && (
+            <div className="alert alert-error" style={{ marginTop: "12px" }}>
+              {erro}
+            </div>
+          )}
         </Card>
 
         {/* Resultados + Painel lateral */}
@@ -473,7 +652,17 @@ export function CaptacaoPage() {
                 {selectedCount > 0 && (
                   <div className="selection-bar">
                     <span>{selectedCount} edital(is) selecionado(s)</span>
-                    <ActionButton label="Salvar Selecionados" onClick={() => {}} variant="primary" />
+                    <ActionButton
+                      label="Salvar Selecionados"
+                      onClick={async () => {
+                        const selecionados = resultados.filter(e => e.selected);
+                        for (const edital of selecionados) {
+                          await salvarEditalNoBanco(edital);
+                        }
+                        alert(`${selecionados.length} edital(is) salvo(s)`);
+                      }}
+                      variant="primary"
+                    />
                   </div>
                 )}
 
@@ -538,7 +727,7 @@ export function CaptacaoPage() {
                     />
                   </div>
 
-                  {/* Intencao Estrategica */}
+                  {/* Intencao Estrategica - T15 */}
                   <div className="panel-section">
                     <h4>Intencao Estrategica</h4>
                     <RadioGroup
@@ -554,7 +743,7 @@ export function CaptacaoPage() {
                     />
                   </div>
 
-                  {/* Expectativa de Margem */}
+                  {/* Expectativa de Margem - T15 */}
                   <div className="panel-section">
                     <h4>Expectativa de Margem: {margemLocal}%</h4>
                     <input
@@ -573,17 +762,19 @@ export function CaptacaoPage() {
                   </div>
 
                   {/* Analise de Gaps */}
-                  <div className="panel-section">
-                    <h4>Analise de Gaps</h4>
-                    <div className="gaps-list">
-                      {painelEdital.gaps.map((g, i) => (
-                        <div key={i} className="gap-item">
-                          <StatusBadge status={getGapColor(g.tipo) as "success" | "warning" | "error"} label={getGapLabel(g.tipo)} size="small" />
-                          <span>{g.item}</span>
-                        </div>
-                      ))}
+                  {painelEdital.gaps.length > 0 && (
+                    <div className="panel-section">
+                      <h4>Analise de Gaps</h4>
+                      <div className="gaps-list">
+                        {painelEdital.gaps.map((g, i) => (
+                          <div key={i} className="gap-item">
+                            <StatusBadge status={getGapColor(g.tipo) as "success" | "warning" | "error"} label={getGapLabel(g.tipo)} size="small" />
+                            <span>{g.item}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Info adicional */}
                   <div className="panel-section">
@@ -607,24 +798,39 @@ export function CaptacaoPage() {
                     </div>
                   </div>
 
+                  {/* Feedback de estratégia salva */}
+                  {estrategiaSalva && (
+                    <div className="alert alert-success" style={{ marginBottom: "8px" }}>
+                      <CheckCircle size={14} /> Estrategia salva com sucesso
+                    </div>
+                  )}
+
                   {/* Acoes */}
                   <div className="panel-actions">
                     <ActionButton
                       icon={<Save size={14} />}
-                      label="Salvar Edital"
+                      label="Salvar Estrategia"
                       variant="primary"
+                      onClick={handleSalvarEstrategia}
+                      loading={salvandoEstrategia}
+                    />
+                    <ActionButton
+                      icon={<Save size={14} />}
+                      label="Salvar Edital"
                       onClick={() => handleSalvarEdital(painelEdital)}
                     />
                     <ActionButton
                       icon={<ExternalLink size={14} />}
-                      label="Abrir no PNCP"
-                      onClick={() => {}}
+                      label="Ir para Validacao"
+                      onClick={() => handleIrParaValidacao(painelEdital)}
                     />
-                    <ActionButton
-                      icon={<Download size={14} />}
-                      label="Baixar PDF"
-                      onClick={() => {}}
-                    />
+                    {painelEdital.url && (
+                      <ActionButton
+                        icon={<ExternalLink size={14} />}
+                        label="Abrir no Portal"
+                        onClick={() => window.open(painelEdital.url, "_blank")}
+                      />
+                    )}
                   </div>
                 </Card>
               </div>
@@ -632,14 +838,50 @@ export function CaptacaoPage() {
           </div>
         )}
 
-        {/* Monitoramento automatico */}
+        {/* Monitoramento automatico - T17 */}
         <Card title="Monitoramento Automatico" icon={<Eye size={18} />}>
           <div className="monitoramento-info">
-            <p><strong>Palavras-chave ativas:</strong> microscopio, centrifuga, autoclave, reagente, espectrofotometro</p>
-            <p><strong>NCMs monitorados:</strong> 9011.80.00, 9027.30.11, 3822.00.90</p>
-            <p><strong>Ultima busca automatica:</strong> 10/02/2026 06:00</p>
-            <p><strong>Novos encontrados:</strong> 3</p>
-            <ActionButton label="Configurar Monitoria" onClick={() => {}} />
+            {loadingMonitoramentos ? (
+              <p className="text-muted">Carregando monitoramentos...</p>
+            ) : monitoramentos.length > 0 ? (
+              <>
+                <p><strong>Monitoramentos ativos:</strong> {monitoramentos.filter(m => m.ativo).length} de {monitoramentos.length}</p>
+                <div style={{ marginTop: "8px" }}>
+                  {monitoramentos.slice(0, 5).map(m => (
+                    <div key={m.id} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
+                      <StatusBadge
+                        status={m.ativo ? "success" : "neutral"}
+                        label={m.ativo ? "Ativo" : "Inativo"}
+                        size="small"
+                      />
+                      <span><strong>{m.termo}</strong></span>
+                      {m.ufs && m.ufs.length > 0 && (
+                        <span className="text-muted">({m.ufs.join(", ")})</span>
+                      )}
+                      {m.editais_encontrados !== undefined && (
+                        <span className="text-muted">{m.editais_encontrados} encontrado(s)</span>
+                      )}
+                      {m.ultimo_check && (
+                        <span className="text-muted">— ultimo: {m.ultimo_check}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {monitoramentos.length > 5 && (
+                  <p className="text-muted" style={{ marginTop: "4px" }}>
+                    +{monitoramentos.length - 5} monitoramento(s) adicionais
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-muted">Nenhum monitoramento configurado.</p>
+                <p style={{ marginTop: "4px" }}>Configure via chat: <em>"Monitore editais de equipamentos laboratoriais no PNCP"</em></p>
+              </>
+            )}
+            <div style={{ marginTop: "12px" }}>
+              <ActionButton label="Atualizar" onClick={carregarMonitoramentos} />
+            </div>
           </div>
         </Card>
       </div>

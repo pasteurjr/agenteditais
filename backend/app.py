@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital
 from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -16,7 +16,8 @@ from tools import (
     tool_calcular_score_aderencia, tool_salvar_editais_selecionados,
     tool_reprocessar_produto, tool_atualizar_produto,
     tool_buscar_links_editais,
-    execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS
+    execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS,
+    tool_calcular_scores_validacao, tool_atualizar_status_proposta
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
 
@@ -1530,6 +1531,137 @@ Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
     return response, {"status": "aguardando_dados"}
 
 
+def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
+                                incluir_encerrados: bool = False,
+                                buscar_detalhes: bool = True) -> dict:
+    """
+    Busca editais em múltiplas fontes (PNCP API + Serper scraper) EM PARALELO,
+    deduplica e retorna resultado consolidado.
+    Reutilizada pelo chat (processar_buscar_editais) e pelo endpoint REST (/api/editais/buscar).
+    """
+    editais = []
+    fontes_consultadas = []
+    erros_fontes = []
+
+    print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Serper)...")
+
+    # 1. Buscar no PNCP (API oficial) — com tratamento de erro
+    try:
+        resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf,
+                                                    buscar_detalhes=buscar_detalhes,
+                                                    incluir_encerrados=incluir_encerrados)
+        if resultado_pncp.get("success"):
+            editais_pncp = resultado_pncp.get("editais", [])
+            for ed in editais_pncp:
+                ed['fonte'] = 'PNCP (API)'
+            editais.extend(editais_pncp)
+            fontes_consultadas.append("PNCP (API)")
+            print(f"[BUSCA-MULTI] PNCP: {len(editais_pncp)} editais encontrados")
+        else:
+            erros_fontes.append(f"PNCP: {resultado_pncp.get('error', 'sem resultados')}")
+    except Exception as e:
+        print(f"[BUSCA-MULTI] Erro PNCP: {e}")
+        erros_fontes.append(f"PNCP: {e}")
+
+    # 2. Buscar em outras fontes via Serper (scraper) — com tratamento de erro
+    try:
+        resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
+    except Exception as e:
+        print(f"[BUSCA-MULTI] Erro Serper: {e}")
+        resultado_scraper = None
+        erros_fontes.append(f"Serper: {e}")
+
+    if resultado_scraper and resultado_scraper.get("success"):
+        editais_scraper = resultado_scraper.get("editais", [])
+        links_pncp = {ed.get('url', '') for ed in editais}
+
+        palavras_excluir_objeto = [
+            'prestação de serviço', 'mão de obra', 'dedicação exclusiva',
+            'terceirização', 'lavanderia', 'limpeza', 'manutenção preventiva',
+            'manutenção corretiva', 'prorrogação da ata', 'prorrogação parcial',
+            'termo aditivo', 'credenciadas no sistema', 'poderão participar'
+        ]
+
+        editais_novos = []
+        for ed in editais_scraper:
+            if ed.get('link') not in links_pncp and ed.get('link'):
+                texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
+                eh_servico_ou_prorrogacao = any(p in texto for p in palavras_excluir_objeto)
+                if eh_servico_ou_prorrogacao:
+                    print(f"[BUSCA-MULTI] Filtrando (serviço/prorrogação): {ed.get('numero', ed.get('titulo', '')[:30])}")
+                    continue
+
+                numero_edital = ed.get('numero', ed.get('titulo', '')[:50])
+                ed_normalizado = {
+                    'numero': numero_edital,
+                    'orgao': ed.get('orgao', 'Não identificado'),
+                    'objeto': ed.get('descricao', ed.get('titulo', '')),
+                    'url': ed.get('link'),
+                    'fonte': f"{ed.get('fonte', 'Web')} (Scraper)",
+                    'fonte_tipo': 'scraper',
+                    'modalidade': 'Identificar no portal',
+                    'valor_referencia': None,
+                    'data_abertura': 'Ver no portal'
+                }
+
+                if numero_edital and '/' in numero_edital:
+                    try:
+                        from tools import _buscar_edital_pncp_por_numero
+                        dados_pncp = _buscar_edital_pncp_por_numero(numero_edital)
+                        if dados_pncp:
+                            ed_normalizado.update({
+                                'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
+                                'ano_compra': dados_pncp.get('ano_compra'),
+                                'seq_compra': dados_pncp.get('seq_compra'),
+                                'numero_pncp': dados_pncp.get('numero_pncp'),
+                                'valor_referencia': dados_pncp.get('valor_referencia'),
+                                'data_abertura': dados_pncp.get('data_abertura'),
+                                'uf': dados_pncp.get('uf'),
+                                'cidade': dados_pncp.get('cidade'),
+                                'orgao': dados_pncp.get('orgao') or ed_normalizado['orgao'],
+                                'objeto': dados_pncp.get('objeto') or ed_normalizado['objeto'],
+                                'url': dados_pncp.get('url') or ed_normalizado['url'],
+                                'fonte': f"{ed.get('fonte', 'Web')} → PNCP",
+                                'fonte_tipo': 'api',
+                                'dados_completos': True,
+                            })
+                            print(f"[BUSCA-MULTI] Edital {numero_edital} enriquecido com dados PNCP")
+                    except Exception as e:
+                        print(f"[BUSCA-MULTI] Erro ao enriquecer {numero_edital}: {e}")
+
+                editais_novos.append(ed_normalizado)
+        editais.extend(editais_novos)
+        fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
+        fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
+        print(f"[BUSCA-MULTI] Scraper: {len(editais_novos)} editais adicionais encontrados")
+        if resultado_scraper.get('erros'):
+            for err in resultado_scraper.get('erros', []):
+                erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
+
+    # 3. Deduplicar por número de edital (priorizar PNCP)
+    editais_unicos = []
+    numeros_vistos = set()
+    for ed in editais:
+        numero = ed.get('numero', '')
+        chave = numero if numero and numero not in ['N/A', 'None', ''] else ed.get('url', '')
+        if chave and chave not in numeros_vistos:
+            numeros_vistos.add(chave)
+            editais_unicos.append(ed)
+
+    if len(editais) != len(editais_unicos):
+        print(f"[BUSCA-MULTI] Removidas {len(editais) - len(editais_unicos)} duplicatas")
+    editais = editais_unicos
+
+    return {
+        "success": len(editais) > 0,
+        "termo": termo,
+        "fontes_consultadas": fontes_consultadas,
+        "total_resultados": len(editais),
+        "editais": editais,
+        "erros": erros_fontes if erros_fontes else None
+    }
+
+
 def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None):
     """
     Processa ação: Buscar editais
@@ -1612,123 +1744,12 @@ JSON:"""
     print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}'")
 
     # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
-    editais = []
-    fontes_consultadas = []
-    erros_fontes = []
-
-    # 1.1 Buscar no PNCP (API oficial)
-    print(f"[BUSCA] Consultando PNCP via API... (incluir_encerrados={incluir_encerrados})")
-    resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf, incluir_encerrados=incluir_encerrados)
-    if resultado_pncp.get("success"):
-        editais_pncp = resultado_pncp.get("editais", [])
-        # Marcar fonte
-        for ed in editais_pncp:
-            ed['fonte'] = 'PNCP (API)'
-        editais.extend(editais_pncp)
-        fontes_consultadas.append("PNCP (API)")
-        print(f"[BUSCA] PNCP: {len(editais_pncp)} editais encontrados")
-    else:
-        erros_fontes.append(f"PNCP: {resultado_pncp.get('error', 'erro desconhecido')}")
-
-    # 1.2 Buscar em outras fontes via Serper (scraper)
-    print(f"[BUSCA] Consultando outras fontes via Serper...")
-    resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
-    if resultado_scraper.get("success"):
-        editais_scraper = resultado_scraper.get("editais", [])
-        # Filtrar editais que já vieram do PNCP (evitar duplicatas)
-        links_pncp = {ed.get('url', '') for ed in editais}
-
-        # Palavras que indicam que NÃO é edital de aquisição de produtos
-        palavras_excluir_objeto = [
-            'prestação de serviço', 'mão de obra', 'dedicação exclusiva',
-            'terceirização', 'lavanderia', 'limpeza', 'manutenção preventiva',
-            'manutenção corretiva', 'prorrogação da ata', 'prorrogação parcial',
-            'termo aditivo', 'credenciadas no sistema', 'poderão participar'
-        ]
-
-        editais_novos = []
-        for ed in editais_scraper:
-            if ed.get('link') not in links_pncp and ed.get('link'):
-                # Verificar se é edital de serviço ou prorrogação (filtrar)
-                texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
-                eh_servico_ou_prorrogacao = any(p in texto for p in palavras_excluir_objeto)
-                if eh_servico_ou_prorrogacao:
-                    print(f"[BUSCA] Filtrando (serviço/prorrogação): {ed.get('numero', ed.get('titulo', '')[:30])}")
-                    continue
-
-                # Padronizar campos
-                numero_edital = ed.get('numero', ed.get('titulo', '')[:50])
-                ed_normalizado = {
-                    'numero': numero_edital,
-                    'orgao': ed.get('orgao', 'Não identificado'),
-                    'objeto': ed.get('descricao', ed.get('titulo', '')),
-                    'url': ed.get('link'),
-                    'fonte': f"{ed.get('fonte', 'Web')} (Scraper)",
-                    'fonte_tipo': 'scraper',
-                    'modalidade': 'Identificar no portal',
-                    'valor_referencia': None,
-                    'data_abertura': 'Ver no portal'
-                }
-
-                # Tentar enriquecer com dados do PNCP se tiver número válido
-                if numero_edital and '/' in numero_edital:
-                    try:
-                        from tools import _buscar_edital_pncp_por_numero
-                        dados_pncp = _buscar_edital_pncp_por_numero(numero_edital)
-                        if dados_pncp:
-                            ed_normalizado.update({
-                                'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
-                                'ano_compra': dados_pncp.get('ano_compra'),
-                                'seq_compra': dados_pncp.get('seq_compra'),
-                                'numero_pncp': dados_pncp.get('numero_pncp'),
-                                'valor_referencia': dados_pncp.get('valor_referencia'),
-                                'data_abertura': dados_pncp.get('data_abertura'),
-                                'uf': dados_pncp.get('uf'),
-                                'cidade': dados_pncp.get('cidade'),
-                                'orgao': dados_pncp.get('orgao') or ed_normalizado['orgao'],
-                                'objeto': dados_pncp.get('objeto') or ed_normalizado['objeto'],
-                                'url': dados_pncp.get('url') or ed_normalizado['url'],
-                                'fonte': f"{ed.get('fonte', 'Web')} → PNCP",  # Indica que veio do scraper mas enriqueceu
-                                'fonte_tipo': 'api',
-                                'dados_completos': True,
-                            })
-                            print(f"[BUSCA] Edital {numero_edital} enriquecido com dados PNCP")
-                    except Exception as e:
-                        print(f"[BUSCA] Erro ao enriquecer {numero_edital}: {e}")
-
-                editais_novos.append(ed_normalizado)
-        editais.extend(editais_novos)
-        fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
-        fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
-        print(f"[BUSCA] Scraper: {len(editais_novos)} editais adicionais encontrados")
-        if resultado_scraper.get('erros'):
-            for err in resultado_scraper.get('erros', []):
-                erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
-
-    # Remover duplicatas por número de edital (priorizar PNCP)
-    editais_unicos = []
-    numeros_vistos = set()
-    for ed in editais:
-        numero = ed.get('numero', '')
-        # Se não tem número ou número é genérico, usar URL como chave
-        chave = numero if numero and numero not in ['N/A', 'None', ''] else ed.get('url', '')
-        if chave and chave not in numeros_vistos:
-            numeros_vistos.add(chave)
-            editais_unicos.append(ed)
-
-    if len(editais) != len(editais_unicos):
-        print(f"[BUSCA] Removidas {len(editais) - len(editais_unicos)} duplicatas")
-    editais = editais_unicos
-
-    # Montar resultado combinado
-    resultado = {
-        "success": len(editais) > 0,
-        "termo": termo,
-        "fontes_consultadas": fontes_consultadas,
-        "total_resultados": len(editais),
-        "editais": editais,
-        "erros": erros_fontes if erros_fontes else None
-    }
+    resultado = _buscar_editais_multifonte(
+        termo=termo, user_id=user_id, uf=uf, incluir_encerrados=incluir_encerrados
+    )
+    editais = resultado.get("editais", [])
+    fontes_consultadas = resultado.get("fontes_consultadas", [])
+    erros_fontes = resultado.get("erros") or []
 
     if not editais:
         fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else 'nenhuma fonte disponível'
@@ -6925,6 +6946,544 @@ def get_proposta(proposta_id):
             return jsonify({"error": "Proposta não encontrada"}), 404
 
         return jsonify(proposta.to_dict())
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Dashboard Stats Route
+# =============================================================================
+
+@app.route("/api/dashboard/stats", methods=["GET"])
+@require_auth
+def get_dashboard_stats():
+    """Retorna estatísticas reais do banco para o Dashboard, filtradas pelo user_id."""
+    from sqlalchemy import func, case
+    from datetime import date, timedelta
+
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        # Total de editais
+        total_editais = db.query(Edital).filter(Edital.user_id == user_id).count()
+
+        # Editais por status
+        status_rows = (
+            db.query(Edital.status, func.count(Edital.id))
+            .filter(Edital.user_id == user_id)
+            .group_by(Edital.status)
+            .all()
+        )
+        editais_por_status = {row[0]: row[1] for row in status_rows}
+
+        # Total de propostas
+        total_propostas = db.query(Proposta).filter(Proposta.user_id == user_id).count()
+
+        # Propostas por status
+        prop_status_rows = (
+            db.query(Proposta.status, func.count(Proposta.id))
+            .filter(Proposta.user_id == user_id)
+            .group_by(Proposta.status)
+            .all()
+        )
+        propostas_por_status = {row[0]: row[1] for row in prop_status_rows}
+
+        # Taxa de sucesso: editais ganhos / (ganhos + perdidos)
+        ganhos = editais_por_status.get('ganho', 0) + editais_por_status.get('vencedor', 0)
+        perdidos = editais_por_status.get('perdido', 0) + editais_por_status.get('perdedor', 0)
+        total_encerrados = ganhos + perdidos
+        taxa_sucesso = round(ganhos / total_encerrados, 4) if total_encerrados > 0 else 0.0
+
+        # Valor total contratado
+        valor_row = (
+            db.query(func.coalesce(func.sum(Contrato.valor_total), 0))
+            .filter(Contrato.user_id == user_id)
+            .scalar()
+        )
+        valor_total_contratado = float(valor_row) if valor_row else 0.0
+
+        # Editais por mês (últimos 6 meses)
+        seis_meses_atras = date.today().replace(day=1)
+        # Recalcular como 6 meses atrás
+        mes = seis_meses_atras.month - 6
+        ano = seis_meses_atras.year
+        if mes <= 0:
+            mes += 12
+            ano -= 1
+        from datetime import datetime as dt
+        data_inicio = dt(ano, mes, 1)
+
+        mes_rows = (
+            db.query(
+                func.date_format(Edital.created_at, '%Y-%m').label('mes'),
+                func.count(Edital.id).label('total')
+            )
+            .filter(
+                Edital.user_id == user_id,
+                Edital.created_at >= data_inicio
+            )
+            .group_by('mes')
+            .order_by('mes')
+            .all()
+        )
+        editais_por_mes = [{"mes": row[0], "total": row[1]} for row in mes_rows]
+
+        # Próximos prazos (editais com data_abertura nos próximos 30 dias)
+        hoje = date.today()
+        em_30_dias = hoje + timedelta(days=30)
+        prazo_rows = (
+            db.query(Edital.numero, Edital.data_abertura)
+            .filter(
+                Edital.user_id == user_id,
+                Edital.data_abertura >= hoje,
+                Edital.data_abertura <= em_30_dias,
+                Edital.status.in_(['novo', 'analisando', 'participando'])
+            )
+            .order_by(Edital.data_abertura)
+            .limit(10)
+            .all()
+        )
+        proximos_prazos = [
+            {
+                "edital": row[0],
+                "prazo": row[1].date().isoformat() if row[1] else None,
+                "dias_restantes": (row[1].date() - hoje).days if row[1] else None
+            }
+            for row in prazo_rows
+        ]
+
+        return jsonify({
+            "total_editais": total_editais,
+            "editais_por_status": editais_por_status,
+            "total_propostas": total_propostas,
+            "propostas_por_status": propostas_por_status,
+            "taxa_sucesso": taxa_sucesso,
+            "valor_total_contratado": valor_total_contratado,
+            "editais_por_mes": editais_por_mes,
+            "proximos_prazos": proximos_prazos
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Onda 2 - T8: Endpoint REST GET /api/editais/buscar
+# =============================================================================
+
+@app.route("/api/editais/buscar", methods=["GET"])
+@require_auth
+def buscar_editais_rest():
+    """
+    Endpoint REST para busca de editais — mesma lógica do chat.
+    Usa _buscar_editais_multifonte() (PNCP API + Serper + deduplicação).
+    Query params:
+      - termo (obrigatório): termo de busca
+      - uf (opcional): filtrar por UF (ex: SP, RJ)
+      - calcularScore (opcional, default true): calcular score aderência
+      - incluirEncerrados (opcional, default false): incluir editais encerrados
+      - limite / limit (opcional, default 20): máximo de resultados
+    """
+    user_id = get_current_user_id()
+    termo = request.args.get("termo", "").strip()
+    uf = request.args.get("uf", "").strip().upper() or None
+    calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
+    calcular_score = calcular_score_str.lower() == "true"
+    incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
+    incluir_encerrados = incluir_encerrados_str.lower() == "true"
+    limite = int(request.args.get("limite", request.args.get("limit", 20)))
+
+    if not termo:
+        return jsonify({"success": False, "error": "Parâmetro 'termo' é obrigatório"}), 400
+
+    try:
+        # Busca multi-fonte: mesma lógica do chat (PNCP + Serper + deduplicação)
+        resultado_busca = _buscar_editais_multifonte(
+            termo=termo,
+            user_id=user_id,
+            uf=uf,
+            incluir_encerrados=incluir_encerrados,
+            buscar_detalhes=False,
+        )
+
+        editais = resultado_busca.get("editais", [])
+
+        # Calcular score ANTES de aplicar limite (para pegar os melhores)
+        if calcular_score and editais:
+            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id)
+            if resultado_score.get("success"):
+                editais = resultado_score.get("editais_com_score", editais)
+
+        # Aplicar limite DEPOIS do score
+        editais = editais[:limite]
+
+        # Normalizar campos de retorno para o frontend
+        editais_normalizados = []
+        for e in editais:
+            editais_normalizados.append({
+                "id": e.get("id"),
+                "numero": e.get("numero"),
+                "orgao": e.get("orgao"),
+                "objeto": e.get("objeto") or e.get("descricao"),
+                "modalidade": e.get("modalidade"),
+                "valor_estimado": e.get("valor_referencia") or e.get("valor_estimado"),
+                "data_abertura": e.get("data_abertura"),
+                "uf": e.get("uf") or uf,
+                "url": e.get("url") or e.get("link"),
+                "fonte": e.get("fonte"),
+                "fonte_tipo": e.get("fonte_tipo"),
+                "score_tecnico": e.get("score_tecnico"),
+                "recomendacao": e.get("recomendacao"),
+                "justificativa": e.get("justificativa"),
+                "produtos_aderentes": e.get("produtos_aderentes", []),
+                "cnpj_orgao": e.get("cnpj_orgao"),
+                "ano_compra": e.get("ano_compra"),
+                "seq_compra": e.get("seq_compra"),
+                "total_itens": e.get("total_itens", 0),
+                "dados_completos": e.get("dados_completos", False),
+                "encerrado": e.get("encerrado", False),
+                "pdf_url": e.get("pdf_url"),
+            })
+
+        return jsonify({
+            "success": True,
+            "editais": editais_normalizados,
+            "total": len(editais_normalizados),
+            "termo": termo,
+            "uf": uf,
+            "fontes_usadas": resultado_busca.get("fontes_consultadas", []),
+            "erros_fontes": resultado_busca.get("erros"),
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# Onda 2 - T9: Endpoint REST GET /api/editais/salvos
+# =============================================================================
+
+@app.route("/api/editais/salvos", methods=["GET"])
+@require_auth
+def listar_editais_salvos():
+    """
+    Lista editais salvos do usuário com scores e estratégias.
+    Query params: status, uf, categoria, com_score (bool), com_estrategia (bool)
+    """
+    user_id = get_current_user_id()
+    status = request.args.get("status")
+    uf = request.args.get("uf")
+    categoria = request.args.get("categoria")
+    com_score = request.args.get("com_score", "false").lower() == "true"
+    com_estrategia = request.args.get("com_estrategia", "false").lower() == "true"
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+
+    db = get_db()
+    try:
+        query = db.query(Edital).filter(Edital.user_id == user_id)
+
+        if status:
+            query = query.filter(Edital.status == status)
+        if uf:
+            query = query.filter(Edital.uf == uf.upper())
+        if categoria:
+            query = query.filter(Edital.categoria == categoria)
+
+        total = query.count()
+        editais = query.order_by(Edital.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+        resultado = []
+        for edital in editais:
+            edital_dict = edital.to_dict()
+
+            # Incluir melhor score/análise se solicitado
+            if com_score:
+                melhor_analise = db.query(Analise).filter(
+                    Analise.edital_id == edital.id,
+                    Analise.user_id == user_id
+                ).order_by(Analise.score_final.desc()).first()
+                if melhor_analise:
+                    edital_dict["score_tecnico"] = float(melhor_analise.score_tecnico) if melhor_analise.score_tecnico else None
+                    edital_dict["score_final"] = float(melhor_analise.score_final) if melhor_analise.score_final else None
+                    edital_dict["recomendacao"] = melhor_analise.recomendacao
+                    edital_dict["analise_id"] = melhor_analise.id
+
+            # Incluir estratégia/decisão go-nogo se solicitado
+            if com_estrategia:
+                estrategia = db.query(EstrategiaEdital).filter(
+                    EstrategiaEdital.edital_id == edital.id,
+                    EstrategiaEdital.user_id == user_id
+                ).first()
+                if estrategia:
+                    edital_dict["decisao"] = estrategia.decisao
+                    edital_dict["prioridade"] = estrategia.prioridade
+                    edital_dict["margem_desejada"] = float(estrategia.margem_desejada) if estrategia.margem_desejada else None
+                    edital_dict["justificativa_estrategia"] = estrategia.justificativa
+                    edital_dict["estrategia_id"] = estrategia.id
+
+            resultado.append(edital_dict)
+
+        return jsonify({
+            "success": True,
+            "editais": resultado,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Onda 2 - T10: Endpoint POST /api/editais/<id>/scores-validacao
+# =============================================================================
+
+@app.route("/api/editais/<edital_id>/scores-validacao", methods=["POST"])
+@require_auth
+def calcular_scores_validacao_rest(edital_id):
+    """
+    Calcula 6 dimensões de score de validação para um edital.
+    Body (opcional): {"produto_id": "<uuid>"}
+    """
+    user_id = get_current_user_id()
+    data = request.json or {}
+    produto_id = data.get("produto_id")
+
+    try:
+        resultado = tool_calcular_scores_validacao(
+            edital_id=edital_id,
+            user_id=user_id,
+            produto_id=produto_id
+        )
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# Onda 2 - T11: Endpoint PUT /api/propostas/<id>/status
+# =============================================================================
+
+@app.route("/api/propostas/<proposta_id>/status", methods=["PUT"])
+@require_auth
+def atualizar_status_proposta(proposta_id):
+    """
+    Atualiza o status de uma proposta seguindo o workflow:
+    rascunho -> revisao -> aprovada -> enviada -> aceita/rejeitada
+    """
+    user_id = get_current_user_id()
+    data = request.json or {}
+    novo_status = data.get("status", "").strip()
+
+    # Status do modelo: rascunho, revisao, aprovada, enviada
+    TRANSICOES_VALIDAS = {
+        "rascunho": ["revisao"],
+        "revisao": ["rascunho", "aprovada"],
+        "aprovada": ["revisao", "enviada"],
+        "enviada": ["aprovada", "rascunho"]
+    }
+
+    STATUS_VALIDOS = list(TRANSICOES_VALIDAS.keys())
+
+    if not novo_status:
+        return jsonify({"success": False, "error": "Campo 'status' é obrigatório"}), 400
+
+    if novo_status not in STATUS_VALIDOS:
+        return jsonify({
+            "success": False,
+            "error": f"Status inválido. Válidos: {', '.join(STATUS_VALIDOS)}"
+        }), 400
+
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+
+        if not proposta:
+            return jsonify({"success": False, "error": "Proposta não encontrada"}), 404
+
+        status_atual = proposta.status
+        transicoes = TRANSICOES_VALIDAS.get(status_atual, [])
+
+        if novo_status not in transicoes:
+            return jsonify({
+                "success": False,
+                "error": f"Transição inválida: '{status_atual}' -> '{novo_status}'. Permitidas: {transicoes}"
+            }), 400
+
+        proposta.status = novo_status
+        proposta.updated_at = datetime.now()
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "proposta_id": proposta_id,
+            "status_anterior": status_atual,
+            "status_atual": novo_status,
+            "proposta": proposta.to_dict()
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Onda 2 - T12: Endpoint export PDF/DOCX propostas
+# =============================================================================
+
+@app.route("/api/propostas/<proposta_id>/export", methods=["GET"])
+@require_auth
+def exportar_proposta(proposta_id):
+    """
+    Exporta proposta em PDF ou DOCX.
+    Query param: formato (pdf | docx), padrão = pdf
+    """
+    user_id = get_current_user_id()
+    formato = request.args.get("formato", "pdf").lower()
+
+    if formato not in ("pdf", "docx"):
+        return jsonify({"success": False, "error": "Formato inválido. Use 'pdf' ou 'docx'"}), 400
+
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+
+        if not proposta:
+            return jsonify({"success": False, "error": "Proposta não encontrada"}), 404
+
+        edital = db.query(Edital).filter(Edital.id == proposta.edital_id).first()
+        produto = db.query(Produto).filter(Produto.id == proposta.produto_id).first()
+
+        # Montar conteúdo do documento
+        titulo = f"Proposta Técnica - {edital.numero if edital else proposta_id}"
+        conteudo_linhas = [
+            f"PROPOSTA TÉCNICA E COMERCIAL",
+            f"",
+            f"Edital: {edital.numero if edital else 'N/A'}",
+            f"Órgão: {edital.orgao if edital else 'N/A'}",
+            f"Objeto: {edital.objeto[:300] if edital and edital.objeto else 'N/A'}",
+            f"",
+            f"PRODUTO OFERTADO",
+            f"Produto: {produto.nome if produto else 'N/A'}",
+            f"Fabricante: {produto.fabricante if produto else 'N/A'}",
+            f"Modelo: {produto.modelo if produto else 'N/A'}",
+            f"",
+            f"PROPOSTA COMERCIAL",
+            f"Preço Unitário: R$ {proposta.preco_unitario:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if proposta.preco_unitario else "Preço Unitário: N/A",
+            f"Quantidade: {proposta.quantidade or 1}",
+            f"Preço Total: R$ {proposta.preco_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if proposta.preco_total else "Preço Total: N/A",
+            f"",
+            f"DESCRIÇÃO TÉCNICA",
+            proposta.texto_tecnico or "Sem descrição técnica.",
+            f"",
+            f"Status: {proposta.status}",
+            f"Data: {proposta.created_at.strftime('%d/%m/%Y') if proposta.created_at else 'N/A'}",
+        ]
+        conteudo_texto = "\n".join(conteudo_linhas)
+
+        import tempfile, os as _os
+
+        if formato == "docx":
+            try:
+                from docx import Document
+                doc = Document()
+                doc.add_heading(titulo, 0)
+                for linha in conteudo_linhas:
+                    if linha:
+                        doc.add_paragraph(linha)
+                    else:
+                        doc.add_paragraph("")
+                tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                doc.save(tmp.name)
+                tmp.close()
+                return send_file(
+                    tmp.name,
+                    mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    as_attachment=True,
+                    download_name=f"proposta_{proposta_id[:8]}.docx"
+                )
+            except ImportError:
+                return jsonify({"success": False, "error": "python-docx não instalado. Execute: pip install python-docx"}), 500
+
+        else:  # pdf
+            try:
+                from weasyprint import HTML
+                html_content = f"""
+                <html><head><meta charset="utf-8">
+                <style>
+                  body {{ font-family: Arial, sans-serif; margin: 40px; font-size: 12px; }}
+                  h1 {{ color: #1e3a5f; border-bottom: 2px solid #1e3a5f; }}
+                  h2 {{ color: #1e3a5f; margin-top: 20px; }}
+                  .label {{ font-weight: bold; }}
+                  table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
+                  td {{ padding: 4px 8px; border: 1px solid #ddd; }}
+                </style>
+                </head><body>
+                <h1>{titulo}</h1>
+                <pre style="white-space: pre-wrap;">{conteudo_texto}</pre>
+                </body></html>
+                """
+                tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                HTML(string=html_content).write_pdf(tmp.name)
+                tmp.close()
+                return send_file(
+                    tmp.name,
+                    mimetype="application/pdf",
+                    as_attachment=True,
+                    download_name=f"proposta_{proposta_id[:8]}.pdf"
+                )
+            except ImportError:
+                # Fallback: gerar PDF simples com reportlab
+                try:
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.pdfgen import canvas
+                    from reportlab.lib.units import cm
+
+                    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                    c = canvas.Canvas(tmp.name, pagesize=A4)
+                    largura, altura = A4
+                    y = altura - 2 * cm
+
+                    c.setFont("Helvetica-Bold", 16)
+                    c.drawString(2 * cm, y, titulo)
+                    y -= 1 * cm
+
+                    c.setFont("Helvetica", 10)
+                    for linha in conteudo_linhas:
+                        if y < 2 * cm:
+                            c.showPage()
+                            y = altura - 2 * cm
+                            c.setFont("Helvetica", 10)
+                        c.drawString(2 * cm, y, linha[:100])
+                        y -= 0.5 * cm
+
+                    c.save()
+                    tmp.close()
+                    return send_file(
+                        tmp.name,
+                        mimetype="application/pdf",
+                        as_attachment=True,
+                        download_name=f"proposta_{proposta_id[:8]}.pdf"
+                    )
+                except ImportError:
+                    return jsonify({"success": False, "error": "Nenhuma lib de PDF disponível. Instale weasyprint ou reportlab"}), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         db.close()
 

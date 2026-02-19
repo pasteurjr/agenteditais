@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { PageProps } from "../types";
 import { FileEdit, Eye, Download, Trash2, Send, Lightbulb } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList, crudCreate, crudDelete } from "../api/crud";
+import { getEditais, getProdutos } from "../api/client";
+import type { Edital, Produto } from "../api/client";
 
 interface Proposta {
   id: string;
@@ -16,20 +20,39 @@ interface Proposta {
   conteudo?: string;
 }
 
-// Dados mock
-const mockPropostas: Proposta[] = [
-  { id: "1", edital: "PE-001/2026", orgao: "UFMG", produto: "Microscopio ABC-500", precoUnitario: 11000, quantidade: 5, valorTotal: 55000, dataCriacao: "10/02/2026", status: "pronta", conteudo: "PROPOSTA TECNICA\n\nEdital: PE-001/2026\nProduto: Microscopio Optico ABC-500\n..." },
-  { id: "2", edital: "PE-045/2026", orgao: "CEMIG", produto: "Centrifuga XYZ-2000", precoUnitario: 8500, quantidade: 5, valorTotal: 42500, dataCriacao: "08/02/2026", status: "enviada" },
-  { id: "3", edital: "CC-012/2026", orgao: "Pref. BH", produto: "Autoclave AM-123", precoUnitario: 15000, quantidade: 2, valorTotal: 30000, dataCriacao: "05/02/2026", status: "rascunho" },
-];
+function mapCrudToProposta(item: Record<string, unknown>): Proposta {
+  const precoUnitario = Number(item.preco_unitario ?? item.precoUnitario ?? 0);
+  const quantidade = Number(item.quantidade ?? 1);
+  return {
+    id: String(item.id ?? ""),
+    edital: String(item.numero_edital ?? item.edital ?? ""),
+    orgao: String(item.orgao ?? ""),
+    produto: String(item.nome_produto ?? item.produto ?? ""),
+    precoUnitario,
+    quantidade,
+    valorTotal: Number(item.preco_total ?? item.valorTotal ?? precoUnitario * quantidade),
+    dataCriacao: String(item.created_at ?? item.dataCriacao ?? "").split("T")[0],
+    status: (["rascunho", "pronta", "enviada"].includes(String(item.status))
+      ? item.status
+      : "rascunho") as Proposta["status"],
+    conteudo: item.texto_tecnico ? String(item.texto_tecnico) : undefined,
+  };
+}
 
-export function PropostaPage() {
-  const [propostas, setPropostas] = useState<Proposta[]>(mockPropostas);
+export function PropostaPage(props?: PageProps) {
+  const { onSendToChat } = props ?? {};
+
+  const [propostas, setPropostas] = useState<Proposta[]>([]);
+  const [loadingLista, setLoadingLista] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todas");
   const [selectedProposta, setSelectedProposta] = useState<Proposta | null>(null);
   const [showGerarModal, setShowGerarModal] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Listas para selects
+  const [editais, setEditais] = useState<Edital[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
 
   // Formulario de nova proposta
   const [novoEdital, setNovoEdital] = useState("");
@@ -39,60 +62,161 @@ export function PropostaPage() {
   const [precoSugerido, setPrecoSugerido] = useState<number | null>(null);
 
   const filteredPropostas = propostas.filter((p) => {
-    const matchSearch = p.edital.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchSearch =
+      p.edital.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.produto.toLowerCase().includes(searchTerm.toLowerCase());
     const matchStatus = statusFilter === "todas" || p.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
+  // Carregar dados ao montar
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingLista(true);
+      try {
+        const res = await crudList("propostas", { limit: 100 });
+        setPropostas(res.items.map(mapCrudToProposta));
+      } catch {
+        setPropostas([]);
+      } finally {
+        setLoadingLista(false);
+      }
+
+      try {
+        setEditais(await getEditais("salvo"));
+      } catch {
+        setEditais([]);
+      }
+
+      try {
+        setProdutos(await getProdutos());
+      } catch {
+        setProdutos([]);
+      }
+    };
+    loadData();
+  }, []);
+
   const handleSugerirPreco = async () => {
-    // TODO: Chamar API para sugerir preco
-    // Prompt: recomendar_preco
-    setPrecoSugerido(11500);
+    const edital = editais.find((e) => e.id === novoEdital || e.numero === novoEdital);
+    const produto = produtos.find((p) => p.id === novoProduto || p.nome === novoProduto);
+    const editalDesc = edital ? `${edital.numero} - ${edital.orgao}` : novoEdital;
+    const produtoDesc = produto ? produto.nome : novoProduto;
+
+    if (onSendToChat && (editalDesc || produtoDesc)) {
+      onSendToChat(
+        `Sugira um preço unitário competitivo para:\n` +
+        `- Edital: ${editalDesc || "(não selecionado)"}\n` +
+        `- Produto: ${produtoDesc || "(não selecionado)"}\n` +
+        `Retorne somente o valor numérico recomendado com justificativa breve.`
+      );
+    }
+
+    // Tenta buscar preco sugerido da analise
+    try {
+      const res = await crudList("preco-historico", { q: produtoDesc, limit: 20 });
+      const items = res.items as Record<string, unknown>[];
+      if (items.length > 0) {
+        const precos = items.map((i) => Number(i.preco ?? i.preco_ofertado ?? 0)).filter((v) => v > 0);
+        if (precos.length > 0) {
+          const media = precos.reduce((a, b) => a + b, 0) / precos.length;
+          setPrecoSugerido(Math.round(media * 0.95));
+        }
+      }
+    } catch {
+      // apenas via IA
+    }
   };
 
   const handleGerarProposta = async () => {
     if (!novoEdital || !novoProduto || !novoPreco || !novaQuantidade) return;
-    // TODO: Chamar API para gerar proposta
-    // Prompt: gerar_proposta
     setLoading(true);
-    setTimeout(() => {
-      const novaProposta: Proposta = {
-        id: String(propostas.length + 1),
-        edital: novoEdital,
-        orgao: "UFMG",
-        produto: novoProduto === "microscopio" ? "Microscopio ABC-500" : novoProduto,
-        precoUnitario: Number(novoPreco),
-        quantidade: Number(novaQuantidade),
-        valorTotal: Number(novoPreco) * Number(novaQuantidade),
-        dataCriacao: new Date().toLocaleDateString("pt-BR"),
-        status: "pronta",
-        conteudo: "PROPOSTA TECNICA GERADA PELA IA...",
+
+    const edital = editais.find((e) => e.id === novoEdital || e.numero === novoEdital);
+    const produto = produtos.find((p) => p.id === novoProduto || p.nome === novoProduto);
+    const editalDesc = edital ? `${edital.numero} - ${edital.orgao}` : novoEdital;
+    const produtoDesc = produto ? produto.nome : novoProduto;
+    const preco = Number(novoPreco);
+    const qtd = Number(novaQuantidade);
+
+    try {
+      // Criar proposta no backend
+      const data: Record<string, unknown> = {
+        numero_edital: edital?.numero ?? novoEdital,
+        orgao: edital?.orgao ?? "",
+        nome_produto: produtoDesc,
+        preco_unitario: preco,
+        quantidade: qtd,
+        preco_total: preco * qtd,
+        status: "rascunho",
       };
+      if (edital?.id) data.edital_id = edital.id;
+      if (produto?.id) data.produto_id = produto.id;
+
+      const created = await crudCreate("propostas", data);
+      const novaProposta = mapCrudToProposta(created);
       setPropostas([novaProposta, ...propostas]);
+
+      // Solicitar geração do texto técnico via IA
+      if (onSendToChat) {
+        onSendToChat(
+          `Gere uma proposta técnica completa para:\n` +
+          `- Edital: ${editalDesc}\n` +
+          `- Produto: ${produtoDesc}\n` +
+          `- Preço Unitário: R$ ${preco.toFixed(2)}\n` +
+          `- Quantidade: ${qtd}\n` +
+          `- Valor Total: R$ ${(preco * qtd).toFixed(2)}\n\n` +
+          `Inclua: identificação da empresa, objeto, especificações técnicas, prazo de entrega e validade da proposta.`
+        );
+      }
+
       setShowGerarModal(false);
-      setLoading(false);
-      // Reset form
       setNovoEdital("");
       setNovoProduto("");
       setNovoPreco("");
       setNovaQuantidade("");
       setPrecoSugerido(null);
-    }, 2000);
+    } catch (err) {
+      console.error("Erro ao criar proposta:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleExcluirProposta = (id: string) => {
-    // TODO: Chamar API para excluir proposta
-    // Prompt: excluir_proposta
-    setPropostas(propostas.filter(p => p.id !== id));
-    if (selectedProposta?.id === id) {
-      setSelectedProposta(null);
+  const handleExcluirProposta = async (id: string) => {
+    try {
+      await crudDelete("propostas", id);
+      setPropostas(propostas.filter((p) => p.id !== id));
+      if (selectedProposta?.id === id) {
+        setSelectedProposta(null);
+      }
+    } catch (err) {
+      console.error("Erro ao excluir proposta:", err);
     }
   };
 
   const handleBaixarProposta = (proposta: Proposta, formato: "docx" | "pdf") => {
-    // TODO: Chamar API para baixar proposta
-    console.log(`Baixando proposta ${proposta.edital} em ${formato}`);
+    const token = localStorage.getItem("editais_ia_access_token");
+    const url = `/api/propostas/${proposta.id}/export?formato=${formato}`;
+    // Abre em nova aba com auth via token na URL não é seguro;
+    // usar fetch + blob para download
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro ao baixar");
+        return res.blob();
+      })
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `proposta-${proposta.edital}.${formato}`;
+        link.click();
+      })
+      .catch(() => {
+        // endpoint ainda não disponível - notifica via chat
+        if (onSendToChat) {
+          onSendToChat(`Exporte a proposta ${proposta.edital} no formato ${formato.toUpperCase()}.`);
+        }
+      });
   };
 
   const formatCurrency = (value: number) => {
@@ -109,6 +233,16 @@ export function PropostaPage() {
         return <span className="status-badge status-badge-info">Enviada</span>;
     }
   };
+
+  const editalOptions = [
+    { value: "", label: "Selecione..." },
+    ...editais.map((e) => ({ value: e.id ?? e.numero, label: `${e.numero} - ${e.orgao}` })),
+  ];
+
+  const produtoOptions = [
+    { value: "", label: "Selecione..." },
+    ...produtos.map((p) => ({ value: p.id, label: p.nome })),
+  ];
 
   const columns: Column<Proposta>[] = [
     { key: "edital", header: "Edital", sortable: true },
@@ -158,24 +292,14 @@ export function PropostaPage() {
               <SelectInput
                 value={novoEdital}
                 onChange={setNovoEdital}
-                options={[
-                  { value: "", label: "Selecione..." },
-                  { value: "PE-001/2026", label: "PE-001/2026 - UFMG - Microscopios" },
-                  { value: "PE-045/2026", label: "PE-045/2026 - CEMIG - Equip. Lab" },
-                  { value: "CC-012/2026", label: "CC-012/2026 - Pref. BH - Material" },
-                ]}
+                options={editalOptions}
               />
             </FormField>
             <FormField label="Produto">
               <SelectInput
                 value={novoProduto}
                 onChange={setNovoProduto}
-                options={[
-                  { value: "", label: "Selecione..." },
-                  { value: "microscopio", label: "Microscopio ABC-500" },
-                  { value: "centrifuga", label: "Centrifuga XYZ-2000" },
-                  { value: "autoclave", label: "Autoclave AM-123" },
-                ]}
+                options={produtoOptions}
               />
             </FormField>
             <FormField label="Preco Unitario" hint={precoSugerido ? `Sugerido: ${formatCurrency(precoSugerido)}` : undefined}>
@@ -241,7 +365,7 @@ export function PropostaPage() {
             idKey="id"
             onRowClick={setSelectedProposta}
             selectedId={selectedProposta?.id}
-            emptyMessage="Nenhuma proposta encontrada"
+            emptyMessage={loadingLista ? "Carregando..." : "Nenhuma proposta encontrada"}
           />
         </Card>
 
@@ -305,22 +429,14 @@ export function PropostaPage() {
           <SelectInput
             value={novoEdital}
             onChange={setNovoEdital}
-            options={[
-              { value: "", label: "Selecione o edital..." },
-              { value: "PE-001/2026", label: "PE-001/2026 - UFMG" },
-              { value: "PE-045/2026", label: "PE-045/2026 - CEMIG" },
-            ]}
+            options={editalOptions}
           />
         </FormField>
         <FormField label="Produto" required>
           <SelectInput
             value={novoProduto}
             onChange={setNovoProduto}
-            options={[
-              { value: "", label: "Selecione o produto..." },
-              { value: "microscopio", label: "Microscopio ABC-500" },
-              { value: "centrifuga", label: "Centrifuga XYZ-2000" },
-            ]}
+            options={produtoOptions}
           />
         </FormField>
         <FormField label="Preco Unitario" required>

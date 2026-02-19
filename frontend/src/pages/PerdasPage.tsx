@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { XCircle, TrendingDown, PieChart, BarChart2 } from "lucide-react";
 import { Card, DataTable, FormField, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
@@ -37,7 +38,7 @@ const mockMotivos: MotivoPerda[] = [
   { motivo: "Outros", quantidade: 1, percentual: 7 },
 ];
 
-export function PerdasPage() {
+export function PerdasPage(_props?: PageProps) {
   const [perdas] = useState<Perda[]>(mockPerdas);
   const [motivos] = useState<MotivoPerda[]>(mockMotivos);
   const [periodo, setPeriodo] = useState("6m");

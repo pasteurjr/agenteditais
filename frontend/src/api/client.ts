@@ -1,6 +1,6 @@
 import type { Session, ChatResponse, Message } from "../types";
 
-const API_BASE = "http://localhost:5007";
+const API_BASE = "";
 
 // Token getter function - will be set by AuthContext
 let getAccessTokenFn: (() => Promise<string | null>) | null = null;

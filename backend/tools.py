@@ -16,7 +16,8 @@ from models import (
     get_db, Produto, ProdutoEspecificacao, ProdutoDocumento,
     FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
-    Concorrente, PrecoHistorico, ParticipacaoEdital
+    Concorrente, PrecoHistorico, ParticipacaoEdital,
+    ParametroScore
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL
@@ -1902,6 +1903,31 @@ def tool_listar_produtos(user_id: str, categoria: str = None,
         db.close()
 
 
+def _get_pesos_score(db, user_id: str) -> Dict[str, float]:
+    """
+    Lê pesos da tabela parametros_score para o user_id.
+    Retorna defaults se não houver configuração cadastrada.
+    """
+    params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
+    if params:
+        return {
+            "peso_tecnico": float(params.peso_tecnico) if params.peso_tecnico else 0.40,
+            "peso_comercial": float(params.peso_comercial) if params.peso_comercial else 0.25,
+            "peso_participacao": float(params.peso_participacao) if params.peso_participacao else 0.20,
+            "peso_ganho": float(params.peso_ganho) if params.peso_ganho else 0.15,
+            "limiar_go": float(params.limiar_go) if params.limiar_go else 70.0,
+            "limiar_nogo": float(params.limiar_nogo) if params.limiar_nogo else 40.0,
+        }
+    return {
+        "peso_tecnico": 0.40,
+        "peso_comercial": 0.25,
+        "peso_participacao": 0.20,
+        "peso_ganho": 0.15,
+        "limiar_go": 70.0,
+        "limiar_nogo": 40.0,
+    }
+
+
 def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str) -> Dict[str, Any]:
     """
     Calcula a aderência de um produto a um edital.
@@ -1909,6 +1935,11 @@ def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str) -> Di
     """
     db = get_db()
     try:
+        # Carregar pesos configurados pelo usuário (ou defaults)
+        pesos = _get_pesos_score(db, user_id)
+        limiar_go = pesos["limiar_go"]
+        limiar_nogo = pesos["limiar_nogo"]
+
         # Buscar produto e edital
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
@@ -2001,8 +2032,16 @@ Exemplo:
 
                 resultado_ia = json.loads(resposta_limpa)
 
-                score = resultado_ia.get("score", 0)
-                recomendacao = resultado_ia.get("recomendacao", "AVALIAR")
+                score_bruto = resultado_ia.get("score", 0)
+                # Aplicar peso_tecnico ao score bruto da IA
+                score = round(score_bruto * pesos["peso_tecnico"] / 0.40, 2)
+                # Usar limiares configurados para recomendar
+                if score >= limiar_go:
+                    recomendacao = "RECOMENDADO"
+                elif score >= limiar_nogo:
+                    recomendacao = "AVALIAR"
+                else:
+                    recomendacao = "NAO_RECOMENDADO"
                 justificativa = resultado_ia.get("justificativa", "Análise via IA")
 
                 return {
@@ -2134,20 +2173,22 @@ Exemplo:
                 "justificativa": justificativa
             })
 
-        # Calcular scores
+        # Calcular scores usando peso_tecnico dos parâmetros configurados
         total = len(requisitos)
         score_tecnico = ((atendidos + parciais * 0.5) / total) * 100 if total > 0 else 0
+        # Score final ponderado pelo peso técnico configurado
+        score_final = round(score_tecnico * pesos["peso_tecnico"] / 0.40, 2)
 
         analise.requisitos_atendidos = atendidos
         analise.requisitos_parciais = parciais
         analise.requisitos_nao_atendidos = nao_atendidos
         analise.score_tecnico = Decimal(str(round(score_tecnico, 2)))
-        analise.score_final = analise.score_tecnico  # Por enquanto, só score técnico
+        analise.score_final = Decimal(str(score_final))
 
-        # Gerar recomendação
-        if score_tecnico >= 80:
+        # Gerar recomendação usando limiares configurados
+        if score_tecnico >= limiar_go:
             analise.recomendacao = "RECOMENDADO participar. Alta aderência técnica."
-        elif score_tecnico >= 50:
+        elif score_tecnico >= limiar_nogo:
             analise.recomendacao = "AVALIAR participação. Aderência média, verificar requisitos não atendidos."
         else:
             analise.recomendacao = "NÃO RECOMENDADO. Baixa aderência técnica."
@@ -6115,3 +6156,316 @@ def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
+
+# =============================================================================
+# Onda 2 - T10: tool_calcular_scores_validacao (6 dimensões + GO/NO-GO)
+# =============================================================================
+
+PROMPT_SCORES_VALIDACAO = """Você é um especialista em licitações públicas brasileiras com profundo conhecimento técnico, jurídico, logístico e comercial.
+
+Analise o edital abaixo e calcule 6 scores de validação (0 a 100) e dê uma decisão GO/NO-GO.
+
+## EDITAL:
+- Número: {numero}
+- Órgão: {orgao}
+- Objeto: {objeto}
+- Valor Estimado: {valor}
+- Modalidade: {modalidade}
+- UF: {uf}
+- Data Abertura: {data_abertura}
+
+## PRODUTO/EMPRESA DO USUÁRIO:
+{produto_info}
+
+## SCORES A CALCULAR (0-100):
+
+1. **score_tecnico** (0-100): Aderência técnica do produto ao objeto do edital.
+   - 90-100: Produto atende 100% dos requisitos técnicos
+   - 70-89: Atende requisitos principais, pequenas adaptações
+   - 50-69: Atende parcialmente, requer ajustes
+   - 0-49: Baixa aderência técnica
+
+2. **score_documental** (0-100): Facilidade de cumprir os requisitos documentais.
+   - 90-100: Documentação padrão, fácil de obter
+   - 70-89: Maioria da documentação disponível
+   - 50-69: Alguns documentos complexos ou demorados
+   - 0-49: Documentação difícil ou impossível
+
+3. **score_complexidade** (0-100): INVERSAMENTE proporcional à complexidade do edital.
+   - 90-100: Edital simples, poucos requisitos
+   - 70-89: Complexidade moderada
+   - 50-69: Edital complexo, muitas exigências
+   - 0-49: Extremamente complexo ou restritivo
+
+4. **score_juridico** (0-100): Segurança jurídica e ausência de riscos legais.
+   - 90-100: Sem restrições legais, edital bem elaborado
+   - 70-89: Pequenas questões jurídicas, riscos baixos
+   - 50-69: Alguns pontos questionáveis, possível impugnação
+   - 0-49: Alto risco jurídico ou edital direcionado
+
+5. **score_logistico** (0-100): Viabilidade logística (entrega, instalação, suporte).
+   - 90-100: Entrega simples, local acessível
+   - 70-89: Logística moderada, razoavelmente viável
+   - 50-69: Logística desafiadora
+   - 0-49: Logística inviável ou muito custosa
+
+6. **score_comercial** (0-100): Atratividade comercial (margem, concorrência, volume).
+   - 90-100: Alta margem esperada, baixa concorrência
+   - 70-89: Boa oportunidade comercial
+   - 50-69: Margem moderada, concorrência média
+   - 0-49: Margem muito baixa ou alta concorrência
+
+## DECISÃO:
+Com base nos scores:
+- **GO**: score_final >= 70 E score_tecnico >= 60 E score_juridico >= 60
+- **NO-GO**: score_final < 40 OU score_tecnico < 30 OU score_juridico < 30
+- **AVALIAR**: demais casos
+
+## RESPONDA APENAS EM JSON:
+{{
+  "score_tecnico": <0-100>,
+  "score_documental": <0-100>,
+  "score_complexidade": <0-100>,
+  "score_juridico": <0-100>,
+  "score_logistico": <0-100>,
+  "score_comercial": <0-100>,
+  "score_final": <média ponderada>,
+  "decisao": "GO" | "NO-GO" | "AVALIAR",
+  "justificativa": "<2-3 frases explicando a decisão>",
+  "pontos_positivos": ["<ponto 1>", "<ponto 2>"],
+  "pontos_atencao": ["<risco 1>", "<risco 2>"]
+}}
+
+O score_final deve ser calculado com os pesos:
+- técnico: 35%, documental: 15%, complexidade: 15%, jurídico: 20%, logístico: 5%, comercial: 10%
+"""
+
+
+def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str = None) -> Dict[str, Any]:
+    """
+    Calcula 6 dimensões de score de validação para um edital:
+    técnico, documental, complexidade, jurídico, logístico, comercial.
+    Retorna também decisão GO/NO-GO.
+
+    Args:
+        edital_id: ID do edital a analisar
+        user_id: ID do usuário
+        produto_id: (opcional) ID do produto específico para análise. Se None, usa o primeiro produto.
+
+    Returns:
+        Dict com scores, decisão GO/NO-GO e justificativa
+    """
+    db = get_db()
+    try:
+        # Buscar edital
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Buscar produto
+        produto = None
+        if produto_id:
+            produto = db.query(Produto).filter(
+                Produto.id == produto_id,
+                Produto.user_id == user_id
+            ).first()
+
+        if not produto:
+            produto = db.query(Produto).filter(
+                Produto.user_id == user_id
+            ).first()
+
+        # Montar informação do produto para o prompt
+        if produto:
+            specs = db.query(ProdutoEspecificacao).filter(
+                ProdutoEspecificacao.produto_id == produto.id
+            ).limit(5).all()
+            specs_texto = "; ".join([f"{s.nome_especificacao}: {s.valor}" for s in specs])
+            produto_info = (
+                f"Nome: {produto.nome}\n"
+                f"Categoria: {produto.categoria}\n"
+                f"Fabricante: {produto.fabricante or 'N/A'}\n"
+                f"Modelo: {produto.modelo or 'N/A'}\n"
+                f"Especificações: {specs_texto or 'Não disponível'}"
+            )
+        else:
+            produto_info = "Produto não informado. Analise considerando um produto genérico da categoria do edital."
+
+        valor_str = "Não informado"
+        if edital.valor_referencia:
+            v = float(edital.valor_referencia)
+            valor_str = f"R$ {v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+        prompt = PROMPT_SCORES_VALIDACAO.format(
+            numero=edital.numero,
+            orgao=edital.orgao,
+            objeto=(edital.objeto or "")[:600],
+            valor=valor_str,
+            modalidade=edital.modalidade or "pregao_eletronico",
+            uf=edital.uf or "N/A",
+            data_abertura=edital.data_abertura.strftime('%d/%m/%Y %H:%M') if edital.data_abertura else "N/A",
+            produto_info=produto_info
+        )
+
+        print(f"[SCORES_VALIDACAO] Calculando para edital {edital.numero}...")
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            model_override="deepseek-chat"
+        )
+
+        if not resposta or len(resposta.strip()) < 10:
+            return {"success": False, "error": "Resposta vazia da IA"}
+
+        # Extrair JSON
+        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        if not json_match:
+            return {"success": False, "error": "IA não retornou JSON válido"}
+
+        raw_json = json_match.group().replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        raw_json = re.sub(r'  +', ' ', raw_json)
+
+        scores_data = json.loads(raw_json)
+
+        # Salvar na análise existente ou criar nova
+        analise = db.query(Analise).filter(
+            Analise.edital_id == edital_id,
+            Analise.user_id == user_id
+        ).first()
+
+        if analise:
+            analise.score_tecnico = scores_data.get('score_tecnico')
+            analise.score_comercial = scores_data.get('score_comercial')
+            analise.score_final = scores_data.get('score_final')
+            analise.recomendacao = (
+                f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
+            )
+        else:
+            analise = Analise(
+                edital_id=edital_id,
+                produto_id=produto.id if produto else edital_id,
+                user_id=user_id,
+                score_tecnico=scores_data.get('score_tecnico'),
+                score_comercial=scores_data.get('score_comercial'),
+                score_final=scores_data.get('score_final'),
+                recomendacao=f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
+            )
+            db.add(analise)
+
+        db.commit()
+
+        print(f"[SCORES_VALIDACAO] {edital.numero}: score_final={scores_data.get('score_final')}, decisao={scores_data.get('decisao')}")
+
+        return {
+            "success": True,
+            "edital_id": edital_id,
+            "edital_numero": edital.numero,
+            "analise_id": analise.id,
+            "scores": {
+                "tecnico": scores_data.get('score_tecnico'),
+                "documental": scores_data.get('score_documental'),
+                "complexidade": scores_data.get('score_complexidade'),
+                "juridico": scores_data.get('score_juridico'),
+                "logistico": scores_data.get('score_logistico'),
+                "comercial": scores_data.get('score_comercial'),
+                "final": scores_data.get('score_final')
+            },
+            "decisao": scores_data.get('decisao', 'AVALIAR'),
+            "justificativa": scores_data.get('justificativa', ''),
+            "pontos_positivos": scores_data.get('pontos_positivos', []),
+            "pontos_atencao": scores_data.get('pontos_atencao', [])
+        }
+
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Erro ao parsear resposta da IA: {e}"}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Onda 2 - T11: tool_atualizar_status_proposta
+# =============================================================================
+
+def tool_atualizar_status_proposta(proposta_id: str, user_id: str, novo_status: str,
+                                    observacao: str = None) -> Dict[str, Any]:
+    """
+    Atualiza o status de uma proposta seguindo workflow:
+    rascunho -> revisao -> aprovada -> enviada -> aceita/rejeitada
+
+    Args:
+        proposta_id: ID da proposta
+        user_id: ID do usuário
+        novo_status: Novo status desejado
+        observacao: Observação opcional sobre a mudança de status
+
+    Returns:
+        Dict com resultado da operação
+    """
+    # Status do modelo: rascunho, revisao, aprovada, enviada
+    TRANSICOES_VALIDAS = {
+        "rascunho": ["revisao"],
+        "revisao": ["rascunho", "aprovada"],
+        "aprovada": ["revisao", "enviada"],
+        "enviada": ["aprovada", "rascunho"]
+    }
+
+    STATUS_VALIDOS = list(TRANSICOES_VALIDAS.keys())
+
+    if novo_status not in STATUS_VALIDOS:
+        return {
+            "success": False,
+            "error": f"Status inválido '{novo_status}'. Válidos: {', '.join(STATUS_VALIDOS)}"
+        }
+
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+
+        if not proposta:
+            return {"success": False, "error": "Proposta não encontrada"}
+
+        status_atual = proposta.status
+        transicoes = TRANSICOES_VALIDAS.get(status_atual, [])
+
+        if novo_status not in transicoes:
+            return {
+                "success": False,
+                "error": f"Transição inválida: '{status_atual}' -> '{novo_status}'. Permitidas: {transicoes}"
+            }
+
+        proposta.status = novo_status
+        proposta.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "proposta_id": proposta_id,
+            "status_anterior": status_atual,
+            "status_atual": novo_status,
+            "mensagem": f"Proposta atualizada: {status_atual} → {novo_status}",
+            "observacao": observacao
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# Registrar novas tools Onda 2 no TOOLS_MAP
+TOOLS_MAP["calcular_scores_validacao"] = tool_calcular_scores_validacao
+TOOLS_MAP["atualizar_status_proposta"] = tool_atualizar_status_proposta

@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:5007";
+const API_BASE = "";
 
 export interface User {
   id: string;

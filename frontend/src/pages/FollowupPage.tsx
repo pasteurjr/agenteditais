@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { ClipboardList, Phone, Bell, Trophy, XCircle, Ban, Clock } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal } from "../components/common";
 import type { Column } from "../components/common";
@@ -36,7 +37,7 @@ const mockResultados: Resultado[] = [
   { id: "3", edital: "PE-018/2026", orgao: "UNICAMP", resultado: "cancelado", data: "03/02/2026" },
 ];
 
-export function FollowupPage() {
+export function FollowupPage(_props?: PageProps) {
   const [aguardando] = useState<EditalAguardando[]>(mockAguardando);
   const [resultados, setResultados] = useState<Resultado[]>(mockResultados);
   const [showRegistrarModal, setShowRegistrarModal] = useState(false);

@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { PageProps } from "../types";
 import { Send, CheckSquare, Upload, ExternalLink, Clock, CheckCircle } from "lucide-react";
 import { Card, DataTable, ActionButton, Modal, FormField, TextInput } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList, crudUpdate } from "../api/crud";
 
 interface PropostaPronta {
   id: string;
@@ -21,81 +23,147 @@ interface PropostaPronta {
   };
 }
 
-// Dados mock
-const mockPropostas: PropostaPronta[] = [
-  {
-    id: "1",
-    edital: "PE-001/2026",
-    orgao: "UFMG",
-    produto: "Microscopio ABC-500",
-    valor: 55000,
-    dataAbertura: "15/02/2026",
-    horaAbertura: "14:00",
-    status: "aguardando",
-    checklist: {
-      propostaTecnica: true,
-      precoDefinido: true,
-      documentosAnexados: 3,
-      documentosTotal: 5,
-      revisaoFinal: false,
-    },
-  },
-  {
-    id: "2",
-    edital: "PE-045/2026",
-    orgao: "CEMIG",
-    produto: "Centrifuga XYZ-2000",
-    valor: 42500,
-    dataAbertura: "20/02/2026",
-    horaAbertura: "10:00",
-    status: "enviada",
-    checklist: {
-      propostaTecnica: true,
-      precoDefinido: true,
-      documentosAnexados: 5,
-      documentosTotal: 5,
-      revisaoFinal: true,
-    },
-  },
-  {
-    id: "3",
-    edital: "CC-012/2026",
-    orgao: "Pref. BH",
-    produto: "Autoclave AM-123",
-    valor: 30000,
-    dataAbertura: "25/02/2026",
-    horaAbertura: "09:00",
-    status: "confirmada",
-    checklist: {
-      propostaTecnica: true,
-      precoDefinido: true,
-      documentosAnexados: 4,
-      documentosTotal: 4,
-      revisaoFinal: true,
-    },
-  },
-];
+function mapCrudToPropostaPronta(item: Record<string, unknown>): PropostaPronta {
+  const statusRaw = String(item.status ?? "rascunho");
+  let status: PropostaPronta["status"] = "aguardando";
+  if (statusRaw === "enviada") status = "enviada";
+  else if (statusRaw === "confirmada") status = "confirmada";
+  else if (statusRaw === "pronta" || statusRaw === "rascunho") status = "aguardando";
 
-export function SubmissaoPage() {
-  const [propostas, setPropostas] = useState<PropostaPronta[]>(mockPropostas);
+  const dataAbertura = String(item.data_abertura ?? item.dataAbertura ?? "");
+  let dataPart = "";
+  let horaPart = "";
+  if (dataAbertura.includes("T")) {
+    [dataPart, horaPart] = dataAbertura.split("T");
+    horaPart = horaPart?.slice(0, 5) ?? "";
+  } else if (dataAbertura.includes(" ")) {
+    [dataPart, horaPart] = dataAbertura.split(" ");
+  } else {
+    dataPart = dataAbertura;
+    horaPart = "00:00";
+  }
+
+  const precoDefinido = Number(item.preco_unitario ?? item.precoUnitario ?? 0) > 0;
+  const temTexto = Boolean(item.texto_tecnico ?? item.conteudo);
+
+  return {
+    id: String(item.id ?? ""),
+    edital: String(item.numero_edital ?? item.edital ?? ""),
+    orgao: String(item.orgao ?? ""),
+    produto: String(item.nome_produto ?? item.produto ?? ""),
+    valor: Number(item.preco_total ?? item.valorTotal ?? 0),
+    dataAbertura: dataPart,
+    horaAbertura: horaPart || "00:00",
+    status,
+    checklist: {
+      propostaTecnica: temTexto,
+      precoDefinido,
+      documentosAnexados: Number(item.documentos_anexados ?? 0),
+      documentosTotal: Number(item.documentos_total ?? 3),
+      revisaoFinal: status !== "aguardando",
+    },
+  };
+}
+
+export function SubmissaoPage(_props?: PageProps) {
+  const [propostas, setPropostas] = useState<PropostaPronta[]>([]);
+  const [loadingLista, setLoadingLista] = useState(true);
   const [selectedProposta, setSelectedProposta] = useState<PropostaPronta | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [uploadTipo, setUploadTipo] = useState("");
+  const [uploadObs, setUploadObs] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const handleMarcarEnviada = (id: string) => {
-    setPropostas(propostas.map(p =>
-      p.id === id ? { ...p, status: "enviada" as const } : p
-    ));
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingLista(true);
+      try {
+        // Listar propostas que estão prontas ou enviadas
+        const res = await crudList("propostas", { limit: 100 });
+        const items = res.items as Record<string, unknown>[];
+        // Filtrar apenas propostas relevantes para submissão (não rascunho simples)
+        const filtered = items.filter((item) => {
+          const s = String(item.status ?? "");
+          return s !== "cancelada" && s !== "perdida";
+        });
+        setPropostas(filtered.map(mapCrudToPropostaPronta));
+      } catch {
+        setPropostas([]);
+      } finally {
+        setLoadingLista(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const handleMarcarEnviada = async (id: string) => {
+    setLoadingStatus(true);
+    try {
+      await crudUpdate("propostas", id, { status: "enviada" });
+      const updated = propostas.map((p) =>
+        p.id === id ? { ...p, status: "enviada" as const, checklist: { ...p.checklist, revisaoFinal: true } } : p
+      );
+      setPropostas(updated);
+      if (selectedProposta?.id === id) {
+        setSelectedProposta(updated.find((p) => p.id === id) ?? null);
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar status:", err);
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
+  const handleConfirmar = async (id: string) => {
+    setLoadingStatus(true);
+    try {
+      await crudUpdate("propostas", id, { status: "confirmada" });
+      const updated = propostas.map((p) =>
+        p.id === id ? { ...p, status: "confirmada" as const } : p
+      );
+      setPropostas(updated);
+      if (selectedProposta?.id === id) {
+        setSelectedProposta(updated.find((p) => p.id === id) ?? null);
+      }
+    } catch (err) {
+      console.error("Erro ao confirmar proposta:", err);
+    } finally {
+      setLoadingStatus(false);
+    }
   };
 
   const handleAbrirPortal = (proposta: PropostaPronta) => {
-    // TODO: Abrir portal PNCP/ComprasNET
-    console.log("Abrindo portal para:", proposta.edital);
     window.open("https://pncp.gov.br", "_blank");
+    console.log("Abrindo portal para:", proposta.edital);
   };
 
   const handleAnexarDocumento = () => {
-    // TODO: Implementar upload de documento
     setShowUploadModal(true);
+  };
+
+  const handleSalvarDocumento = async () => {
+    if (!selectedProposta || !uploadFile) return;
+    try {
+      // Atualizar contagem de documentos no backend
+      const novoAnexado = (selectedProposta.checklist.documentosAnexados ?? 0) + 1;
+      await crudUpdate("propostas", selectedProposta.id, {
+        documentos_anexados: novoAnexado,
+      });
+      const updated = propostas.map((p) =>
+        p.id === selectedProposta.id
+          ? { ...p, checklist: { ...p.checklist, documentosAnexados: novoAnexado } }
+          : p
+      );
+      setPropostas(updated);
+      setSelectedProposta(updated.find((p) => p.id === selectedProposta.id) ?? null);
+    } catch (err) {
+      console.error("Erro ao anexar documento:", err);
+    }
+    setShowUploadModal(false);
+    setUploadTipo("");
+    setUploadObs("");
+    setUploadFile(null);
   };
 
   const formatCurrency = (value: number) => {
@@ -114,8 +182,8 @@ export function SubmissaoPage() {
   };
 
   const getChecklistProgress = (checklist: PropostaPronta["checklist"]) => {
-    let total = 4;
     let done = 0;
+    const total = 4;
     if (checklist.propostaTecnica) done++;
     if (checklist.precoDefinido) done++;
     if (checklist.documentosAnexados >= checklist.documentosTotal) done++;
@@ -131,7 +199,7 @@ export function SubmissaoPage() {
     {
       key: "abertura",
       header: "Abertura",
-      render: (p) => `${p.dataAbertura} ${p.horaAbertura}`,
+      render: (p) => p.dataAbertura ? `${p.dataAbertura} ${p.horaAbertura}` : "-",
       sortable: true,
     },
     { key: "status", header: "Status", render: (p) => getStatusBadge(p.status) },
@@ -165,7 +233,7 @@ export function SubmissaoPage() {
             idKey="id"
             onRowClick={setSelectedProposta}
             selectedId={selectedProposta?.id}
-            emptyMessage="Nenhuma proposta pronta para envio"
+            emptyMessage={loadingLista ? "Carregando..." : "Nenhuma proposta pronta para envio"}
           />
         </Card>
 
@@ -180,7 +248,7 @@ export function SubmissaoPage() {
                   <p><strong>Orgao:</strong> {selectedProposta.orgao}</p>
                   <p><strong>Produto:</strong> {selectedProposta.produto}</p>
                   <p><strong>Valor:</strong> {formatCurrency(selectedProposta.valor)}</p>
-                  <p><strong>Abertura:</strong> {selectedProposta.dataAbertura} as {selectedProposta.horaAbertura}</p>
+                  <p><strong>Abertura:</strong> {selectedProposta.dataAbertura || "-"} {selectedProposta.dataAbertura ? `as ${selectedProposta.horaAbertura}` : ""}</p>
                 </div>
               </div>
 
@@ -219,7 +287,15 @@ export function SubmissaoPage() {
                   icon={<Send size={14} />}
                   label="Marcar como Enviada"
                   onClick={() => handleMarcarEnviada(selectedProposta.id)}
-                  disabled={selectedProposta.status !== "aguardando"}
+                  disabled={selectedProposta.status !== "aguardando" || loadingStatus}
+                  loading={loadingStatus && selectedProposta.status === "aguardando"}
+                />
+                <ActionButton
+                  icon={<CheckCircle size={14} />}
+                  label="Confirmar Envio"
+                  onClick={() => handleConfirmar(selectedProposta.id)}
+                  disabled={selectedProposta.status !== "enviada" || loadingStatus}
+                  loading={loadingStatus && selectedProposta.status === "enviada"}
                 />
                 <ActionButton
                   icon={<ExternalLink size={14} />}
@@ -240,12 +316,12 @@ export function SubmissaoPage() {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowUploadModal(false)}>Cancelar</button>
-            <button className="btn btn-primary">Enviar</button>
+            <button className="btn btn-primary" onClick={handleSalvarDocumento}>Enviar</button>
           </>
         }
       >
         <FormField label="Tipo de Documento" required>
-          <select className="select-input">
+          <select className="select-input" value={uploadTipo} onChange={(e) => setUploadTipo(e.target.value)}>
             <option value="">Selecione...</option>
             <option value="proposta">Proposta Tecnica</option>
             <option value="certidao">Certidao Negativa</option>
@@ -255,10 +331,14 @@ export function SubmissaoPage() {
           </select>
         </FormField>
         <FormField label="Arquivo" required>
-          <input type="file" accept=".pdf,.doc,.docx" />
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+          />
         </FormField>
         <FormField label="Observacao">
-          <TextInput value="" onChange={() => {}} placeholder="Observacao opcional..." />
+          <TextInput value={uploadObs} onChange={setUploadObs} placeholder="Observacao opcional..." />
         </FormField>
       </Modal>
     </div>

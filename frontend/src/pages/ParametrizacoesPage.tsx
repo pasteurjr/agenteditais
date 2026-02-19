@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { Settings, Globe, Bell, Palette, Plus, Play, Pause, Trash2, ChevronDown, ChevronRight, Pencil, Sparkles, MapPin, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import type { PageProps } from "../types";
+import { Settings, Globe, Bell, Palette, Plus, Play, Pause, Trash2, ChevronDown, ChevronRight, Pencil, MapPin, CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2, AlertCircle, Lock } from "lucide-react";
 import { Card, DataTable, ActionButton, TabPanel, FormField, TextInput, Checkbox, SelectInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 
 interface Fonte {
   id: string;
@@ -26,50 +28,11 @@ interface Classe {
   produtos: number;
 }
 
-// Dados mock
-const mockFontes: Fonte[] = [
-  { id: "1", nome: "PNCP", tipo: "api", url: "api.pncp.gov.br", ativa: true },
-  { id: "2", nome: "ComprasNET", tipo: "scraper", url: "comprasnet.gov.br", ativa: true },
-  { id: "3", nome: "BEC-SP", tipo: "scraper", url: "bec.sp.gov.br", ativa: false },
-  { id: "4", nome: "SICONV", tipo: "api", url: "siconv.gov.br", ativa: true },
-];
-
-const mockClasses: Classe[] = [
-  {
-    id: "1",
-    nome: "Laboratorio",
-    ncms: "9011, 9012",
-    produtos: 15,
-    subclasses: [
-      { id: "1-1", nome: "Microscopios", ncms: "9011.10.00, 9011.20.00", produtos: 5 },
-      { id: "1-2", nome: "Centrifugas", ncms: "8421.19.10", produtos: 4 },
-      { id: "1-3", nome: "Autoclaves", ncms: "8419.20.00", produtos: 6 },
-    ]
-  },
-  {
-    id: "2",
-    nome: "Hospitalar",
-    ncms: "9018, 9402",
-    produtos: 22,
-    subclasses: [
-      { id: "2-1", nome: "Equipamentos Cirurgicos", ncms: "9018.90.99", produtos: 8 },
-      { id: "2-2", nome: "Mobiliario Hospitalar", ncms: "9402.90.20", produtos: 6 },
-      { id: "2-3", nome: "Monitores", ncms: "9018.19.80", produtos: 4 },
-      { id: "2-4", nome: "Esterilizacao", ncms: "8419.20.00", produtos: 2 },
-      { id: "2-5", nome: "Diagnostico", ncms: "9018.19.10", produtos: 2 },
-    ]
-  },
-  {
-    id: "3",
-    nome: "Informatica",
-    ncms: "8471, 8473",
-    produtos: 8,
-    subclasses: [
-      { id: "3-1", nome: "Computadores", ncms: "8471.30.19", produtos: 5 },
-      { id: "3-2", nome: "Perifericos", ncms: "8471.60.80", produtos: 3 },
-    ]
-  },
-];
+interface ParametroScore {
+  id: string;
+  nome: string;
+  peso: number;
+}
 
 // Lista de estados brasileiros
 const ESTADOS_BR = [
@@ -84,10 +47,20 @@ const ESTADOS_BR = [
   { uf: "SP", nome: "Sao Paulo" }, { uf: "SE", nome: "Sergipe" }, { uf: "TO", nome: "Tocantins" },
 ];
 
-export function ParametrizacoesPage() {
-  const [fontes, setFontes] = useState<Fonte[]>(mockFontes);
-  const [classes, setClasses] = useState<Classe[]>(mockClasses);
+export function ParametrizacoesPage({ onSendToChat }: PageProps) {
+  const [fontes, setFontes] = useState<Fonte[]>([]);
+  const [loadingFontes, setLoadingFontes] = useState(true);
+  const [errorFontes, setErrorFontes] = useState<string | null>(null);
+  const [parametros, setParametros] = useState<ParametroScore[]>([]);
+  const [loadingParametros, setLoadingParametros] = useState(true);
+  const [classes, setClasses] = useState<Classe[]>([]);
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+
+  // Fonte modal form state
+  const [novaFonteNome, setNovaFonteNome] = useState("");
+  const [novaFonteTipo, setNovaFonteTipo] = useState<"api" | "scraper">("api");
+  const [novaFonteUrl, setNovaFonteUrl] = useState("");
+  const [salvandoFonte, setSalvandoFonte] = useState(false);
 
   // Configuracoes de notificacao
   const [emailNotif, setEmailNotif] = useState("contato@aquila.com.br");
@@ -120,7 +93,6 @@ export function ParametrizacoesPage() {
   const [showClasseModal, setShowClasseModal] = useState(false);
   const [showSubclasseModal, setShowSubclasseModal] = useState(false);
   const [selectedClasseId, setSelectedClasseId] = useState<string | null>(null);
-  const [gerandoIA, setGerandoIA] = useState(false);
 
   // Campos do formulario de classe
   const [novaClasseNome, setNovaClasseNome] = useState("");
@@ -130,8 +102,104 @@ export function ParametrizacoesPage() {
   const [novaSubclasseNome, setNovaSubclasseNome] = useState("");
   const [novaSubclasseNCMs, setNovaSubclasseNCMs] = useState("");
 
-  const handleToggleFonte = (id: string) => {
-    setFontes(fontes.map(f => f.id === id ? { ...f, ativa: !f.ativa } : f));
+  const loadFontes = useCallback(async () => {
+    try {
+      setLoadingFontes(true);
+      setErrorFontes(null);
+      const res = await crudList("fontes-editais");
+      setFontes(res.items.map(f => ({
+        id: String(f.id ?? ""),
+        nome: String(f.nome ?? ""),
+        tipo: (f.tipo as "api" | "scraper") || "api",
+        url: String(f.url ?? ""),
+        ativa: Boolean(f.ativa ?? true),
+      })));
+    } catch (err) {
+      setErrorFontes(err instanceof Error ? err.message : "Erro ao carregar fontes");
+    } finally {
+      setLoadingFontes(false);
+    }
+  }, []);
+
+  const loadParametros = useCallback(async () => {
+    try {
+      setLoadingParametros(true);
+      const res = await crudList("parametros-score");
+      setParametros(res.items.map(p => ({
+        id: String(p.id ?? ""),
+        nome: String(p.nome ?? ""),
+        peso: Number(p.peso ?? 0),
+      })));
+    } catch {
+      // May not exist yet
+    } finally {
+      setLoadingParametros(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFontes();
+    loadParametros();
+  }, [loadFontes, loadParametros]);
+
+  const handleToggleFonte = async (id: string) => {
+    const fonte = fontes.find(f => f.id === id);
+    if (!fonte) return;
+    try {
+      await crudUpdate("fontes-editais", id, { ativa: !fonte.ativa });
+      setFontes(fontes.map(f => f.id === id ? { ...f, ativa: !f.ativa } : f));
+    } catch (err) {
+      setErrorFontes(err instanceof Error ? err.message : "Erro ao atualizar fonte");
+    }
+  };
+
+  const handleExcluirFonte = async (id: string) => {
+    if (!confirm("Excluir esta fonte?")) return;
+    try {
+      await crudDelete("fontes-editais", id);
+      setFontes(fontes.filter(f => f.id !== id));
+    } catch (err) {
+      setErrorFontes(err instanceof Error ? err.message : "Erro ao excluir fonte");
+    }
+  };
+
+  const handleSalvarFonte = async () => {
+    if (!novaFonteNome.trim()) return;
+    setSalvandoFonte(true);
+    try {
+      const created = await crudCreate("fontes-editais", {
+        nome: novaFonteNome,
+        tipo: novaFonteTipo,
+        url: novaFonteUrl,
+        ativa: true,
+      });
+      setFontes([...fontes, {
+        id: String(created.id ?? ""),
+        nome: novaFonteNome,
+        tipo: novaFonteTipo,
+        url: novaFonteUrl,
+        ativa: true,
+      }]);
+      setNovaFonteNome("");
+      setNovaFonteTipo("api");
+      setNovaFonteUrl("");
+      setShowFonteModal(false);
+    } catch (err) {
+      setErrorFontes(err instanceof Error ? err.message : "Erro ao salvar fonte");
+    } finally {
+      setSalvandoFonte(false);
+    }
+  };
+
+  const getParamPeso = (nome: string) =>
+    parametros.find(p => p.nome === nome)?.peso?.toString() || "";
+
+  const updateParamPeso = async (nome: string, valor: string) => {
+    const p = parametros.find(p => p.nome === nome);
+    if (p) {
+      await crudUpdate("parametros-score", p.id, { peso: Number(valor) });
+      setParametros(parametros.map(pm => pm.id === p.id ? { ...pm, peso: Number(valor) } : pm));
+    }
   };
 
   const toggleClasseExpansion = (classeId: string) => {
@@ -168,26 +236,9 @@ export function ParametrizacoesPage() {
     }
   };
 
-  const handleGerarComIA = async () => {
-    setGerandoIA(true);
-    // Simula chamada a IA
-    setTimeout(() => {
-      // Adiciona uma nova classe gerada pela IA
-      const novaClasse: Classe = {
-        id: String(classes.length + 1),
-        nome: "Reagentes",
-        ncms: "3822, 3002",
-        produtos: 0,
-        subclasses: [
-          { id: `${classes.length + 1}-1`, nome: "Reagentes Diagnostico", ncms: "3822.00.90", produtos: 0 },
-          { id: `${classes.length + 1}-2`, nome: "Reagentes Quimicos", ncms: "3822.00.10", produtos: 0 },
-        ]
-      };
-      setClasses([...classes, novaClasse]);
-      setGerandoIA(false);
-      alert("IA gerou nova classe 'Reagentes' baseado no portfolio!");
-    }, 2000);
-  };
+  // Funcao placeholder — tool_gerar_classes_portfolio sera criada na Onda 4 (T48)
+  const handleGerarComIA = () => {};
+
 
   const handleSalvarClasse = () => {
     if (!novaClasseNome.trim()) return;
@@ -254,7 +305,7 @@ export function ParametrizacoesPage() {
           >
             {f.ativa ? <Pause size={16} /> : <Play size={16} />}
           </button>
-          <button title="Excluir" className="danger"><Trash2 size={16} /></button>
+          <button title="Excluir" className="danger" onClick={() => handleExcluirFonte(f.id)}><Trash2 size={16} /></button>
         </div>
       ),
     },
@@ -293,10 +344,10 @@ export function ParametrizacoesPage() {
                         <div className="card-actions">
                           <ActionButton icon={<Plus size={14} />} label="Nova Classe" onClick={() => setShowClasseModal(true)} />
                           <ActionButton
-                            icon={<Sparkles size={14} />}
-                            label={gerandoIA ? "Gerando..." : "Gerar com IA"}
-                            onClick={handleGerarComIA}
-                            loading={gerandoIA}
+                            icon={<Lock size={14} />}
+                            label="Gerar com IA (Onda 4)"
+                            onClick={() => {}}
+                            disabled
                           />
                         </div>
                       }
@@ -447,17 +498,22 @@ export function ParametrizacoesPage() {
                       {/* Historico para Score Ganho */}
                       <div className="norteador-config-section">
                         <h4>Configurar Score Aderencia de Ganho (f)</h4>
-                        <div className="form-grid form-grid-3">
-                          <FormField label="Taxa de Vitoria Historica (%)">
-                            <TextInput value="" onChange={() => {}} placeholder="Ex: 35" type="number" />
-                          </FormField>
-                          <FormField label="Margem Media Praticada (%)">
-                            <TextInput value="" onChange={() => {}} placeholder="Ex: 15" type="number" />
-                          </FormField>
-                          <FormField label="Total de Licitacoes Participadas">
-                            <TextInput value="" onChange={() => {}} placeholder="Ex: 120" type="number" />
-                          </FormField>
-                        </div>
+                        {loadingParametros ? (
+                          <div className="loading-center"><Loader2 size={16} className="spin" /><span>Carregando...</span></div>
+                        ) : (
+                          <div className="form-grid form-grid-3">
+                            <FormField label="Taxa de Vitoria Historica (%)">
+                              <TextInput value={getParamPeso("taxa_vitoria")} onChange={(v) => updateParamPeso("taxa_vitoria", v)} placeholder="Ex: 35" type="number" />
+                            </FormField>
+                            <FormField label="Margem Media Praticada (%)">
+                              <TextInput value={getParamPeso("margem_media")} onChange={(v) => updateParamPeso("margem_media", v)} placeholder="Ex: 15" type="number" />
+                            </FormField>
+                            <FormField label="Total de Licitacoes Participadas">
+                              <TextInput value={getParamPeso("total_licitacoes")} onChange={(v) => updateParamPeso("total_licitacoes", v)} placeholder="Ex: 120" type="number" />
+                            </FormField>
+                          </div>
+                        )}
+                        <ActionButton icon={<Lock size={14} />} label="Calcular pesos com IA (Onda 4)" onClick={() => {}} disabled />
                       </div>
                     </Card>
 
@@ -563,7 +619,7 @@ export function ParametrizacoesPage() {
                           <TextInput value="" onChange={() => {}} prefix="R$" />
                         </FormField>
                       </div>
-                      <ActionButton icon={<Sparkles size={14} />} label="Calcular com IA baseado no portfolio" onClick={() => {}} />
+                      <ActionButton icon={<Lock size={14} />} label="Calcular com IA (Onda 4)" onClick={() => {}} disabled />
                     </Card>
                   </>
                 );
@@ -571,22 +627,43 @@ export function ParametrizacoesPage() {
               case "fontes":
                 return (
                   <>
+                    {errorFontes && (
+                      <div className="portfolio-error">
+                        <AlertCircle size={16} />
+                        <span>{errorFontes}</span>
+                        <button onClick={loadFontes}>Tentar novamente</button>
+                      </div>
+                    )}
                     <Card
                       title="Fontes de Editais"
                       actions={
-                        <ActionButton
-                          icon={<Plus size={14} />}
-                          label="Cadastrar Fonte"
-                          onClick={() => setShowFonteModal(true)}
-                        />
+                        <div className="card-actions">
+                          <ActionButton
+                            icon={<RefreshCw size={14} />}
+                            label="Atualizar"
+                            onClick={loadFontes}
+                          />
+                          <ActionButton
+                            icon={<Plus size={14} />}
+                            label="Cadastrar Fonte"
+                            onClick={() => setShowFonteModal(true)}
+                          />
+                        </div>
                       }
                     >
-                      <DataTable data={fontes} columns={fonteColumns} idKey="id" />
+                      {loadingFontes ? (
+                        <div className="loading-center">
+                          <Loader2 size={20} className="spin" />
+                          <span>Carregando fontes...</span>
+                        </div>
+                      ) : (
+                        <DataTable data={fontes} columns={fonteColumns} idKey="id" emptyMessage="Nenhuma fonte cadastrada. Use 'Cadastrar via IA' ou adicione manualmente." />
+                      )}
                     </Card>
 
                     <Card title="Palavras-chave de Busca">
                       <div className="palavras-chave">
-                        <ActionButton icon={<Sparkles size={14} />} label="Gerar automaticamente do portfolio" onClick={() => {}} />
+                        <ActionButton icon={<Lock size={14} />} label="Gerar do portfolio (Onda 4)" onClick={() => {}} disabled />
                         <div className="tags-container">
                           <span className="tag">microscopio</span>
                           <span className="tag">centrifuga</span>
@@ -603,9 +680,10 @@ export function ParametrizacoesPage() {
                       <div className="ncms-busca">
                         <div className="ncms-actions">
                           <ActionButton
-                            icon={<RefreshCw size={14} />}
-                            label="Sincronizar NCMs do Portfolio"
+                            icon={<Lock size={14} />}
+                            label="Sincronizar NCMs (Onda 4)"
                             onClick={() => {}}
+                            disabled
                           />
                         </div>
                         <div className="tags-container">
@@ -729,17 +807,19 @@ export function ParametrizacoesPage() {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowFonteModal(false)}>Cancelar</button>
-            <button className="btn btn-primary">Salvar</button>
+            <button className="btn btn-primary" onClick={handleSalvarFonte} disabled={salvandoFonte || !novaFonteNome}>
+              {salvandoFonte ? <Loader2 size={14} className="spin" /> : null} Salvar
+            </button>
           </>
         }
       >
         <FormField label="Nome" required>
-          <TextInput value="" onChange={() => {}} />
+          <TextInput value={novaFonteNome} onChange={setNovaFonteNome} />
         </FormField>
         <FormField label="Tipo" required>
           <SelectInput
-            value=""
-            onChange={() => {}}
+            value={novaFonteTipo}
+            onChange={(v) => setNovaFonteTipo(v as "api" | "scraper")}
             options={[
               { value: "api", label: "API" },
               { value: "scraper", label: "Scraper" },
@@ -748,7 +828,7 @@ export function ParametrizacoesPage() {
           />
         </FormField>
         <FormField label="URL" required>
-          <TextInput value="" onChange={() => {}} type="url" />
+          <TextInput value={novaFonteUrl} onChange={setNovaFonteUrl} type="url" />
         </FormField>
       </Modal>
 

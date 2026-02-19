@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { PageProps } from "../types";
 import { DollarSign, Search, TrendingUp, History, Lightbulb } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, ScoreBadge } from "../components/common";
+import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList } from "../api/crud";
+import { getEditais, getProdutos } from "../api/client";
+import type { Edital, Produto } from "../api/client";
 
 interface PrecoMercado {
   id: string;
@@ -29,27 +33,18 @@ interface RecomendacaoPreco {
   baseadoEm: number;
 }
 
-// Dados mock
-const mockPrecosMercado: PrecoMercado[] = [
-  { id: "1", data: "10/01/2026", orgao: "UFMG", termo: "microscopio optico", valor: 11200, vencedor: "Lab Solutions" },
-  { id: "2", data: "05/01/2026", orgao: "USP", termo: "microscopio optico", valor: 13800, vencedor: "TechMed" },
-  { id: "3", data: "20/12/2025", orgao: "UNESP", termo: "microscopio optico", valor: 10500, vencedor: "MedEquip" },
-  { id: "4", data: "15/12/2025", orgao: "UNICAMP", termo: "microscopio optico", valor: 12300, vencedor: "Lab Solutions" },
-];
+export function PrecificacaoPage(props?: PageProps) {
+  const { onSendToChat } = props ?? {};
 
-const mockHistorico: HistoricoPreco[] = [
-  { id: "1", produto: "Microscopio ABC-500", preco: 11000, data: "15/01/2026", edital: "PE-032/2026", resultado: "ganho" },
-  { id: "2", produto: "Centrifuga XYZ", preco: 8500, data: "10/01/2026", edital: "PE-028/2026", resultado: "perdido" },
-  { id: "3", produto: "Autoclave AM-123", preco: 15000, data: "05/01/2026", edital: "PE-020/2026", resultado: "ganho" },
-];
-
-export function PrecificacaoPage() {
   const [termoBusca, setTermoBusca] = useState("");
   const [precosMercado, setPrecosMercado] = useState<PrecoMercado[]>([]);
-  const [historico] = useState<HistoricoPreco[]>(mockHistorico);
+  const [historico, setHistorico] = useState<HistoricoPreco[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingHistorico, setLoadingHistorico] = useState(true);
 
   // Recomendacao
+  const [editais, setEditais] = useState<Edital[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [editalSelecionado, setEditalSelecionado] = useState("");
   const [produtoSelecionado, setProdutoSelecionado] = useState("");
   const [recomendacao, setRecomendacao] = useState<RecomendacaoPreco | null>(null);
@@ -58,37 +53,130 @@ export function PrecificacaoPage() {
   // Estatisticas
   const [estatisticas, setEstatisticas] = useState<{ media: number; min: number; max: number } | null>(null);
 
+  // Carregar historico de precos e listas ao montar
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingHistorico(true);
+      try {
+        // Historico de precos via CRUD
+        const res = await crudList("preco-historico", { limit: 50 });
+        const items = res.items as Record<string, unknown>[];
+        setHistorico(items.map((item) => ({
+          id: String(item.id ?? ""),
+          produto: String(item.produto ?? item.nome_produto ?? ""),
+          preco: Number(item.preco ?? item.preco_ofertado ?? 0),
+          data: String(item.data ?? item.data_licitacao ?? ""),
+          edital: String(item.edital ?? item.numero_edital ?? ""),
+          resultado: (item.resultado === "ganho" ? "ganho" : "perdido") as "ganho" | "perdido",
+        })));
+      } catch {
+        // Se tabela não existe ainda, historico fica vazio
+        setHistorico([]);
+      } finally {
+        setLoadingHistorico(false);
+      }
+
+      // Editais salvos
+      try {
+        const edList = await getEditais("salvo");
+        setEditais(edList);
+      } catch {
+        setEditais([]);
+      }
+
+      // Produtos cadastrados
+      try {
+        const prodList = await getProdutos();
+        setProdutos(prodList);
+      } catch {
+        setProdutos([]);
+      }
+    };
+
+    loadData();
+  }, []);
+
   const handleBuscarPrecos = async () => {
     if (!termoBusca) return;
-    // TODO: Chamar API para buscar precos no PNCP
-    // Prompt: buscar_precos_pncp
     setLoading(true);
-    setTimeout(() => {
-      setPrecosMercado(mockPrecosMercado);
-      setEstatisticas({
-        media: 11950,
-        min: 10500,
-        max: 13800,
-      });
+    setPrecosMercado([]);
+    setEstatisticas(null);
+    try {
+      // Busca historico filtrado pelo termo
+      const res = await crudList("preco-historico", { q: termoBusca, limit: 50 });
+      const items = res.items as Record<string, unknown>[];
+      const precos: PrecoMercado[] = items.map((item) => ({
+        id: String(item.id ?? ""),
+        data: String(item.data ?? item.data_licitacao ?? ""),
+        orgao: String(item.orgao ?? item.nome_orgao ?? ""),
+        termo: String(item.produto ?? item.nome_produto ?? termoBusca),
+        valor: Number(item.preco ?? item.preco_ofertado ?? 0),
+        vencedor: String(item.vencedor ?? item.empresa_vencedora ?? ""),
+      }));
+      setPrecosMercado(precos);
+      if (precos.length > 0) {
+        const valores = precos.map((p) => p.valor).filter((v) => v > 0);
+        const media = valores.reduce((a, b) => a + b, 0) / valores.length;
+        setEstatisticas({
+          media: Math.round(media),
+          min: Math.min(...valores),
+          max: Math.max(...valores),
+        });
+      }
+    } catch {
+      // Fallback: enviar para IA buscar precos
+      if (onSendToChat) {
+        onSendToChat(`Busque preços de mercado para o produto: ${termoBusca}. Consulte o PNCP e retorne dados de licitações similares.`);
+      }
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const handleRecomendarPreco = async () => {
     if (!editalSelecionado || !produtoSelecionado) return;
-    // TODO: Chamar API para recomendar preco
-    // Prompt: recomendar_preco
     setLoadingRecomendacao(true);
-    setTimeout(() => {
-      setRecomendacao({
-        precoSugerido: 11500,
-        faixaMin: 10000,
-        faixaMax: 13000,
-        justificativa: "Baseado em 12 licitacoes similares nos ultimos 6 meses, considerando o portfolio da empresa e historico de vitorias.",
-        baseadoEm: 12,
-      });
+    setRecomendacao(null);
+
+    const edital = editais.find((e) => e.id === editalSelecionado || e.numero === editalSelecionado);
+    const produto = produtos.find((p) => p.id === produtoSelecionado || p.nome === produtoSelecionado);
+
+    const editalDesc = edital ? `${edital.numero} - ${edital.orgao}` : editalSelecionado;
+    const produtoDesc = produto ? produto.nome : produtoSelecionado;
+
+    if (onSendToChat) {
+      onSendToChat(
+        `Recomende um preço competitivo para a seguinte licitação:\n` +
+        `- Edital: ${editalDesc}\n` +
+        `- Produto: ${produtoDesc}\n` +
+        `Analise preços históricos, licitações similares no PNCP e retorne: preço sugerido, faixa competitiva (min/max) e justificativa.`
+      );
+    }
+
+    // Tentar buscar analise existente para sugestao de preco
+    try {
+      const res = await crudList("preco-historico", { q: produtoDesc, limit: 20 });
+      const items = res.items as Record<string, unknown>[];
+      if (items.length > 0) {
+        const precos = items.map((i) => Number(i.preco ?? i.preco_ofertado ?? 0)).filter((v) => v > 0);
+        if (precos.length > 0) {
+          const media = precos.reduce((a, b) => a + b, 0) / precos.length;
+          const min = Math.min(...precos);
+          const max = Math.max(...precos);
+          setRecomendacao({
+            precoSugerido: Math.round(media * 0.95), // 5% abaixo da media para ser competitivo
+            faixaMin: Math.round(min * 0.9),
+            faixaMax: Math.round(max * 0.95),
+            justificativa: `Baseado em ${precos.length} licitacoes similares. Preco sugerido 5% abaixo da media de mercado para maior competitividade.`,
+            baseadoEm: precos.length,
+          });
+        }
+      }
+    } catch {
+      // recomendacao via IA ja foi enviada acima
+    } finally {
       setLoadingRecomendacao(false);
-    }, 2000);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -117,6 +205,16 @@ export function PrecificacaoPage() {
         </span>
       ),
     },
+  ];
+
+  const editalOptions = [
+    { value: "", label: "Selecione..." },
+    ...editais.map((e) => ({ value: e.id ?? e.numero, label: `${e.numero} - ${e.orgao}` })),
+  ];
+
+  const produtoOptions = [
+    { value: "", label: "Selecione..." },
+    ...produtos.map((p) => ({ value: p.id, label: p.nome })),
   ];
 
   return (
@@ -185,11 +283,9 @@ export function PrecificacaoPage() {
               <SelectInput
                 value={editalSelecionado}
                 onChange={setEditalSelecionado}
-                options={[
+                options={editalOptions.length > 1 ? editalOptions : [
                   { value: "", label: "Selecione..." },
-                  { value: "PE-001/2026", label: "PE-001/2026 - UFMG" },
-                  { value: "PE-045/2026", label: "PE-045/2026 - CEMIG" },
-                  { value: "CC-012/2026", label: "CC-012/2026 - Pref. BH" },
+                  { value: "manual", label: "Edital manual" },
                 ]}
               />
             </FormField>
@@ -197,11 +293,9 @@ export function PrecificacaoPage() {
               <SelectInput
                 value={produtoSelecionado}
                 onChange={setProdutoSelecionado}
-                options={[
+                options={produtoOptions.length > 1 ? produtoOptions : [
                   { value: "", label: "Selecione..." },
-                  { value: "microscopio", label: "Microscopio ABC-500" },
-                  { value: "centrifuga", label: "Centrifuga XYZ-2000" },
-                  { value: "autoclave", label: "Autoclave AM-123" },
+                  { value: "manual", label: "Produto manual" },
                 ]}
               />
             </FormField>
@@ -255,7 +349,7 @@ export function PrecificacaoPage() {
             data={historico}
             columns={historicoColumns}
             idKey="id"
-            emptyMessage="Nenhum historico encontrado"
+            emptyMessage={loadingHistorico ? "Carregando..." : "Nenhum historico encontrado"}
           />
         </Card>
       </div>

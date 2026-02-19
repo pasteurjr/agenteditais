@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Radio, Plus, Play, Pause, Trash2, Eye, Save, RefreshCw } from "lucide-react";
 import { Card, DataTable, ActionButton, Modal, FormField, TextInput, SelectInput, Checkbox } from "../components/common";
 import type { Column } from "../components/common";
@@ -37,7 +38,7 @@ const mockEncontrados: EditalEncontrado[] = [
 
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 
-export function MonitoriaPage() {
+export function MonitoriaPage(_props?: PageProps) {
   const [monitoramentos, setMonitoramentos] = useState<Monitoramento[]>(mockMonitoramentos);
   const [encontrados] = useState<EditalEncontrado[]>(mockEncontrados);
   const [selectedMonitoramento, setSelectedMonitoramento] = useState<Monitoramento | null>(null);

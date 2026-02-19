@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar } from "../components/common";
 import type { Column } from "../components/common";
@@ -38,7 +39,7 @@ const mockHistorico: HistoricoConcorrente[] = [
   { id: "4", data: "25/01/2026", edital: "PE-020/2026", orgao: "UNESP", valor: 38000, resultado: "perdeu", nosParticipamos: false },
 ];
 
-export function ConcorrenciaPage() {
+export function ConcorrenciaPage(_props?: PageProps) {
   const [concorrentes] = useState<Concorrente[]>(mockConcorrentes);
   const [selectedConcorrente, setSelectedConcorrente] = useState<Concorrente | null>(null);
   const [historico] = useState<HistoricoConcorrente[]>(mockHistorico);

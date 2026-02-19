@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { AlertTriangle, FileText, Lightbulb, Save, Clock, CheckCircle } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, TextArea, SelectInput, Modal } from "../components/common";
 import type { Column } from "../components/common";
@@ -34,7 +35,7 @@ const mockImpugnacoes: Impugnacao[] = [
   { id: "2", edital: "PE-050/2025", tipo: "recurso", motivo: "Desclassificacao indevida", dataCriacao: "01/02/2026", status: "enviada" },
 ];
 
-export function ImpugnacaoPage() {
+export function ImpugnacaoPage(_props?: PageProps) {
   const [editais] = useState<EditalImpugnacao[]>(mockEditais);
   const [impugnacoes, setImpugnacoes] = useState<Impugnacao[]>(mockImpugnacoes);
   const [selectedEdital, setSelectedEdital] = useState<EditalImpugnacao | null>(null);

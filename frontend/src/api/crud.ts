@@ -3,7 +3,7 @@
  * Endpoints: /api/crud/<table>
  */
 
-const API_BASE = "http://localhost:5007";
+const API_BASE = "";
 
 let getAccessTokenFn: (() => Promise<string | null>) | null = null;
 

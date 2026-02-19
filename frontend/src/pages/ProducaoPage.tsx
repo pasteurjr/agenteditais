@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PageProps } from "../types";
 import { Package, Truck, FileText, Clock, CheckCircle, AlertTriangle } from "lucide-react";
 import { Card, DataTable, ActionButton, Modal, FormField, TextInput } from "../components/common";
 import type { Column } from "../components/common";
@@ -24,7 +25,7 @@ const mockContratos: Contrato[] = [
   { id: "4", edital: "PE-010/2026", orgao: "UNICAMP", produto: "Reagente TR-001", quantidade: 100, valorTotal: 15000, prazoEntrega: "01/02/2026", diasRestantes: -9, status: "atrasado" },
 ];
 
-export function ProducaoPage() {
+export function ProducaoPage(_props?: PageProps) {
   const [contratos, setContratos] = useState<Contrato[]>(mockContratos);
   const [selectedContrato, setSelectedContrato] = useState<Contrato | null>(null);
   const [showEntregaModal, setShowEntregaModal] = useState(false);

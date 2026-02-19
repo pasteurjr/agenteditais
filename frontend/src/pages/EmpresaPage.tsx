@@ -1,7 +1,31 @@
-import { useState } from "react";
-import { Building, Upload, Plus, Pencil, Trash2, Eye, Download, AlertTriangle, X, Sparkles, RefreshCw, Mail, Phone } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Lock } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import type { CrudListResponse } from "../api/crud";
+
+interface EmpresaPageProps {
+  onSendToChat?: (message: string, file?: File) => Promise<void>;
+}
+
+interface Empresa {
+  id: string;
+  razao_social: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  inscricao_estadual?: string;
+  website?: string;
+  instagram?: string;
+  linkedin?: string;
+  facebook?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  emails?: string;
+  celulares?: string;
+}
 
 interface Documento {
   id: string;
@@ -15,89 +39,174 @@ interface Documento {
 interface Responsavel {
   id: string;
   nome: string;
-  cargo: string;
-  email: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
 }
 
 interface CertidaoAutomatica {
   id: string;
   certidao: string;
   status: "obtida" | "pendente" | "erro";
-  dataObtencao: string | null;
+  data_obtencao: string | null;
   validade: string | null;
 }
 
-interface AlertaIA {
-  id: string;
-  mensagem: string;
-  severidade: "critico" | "aviso" | "info";
-}
-
-// Dados mock
-const mockDocumentos: Documento[] = [
-  { id: "1", nome: "Contrato Social", tipo: "contrato", validade: null, status: "ok", arquivo: "contrato.pdf" },
-  { id: "2", nome: "AFE", tipo: "afe", validade: "15/08/2026", status: "ok", arquivo: "afe.pdf" },
-  { id: "3", nome: "CBPAD", tipo: "cbpad", validade: "10/03/2026", status: "vence", arquivo: "cbpad.pdf" },
-  { id: "4", nome: "CBPP", tipo: "cbpp", validade: null, status: "falta" },
-  { id: "5", nome: "Corpo de Bombeiros", tipo: "bombeiros", validade: "20/12/2026", status: "ok", arquivo: "bombeiros.pdf" },
-  { id: "6", nome: "Certidao Negativa", tipo: "certidao", validade: "01/03/2026", status: "vence", arquivo: "certidao.pdf" },
-  { id: "7", nome: "Balanco Patrimonial 2025", tipo: "hab_financeira", validade: null, status: "ok", arquivo: "balanco2025.pdf" },
-  { id: "8", nome: "Atestado Capacidade Tecnica", tipo: "qual_tecnica", validade: null, status: "falta" },
-];
-
-const mockCertidoes: CertidaoAutomatica[] = [
-  { id: "1", certidao: "CND FGTS", status: "obtida", dataObtencao: "08/02/2026", validade: "08/03/2026" },
-  { id: "2", certidao: "CND INSS / Previdenciaria", status: "obtida", dataObtencao: "05/02/2026", validade: "05/03/2026" },
-  { id: "3", certidao: "CND Receita Federal (Tributos)", status: "pendente", dataObtencao: null, validade: null },
-  { id: "4", certidao: "CND Trabalhista (TST)", status: "obtida", dataObtencao: "01/02/2026", validade: "01/08/2026" },
-  { id: "5", certidao: "CND Estadual (SEFAZ-MG)", status: "erro", dataObtencao: null, validade: null },
-];
-
-const mockAlertasIA: AlertaIA[] = [
-  { id: "1", mensagem: "Certidao Negativa vence em 20 dias - renovar urgente", severidade: "critico" },
-  { id: "2", mensagem: "Edital PE-001/2026 exige Atestado de Capacidade Tecnica - documento nao encontrado", severidade: "critico" },
-  { id: "3", mensagem: "CBPP nao cadastrado - 73% dos editais da sua area exigem este documento", severidade: "aviso" },
-  { id: "4", mensagem: "CBPAD vence em 28 dias - agende renovacao", severidade: "aviso" },
-  { id: "5", mensagem: "Balanco Patrimonial 2025 cadastrado com sucesso - disponivel para licitacoes", severidade: "info" },
-];
-
-const mockResponsaveis: Responsavel[] = [
-  { id: "1", nome: "Joao Silva", cargo: "Diretor", email: "joao@empresa.com" },
-  { id: "2", nome: "Maria Santos", cargo: "Comercial", email: "maria@empresa.com" },
-];
-
-export function EmpresaPage() {
-  // Estado do formulario
-  const [razaoSocial, setRazaoSocial] = useState("Aquila Diagnostico Ltda");
-  const [nomeFantasia, setNomeFantasia] = useState("Aquila Diagnostico");
-  const [cnpj, setCnpj] = useState("11.111.111/0001-11");
-  const [inscricaoEstadual, setInscricaoEstadual] = useState("123.456.789");
-  const [website, setWebsite] = useState("https://aquila.com.br");
-  const [instagram, setInstagram] = useState("@aquiladiag");
-  const [linkedin, setLinkedin] = useState("aquila-diagnostico");
+export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
+  // Empresa data
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [razaoSocial, setRazaoSocial] = useState("");
+  const [nomeFantasia, setNomeFantasia] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [inscricaoEstadual, setInscricaoEstadual] = useState("");
+  const [website, setWebsite] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [linkedin, setLinkedin] = useState("");
   const [facebook, setFacebook] = useState("");
-  const [endereco, setEndereco] = useState("Rua das Flores, 123");
-  const [cidade, setCidade] = useState("Belo Horizonte");
-  const [uf, setUf] = useState("MG");
-  const [cep, setCep] = useState("30000-000");
+  const [endereco, setEndereco] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
+  const [cep, setCep] = useState("");
 
   // Emails e celulares multiplos
-  const [emails, setEmails] = useState(["contato@aquila.com.br", "comercial@aquila.com.br"]);
-  const [celulares, setCelulares] = useState(["(31) 99999-9999", "(31) 98888-8888"]);
+  const [emails, setEmails] = useState<string[]>([]);
+  const [celulares, setCelulares] = useState<string[]>([]);
   const [novoEmail, setNovoEmail] = useState("");
   const [novoCelular, setNovoCelular] = useState("");
 
-  const [documentos] = useState<Documento[]>(mockDocumentos);
-  const [certidoes] = useState<CertidaoAutomatica[]>(mockCertidoes);
-  const [responsaveis] = useState<Responsavel[]>(mockResponsaveis);
+  // Sub-tables
+  const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [certidoes, setCertidoes] = useState<CertidaoAutomatica[]>([]);
+  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
+
+  // Loading/error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Modals
   const [showDocModal, setShowDocModal] = useState(false);
   const [showRespModal, setShowRespModal] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [buscandoCertidoes, setBuscandoCertidoes] = useState(false);
+
+  // New responsavel form
+  const [novoRespNome, setNovoRespNome] = useState("");
+  const [novoRespCargo, setNovoRespCargo] = useState("");
+  const [novoRespEmail, setNovoRespEmail] = useState("");
+  const [novoRespTel, setNovoRespTel] = useState("");
+
+  // New doc form
+  const [novoDocTipo, setNovoDocTipo] = useState("");
+  const [novoDocValidade, setNovoDocValidade] = useState("");
+  const [novoDocFile, setNovoDocFile] = useState<File | null>(null);
+
+  const loadEmpresa = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res: CrudListResponse = await crudList("empresas", { limit: 1 });
+      if (res.items.length > 0) {
+        const emp = res.items[0] as Record<string, unknown>;
+        const id = String(emp.id ?? "");
+        setEmpresaId(id);
+        setRazaoSocial(String(emp.razao_social ?? ""));
+        setNomeFantasia(String(emp.nome_fantasia ?? ""));
+        setCnpj(String(emp.cnpj ?? ""));
+        setInscricaoEstadual(String(emp.inscricao_estadual ?? ""));
+        setWebsite(String(emp.website ?? ""));
+        setInstagram(String(emp.instagram ?? ""));
+        setLinkedin(String(emp.linkedin ?? ""));
+        setFacebook(String(emp.facebook ?? ""));
+        setEndereco(String(emp.endereco ?? ""));
+        setCidade(String(emp.cidade ?? ""));
+        setUf(String(emp.uf ?? ""));
+        setCep(String(emp.cep ?? ""));
+        const emailsStr = String(emp.emails ?? "");
+        setEmails(emailsStr ? emailsStr.split(",").map(e => e.trim()).filter(Boolean) : []);
+        const celStr = String(emp.celulares ?? "");
+        setCelulares(celStr ? celStr.split(",").map(c => c.trim()).filter(Boolean) : []);
+
+        // Load sub-tables
+        await loadSubTables(id);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar empresa");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadSubTables = async (id: string) => {
+    try {
+      const [docsRes, certRes, respRes] = await Promise.all([
+        crudList("empresa-documentos", { parent_id: id }),
+        crudList("empresa-certidoes", { parent_id: id }),
+        crudList("empresa-responsaveis", { parent_id: id }),
+      ]);
+
+      setDocumentos(docsRes.items.map(d => ({
+        id: String(d.id ?? ""),
+        nome: String(d.nome ?? ""),
+        tipo: String(d.tipo ?? ""),
+        validade: d.validade ? String(d.validade) : null,
+        status: (d.status as Documento["status"]) || "ok",
+        arquivo: d.arquivo ? String(d.arquivo) : undefined,
+      })));
+
+      setCertidoes(certRes.items.map(c => ({
+        id: String(c.id ?? ""),
+        certidao: String(c.certidao ?? ""),
+        status: (c.status as CertidaoAutomatica["status"]) || "pendente",
+        data_obtencao: c.data_obtencao ? String(c.data_obtencao) : null,
+        validade: c.validade ? String(c.validade) : null,
+      })));
+
+      setResponsaveis(respRes.items.map(r => ({
+        id: String(r.id ?? ""),
+        nome: String(r.nome ?? ""),
+        cargo: r.cargo ? String(r.cargo) : undefined,
+        email: r.email ? String(r.email) : undefined,
+        telefone: r.telefone ? String(r.telefone) : undefined,
+      })));
+    } catch {
+      // Sub-tables may be empty or not exist yet - not a fatal error
+    }
+  };
+
+  useEffect(() => {
+    loadEmpresa();
+  }, [loadEmpresa]);
 
   const handleSave = async () => {
     setSaving(true);
-    setTimeout(() => setSaving(false), 1000);
+    try {
+      const data = {
+        razao_social: razaoSocial,
+        nome_fantasia: nomeFantasia,
+        cnpj,
+        inscricao_estadual: inscricaoEstadual,
+        website,
+        instagram,
+        linkedin,
+        facebook,
+        endereco,
+        cidade,
+        uf,
+        cep,
+        emails: emails.join(","),
+        celulares: celulares.join(","),
+      };
+
+      if (empresaId) {
+        await crudUpdate("empresas", empresaId, data);
+      } else {
+        const created = await crudCreate("empresas", data);
+        setEmpresaId(String(created.id ?? ""));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar empresa");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddEmail = () => {
@@ -122,9 +231,65 @@ export function EmpresaPage() {
     setCelulares(celulares.filter((_, i) => i !== index));
   };
 
-  const handleBuscarCertidoes = () => {
-    setBuscandoCertidoes(true);
-    setTimeout(() => setBuscandoCertidoes(false), 2000);
+  const handleSalvarResponsavel = async () => {
+    if (!novoRespNome.trim() || !empresaId) return;
+    try {
+      await crudCreate("empresa-responsaveis", {
+        empresa_id: empresaId,
+        nome: novoRespNome,
+        cargo: novoRespCargo,
+        email: novoRespEmail,
+        telefone: novoRespTel,
+      });
+      setNovoRespNome("");
+      setNovoRespCargo("");
+      setNovoRespEmail("");
+      setNovoRespTel("");
+      setShowRespModal(false);
+      await loadSubTables(empresaId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar responsavel");
+    }
+  };
+
+  const handleExcluirResponsavel = async (id: string) => {
+    if (!confirm("Excluir este responsavel?")) return;
+    try {
+      await crudDelete("empresa-responsaveis", id);
+      setResponsaveis(responsaveis.filter(r => r.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir responsavel");
+    }
+  };
+
+  const handleSalvarDocumento = async () => {
+    if (!novoDocTipo || !empresaId) return;
+    try {
+      await crudCreate("empresa-documentos", {
+        empresa_id: empresaId,
+        tipo: novoDocTipo,
+        nome: novoDocTipo,
+        validade: novoDocValidade || null,
+        status: novoDocFile ? "ok" : "falta",
+      });
+      await loadSubTables(empresaId);
+      setNovoDocTipo("");
+      setNovoDocValidade("");
+      setNovoDocFile(null);
+      setShowDocModal(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar documento");
+    }
+  };
+
+  const handleExcluirDocumento = async (id: string) => {
+    if (!confirm("Excluir este documento?")) return;
+    try {
+      await crudDelete("empresa-documentos", id);
+      setDocumentos(documentos.filter(d => d.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir documento");
+    }
   };
 
   const getStatusBadge = (status: Documento["status"]) => {
@@ -149,25 +314,6 @@ export function EmpresaPage() {
     }
   };
 
-  const getAlertaIcon = (severidade: AlertaIA["severidade"]) => {
-    switch (severidade) {
-      case "critico":
-        return <AlertTriangle size={14} style={{ color: "#ef4444" }} />;
-      case "aviso":
-        return <AlertTriangle size={14} style={{ color: "#eab308" }} />;
-      case "info":
-        return <Sparkles size={14} style={{ color: "#3b82f6" }} />;
-    }
-  };
-
-  const getAlertaClass = (severidade: AlertaIA["severidade"]) => {
-    switch (severidade) {
-      case "critico": return "alerta-critico";
-      case "aviso": return "alerta-aviso";
-      case "info": return "alerta-info";
-    }
-  };
-
   const docColumns: Column<Documento>[] = [
     { key: "nome", header: "Documento", sortable: true },
     { key: "tipo", header: "Tipo", render: (d) => <span className="text-muted" style={{ fontSize: "12px" }}>{d.tipo}</span> },
@@ -183,7 +329,7 @@ export function EmpresaPage() {
             <>
               <button title="Visualizar"><Eye size={16} /></button>
               <button title="Download"><Download size={16} /></button>
-              <button title="Excluir" className="danger"><Trash2 size={16} /></button>
+              <button title="Excluir" className="danger" onClick={() => handleExcluirDocumento(d.id)}><Trash2 size={16} /></button>
             </>
           ) : (
             <button className="btn-small btn-primary" onClick={() => setShowDocModal(true)}>
@@ -198,7 +344,7 @@ export function EmpresaPage() {
   const certidaoColumns: Column<CertidaoAutomatica>[] = [
     { key: "certidao", header: "Certidao", sortable: true },
     { key: "status", header: "Status", render: (c) => getCertidaoStatus(c.status) },
-    { key: "dataObtencao", header: "Data Obtencao", render: (c) => c.dataObtencao || "-" },
+    { key: "data_obtencao", header: "Data Obtencao", render: (c) => c.data_obtencao || "-" },
     { key: "validade", header: "Validade", render: (c) => c.validade || "-" },
     {
       key: "acoes",
@@ -219,20 +365,30 @@ export function EmpresaPage() {
 
   const respColumns: Column<Responsavel>[] = [
     { key: "nome", header: "Nome", sortable: true },
-    { key: "cargo", header: "Cargo" },
-    { key: "email", header: "Email" },
+    { key: "cargo", header: "Cargo", render: (r) => r.cargo || "-" },
+    { key: "email", header: "Email", render: (r) => r.email || "-" },
     {
       key: "acoes",
       header: "Acoes",
       width: "80px",
-      render: () => (
+      render: (r) => (
         <div className="table-actions">
-          <button title="Editar"><Pencil size={16} /></button>
-          <button title="Excluir" className="danger"><Trash2 size={16} /></button>
+          <button title="Excluir" className="danger" onClick={() => handleExcluirResponsavel(r.id)}><Trash2 size={16} /></button>
         </div>
       ),
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <div className="loading-center">
+          <Loader2 size={32} className="spin" />
+          <span>Carregando dados da empresa...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -244,24 +400,24 @@ export function EmpresaPage() {
             <p>Cadastro de informacoes e documentos da empresa</p>
           </div>
         </div>
+        <div className="page-header-actions">
+          <ActionButton
+            icon={<Lock size={16} />}
+            label="Verificar Documentos (Em breve)"
+            onClick={() => {}}
+            disabled
+          />
+        </div>
       </div>
 
       <div className="page-content">
-        {/* Alertas de Documentacao (IA) */}
-        <Card
-          title="Alertas de Documentacao (IA)"
-          icon={<Sparkles size={18} />}
-          variant="attention"
-        >
-          <div className="alertas-ia-list">
-            {mockAlertasIA.map((alerta) => (
-              <div key={alerta.id} className={`alerta-ia-item ${getAlertaClass(alerta.severidade)}`}>
-                {getAlertaIcon(alerta.severidade)}
-                <span>{alerta.mensagem}</span>
-              </div>
-            ))}
+        {error && (
+          <div className="portfolio-error">
+            <AlertCircle size={16} />
+            <span>{error}</span>
+            <button onClick={loadEmpresa}>Tentar novamente</button>
           </div>
-        </Card>
+        )}
 
         {/* Informacoes Cadastrais */}
         <Card title="Informacoes Cadastrais" icon={<Building size={18} />}>
@@ -408,10 +564,10 @@ export function EmpresaPage() {
           icon={<RefreshCw size={18} />}
           actions={
             <ActionButton
-              icon={<RefreshCw size={14} />}
-              label="Buscar Certidoes Agora"
-              onClick={handleBuscarCertidoes}
-              loading={buscandoCertidoes}
+              icon={<Lock size={14} />}
+              label="Buscar Certidoes (Em breve)"
+              onClick={() => {}}
+              disabled
             />
           }
         >
@@ -451,45 +607,45 @@ export function EmpresaPage() {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowDocModal(false)}>Cancelar</button>
-            <button className="btn btn-primary">Enviar</button>
+            <button className="btn btn-primary" onClick={handleSalvarDocumento} disabled={!novoDocTipo}>Enviar</button>
           </>
         }
       >
         <FormField label="Tipo de Documento" required>
-          <select className="select-input">
+          <select className="select-input" value={novoDocTipo} onChange={(e) => setNovoDocTipo(e.target.value)}>
             <option value="">Selecione...</option>
             <optgroup label="Habilitacao Juridica">
-              <option value="contrato">Contrato Social</option>
-              <option value="procuracao">Procuracao</option>
+              <option value="Contrato Social">Contrato Social</option>
+              <option value="Procuracao">Procuracao</option>
             </optgroup>
             <optgroup label="Habilitacao Fiscal">
-              <option value="certidao">Certidao Negativa</option>
-              <option value="hab_fiscal">Habilitacao Fiscal</option>
+              <option value="Certidao Negativa">Certidao Negativa</option>
+              <option value="Habilitacao Fiscal">Habilitacao Fiscal</option>
             </optgroup>
             <optgroup label="Habilitacao Economica/Financeira">
-              <option value="hab_financeira">Habilitacao Economica</option>
-              <option value="balanco">Balanco Patrimonial</option>
+              <option value="Habilitacao Economica">Habilitacao Economica</option>
+              <option value="Balanco Patrimonial">Balanco Patrimonial</option>
             </optgroup>
             <optgroup label="Qualificacao Tecnica">
-              <option value="qual_tecnica">Qualificacao Tecnica</option>
-              <option value="atestado">Atestado de Capacidade</option>
+              <option value="Qualificacao Tecnica">Qualificacao Tecnica</option>
+              <option value="Atestado de Capacidade">Atestado de Capacidade</option>
             </optgroup>
             <optgroup label="Sanitarias/Regulatorias">
-              <option value="afe">AFE (ANVISA)</option>
-              <option value="cbpad">CBPAD</option>
-              <option value="cbpp">CBPP</option>
-              <option value="bombeiros">Corpo de Bombeiros</option>
+              <option value="AFE">AFE (ANVISA)</option>
+              <option value="CBPAD">CBPAD</option>
+              <option value="CBPP">CBPP</option>
+              <option value="Corpo de Bombeiros">Corpo de Bombeiros</option>
             </optgroup>
             <optgroup label="Outros">
-              <option value="outro">Outro</option>
+              <option value="Outro">Outro</option>
             </optgroup>
           </select>
         </FormField>
-        <FormField label="Arquivo" required>
-          <input type="file" accept=".pdf,.doc,.docx,.jpg,.png" />
+        <FormField label="Arquivo">
+          <input type="file" accept=".pdf,.doc,.docx,.jpg,.png" onChange={(e) => setNovoDocFile(e.target.files?.[0] || null)} />
         </FormField>
         <FormField label="Validade">
-          <input type="date" className="text-input" />
+          <input type="date" className="text-input" value={novoDocValidade} onChange={(e) => setNovoDocValidade(e.target.value)} />
         </FormField>
       </Modal>
 
@@ -501,21 +657,21 @@ export function EmpresaPage() {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowRespModal(false)}>Cancelar</button>
-            <button className="btn btn-primary">Salvar</button>
+            <button className="btn btn-primary" onClick={handleSalvarResponsavel} disabled={!novoRespNome}>Salvar</button>
           </>
         }
       >
         <FormField label="Nome" required>
-          <TextInput value="" onChange={() => {}} />
+          <TextInput value={novoRespNome} onChange={setNovoRespNome} />
         </FormField>
         <FormField label="Cargo">
-          <TextInput value="" onChange={() => {}} />
+          <TextInput value={novoRespCargo} onChange={setNovoRespCargo} />
         </FormField>
         <FormField label="Email" required>
-          <TextInput value="" onChange={() => {}} type="email" />
+          <TextInput value={novoRespEmail} onChange={setNovoRespEmail} type="email" />
         </FormField>
         <FormField label="Telefone">
-          <TextInput value="" onChange={() => {}} />
+          <TextInput value={novoRespTel} onChange={setNovoRespTel} />
         </FormField>
       </Modal>
     </div>

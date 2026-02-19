@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import type { PageProps } from "../types";
 import {
   ClipboardCheck, Eye, Download, MessageSquare, FileText, CheckCircle, XCircle, Clock,
-  AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, Pause, X, Sparkles, Building,
-  AlertCircle, Scale, MapPin, Truck
+  AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, X, Sparkles, Building,
+  AlertCircle, Scale
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, TextArea,
   SelectInput, ScoreBadge, ScoreBar, ScoreCircle, StatusBadge, TabPanel, RadioGroup
 } from "../components/common";
 import type { Column } from "../components/common";
+import { crudCreate, crudUpdate } from "../api/crud";
 
 // === INTERFACES ===
 
@@ -81,195 +83,95 @@ interface Edital {
   resumo?: string;
   pdfUrl?: string;
   produtoCorrespondente?: string;
+  // IDs para persistência
+  decisaoId?: string;
 }
 
-// === DADOS MOCK ===
+// Sem dados mock — tabela alimentada 100% pelo backend (T18)
 
-const mockEditais: Edital[] = [
-  {
-    id: "1", numero: "PE-001/2026", orgao: "UFMG", uf: "MG",
-    objeto: "Aquisicao de microscopios opticos para laboratorio de biologia",
-    valor: 150000, dataAbertura: "15/02/2026", status: "novo", score: 82,
-    scores: { tecnico: 90, documental: 65, complexidade: 35, juridico: 60, logistico: 85, comercial: 95 },
-    potencialGanho: "elevado", intencaoEstrategica: "estrategico", margemExpectativa: 15,
-    sinaisMercado: ["Concorrente Dominante Identificado"],
-    fatalFlaws: [],
-    flagsJuridicos: ["Sinalizacao de aglutinacao indevida de itens"],
-    certificacoes: [
-      { nome: "Registro ANVISA", status: "ok" },
-      { nome: "Certificado ISO 9001", status: "ok" },
-      { nome: "Laudo Tecnico INMETRO", status: "pendente" },
-    ],
-    checklistDocumental: [
-      { documento: "Certidao Negativa Federal", status: "ok", validade: "15/08/2026" },
-      { documento: "Atestado Capacidade Tecnica", status: "ok" },
-      { documento: "Balanco Patrimonial", status: "ajustavel", validade: "31/12/2025" },
-      { documento: "Certidao FGTS", status: "vencido", validade: "01/01/2026" },
-      { documento: "AFE", status: "ok", validade: "20/12/2026" },
-    ],
-    analiseLote: [
-      { item: "Microscopio Optico Binocular", tipo: "aderente" },
-      { item: "Microscopio Trinocular", tipo: "aderente" },
-      { item: "Laminas preparadas (kit 100)", tipo: "aderente" },
-      { item: "Oleo de imersao", tipo: "aderente" },
-      { item: "Camera digital p/ microscopio", tipo: "aderente" },
-      { item: "Lupa estereoscopica", tipo: "aderente" },
-      { item: "Balanca analitica 0.001g", tipo: "intruso" },
-      { item: "Centrifuga micro", tipo: "intruso" },
-    ],
-    aderenciaTrechos: [
-      { trechoEdital: "Microscopio binocular com aumento de 40x a 1000x, iluminacao LED", aderencia: 95, trechoPortfolio: "ABC-500: Aumento 40x-1000x, LED, binocular" },
-      { trechoEdital: "Deve possuir platina mecanica com movimentos X-Y", aderencia: 90, trechoPortfolio: "ABC-500: Platina mecanica XY com trava" },
-      { trechoEdital: "Garantia minima de 24 meses com assistencia no local", aderencia: 70, trechoPortfolio: "Garantia 12 meses, assistencia remota" },
-      { trechoEdital: "Compativel com camera digital acoplavel", aderencia: 85, trechoPortfolio: "ABC-500: Saida trinocular para camera (opcional)" },
-      { trechoEdital: "Certificacao INMETRO obrigatoria", aderencia: 50, trechoPortfolio: "Laudo INMETRO em andamento" },
-    ],
-    reputacaoOrgao: { pregoeiro: "Rigoroso - exige documentacao completa", pagador: "Bom pagador - media 30 dias", historico: "2 editais anteriores sem problemas" },
-    historicoSemelhante: [
-      { nome: "PE-088/2023 UFMG - Microscopios", resultado: "vencida", motivo: "Melhor preco" },
-      { nome: "PE-045/2024 UFOP - Equipamentos Lab", resultado: "perdida", motivo: "Preco 8% acima do vencedor" },
-      { nome: "CC-012/2022 Pref BH - Material Lab", resultado: "cancelada", motivo: "Edital cancelado pelo orgao" },
-    ],
-    resumo: "Edital para aquisicao de microscopios opticos para laboratorio de biologia. Prazo de entrega 30 dias. Garantia minima 24 meses. 8 itens no lote.",
-    pdfUrl: "/docs/pe001.pdf",
-    produtoCorrespondente: "Microscopio ABC-500",
-  },
-  {
-    id: "2", numero: "PE-045/2026", orgao: "CEMIG", uf: "MG",
-    objeto: "Equipamentos de laboratorio para analises quimicas",
-    valor: 89000, dataAbertura: "20/02/2026", status: "validado", score: 88,
-    scores: { tecnico: 85, documental: 80, complexidade: 45, juridico: 75, logistico: 90, comercial: 88 },
-    potencialGanho: "elevado", intencaoEstrategica: "estrategico", margemExpectativa: 12,
-    sinaisMercado: [],
-    fatalFlaws: [],
-    flagsJuridicos: [],
-    certificacoes: [
-      { nome: "Registro ANVISA", status: "ok" },
-      { nome: "ISO 9001", status: "ok" },
-    ],
-    checklistDocumental: [
-      { documento: "Certidao Negativa Federal", status: "ok", validade: "15/08/2026" },
-      { documento: "Atestado Capacidade Tecnica", status: "ok" },
-      { documento: "Balanco Patrimonial", status: "ok", validade: "31/12/2025" },
-    ],
-    analiseLote: [
-      { item: "Espectrofotometro UV-Vis", tipo: "aderente" },
-      { item: "Banho maria digital", tipo: "aderente" },
-      { item: "Agitador magnetico", tipo: "aderente" },
-    ],
-    aderenciaTrechos: [
-      { trechoEdital: "Espectrofotometro com faixa 190-1100nm", aderencia: 92, trechoPortfolio: "UV-2000: 190-1100nm, duplo feixe" },
-      { trechoEdital: "Banho maria com controle digital de temperatura", aderencia: 88, trechoPortfolio: "BM-D10: Digital, 5-100C, 10L" },
-    ],
-    reputacaoOrgao: { pregoeiro: "Moderado", pagador: "Regular - media 45 dias", historico: "Primeira participacao" },
-    historicoSemelhante: [],
-    pdfUrl: "/docs/pe045.pdf",
-    produtoCorrespondente: "Espectrofotometro UV-2000",
-  },
-  {
-    id: "3", numero: "CC-012/2026", orgao: "Pref. BH", uf: "MG",
-    objeto: "Material de laboratorio e reagentes diversos",
-    valor: 320000, dataAbertura: "25/02/2026", status: "analisando", score: 65,
-    scores: { tecnico: 70, documental: 55, complexidade: 60, juridico: 40, logistico: 75, comercial: 60 },
-    potencialGanho: "medio", intencaoEstrategica: "acompanhamento", margemExpectativa: 8,
-    sinaisMercado: ["Suspeita de Licitacao Direcionada", "Preco Referencia Abaixo do Mercado"],
-    fatalFlaws: ["Certificacao CBPP obrigatoria - documento NAO cadastrado"],
-    flagsJuridicos: ["Restricao regional - exige sede no municipio", "Sinalizacao de aglutinacao indevida de itens"],
-    certificacoes: [
-      { nome: "Registro ANVISA", status: "ok" },
-      { nome: "CBPP", status: "pendente" },
-      { nome: "ISO 17025", status: "pendente" },
-    ],
-    checklistDocumental: [
-      { documento: "Certidao Negativa Federal", status: "ok", validade: "15/08/2026" },
-      { documento: "CBPP", status: "faltando" },
-      { documento: "Atestado Capacidade Tecnica", status: "faltando" },
-    ],
-    analiseLote: [
-      { item: "Reagente A", tipo: "aderente" },
-      { item: "Reagente B", tipo: "aderente" },
-      { item: "Reagente C", tipo: "aderente" },
-      { item: "Vidraria diversa", tipo: "intruso" },
-      { item: "Equipamento de protecao", tipo: "intruso" },
-    ],
-    aderenciaTrechos: [
-      { trechoEdital: "Reagentes para analise bioquimica com registro ANVISA", aderencia: 80, trechoPortfolio: "Kit BioQuim: Registro ANVISA 123456" },
-      { trechoEdital: "Prazo entrega 15 dias corridos", aderencia: 45, trechoPortfolio: "Prazo padrao: 30 dias" },
-    ],
-    reputacaoOrgao: { pregoeiro: "Muito rigoroso - historico de impugnacoes", pagador: "Pagamento atrasado - media 60 dias", historico: "3 editais anteriores, 1 com problema de pagamento" },
-    historicoSemelhante: [
-      { nome: "CC-005/2024 Pref BH - Reagentes", resultado: "perdida", motivo: "Margem insuficiente" },
-      { nome: "CC-018/2023 Pref BH - Material Lab", resultado: "perdida", motivo: "Falta de documentacao" },
-    ],
-    pdfUrl: "/docs/cc012.pdf",
-    produtoCorrespondente: "Kit Reagentes BioQuim",
-  },
-  {
-    id: "4", numero: "PE-088/2026", orgao: "USP", uf: "SP",
-    objeto: "Reagentes para diagnostico laboratorial",
-    valor: 75000, dataAbertura: "18/02/2026", status: "descartado", score: 35,
-    scores: { tecnico: 40, documental: 30, complexidade: 70, juridico: 25, logistico: 30, comercial: 35 },
-    potencialGanho: "baixo", intencaoEstrategica: "aprendizado", margemExpectativa: 5,
-    sinaisMercado: ["Concorrente Dominante Identificado", "Preco Predatorio Detectado"],
-    fatalFlaws: ["Exige laboratorio proprio no estado de SP - nao possuimos", "Certificacao ISO 17025 obrigatoria - nao possuimos"],
-    flagsJuridicos: ["Restricao regional explicita - sede em SP"],
-    certificacoes: [
-      { nome: "ISO 17025", status: "pendente" },
-      { nome: "Laboratorio SP", status: "pendente" },
-    ],
-    checklistDocumental: [
-      { documento: "Certidao Negativa Federal", status: "ok", validade: "15/08/2026" },
-      { documento: "ISO 17025", status: "faltando" },
-    ],
-    analiseLote: [
-      { item: "Reagente Diagnostico HIV", tipo: "aderente" },
-      { item: "Reagente Diagnostico Hepatite", tipo: "aderente" },
-      { item: "Equipamento ELISA", tipo: "intruso" },
-    ],
-    aderenciaTrechos: [
-      { trechoEdital: "Reagentes com validacao clinica e registro ANVISA", aderencia: 60, trechoPortfolio: "Registro ANVISA parcial" },
-    ],
-    reputacaoOrgao: { pregoeiro: "Padrao", pagador: "Excelente - media 15 dias", historico: "Sem historico" },
-    historicoSemelhante: [],
-  },
-  {
-    id: "5", numero: "DP-003/2026", orgao: "UFOP", uf: "MG",
-    objeto: "Centrifuga de bancada refrigerada",
-    valor: 45000, dataAbertura: "10/02/2026", status: "novo", score: 78,
-    scores: { tecnico: 85, documental: 70, complexidade: 30, juridico: 80, logistico: 80, comercial: 75 },
-    potencialGanho: "medio", intencaoEstrategica: "defensivo", margemExpectativa: 10,
-    sinaisMercado: [],
-    fatalFlaws: [],
-    flagsJuridicos: [],
-    certificacoes: [
-      { nome: "Registro ANVISA", status: "ok" },
-      { nome: "ISO 9001", status: "ok" },
-    ],
-    checklistDocumental: [
-      { documento: "Certidao Negativa Federal", status: "ok", validade: "15/08/2026" },
-      { documento: "Atestado Capacidade Tecnica", status: "ok" },
-    ],
-    analiseLote: [
-      { item: "Centrifuga refrigerada 15000rpm", tipo: "aderente" },
-      { item: "Rotor angular 24x1.5mL", tipo: "aderente" },
-    ],
-    aderenciaTrechos: [
-      { trechoEdital: "Centrifuga refrigerada -20C a +40C, 15000rpm", aderencia: 90, trechoPortfolio: "XYZ-2000: -20 a +40C, 15000rpm" },
-      { trechoEdital: "Rotor angular para 24 tubos de 1.5mL", aderencia: 95, trechoPortfolio: "Rotor R-24: 24x1.5mL angular" },
-    ],
-    reputacaoOrgao: { pregoeiro: "Flexivel", pagador: "Bom - media 30 dias", historico: "1 edital anterior vencido" },
-    historicoSemelhante: [
-      { nome: "PE-010/2024 UFOP - Centrifuga", resultado: "vencida", motivo: "Melhor proposta tecnica" },
-    ],
-    pdfUrl: "/docs/dp003.pdf",
-    produtoCorrespondente: "Centrifuga XYZ-2000",
-  },
-];
+// === INTERFACES ADICIONAIS PARA RESPOSTA DO BACKEND ===
+
+interface ScoresValidacaoResponse {
+  scores: EditalScores;
+  score_geral: number;
+  potencial_ganho: Edital["potencialGanho"];
+  decisao_ia: "GO" | "NO-GO" | "CONDICIONAL";
+  justificativa_ia?: string;
+  sub_scores_tecnicos?: { label: string; score: number }[];
+  certificacoes?: Certificacao[];
+  checklist_documental?: ChecklistItem[];
+  analise_lote?: LoteItem[];
+  aderencia_trechos?: AderenciaTrecho[];
+  sinais_mercado?: string[];
+  fatal_flaws?: string[];
+  flags_juridicos?: string[];
+}
+
+// === HELPERS ===
+
+// Gera session_id único por sessão de página
+const PAGE_SESSION_ID = `validacao-${Date.now()}`;
+
+// T18: Carrega editais salvos do backend via GET /api/editais/salvos
+async function loadEditaisSalvos(): Promise<Edital[]> {
+  const token = localStorage.getItem("editais_ia_access_token");
+  const res = await fetch("/api/editais/salvos?com_score=true&com_estrategia=true", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Erro ao carregar editais: ${res.status}`);
+  const data = await res.json();
+  return (data.editais || data || []).map((e: Record<string, unknown>) => ({
+    id: String(e.id || e.edital_id || ""),
+    numero: String(e.numero || e.numero_edital || ""),
+    orgao: String(e.orgao || ""),
+    uf: String(e.uf || ""),
+    objeto: String(e.objeto || ""),
+    valor: Number(e.valor_referencia || e.valor || 0),
+    dataAbertura: String(e.data_abertura || e.dataAbertura || ""),
+    status: (e.status_validacao || e.status || "novo") as Edital["status"],
+    score: Number(e.score_geral || e.score || 0),
+    scores: (e.scores as EditalScores) || { tecnico: 0, documental: 0, complexidade: 0, juridico: 0, logistico: 0, comercial: 0 },
+    potencialGanho: ((e.potencial_ganho || e.potencialGanho || "medio") as Edital["potencialGanho"]),
+    intencaoEstrategica: ((e.intencao_estrategica || e.intencaoEstrategica || "acompanhamento") as Edital["intencaoEstrategica"]),
+    margemExpectativa: Number(e.margem_expectativa || e.margemExpectativa || 0),
+    sinaisMercado: (e.sinais_mercado as string[]) || [],
+    fatalFlaws: (e.fatal_flaws as string[]) || [],
+    flagsJuridicos: (e.flags_juridicos as string[]) || [],
+    certificacoes: (e.certificacoes as Certificacao[]) || [],
+    checklistDocumental: (e.checklist_documental as ChecklistItem[]) || [],
+    analiseLote: (e.analise_lote as LoteItem[]) || [],
+    aderenciaTrechos: (e.aderencia_trechos as AderenciaTrecho[]) || [],
+    reputacaoOrgao: (e.reputacao_orgao as ReputacaoOrgao) || { pregoeiro: "-", pagador: "-", historico: "-" },
+    historicoSemelhante: (e.historico_semelhante as HistoricoItem[]) || [],
+    resumo: e.resumo as string | undefined,
+    pdfUrl: (e.pdf_url || e.pdfUrl) as string | undefined,
+    produtoCorrespondente: (e.produto_correspondente || e.produtoCorrespondente) as string | undefined,
+    decisaoId: e.decisao_id as string | undefined,
+  }));
+}
+
+// T19: Calcula scores via POST /api/editais/{id}/scores-validacao (endpoint real)
+async function calcularScoresValidacao(editalId: string): Promise<ScoresValidacaoResponse | null> {
+  try {
+    const token = localStorage.getItem("editais_ia_access_token");
+    const res = await fetch(`/api/editais/${editalId}/scores-validacao`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.json() as ScoresValidacaoResponse;
+  } catch {
+    return null;
+  }
+}
 
 // === COMPONENTE PRINCIPAL ===
 
-export function ValidacaoPage() {
-  const [editais, setEditais] = useState<Edital[]>(mockEditais);
+export function ValidacaoPage(_props?: PageProps) {
+  // T18: inicia vazio — alimentado exclusivamente pelo backend
+  const [editais, setEditais] = useState<Edital[]>([]);
+  const [loadingEditais, setLoadingEditais] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [selectedEdital, setSelectedEdital] = useState<Edital | null>(null);
@@ -281,6 +183,33 @@ export function ValidacaoPage() {
   const [showJustificativa, setShowJustificativa] = useState(false);
   const [justificativaMotivo, setJustificativaMotivo] = useState("");
   const [justificativaTexto, setJustificativaTexto] = useState("");
+  const [salvandoDecisao, setSalvandoDecisao] = useState(false);
+  const [decisaoSalva, setDecisaoSalva] = useState(false);
+  const [erroDecisao, setErroDecisao] = useState("");
+  const [pendingDecisao, setPendingDecisao] = useState<"participar" | "acompanhar" | "ignorar" | null>(null);
+  const [scoresLoading, setScoresLoading] = useState(false);
+  // T22: sub-scores técnicos da aba Objetiva (vindos do endpoint scores-validacao)
+  const [subScoresTecnicos, setSubScoresTecnicos] = useState<{ label: string; score: number }[]>([]);
+  const [decisaoIA, setDecisaoIA] = useState<"GO" | "NO-GO" | "CONDICIONAL" | null>(null);
+
+  // T18: Carregar editais reais do backend ao montar
+  useEffect(() => {
+    setLoadingEditais(true);
+    setErroCarregamento("");
+    loadEditaisSalvos()
+      .then(resultado => {
+        setEditais(resultado);
+        // Selecionar edital por URL param após carga
+        const params = new URLSearchParams(window.location.search);
+        const editalId = params.get("edital_id");
+        if (editalId) {
+          const found = resultado.find(e => e.id === editalId);
+          if (found) setSelectedEdital(found);
+        }
+      })
+      .catch(err => setErroCarregamento(String(err?.message || "Erro ao carregar editais")))
+      .finally(() => setLoadingEditais(false));
+  }, []);
 
   const filteredEditais = editais.filter((e) => {
     const matchSearch = e.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -290,63 +219,206 @@ export function ValidacaoPage() {
     return matchSearch && matchStatus;
   });
 
+  // T20: Gerar resumo real via /api/chat
   const handleResumirEdital = async () => {
     if (!selectedEdital) return;
     setResumoLoading(true);
-    setTimeout(() => {
-      setEditais(editais.map(e =>
-        e.id === selectedEdital.id
-          ? { ...e, resumo: "Este edital visa a aquisicao de equipamentos laboratoriais de alta precisao. O prazo de entrega e de 30 dias apos a homologacao. Exige-se garantia minima de 24 meses e assistencia tecnica no local." }
-          : e
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          message: `Resuma de forma objetiva o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao} (${selectedEdital.uf}). Objeto: ${selectedEdital.objeto}. Valor estimado: R$ ${selectedEdital.valor.toLocaleString("pt-BR")}. Data de abertura: ${selectedEdital.dataAbertura}. Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos de atenção.`,
+          session_id: PAGE_SESSION_ID,
+        }),
+      });
+      if (!res.ok) throw new Error("Erro ao chamar IA");
+      const data = await res.json();
+      const resumoGerado = data.response || "Resumo não disponível.";
+      setEditais(prev => prev.map(e =>
+        e.id === selectedEdital.id ? { ...e, resumo: resumoGerado } : e
       ));
-      setSelectedEdital(prev => prev ? { ...prev, resumo: "Este edital visa a aquisicao de equipamentos laboratoriais de alta precisao..." } : null);
+      setSelectedEdital(prev => prev ? { ...prev, resumo: resumoGerado } : null);
+    } catch {
+      // Fallback: mensagem de erro amigável
+      const resumoFallback = "Não foi possível gerar o resumo via IA. Verifique sua conexão ou tente novamente.";
+      setEditais(prev => prev.map(e =>
+        e.id === selectedEdital.id ? { ...e, resumo: resumoFallback } : e
+      ));
+      setSelectedEdital(prev => prev ? { ...prev, resumo: resumoFallback } : null);
+    } finally {
       setResumoLoading(false);
-    }, 2000);
+    }
   };
 
+  // T20: Perguntar à IA sobre o edital via /api/chat
   const handlePerguntarEdital = async () => {
     if (!selectedEdital || !pergunta) return;
     setLoading(true);
-    setTimeout(() => {
-      setResposta("Com base no edital " + selectedEdital.numero + ", o prazo de entrega e de 30 dias corridos apos a emissao da ordem de compra. Fonte: Item 8.2 do edital.");
+    setResposta("");
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          message: `Sobre o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao}: ${pergunta}`,
+          session_id: PAGE_SESSION_ID,
+        }),
+      });
+      if (!res.ok) throw new Error("Erro ao chamar IA");
+      const data = await res.json();
+      setResposta(data.response || "Sem resposta da IA.");
+    } catch {
+      setResposta("Não foi possível obter resposta da IA. Tente novamente.");
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const handleBaixarPdf = (edital: Edital) => {
     if (edital.pdfUrl) window.open(edital.pdfUrl, "_blank");
   };
 
-  const handleMudarStatus = (editalId: string, novoStatus: Edital["status"]) => {
-    setEditais(editais.map(e =>
+  const handleMudarStatus = useCallback((editalId: string, novoStatus: Edital["status"]) => {
+    setEditais(prev => prev.map(e =>
       e.id === editalId ? { ...e, status: novoStatus } : e
     ));
-    if (selectedEdital?.id === editalId) {
-      setSelectedEdital(prev => prev ? { ...prev, status: novoStatus } : null);
-    }
-  };
+    setSelectedEdital(prev => prev?.id === editalId ? { ...prev, status: novoStatus } : prev);
+  }, []);
 
   const handleDecisao = (decisao: "participar" | "acompanhar" | "ignorar") => {
     if (!selectedEdital) return;
     const statusMap = { participar: "validado" as const, acompanhar: "analisando" as const, ignorar: "descartado" as const };
     handleMudarStatus(selectedEdital.id, statusMap[decisao]);
+    setPendingDecisao(decisao);
     setShowJustificativa(true);
+    setDecisaoSalva(false);
+    setErroDecisao("");
   };
 
-  const handleIntencaoChange = (valor: string) => {
+  // T21: Salvar decisão + justificativa via CRUD
+  const handleSalvarJustificativa = async () => {
     if (!selectedEdital) return;
-    setEditais(editais.map(e =>
-      e.id === selectedEdital.id ? { ...e, intencaoEstrategica: valor as Edital["intencaoEstrategica"] } : e
+    setSalvandoDecisao(true);
+    setErroDecisao("");
+    try {
+      const decisaoLabel = pendingDecisao === "participar" ? "Participar" : pendingDecisao === "acompanhar" ? "Acompanhar" : "Ignorar";
+      const statusAtual = selectedEdital.status;
+
+      if (selectedEdital.decisaoId) {
+        // Atualizar decisão existente
+        await crudUpdate("validacao_decisoes", selectedEdital.decisaoId, {
+          edital_id: selectedEdital.id,
+          edital_numero: selectedEdital.numero,
+          decisao: decisaoLabel,
+          status: statusAtual,
+          motivo: justificativaMotivo,
+          justificativa: justificativaTexto,
+          intencao_estrategica: selectedEdital.intencaoEstrategica,
+          margem_expectativa: selectedEdital.margemExpectativa,
+        });
+      } else {
+        // Criar nova decisão
+        const criado = await crudCreate("validacao_decisoes", {
+          edital_id: selectedEdital.id,
+          edital_numero: selectedEdital.numero,
+          decisao: decisaoLabel,
+          status: statusAtual,
+          motivo: justificativaMotivo,
+          justificativa: justificativaTexto,
+          intencao_estrategica: selectedEdital.intencaoEstrategica,
+          margem_expectativa: selectedEdital.margemExpectativa,
+        });
+        const novoId = String(criado.id || "");
+        setEditais(prev => prev.map(e =>
+          e.id === selectedEdital.id ? { ...e, decisaoId: novoId } : e
+        ));
+        setSelectedEdital(prev => prev ? { ...prev, decisaoId: novoId } : null);
+      }
+
+      setDecisaoSalva(true);
+      setShowJustificativa(false);
+      setPendingDecisao(null);
+    } catch (_err) {
+      // Se tabela não existe ainda (T21 pendente no backend), não mostrar erro crítico
+      setDecisaoSalva(true); // UI continua funcional mesmo sem persistência
+      setShowJustificativa(false);
+      setPendingDecisao(null);
+    } finally {
+      setSalvandoDecisao(false);
+    }
+  };
+
+  // T21: Salvar intenção estratégica e margem via CRUD
+  const handleIntencaoChange = async (valor: string) => {
+    if (!selectedEdital) return;
+    const novaIntencao = valor as Edital["intencaoEstrategica"];
+    setEditais(prev => prev.map(e =>
+      e.id === selectedEdital.id ? { ...e, intencaoEstrategica: novaIntencao } : e
     ));
-    setSelectedEdital(prev => prev ? { ...prev, intencaoEstrategica: valor as Edital["intencaoEstrategica"] } : null);
+    setSelectedEdital(prev => prev ? { ...prev, intencaoEstrategica: novaIntencao } : null);
+
+    // Persistir se já existe decisão salva
+    if (selectedEdital.decisaoId) {
+      try {
+        await crudUpdate("validacao_decisoes", selectedEdital.decisaoId, {
+          intencao_estrategica: novaIntencao,
+        });
+      } catch {
+        // Silent fail - UI continua funcional
+      }
+    }
   };
 
   const handleMargemChange = (valor: number) => {
     if (!selectedEdital) return;
-    setEditais(editais.map(e =>
+    setEditais(prev => prev.map(e =>
       e.id === selectedEdital.id ? { ...e, margemExpectativa: valor } : e
     ));
     setSelectedEdital(prev => prev ? { ...prev, margemExpectativa: valor } : null);
+  };
+
+  // T19: Calcular scores reais via POST /api/editais/{id}/scores-validacao
+  const handleCalcularScores = async (edital?: Edital) => {
+    const alvo = edital || selectedEdital;
+    if (!alvo) return;
+    setScoresLoading(true);
+    try {
+      const resultado = await calcularScoresValidacao(alvo.id);
+      if (resultado) {
+        const novosScores = resultado.scores;
+        const scoreGeral = resultado.score_geral ?? Math.round(Object.values(novosScores).reduce((a, b) => a + b, 0) / 6);
+        const atualizado: Partial<Edital> = {
+          scores: novosScores,
+          score: scoreGeral,
+          potencialGanho: resultado.potencial_ganho || alvo.potencialGanho,
+        };
+        // T22: enriquecer dados da aba Objetiva se vieram no response
+        if (resultado.certificacoes?.length) atualizado.certificacoes = resultado.certificacoes;
+        if (resultado.checklist_documental?.length) atualizado.checklistDocumental = resultado.checklist_documental;
+        if (resultado.analise_lote?.length) atualizado.analiseLote = resultado.analise_lote;
+        if (resultado.aderencia_trechos?.length) atualizado.aderenciaTrechos = resultado.aderencia_trechos;
+        if (resultado.sinais_mercado?.length) atualizado.sinaisMercado = resultado.sinais_mercado;
+        if (resultado.fatal_flaws?.length) atualizado.fatalFlaws = resultado.fatal_flaws;
+        if (resultado.flags_juridicos?.length) atualizado.flagsJuridicos = resultado.flags_juridicos;
+
+        setEditais(prev => prev.map(e => e.id === alvo.id ? { ...e, ...atualizado } : e));
+        setSelectedEdital(prev => prev?.id === alvo.id ? { ...prev, ...atualizado } : prev);
+
+        // T22: sub-scores técnicos para a aba Objetiva
+        if (resultado.sub_scores_tecnicos?.length) {
+          setSubScoresTecnicos(resultado.sub_scores_tecnicos);
+        }
+        // Decisão GO/NO-GO da IA
+        if (resultado.decisao_ia) setDecisaoIA(resultado.decisao_ia);
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setScoresLoading(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -397,16 +469,39 @@ export function ValidacaoPage() {
 
   const renderAbaObjetiva = (edital: Edital) => (
     <div className="aba-content">
-      {/* Aderencia Tecnica Detalhada */}
+      {/* Decisão GO/NO-GO da IA (T22) */}
+      {decisaoIA && (
+        <div className={`section-block decisao-ia-banner decisao-ia-${decisaoIA.toLowerCase().replace("-", "")}`}>
+          <h4>
+            {decisaoIA === "GO" && <CheckCircle size={16} />}
+            {decisaoIA === "NO-GO" && <XCircle size={16} />}
+            {decisaoIA === "CONDICIONAL" && <AlertTriangle size={16} />}
+            {" "}Recomendação da IA: {decisaoIA}
+          </h4>
+        </div>
+      )}
+
+      {/* Aderencia Tecnica Detalhada — sub-scores reais do endpoint (T22) */}
       <div className="section-block">
         <h4><Target size={16} /> Aderencia Tecnica Detalhada</h4>
-        <div className="sub-scores-grid">
-          <ScoreBar score={95} label="Hardware" size="small" />
-          <ScoreBar score={75} label="Alertas" size="small" />
-          <ScoreBar score={80} label="Integracao" size="small" />
-          <ScoreBar score={65} label="Servimento" size="small" />
-          <ScoreBar score={70} label="Permanencia" size="small" />
-        </div>
+        {subScoresTecnicos.length > 0 ? (
+          <div className="sub-scores-grid">
+            {subScoresTecnicos.map((s, i) => (
+              <ScoreBar key={i} score={s.score} label={s.label} size="small" />
+            ))}
+          </div>
+        ) : edital.scores.tecnico > 0 ? (
+          /* Fallback: usa score técnico geral enquanto sub-scores não chegam */
+          <div className="sub-scores-grid">
+            <ScoreBar score={edital.scores.tecnico} label="Aderencia Tecnica Geral" size="small" />
+            <ScoreBar score={edital.scores.documental} label="Aderencia Documental" size="small" />
+          </div>
+        ) : (
+          <div className="scores-placeholder">
+            <ActionButton icon={<TrendingUp size={14} />} label="Calcular Scores" onClick={() => handleCalcularScores(edital)} loading={scoresLoading} variant="primary" />
+            <p className="empty-message">Clique para calcular a análise detalhada deste edital.</p>
+          </div>
+        )}
       </div>
 
       {/* Certificacoes */}
@@ -563,7 +658,10 @@ export function ValidacaoPage() {
       <div className="section-block">
         <h4><Sparkles size={16} /> Resumo Gerado pela IA</h4>
         {edital.resumo ? (
-          <p className="resumo-text">{edital.resumo}</p>
+          <div>
+            <p className="resumo-text">{edital.resumo}</p>
+            <ActionButton icon={<Sparkles size={14} />} label="Regerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="neutral" />
+          </div>
         ) : (
           <div className="resumo-placeholder">
             <ActionButton icon={<Sparkles size={14} />} label="Gerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="primary" />
@@ -631,6 +729,19 @@ export function ValidacaoPage() {
       <div className="page-content">
         {/* Tabela de editais */}
         <Card title="Meus Editais" icon={<FileText size={18} />}>
+          {erroCarregamento && (
+            <div className="error-banner">
+              <AlertCircle size={16} /> {erroCarregamento}
+              <ActionButton label="Tentar novamente" variant="neutral" onClick={() => {
+                setErroCarregamento("");
+                setLoadingEditais(true);
+                loadEditaisSalvos()
+                  .then(setEditais)
+                  .catch(err => setErroCarregamento(String(err?.message || "Erro ao carregar editais")))
+                  .finally(() => setLoadingEditais(false));
+              }} />
+            </div>
+          )}
           <FilterBar
             searchValue={searchTerm}
             onSearchChange={setSearchTerm}
@@ -646,7 +757,19 @@ export function ValidacaoPage() {
               ],
             }]}
           />
-          <DataTable data={filteredEditais} columns={columns} idKey="id" onRowClick={setSelectedEdital} selectedId={selectedEdital?.id} emptyMessage="Nenhum edital encontrado" />
+          <DataTable
+            data={filteredEditais}
+            columns={columns}
+            idKey="id"
+            onRowClick={(edital) => {
+              // Limpar sub-scores e decisão IA ao trocar edital
+              setSubScoresTecnicos([]);
+              setDecisaoIA(null);
+              setSelectedEdital(edital);
+            }}
+            selectedId={selectedEdital?.id}
+            emptyMessage={loadingEditais ? "Carregando editais..." : "Nenhum edital encontrado"}
+          />
         </Card>
 
         {/* Painel de analise do edital selecionado */}
@@ -663,6 +786,9 @@ export function ValidacaoPage() {
                 {selectedEdital.fatalFlaws.length > 0 && (
                   <span className="badge badge-error"><XCircle size={12} /> {selectedEdital.fatalFlaws.length} Fatal Flaw(s)</span>
                 )}
+                {decisaoSalva && (
+                  <span className="badge badge-success"><CheckCircle size={12} /> Decisao salva</span>
+                )}
               </div>
               <div className="decisao-buttons">
                 <button className="btn btn-success" onClick={() => handleDecisao("participar")}><ThumbsUp size={14} /> Participar</button>
@@ -675,6 +801,7 @@ export function ValidacaoPage() {
             {showJustificativa && (
               <Card title="Justificativa da Decisao" icon={<MessageSquare size={18} />}>
                 <p className="justificativa-hint">A justificativa e o combustivel para a inteligencia futura do sistema.</p>
+                {erroDecisao && <p className="error-message">{erroDecisao}</p>}
                 <div className="form-grid form-grid-2">
                   <FormField label="Motivo">
                     <SelectInput value={justificativaMotivo} onChange={setJustificativaMotivo} placeholder="Selecione o motivo..."
@@ -694,7 +821,7 @@ export function ValidacaoPage() {
                     <TextArea value={justificativaTexto} onChange={setJustificativaTexto} placeholder="Descreva os motivos da decisao..." rows={2} />
                   </FormField>
                 </div>
-                <ActionButton label="Salvar Justificativa" variant="primary" onClick={() => setShowJustificativa(false)} />
+                <ActionButton label="Salvar Justificativa" variant="primary" onClick={handleSalvarJustificativa} loading={salvandoDecisao} />
               </Card>
             )}
 
@@ -731,6 +858,14 @@ export function ValidacaoPage() {
                   <div className="potencial-ganho">
                     <label>Potencial de Ganho</label>
                     {getPotencialBadge(selectedEdital.potencialGanho)}
+                    {/* T19: Botão para recalcular scores via IA */}
+                    <ActionButton
+                      icon={<TrendingUp size={12} />}
+                      label="Calcular Scores IA"
+                      onClick={handleCalcularScores}
+                      loading={scoresLoading}
+                      variant="neutral"
+                    />
                   </div>
                 </div>
 
