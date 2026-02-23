@@ -959,8 +959,14 @@ class Empresa(Base):
     cidade = Column(String(100), nullable=True)
     uf = Column(String(2), nullable=True)
     cep = Column(String(10), nullable=True)
+    website = Column(String(500), nullable=True)
+    instagram = Column(String(100), nullable=True)
+    linkedin = Column(String(100), nullable=True)
+    facebook = Column(String(100), nullable=True)
     telefone = Column(String(20), nullable=True)
+    celulares = Column(Text, nullable=True)
     email = Column(String(255), nullable=True)
+    emails = Column(Text, nullable=True)
     porte = Column(Enum('me', 'epp', 'medio', 'grande'), nullable=True)
     areas_atuacao = Column(JSON, nullable=True)
     ativo = Column(Boolean, default=True)
@@ -986,8 +992,14 @@ class Empresa(Base):
             "cidade": self.cidade,
             "uf": self.uf,
             "cep": self.cep,
+            "website": self.website,
+            "instagram": self.instagram,
+            "linkedin": self.linkedin,
+            "facebook": self.facebook,
             "telefone": self.telefone,
+            "celulares": self.celulares,
             "email": self.email,
+            "emails": self.emails,
             "porte": self.porte,
             "areas_atuacao": self.areas_atuacao,
             "ativo": self.ativo,
@@ -1001,13 +1013,19 @@ class EmpresaDocumento(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
-    tipo = Column(Enum('contrato_social', 'atestado_capacidade', 'balanco', 'alvara', 'registro_conselho', 'procuracao', 'outro'), nullable=False)
+    tipo = Column(Enum(
+        'contrato_social', 'atestado_capacidade', 'balanco', 'alvara',
+        'registro_conselho', 'procuracao', 'certidao_negativa',
+        'habilitacao_fiscal', 'habilitacao_economica', 'qualificacao_tecnica',
+        'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
+    ), nullable=False)
     nome_arquivo = Column(String(255), nullable=False)
     path_arquivo = Column(String(500), nullable=False)
     data_emissao = Column(Date, nullable=True)
     data_vencimento = Column(Date, nullable=True)
     texto_extraido = Column(LONGTEXT, nullable=True)
     processado = Column(Boolean, default=False)
+    edital_requisito_id = Column(String(36), ForeignKey('editais_requisitos.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1019,9 +1037,11 @@ class EmpresaDocumento(Base):
             "empresa_id": self.empresa_id,
             "tipo": self.tipo,
             "nome_arquivo": self.nome_arquivo,
+            "path_arquivo": self.path_arquivo,
             "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
             "data_vencimento": self.data_vencimento.isoformat() if self.data_vencimento else None,
             "processado": self.processado,
+            "edital_requisito_id": self.edital_requisito_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1040,6 +1060,7 @@ class EmpresaCertidao(Base):
     path_arquivo = Column(String(500), nullable=True)
     status = Column(Enum('valida', 'vencida', 'pendente'), default='valida')
     url_consulta = Column(String(500), nullable=True)
+    edital_requisito_id = Column(String(36), ForeignKey('editais_requisitos.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1054,8 +1075,10 @@ class EmpresaCertidao(Base):
             "numero": self.numero,
             "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
             "data_vencimento": self.data_vencimento.isoformat() if self.data_vencimento else None,
+            "path_arquivo": self.path_arquivo,
             "status": self.status,
             "url_consulta": self.url_consulta,
+            "edital_requisito_id": self.edital_requisito_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1399,6 +1422,16 @@ class ParametroScore(Base):
     limiar_go = Column(DECIMAL(5, 2), default=70.0)
     limiar_nogo = Column(DECIMAL(5, 2), default=40.0)
     margem_minima = Column(DECIMAL(5, 2), nullable=True)
+    # Campos comerciais (Parametrizações)
+    estados_atuacao = Column(JSON, nullable=True)       # ["SP", "RJ", "MG"]
+    prazo_maximo = Column(Integer, nullable=True)        # dias
+    frequencia_maxima = Column(String(20), nullable=True)  # semanal, mensal, etc
+    tam = Column(DECIMAL(15, 2), nullable=True)
+    sam = Column(DECIMAL(15, 2), nullable=True)
+    som = Column(DECIMAL(15, 2), nullable=True)
+    tipos_edital = Column(JSON, nullable=True)           # ["comodato", "venda", ...]
+    palavras_chave = Column(JSON, nullable=True)         # ["microscopio", "centrifuga"]
+    ncms_busca = Column(JSON, nullable=True)             # ["9018.19.80"]
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1415,6 +1448,47 @@ class ParametroScore(Base):
             "limiar_go": float(self.limiar_go) if self.limiar_go else None,
             "limiar_nogo": float(self.limiar_nogo) if self.limiar_nogo else None,
             "margem_minima": float(self.margem_minima) if self.margem_minima else None,
+            "estados_atuacao": self.estados_atuacao,
+            "prazo_maximo": self.prazo_maximo,
+            "frequencia_maxima": self.frequencia_maxima,
+            "tam": float(self.tam) if self.tam else None,
+            "sam": float(self.sam) if self.sam else None,
+            "som": float(self.som) if self.som else None,
+            "tipos_edital": self.tipos_edital,
+            "palavras_chave": self.palavras_chave,
+            "ncms_busca": self.ncms_busca,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ClasseProduto(Base):
+    """Classes e subclasses de produtos parametrizáveis pelo usuário"""
+    __tablename__ = 'classes_produtos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    nome = Column(String(255), nullable=False)
+    tipo = Column(String(20), nullable=False, default='classe')  # classe ou subclasse
+    ncms = Column(JSON, nullable=True)  # ["9018.19.80", "9027.80.99"]
+    classe_pai_id = Column(String(36), ForeignKey('classes_produtos.id', ondelete='CASCADE'), nullable=True)
+    campos_mascara = Column(JSON, nullable=True)  # [{"nome": "Potencia", "tipo": "texto"}, ...]
+    qtd_produtos = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", backref="classes_produtos")
+    classe_pai = relationship("ClasseProduto", remote_side=[id], backref="subclasses")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "nome": self.nome,
+            "tipo": self.tipo,
+            "ncms": self.ncms,
+            "classe_pai_id": self.classe_pai_id,
+            "campos_mascara": self.campos_mascara,
+            "qtd_produtos": self.qtd_produtos,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1530,6 +1604,14 @@ def init_db():
                     url_base='https://www.bec.sp.gov.br',
                     ativo=True,
                     descricao='Bolsa Eletrônica de Compras de São Paulo'
+                ),
+                FonteEdital(
+                    id='siconv',
+                    nome='SICONV / +Brasil',
+                    tipo='scraper',
+                    url_base='https://transferegov.sistema.gov.br',
+                    ativo=True,
+                    descricao='Plataforma +Brasil (antigo SICONV) - Convênios e Contratos de Repasse'
                 ),
             ]
             for fonte in fontes_iniciais:

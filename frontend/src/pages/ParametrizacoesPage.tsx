@@ -13,6 +13,16 @@ interface Fonte {
   ativa: boolean;
 }
 
+interface ClasseProdutoAPI {
+  id: string;
+  nome: string;
+  tipo: string;
+  ncms: string[];
+  classe_pai_id: string | null;
+  campos_mascara: Record<string, unknown> | null;
+  qtd_produtos: number;
+}
+
 interface Subclasse {
   id: string;
   nome: string;
@@ -26,6 +36,20 @@ interface Classe {
   ncms: string;
   subclasses: Subclasse[];
   produtos: number;
+}
+
+interface ParametroScoreAPI {
+  id: string;
+  estados_atuacao: string[];
+  prazo_maximo: number;
+  frequencia_maxima: string;
+  tam: string;
+  sam: string;
+  som: string;
+  tipos_edital: string[];
+  palavras_chave: string[];
+  ncms_busca: string[];
+  [key: string]: unknown;
 }
 
 interface ParametroScore {
@@ -55,6 +79,23 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
   const [loadingParametros, setLoadingParametros] = useState(true);
   const [classes, setClasses] = useState<Classe[]>([]);
   const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+  const [loadingClasses, setLoadingClasses] = useState(true);
+
+  // Parametros-score state (persisted)
+  const [paramScoreId, setParamScoreId] = useState<string | null>(null);
+  const [paramScore, setParamScore] = useState<ParametroScoreAPI | null>(null);
+  const [loadingParamScore, setLoadingParamScore] = useState(true);
+  const [savingParamScore, setSavingParamScore] = useState(false);
+  const [savingClasse, setSavingClasse] = useState(false);
+
+  // Palavras-chave e NCMs editing
+  const [editingPalavras, setEditingPalavras] = useState(false);
+  const [palavrasText, setPalavrasText] = useState("");
+  const [editingNcms, setEditingNcms] = useState(false);
+  const [ncmsText, setNcmsText] = useState("");
+
+  // Edit mode for classes (null = creating new, string = editing existing id)
+  const [editingClasseId, setEditingClasseId] = useState<string | null>(null);
 
   // Fonte modal form state
   const [novaFonteNome, setNovaFonteNome] = useState("");
@@ -76,17 +117,24 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
 
   // Tipos de edital
   const [tiposEdital, setTiposEdital] = useState({
-    comodato: true,
-    venda: true,
-    aluguel: true,
-    consumo: true,
+    comodato: false,
+    venda: false,
+    aluguel: false,
+    consumo: false,
     insumosLab: false,
     insumosHosp: false,
   });
 
   // Regiao de atuacao
-  const [estadosSelecionados, setEstadosSelecionados] = useState<Set<string>>(new Set(["SP", "MG", "RJ", "ES"]));
+  const [estadosSelecionados, setEstadosSelecionados] = useState<Set<string>>(new Set());
   const [todoBrasil, setTodoBrasil] = useState(false);
+
+  // Comercial - Tempo de Entrega + Mercado
+  const [prazoMaximo, setPrazoMaximo] = useState("");
+  const [frequenciaMaxima, setFrequenciaMaxima] = useState("semanal");
+  const [tam, setTam] = useState("");
+  const [sam, setSam] = useState("");
+  const [som, setSom] = useState("");
 
   // Modais
   const [showFonteModal, setShowFonteModal] = useState(false);
@@ -137,10 +185,86 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     }
   }, []);
 
+  // Helper to convert tipos_edital array to checkbox state
+  const tiposArrayToState = (tipos: string[]) => ({
+    comodato: tipos.includes("comodato"),
+    venda: tipos.includes("venda"),
+    aluguel: tipos.includes("aluguel"),
+    consumo: tipos.includes("consumo"),
+    insumosLab: tipos.includes("insumosLab"),
+    insumosHosp: tipos.includes("insumosHosp"),
+  });
+
+  // Helper to convert checkbox state to tipos_edital array
+  const tiposStateToArray = (state: typeof tiposEdital) =>
+    Object.entries(state).filter(([, v]) => v).map(([k]) => k);
+
+  const loadClasses = useCallback(async () => {
+    try {
+      setLoadingClasses(true);
+      const res = await crudList("classes-produtos", { limit: 500 });
+      const items = res.items as unknown as ClasseProdutoAPI[];
+
+      // Build hierarchical tree from flat list
+      const classesTop = items.filter(i => i.tipo === "classe");
+      const tree: Classe[] = classesTop.map(c => {
+        const subs = items.filter(i => i.tipo === "subclasse" && String(i.classe_pai_id) === String(c.id));
+        return {
+          id: String(c.id),
+          nome: c.nome,
+          ncms: Array.isArray(c.ncms) ? c.ncms.join(", ") : String(c.ncms || ""),
+          produtos: c.qtd_produtos || 0,
+          subclasses: subs.map(s => ({
+            id: String(s.id),
+            nome: s.nome,
+            ncms: Array.isArray(s.ncms) ? s.ncms.join(", ") : String(s.ncms || ""),
+            produtos: s.qtd_produtos || 0,
+          })),
+        };
+      });
+      setClasses(tree);
+    } catch {
+      // May not exist yet
+    } finally {
+      setLoadingClasses(false);
+    }
+  }, []);
+
+  const loadParamScore = useCallback(async () => {
+    try {
+      setLoadingParamScore(true);
+      const res = await crudList("parametros-score");
+      if (res.items.length > 0) {
+        const p = res.items[0] as unknown as ParametroScoreAPI;
+        const id = String(p.id);
+        setParamScoreId(id);
+        setParamScore(p);
+
+        // Populate local state from persisted data
+        const estados = Array.isArray(p.estados_atuacao) ? p.estados_atuacao : [];
+        setEstadosSelecionados(new Set(estados));
+        setTodoBrasil(estados.length === 27);
+        setPrazoMaximo(p.prazo_maximo != null ? String(p.prazo_maximo) : "");
+        setFrequenciaMaxima(p.frequencia_maxima || "semanal");
+        setTam(p.tam != null ? String(p.tam) : "");
+        setSam(p.sam != null ? String(p.sam) : "");
+        setSom(p.som != null ? String(p.som) : "");
+        const tipos = Array.isArray(p.tipos_edital) ? p.tipos_edital : [];
+        setTiposEdital(tiposArrayToState(tipos));
+      }
+    } catch {
+      // May not exist yet
+    } finally {
+      setLoadingParamScore(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadFontes();
     loadParametros();
-  }, [loadFontes, loadParametros]);
+    loadClasses();
+    loadParamScore();
+  }, [loadFontes, loadParametros, loadClasses, loadParamScore]);
 
   const handleToggleFonte = async (id: string) => {
     const fonte = fontes.find(f => f.id === id);
@@ -214,6 +338,40 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     });
   };
 
+  // Helper to ensure parametros-score record exists, returns the id
+  const ensureParamScore = async (): Promise<string> => {
+    if (paramScoreId) return paramScoreId;
+    const created = await crudCreate("parametros-score", {
+      estados_atuacao: [],
+      prazo_maximo: 30,
+      frequencia_maxima: "semanal",
+      tam: 0,
+      sam: 0,
+      som: 0,
+      tipos_edital: [],
+      palavras_chave: [],
+      ncms_busca: [],
+    });
+    const id = String(created.id);
+    setParamScoreId(id);
+    setParamScore(created as unknown as ParametroScoreAPI);
+    return id;
+  };
+
+  // Save a partial update to parametros-score
+  const saveParamScore = async (data: Record<string, unknown>) => {
+    setSavingParamScore(true);
+    try {
+      const id = await ensureParamScore();
+      await crudUpdate("parametros-score", id, data);
+      setParamScore(prev => prev ? { ...prev, ...data } as ParametroScoreAPI : prev);
+    } catch (err) {
+      console.error("Erro ao salvar parametros-score:", err);
+    } finally {
+      setSavingParamScore(false);
+    }
+  };
+
   const toggleEstado = (uf: string) => {
     if (todoBrasil) return;
     setEstadosSelecionados(prev => {
@@ -232,52 +390,168 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     if (checked) {
       setEstadosSelecionados(new Set(ESTADOS_BR.map(e => e.uf)));
     } else {
-      setEstadosSelecionados(new Set(["SP", "MG", "RJ", "ES"]));
+      setEstadosSelecionados(new Set());
     }
+  };
+
+  // Save handlers for comercial tab
+  const handleSalvarEstados = async () => {
+    await saveParamScore({ estados_atuacao: Array.from(estadosSelecionados) });
+  };
+
+  const handleSalvarTempoEntrega = async () => {
+    await saveParamScore({
+      prazo_maximo: prazoMaximo ? Number(prazoMaximo) : 0,
+      frequencia_maxima: frequenciaMaxima,
+    });
+  };
+
+  const handleSalvarMercado = async () => {
+    await saveParamScore({
+      tam: tam || "0",
+      sam: sam || "0",
+      som: som || "0",
+    });
+  };
+
+  const handleSalvarTiposEdital = async () => {
+    await saveParamScore({ tipos_edital: tiposStateToArray(tiposEdital) });
+  };
+
+  const handleSalvarPalavrasChave = async () => {
+    const palavras = palavrasText.split(",").map(p => p.trim()).filter(Boolean);
+    await saveParamScore({ palavras_chave: palavras });
+    setEditingPalavras(false);
+  };
+
+  const handleSalvarNcmsBusca = async () => {
+    const ncms = ncmsText.split(",").map(n => n.trim()).filter(Boolean);
+    await saveParamScore({ ncms_busca: ncms });
+    setEditingNcms(false);
   };
 
   // Funcao placeholder — tool_gerar_classes_portfolio sera criada na Onda 4 (T48)
   const handleGerarComIA = () => {};
 
-
-  const handleSalvarClasse = () => {
-    if (!novaClasseNome.trim()) return;
-    const novaClasse: Classe = {
-      id: String(classes.length + 1),
-      nome: novaClasseNome,
-      ncms: novaClasseNCMs,
-      produtos: 0,
-      subclasses: []
-    };
-    setClasses([...classes, novaClasse]);
-    setNovaClasseNome("");
-    setNovaClasseNCMs("");
-    setShowClasseModal(false);
+  const handleExcluirClasse = async (classeId: string) => {
+    if (!confirm("Excluir esta classe e suas subclasses?")) return;
+    try {
+      // Also delete subclasses belonging to this class
+      const classe = classes.find(c => c.id === classeId);
+      if (classe) {
+        for (const sub of classe.subclasses) {
+          await crudDelete("classes-produtos", sub.id);
+        }
+      }
+      await crudDelete("classes-produtos", classeId);
+      setClasses(classes.filter(c => c.id !== classeId));
+    } catch (err) {
+      console.error("Erro ao excluir classe:", err);
+    }
   };
 
-  const handleSalvarSubclasse = () => {
-    if (!novaSubclasseNome.trim() || !selectedClasseId) return;
-    setClasses(classes.map(c => {
-      if (c.id === selectedClasseId) {
-        return {
-          ...c,
-          subclasses: [
-            ...c.subclasses,
-            {
-              id: `${c.id}-${c.subclasses.length + 1}`,
-              nome: novaSubclasseNome,
-              ncms: novaSubclasseNCMs,
-              produtos: 0
-            }
-          ]
+  const handleEditarClasse = (classe: Classe) => {
+    setEditingClasseId(classe.id);
+    setNovaClasseNome(classe.nome);
+    setNovaClasseNCMs(classe.ncms);
+    setShowClasseModal(true);
+  };
+
+  const handleExcluirSubclasse = async (classeId: string, subId: string) => {
+    if (!confirm("Excluir esta subclasse?")) return;
+    try {
+      await crudDelete("classes-produtos", subId);
+      setClasses(classes.map(c => {
+        if (c.id === classeId) {
+          return { ...c, subclasses: c.subclasses.filter(s => s.id !== subId) };
+        }
+        return c;
+      }));
+    } catch (err) {
+      console.error("Erro ao excluir subclasse:", err);
+    }
+  };
+
+  const handleSalvarClasse = async () => {
+    if (!novaClasseNome.trim()) return;
+    setSavingClasse(true);
+    try {
+      const ncmsArray = novaClasseNCMs.split(",").map(n => n.trim()).filter(Boolean);
+      if (editingClasseId) {
+        // Update existing
+        await crudUpdate("classes-produtos", editingClasseId, {
+          nome: novaClasseNome,
+          ncms: ncmsArray,
+        });
+        setClasses(classes.map(c =>
+          c.id === editingClasseId
+            ? { ...c, nome: novaClasseNome, ncms: novaClasseNCMs }
+            : c
+        ));
+        setEditingClasseId(null);
+      } else {
+        // Create new
+        const created = await crudCreate("classes-produtos", {
+          nome: novaClasseNome,
+          tipo: "classe",
+          ncms: ncmsArray,
+        });
+        const novaClasse: Classe = {
+          id: String(created.id),
+          nome: novaClasseNome,
+          ncms: novaClasseNCMs,
+          produtos: 0,
+          subclasses: [],
         };
+        setClasses([...classes, novaClasse]);
       }
-      return c;
-    }));
-    setNovaSubclasseNome("");
-    setNovaSubclasseNCMs("");
-    setShowSubclasseModal(false);
-    setSelectedClasseId(null);
+      setNovaClasseNome("");
+      setNovaClasseNCMs("");
+      setShowClasseModal(false);
+    } catch (err) {
+      console.error("Erro ao salvar classe:", err);
+    } finally {
+      setSavingClasse(false);
+    }
+  };
+
+  const handleSalvarSubclasse = async () => {
+    if (!novaSubclasseNome.trim() || !selectedClasseId) return;
+    setSavingClasse(true);
+    try {
+      const ncmsArray = novaSubclasseNCMs.split(",").map(n => n.trim()).filter(Boolean);
+      const created = await crudCreate("classes-produtos", {
+        nome: novaSubclasseNome,
+        tipo: "subclasse",
+        classe_pai_id: Number(selectedClasseId),
+        ncms: ncmsArray,
+      });
+      setClasses(classes.map(c => {
+        if (c.id === selectedClasseId) {
+          return {
+            ...c,
+            subclasses: [
+              ...c.subclasses,
+              {
+                id: String(created.id),
+                nome: novaSubclasseNome,
+                ncms: novaSubclasseNCMs,
+                produtos: 0,
+              },
+            ],
+          };
+        }
+        return c;
+      }));
+      setNovaSubclasseNome("");
+      setNovaSubclasseNCMs("");
+      setShowSubclasseModal(false);
+      setSelectedClasseId(null);
+    } catch (err) {
+      console.error("Erro ao salvar subclasse:", err);
+    } finally {
+      setSavingClasse(false);
+    }
   };
 
   const fonteColumns: Column<Fonte>[] = [
@@ -352,7 +626,18 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                         </div>
                       }
                     >
+                      {loadingClasses ? (
+                        <div className="loading-center">
+                          <Loader2 size={20} className="spin" />
+                          <span>Carregando classes...</span>
+                        </div>
+                      ) : (
                       <div className="classes-tree">
+                        {classes.length === 0 && (
+                          <p className="text-muted" style={{ padding: "16px", textAlign: "center" }}>
+                            Nenhuma classe cadastrada. Clique em "Nova Classe" para comecar.
+                          </p>
+                        )}
                         {classes.map((classe) => (
                           <div key={classe.id} className="classe-item">
                             <div
@@ -372,8 +657,8 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                                   setSelectedClasseId(classe.id);
                                   setShowSubclasseModal(true);
                                 }}><Plus size={14} /></button>
-                                <button title="Editar"><Pencil size={14} /></button>
-                                <button title="Excluir" className="danger"><Trash2 size={14} /></button>
+                                <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarClasse(classe); }}><Pencil size={14} /></button>
+                                <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluirClasse(classe.id); }}><Trash2 size={14} /></button>
                               </div>
                             </div>
                             {expandedClasses.has(classe.id) && classe.subclasses.length > 0 && (
@@ -385,7 +670,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                                     <span className="subclasse-count">{sub.produtos} produtos</span>
                                     <div className="subclasse-actions">
                                       <button title="Editar"><Pencil size={14} /></button>
-                                      <button title="Excluir" className="danger"><Trash2 size={14} /></button>
+                                      <button title="Excluir" className="danger" onClick={() => handleExcluirSubclasse(classe.id, sub.id)}><Trash2 size={14} /></button>
                                     </div>
                                   </div>
                                 ))}
@@ -394,6 +679,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                           </div>
                         ))}
                       </div>
+                      )}
                     </Card>
 
                     <Card title="Tipos de Edital Desejados">
@@ -429,6 +715,9 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                           label="Compra de insumos hospitalares"
                         />
                       </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Tipos"} variant="primary" onClick={handleSalvarTiposEdital} disabled={savingParamScore} />
+                      </div>
                     </Card>
 
                     {/* Norteadores de Score */}
@@ -436,32 +725,44 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                       <div className="norteadores-grid">
                         <div className="norteador-item">
                           <div className="norteador-header">
-                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                            {classes.length > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
                             <span className="norteador-label">(a) Classificacao/Agrupamento</span>
                             <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
                           </div>
                           <p className="norteador-desc">Arvore de classes e subclasses acima</p>
-                          <StatusBadge status="success" label="Configurado" size="small" />
+                          {classes.length > 0
+                            ? <StatusBadge status="success" label={`${classes.length} classe(s) configurada(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
                         <div className="norteador-item">
                           <div className="norteador-header">
-                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                            {estadosSelecionados.size > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
                             <span className="norteador-label">(b) Score Comercial</span>
                             <span className="score-feed-badge feed-comercial">Score Comercial</span>
                           </div>
                           <p className="norteador-desc">Regiao de atuacao, prazos e mercado (aba Comercial)</p>
-                          <StatusBadge status="success" label="Configurado" size="small" />
+                          {estadosSelecionados.size > 0
+                            ? <StatusBadge status="success" label={`${estadosSelecionados.size} estado(s) selecionado(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
                         <div className="norteador-item">
                           <div className="norteador-header">
-                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                            {tiposStateToArray(tiposEdital).length > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
                             <span className="norteador-label">(c) Tipos de Edital</span>
                             <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
                           </div>
                           <p className="norteador-desc">Checkboxes de tipos de edital acima</p>
-                          <StatusBadge status="success" label="Configurado" size="small" />
+                          {tiposStateToArray(tiposEdital).length > 0
+                            ? <StatusBadge status="success" label={`${tiposStateToArray(tiposEdital).length} tipo(s) selecionado(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
                         <div className="norteador-item">
@@ -471,27 +772,27 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                             <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
                           </div>
                           <p className="norteador-desc">Baseado nas especificacoes dos produtos do Portfolio</p>
-                          <StatusBadge status="success" label="4 produtos com specs" size="small" />
+                          <StatusBadge status="success" label="Configurar no Portfolio" size="small" />
                         </div>
 
                         <div className="norteador-item">
                           <div className="norteador-header">
                             <AlertTriangle size={16} style={{ color: "#eab308" }} />
-                            <span className="norteador-label">(e) Score Recomendacao</span>
+                            <span className="norteador-label">(e) Score Participacao</span>
                             <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
                           </div>
                           <p className="norteador-desc">Documentos frequentemente solicitados em editais (configurar abaixo)</p>
-                          <StatusBadge status="warning" label="Parcial - 6/10 docs" size="small" />
+                          <StatusBadge status="warning" label="Em configuracao" size="small" />
                         </div>
 
                         <div className="norteador-item">
                           <div className="norteador-header">
-                            <XCircle size={16} style={{ color: "#ef4444" }} />
+                            <XCircle size={16} style={{ color: "#6b7280" }} />
                             <span className="norteador-label">(f) Score Aderencia de Ganho</span>
                             <span className="score-feed-badge feed-ganho">Score Ganho</span>
                           </div>
                           <p className="norteador-desc">Historico: taxa de vitoria, margem media praticada</p>
-                          <StatusBadge status="error" label="Nao configurado" size="small" />
+                          <StatusBadge status="neutral" label="A definir" size="small" />
                         </div>
                       </div>
 
@@ -559,6 +860,10 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
               case "comercial":
                 return (
                   <>
+                    {loadingParamScore ? (
+                      <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando parametros comerciais...</span></div>
+                    ) : (
+                    <>
                     <Card title="Regiao de Atuacao" icon={<MapPin size={18} />}>
                       <div className="regiao-atuacao">
                         <div className="regiao-header">
@@ -584,18 +889,21 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                         <div className="estados-resumo">
                           <strong>Estados selecionados:</strong> {estadosSelecionados.size === 27 ? "Todos (Brasil)" : Array.from(estadosSelecionados).join(", ")}
                         </div>
+                        <div className="form-actions" style={{ marginTop: "12px" }}>
+                          <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Estados"} variant="primary" onClick={handleSalvarEstados} disabled={savingParamScore} />
+                        </div>
                       </div>
                     </Card>
 
                     <Card title="Tempo de Entrega">
                       <div className="form-grid form-grid-2">
                         <FormField label="Prazo maximo aceito (dias)">
-                          <TextInput value="30" onChange={() => {}} type="number" />
+                          <TextInput value={prazoMaximo} onChange={(v) => setPrazoMaximo(v)} type="number" />
                         </FormField>
                         <FormField label="Frequencia maxima">
                           <SelectInput
-                            value="semanal"
-                            onChange={() => {}}
+                            value={frequenciaMaxima}
+                            onChange={(v) => setFrequenciaMaxima(v)}
                             options={[
                               { value: "diaria", label: "Diaria" },
                               { value: "semanal", label: "Semanal" },
@@ -605,22 +913,30 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                           />
                         </FormField>
                       </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Prazo/Frequencia"} variant="primary" onClick={handleSalvarTempoEntrega} disabled={savingParamScore} />
+                      </div>
                     </Card>
 
                     <Card title="Mercado (TAM/SAM/SOM)">
                       <div className="form-grid form-grid-3">
                         <FormField label="TAM (Mercado Total)" hint="Editais/ano">
-                          <TextInput value="" onChange={() => {}} prefix="R$" />
+                          <TextInput value={tam} onChange={(v) => setTam(v)} prefix="R$" />
                         </FormField>
                         <FormField label="SAM (Mercado Alcancavel)">
-                          <TextInput value="" onChange={() => {}} prefix="R$" />
+                          <TextInput value={sam} onChange={(v) => setSam(v)} prefix="R$" />
                         </FormField>
                         <FormField label="SOM (Mercado Objetivo)">
-                          <TextInput value="" onChange={() => {}} prefix="R$" />
+                          <TextInput value={som} onChange={(v) => setSom(v)} prefix="R$" />
                         </FormField>
                       </div>
-                      <ActionButton icon={<Lock size={14} />} label="Calcular com IA (Onda 4)" onClick={() => {}} disabled />
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Mercado"} variant="primary" onClick={handleSalvarMercado} disabled={savingParamScore} />
+                        <ActionButton icon={<Lock size={14} />} label="Calcular com IA (Onda 4)" onClick={() => {}} disabled />
+                      </div>
                     </Card>
+                    </>
+                    )}
                   </>
                 );
 
@@ -664,15 +980,34 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                     <Card title="Palavras-chave de Busca">
                       <div className="palavras-chave">
                         <ActionButton icon={<Lock size={14} />} label="Gerar do portfolio (Onda 4)" onClick={() => {}} disabled />
-                        <div className="tags-container">
-                          <span className="tag">microscopio</span>
-                          <span className="tag">centrifuga</span>
-                          <span className="tag">autoclave</span>
-                          <span className="tag">equipamento laboratorio</span>
-                          <span className="tag">reagente</span>
-                          <span className="tag">esterilizacao</span>
-                          <button className="tag tag-add">+ Editar</button>
-                        </div>
+                        {editingPalavras ? (
+                          <div style={{ marginTop: "8px" }}>
+                            <FormField label="Palavras-chave (separadas por virgula)">
+                              <TextInput
+                                value={palavrasText}
+                                onChange={setPalavrasText}
+                                placeholder="microscopio, centrifuga, autoclave"
+                              />
+                            </FormField>
+                            <div className="form-actions" style={{ marginTop: "8px" }}>
+                              <ActionButton label={savingParamScore ? "Salvando..." : "Salvar"} variant="primary" onClick={handleSalvarPalavrasChave} disabled={savingParamScore} />
+                              <ActionButton label="Cancelar" onClick={() => setEditingPalavras(false)} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="tags-container">
+                            {(paramScore?.palavras_chave && paramScore.palavras_chave.length > 0)
+                              ? paramScore.palavras_chave.map((p, i) => (
+                                  <span key={i} className="tag">{p}</span>
+                                ))
+                              : <span className="text-muted" style={{ fontSize: "13px" }}>Nenhuma palavra-chave cadastrada</span>
+                            }
+                            <button className="tag tag-add" onClick={() => {
+                              setPalavrasText(paramScore?.palavras_chave?.join(", ") || "");
+                              setEditingPalavras(true);
+                            }}>+ Editar</button>
+                          </div>
+                        )}
                       </div>
                     </Card>
 
@@ -686,18 +1021,34 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                             disabled
                           />
                         </div>
-                        <div className="tags-container">
-                          <span className="tag">9011.10.00</span>
-                          <span className="tag">9011.20.00</span>
-                          <span className="tag">8421.19.10</span>
-                          <span className="tag">8419.20.00</span>
-                          <span className="tag">9018.90.99</span>
-                          <span className="tag">9402.90.20</span>
-                          <span className="tag">3822.00.90</span>
-                          <span className="tag">3822.00.10</span>
-                          <span className="tag">8471.30.19</span>
-                          <button className="tag tag-add">+ Adicionar NCM</button>
-                        </div>
+                        {editingNcms ? (
+                          <div style={{ marginTop: "8px" }}>
+                            <FormField label="NCMs (separados por virgula)">
+                              <TextInput
+                                value={ncmsText}
+                                onChange={setNcmsText}
+                                placeholder="9011.10.00, 9011.20.00, 8421.19.10"
+                              />
+                            </FormField>
+                            <div className="form-actions" style={{ marginTop: "8px" }}>
+                              <ActionButton label={savingParamScore ? "Salvando..." : "Salvar"} variant="primary" onClick={handleSalvarNcmsBusca} disabled={savingParamScore} />
+                              <ActionButton label="Cancelar" onClick={() => setEditingNcms(false)} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="tags-container">
+                            {(paramScore?.ncms_busca && paramScore.ncms_busca.length > 0)
+                              ? paramScore.ncms_busca.map((n, i) => (
+                                  <span key={i} className="tag">{n}</span>
+                                ))
+                              : <span className="text-muted" style={{ fontSize: "13px" }}>Nenhum NCM cadastrado</span>
+                            }
+                            <button className="tag tag-add" onClick={() => {
+                              setNcmsText(paramScore?.ncms_busca?.join(", ") || "");
+                              setEditingNcms(true);
+                            }}>+ Adicionar NCM</button>
+                          </div>
+                        )}
                         <p className="text-muted" style={{ marginTop: "8px", fontSize: "12px" }}>
                           NCMs sao usados para busca direta no PNCP por codigo de produto
                         </p>
@@ -832,15 +1183,17 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         </FormField>
       </Modal>
 
-      {/* Modal Nova Classe */}
+      {/* Modal Nova/Editar Classe */}
       <Modal
         isOpen={showClasseModal}
-        onClose={() => setShowClasseModal(false)}
-        title="Nova Classe de Produto"
+        onClose={() => { setShowClasseModal(false); setEditingClasseId(null); setNovaClasseNome(""); setNovaClasseNCMs(""); }}
+        title={editingClasseId ? "Editar Classe de Produto" : "Nova Classe de Produto"}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowClasseModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarClasse}>Salvar</button>
+            <button className="btn btn-secondary" onClick={() => { setShowClasseModal(false); setEditingClasseId(null); setNovaClasseNome(""); setNovaClasseNCMs(""); }}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSalvarClasse} disabled={savingClasse || !novaClasseNome}>
+              {savingClasse ? <Loader2 size={14} className="spin" /> : null} Salvar
+            </button>
           </>
         }
       >
@@ -860,7 +1213,9 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowSubclasseModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarSubclasse}>Salvar</button>
+            <button className="btn btn-primary" onClick={handleSalvarSubclasse} disabled={savingClasse || !novaSubclasseNome}>
+              {savingClasse ? <Loader2 size={14} className="spin" /> : null} Salvar
+            </button>
           </>
         }
       >

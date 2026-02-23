@@ -26,6 +26,16 @@ except ImportError:
 from models import SessionLocal, Alerta, Monitoramento, Notificacao, PreferenciasNotificacao, Edital, User
 from sqlalchemy import and_, or_
 
+# Importar templates de notificação
+try:
+    from notifications import (
+        enviar_email_notificacao, template_novo_edital,
+        template_alerta_prazo, template_resumo_diario, smtp_configurado
+    )
+    NOTIFICATIONS_AVAILABLE = True
+except ImportError:
+    NOTIFICATIONS_AVAILABLE = False
+
 
 # =============================================================================
 # CONFIGURAÇÕES
@@ -256,7 +266,12 @@ def job_executar_monitoramentos():
                     if user and prefs and prefs.email_habilitado:
                         email_destino = prefs.email_notificacao or user.email
                         if email_destino:
-                            enviar_email_alerta(email_destino, titulo, mensagem)
+                            # Usar template HTML se disponível
+                            if NOTIFICATIONS_AVAILABLE:
+                                assunto_html, corpo_html = template_novo_edital(editais_encontrados, mon.termo)
+                                enviar_email_notificacao(email_destino, assunto_html, corpo_html)
+                            else:
+                                enviar_email_alerta(email_destino, titulo, mensagem)
 
                 print(f"[SCHEDULER] Monitoramento '{mon.termo}' concluído: {len(editais_encontrados)} editais")
 

@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle } from "lucide-react";
 import {
   Card, StatCard, DataTable, ActionButton, FormField, TextInput, Checkbox,
-  SelectInput, ScoreCircle, ScoreBar, RadioGroup, StatusBadge,
+  SelectInput, ScoreCircle, StarRating, RadioGroup, StatusBadge,
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate } from "../api/crud";
@@ -180,9 +180,18 @@ export function CaptacaoPage(_props?: PageProps) {
   const [margemLocal, setMargemLocal] = useState(15);
   const [salvandoEstrategia, setSalvandoEstrategia] = useState(false);
   const [estrategiaSalva, setEstrategiaSalva] = useState(false);
+  const [variaPorProduto, setVariaPorProduto] = useState(false);
+  const [variaPorRegiao, setVariaPorRegiao] = useState(false);
 
   const [monitoramentos, setMonitoramentos] = useState<MonitoramentoInfo[]>([]);
   const [loadingMonitoramentos, setLoadingMonitoramentos] = useState(false);
+
+  // C3: NCM search field
+  const [ncm, setNcm] = useState("");
+
+  // C2: Scores de validacao (gaps reais do endpoint)
+  const [scoresValidacao, setScoresValidacao] = useState<Record<string, unknown> | null>(null);
+  const [loadingScores, setLoadingScores] = useState(false);
 
   // Carrega monitoramentos ao montar (T17)
   useEffect(() => {
@@ -219,8 +228,13 @@ export function CaptacaoPage(_props?: PageProps) {
     setErro(null);
     try {
       const token = localStorage.getItem("editais_ia_access_token");
+      // C3: Incluir NCM no termo de busca se preenchido
+      let termoBusca = termo.trim();
+      if (ncm.trim()) {
+        termoBusca += " NCM " + ncm.trim();
+      }
       const params = new URLSearchParams({
-        termo: termo.trim(),
+        termo: termoBusca,
         calcularScore: String(calcularScore),
         incluirEncerrados: String(incluirEncerrados),
         limite: "30",
@@ -355,8 +369,25 @@ export function CaptacaoPage(_props?: PageProps) {
         justificativa: `Intenção: ${intencaoLocal}`,
       };
 
-      if (painelEdital.estrategiaId) {
-        await crudUpdate("estrategias-editais", painelEdital.estrategiaId, payload);
+      let estrategiaId = painelEdital.estrategiaId;
+
+      // Se não tem estrategiaId, buscar se já existe uma para este edital
+      if (!estrategiaId) {
+        try {
+          const existentes = await crudList("estrategias-editais", { q: editalId ?? "" });
+          const existente = existentes.items.find((e: Record<string, unknown>) => String(e.edital_id) === editalId);
+          if (existente) {
+            estrategiaId = String(existente.id);
+          }
+        } catch { /* ignorar erro de busca */ }
+      }
+
+      if (estrategiaId) {
+        await crudUpdate("estrategias-editais", estrategiaId, payload);
+        setResultados(prev => prev.map(e =>
+          e.id === painelEdital.id ? { ...e, estrategiaId, editalSalvoId: editalId ?? undefined } : e
+        ));
+        setPainelEdital(prev => prev ? { ...prev, estrategiaId, editalSalvoId: editalId ?? undefined } : prev);
       } else {
         const criada = await crudCreate("estrategias-editais", payload);
         const novoId = String(criada.id ?? "");
@@ -374,17 +405,73 @@ export function CaptacaoPage(_props?: PageProps) {
     }
   };
 
+  // C2: Buscar scores de validacao (gaps reais) via endpoint
+  const fetchScoresValidacao = async (editalId: string) => {
+    // Precisa de UUID completo (36 chars) para chamar o endpoint
+    if (!editalId || editalId.length !== 36) {
+      setScoresValidacao(null);
+      return;
+    }
+    setLoadingScores(true);
+    setScoresValidacao(null);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/editais/${editalId}/scores-validacao`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setScoresValidacao(data);
+        }
+      }
+    } catch {
+      // Silencioso - scores sao opcionais
+    } finally {
+      setLoadingScores(false);
+    }
+  };
+
   const handleAbrirPainel = (edital: EditalBusca) => {
     setPainelEdital(edital);
     setIntencaoLocal(edital.intencaoEstrategica);
     setMargemLocal(edital.margemExpectativa);
     setEstrategiaSalva(false);
+    // C2: Lazy-load scores de validacao ao abrir o painel
+    const editalId = edital.editalSalvoId || (edital.id.length === 36 ? edital.id : null);
+    if (editalId) {
+      fetchScoresValidacao(editalId);
+    } else {
+      setScoresValidacao(null);
+      setLoadingScores(false);
+    }
   };
 
   const handleToggleSelect = (id: string) => {
     setResultados(resultados.map(e =>
       e.id === id ? { ...e, selected: !e.selected } : e
     ));
+  };
+
+  // C1: Exportar CSV
+  const handleExportarCSV = () => {
+    if (!resultados.length) return;
+    const header = 'Numero;Orgao;UF;Objeto;Valor;Abertura;Score\n';
+    const rows = resultados.map(e =>
+      `${e.numero};${e.orgao};${e.uf};"${(e.objeto || '').replace(/"/g, '""')}";${e.valor || ''};${e.dataAbertura || ''};${e.score || ''}`
+    ).join('\n');
+    const blob = new Blob(['\ufeff' + header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `editais_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // T16: Navegação para ValidacaoPage com edital_id
@@ -480,8 +567,61 @@ export function CaptacaoPage(_props?: PageProps) {
       header: "Score",
       width: "70px",
       render: (e) => calcularScore ? (
-        <div className="score-cell-tooltip" title={`Tec: ${e.scores.tecnico}% | Com: ${e.scores.comercial}% | Rec: ${e.scores.recomendacao}%`}>
+        <div
+          className="score-cell-tooltip"
+          style={{ position: "relative" }}
+          onMouseEnter={(ev) => {
+            const tooltip = ev.currentTarget.querySelector(".gap-tooltip") as HTMLElement;
+            if (tooltip) tooltip.style.display = "block";
+          }}
+          onMouseLeave={(ev) => {
+            const tooltip = ev.currentTarget.querySelector(".gap-tooltip") as HTMLElement;
+            if (tooltip) tooltip.style.display = "none";
+          }}
+        >
           <ScoreCircle score={e.score} size={40} />
+          <div
+            className="gap-tooltip"
+            style={{
+              display: "none",
+              position: "absolute",
+              bottom: "100%",
+              left: "50%",
+              transform: "translateX(-50%)",
+              backgroundColor: "#1e293b",
+              color: "#e2e8f0",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              fontSize: "12px",
+              lineHeight: "1.5",
+              minWidth: "200px",
+              maxWidth: "300px",
+              zIndex: 9999,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+              pointerEvents: "none",
+              whiteSpace: "normal",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: "6px", borderBottom: "1px solid #334155", paddingBottom: "4px" }}>Analise de Gaps</div>
+            {e.gaps.length > 0 ? (
+              e.gaps.map((g, i) => (
+                <div key={i} style={{ display: "flex", gap: "6px", alignItems: "flex-start", marginBottom: "3px" }}>
+                  <span style={{ color: g.tipo === "atendido" ? "#22c55e" : g.tipo === "parcial" ? "#eab308" : "#ef4444", flexShrink: 0 }}>
+                    {g.tipo === "atendido" ? "\u2714" : g.tipo === "parcial" ? "\u25CF" : "\u2718"}
+                  </span>
+                  <span>{g.item}</span>
+                </div>
+              ))
+            ) : (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <span style={{ color: "#22c55e" }}>{"\u2714"}</span>
+                <span>Todos os requisitos atendidos</span>
+              </div>
+            )}
+            <div style={{ marginTop: "6px", borderTop: "1px solid #334155", paddingTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
+              Tec: {e.scores.tecnico}% | Com: {e.scores.comercial}% | Rec: {e.scores.recomendacao}%
+            </div>
+          </div>
         </div>
       ) : <span>-</span>,
       sortable: true,
@@ -611,6 +751,13 @@ export function CaptacaoPage(_props?: PageProps) {
                 ]}
               />
             </FormField>
+            <FormField label="NCM (codigo)">
+              <TextInput
+                value={ncm}
+                onChange={setNcm}
+                placeholder="Ex: 9027.80.99"
+              />
+            </FormField>
           </div>
 
           <div className="checkbox-inline">
@@ -645,7 +792,7 @@ export function CaptacaoPage(_props?: PageProps) {
                   <div className="card-actions">
                     <ActionButton icon={<Save size={14} />} label="Salvar Todos" onClick={handleSalvarTodos} />
                     <ActionButton icon={<Save size={14} />} label="Salvar Score >= 70%" onClick={handleSalvarRecomendados} />
-                    <ActionButton icon={<Download size={14} />} label="Exportar CSV" onClick={() => {}} />
+                    <ActionButton icon={<Download size={14} />} label="Exportar CSV" onClick={handleExportarCSV} />
                   </div>
                 }
               >
@@ -695,11 +842,20 @@ export function CaptacaoPage(_props?: PageProps) {
                     <ScoreCircle score={painelEdital.score} size={100} label="Score Geral" />
                   </div>
 
-                  {/* 3 sub-scores */}
-                  <div className="panel-subscores">
-                    <ScoreBar score={painelEdital.scores.tecnico} label="Tecnico" size="small" />
-                    <ScoreBar score={painelEdital.scores.comercial} label="Comercial" size="small" />
-                    <ScoreBar score={painelEdital.scores.recomendacao} label="Recomendacao" size="small" />
+                  {/* 3 sub-scores: Técnico e Comercial em gauge circular, Recomendação em estrelas */}
+                  <div className="panel-subscores" style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <ScoreCircle score={painelEdital.scores.tecnico} size={60} />
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Tecnica</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <ScoreCircle score={painelEdital.scores.comercial} size={60} />
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Comercial</div>
+                    </div>
+                    <div style={{ textAlign: "center", flex: 1, minWidth: "120px" }}>
+                      <StarRating score={painelEdital.scores.recomendacao} />
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Recomendacao</div>
+                    </div>
                   </div>
 
                   {/* Produto correspondente */}
@@ -756,15 +912,125 @@ export function CaptacaoPage(_props?: PageProps) {
                     />
                     <div className="slider-labels">
                       <span>0%</span>
-                      <span className="text-muted">Varia por Produto / Regiao</span>
                       <span>50%</span>
                     </div>
+                    {/* Botões Varia por Produto / Região (F7) */}
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                      <button
+                        onClick={() => setVariaPorProduto(!variaPorProduto)}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          fontSize: "12px",
+                          border: variaPorProduto ? "2px solid #3b82f6" : "1px solid #334155",
+                          borderRadius: "6px",
+                          backgroundColor: variaPorProduto ? "#1e3a5f" : "transparent",
+                          color: variaPorProduto ? "#60a5fa" : "#94a3b8",
+                          cursor: "pointer",
+                          fontWeight: variaPorProduto ? 600 : 400,
+                        }}
+                      >
+                        Varia por Produto
+                      </button>
+                      <button
+                        onClick={() => setVariaPorRegiao(!variaPorRegiao)}
+                        style={{
+                          flex: 1,
+                          padding: "6px 10px",
+                          fontSize: "12px",
+                          border: variaPorRegiao ? "2px solid #3b82f6" : "1px solid #334155",
+                          borderRadius: "6px",
+                          backgroundColor: variaPorRegiao ? "#1e3a5f" : "transparent",
+                          color: variaPorRegiao ? "#60a5fa" : "#94a3b8",
+                          cursor: "pointer",
+                          fontWeight: variaPorRegiao ? 600 : 400,
+                        }}
+                      >
+                        Varia por Regiao
+                      </button>
+                    </div>
+                    {variaPorProduto && (
+                      <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#0f172a", borderRadius: "6px", fontSize: "12px" }}>
+                        <div style={{ color: "#94a3b8", marginBottom: "4px" }}>Margem por produto (ajuste individual via Parametrizacoes)</div>
+                        <div style={{ color: "#64748b", fontStyle: "italic" }}>Configure as margens por produto na aba Parametrizacoes &gt; Comerciais</div>
+                      </div>
+                    )}
+                    {variaPorRegiao && (
+                      <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#0f172a", borderRadius: "6px", fontSize: "12px" }}>
+                        <div style={{ color: "#94a3b8", marginBottom: "4px" }}>Margem por regiao (ajuste individual via Parametrizacoes)</div>
+                        <div style={{ color: "#64748b", fontStyle: "italic" }}>Configure as margens por UF na aba Parametrizacoes &gt; Comerciais</div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Analise de Gaps */}
-                  {painelEdital.gaps.length > 0 && (
-                    <div className="panel-section">
-                      <h4>Analise de Gaps</h4>
+                  {/* Analise de Gaps - C2: Dados reais do endpoint scores-validacao */}
+                  <div className="panel-section">
+                    <h4>Analise de Gaps / Validacao</h4>
+                    {loadingScores ? (
+                      <p className="text-muted">Carregando scores de validacao...</p>
+                    ) : scoresValidacao ? (
+                      <div className="gaps-list">
+                        {/* 6 dimensoes de score */}
+                        <div style={{ marginBottom: "10px" }}>
+                          {[
+                            { key: "tecnico", label: "Tecnico" },
+                            { key: "documental", label: "Documental" },
+                            { key: "complexidade", label: "Complexidade" },
+                            { key: "juridico", label: "Juridico" },
+                            { key: "logistico", label: "Logistico" },
+                            { key: "comercial", label: "Comercial" },
+                          ].map(dim => {
+                            const scores = scoresValidacao.scores as Record<string, number> | undefined;
+                            const val = scores?.[dim.key] ?? null;
+                            const status: "success" | "warning" | "error" = val === null ? "error" : val >= 70 ? "success" : val >= 40 ? "warning" : "error";
+                            return (
+                              <div key={dim.key} className="gap-item" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                <span>{dim.label}</span>
+                                <StatusBadge status={status} label={val !== null ? `${val}%` : "N/A"} size="small" />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Decisao GO/NO-GO */}
+                        {scoresValidacao.decisao && (
+                          <div style={{ marginBottom: "8px", padding: "6px 10px", borderRadius: "6px", backgroundColor: String(scoresValidacao.decisao) === "GO" ? "#052e16" : String(scoresValidacao.decisao) === "NO-GO" ? "#450a0a" : "#1e293b" }}>
+                            <strong style={{ color: String(scoresValidacao.decisao) === "GO" ? "#22c55e" : String(scoresValidacao.decisao) === "NO-GO" ? "#ef4444" : "#eab308" }}>
+                              {String(scoresValidacao.decisao)}
+                            </strong>
+                            {scoresValidacao.justificativa && (
+                              <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
+                                {String(scoresValidacao.justificativa)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Pontos positivos */}
+                        {Array.isArray(scoresValidacao.pontos_positivos) && (scoresValidacao.pontos_positivos as string[]).length > 0 && (
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: "12px", fontWeight: 600, color: "#22c55e", marginBottom: "4px" }}>Pontos positivos:</div>
+                            {(scoresValidacao.pontos_positivos as string[]).map((p, i) => (
+                              <div key={i} style={{ fontSize: "12px", color: "#cbd5e1", display: "flex", gap: "4px", marginBottom: "2px" }}>
+                                <span style={{ color: "#22c55e", flexShrink: 0 }}>{"\u2714"}</span>
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Pontos de atencao */}
+                        {Array.isArray(scoresValidacao.pontos_atencao) && (scoresValidacao.pontos_atencao as string[]).length > 0 && (
+                          <div style={{ marginBottom: "6px" }}>
+                            <div style={{ fontSize: "12px", fontWeight: 600, color: "#eab308", marginBottom: "4px" }}>Pontos de atencao:</div>
+                            {(scoresValidacao.pontos_atencao as string[]).map((p, i) => (
+                              <div key={i} style={{ fontSize: "12px", color: "#cbd5e1", display: "flex", gap: "4px", marginBottom: "2px" }}>
+                                <span style={{ color: "#eab308", flexShrink: 0 }}>{"\u26A0"}</span>
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : painelEdital.gaps.length > 0 ? (
+                      /* Fallback: gaps locais da busca */
                       <div className="gaps-list">
                         {painelEdital.gaps.map((g, i) => (
                           <div key={i} className="gap-item">
@@ -773,8 +1039,10 @@ export function CaptacaoPage(_props?: PageProps) {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-muted">Nenhum gap identificado</p>
+                    )}
+                  </div>
 
                   {/* Info adicional */}
                   <div className="panel-section">

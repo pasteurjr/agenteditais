@@ -71,9 +71,17 @@ export function setDashboardTokenGetter(fn: () => Promise<string | null>) {
 
 async function fetchDashboardStats(): Promise<DashboardStats> {
   const headers: HeadersInit = { "Content-Type": "application/json" };
+
+  // Tentar obter token via getter ou fallback direto do localStorage
+  let token: string | null = null;
   if (getDashboardTokenFn) {
-    const token = await getDashboardTokenFn();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    token = await getDashboardTokenFn();
+  }
+  if (!token) {
+    token = localStorage.getItem("editais_ia_access_token");
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch("/api/dashboard/stats", { headers });
@@ -141,14 +149,20 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (retries = 2) => {
     try {
       setLoading(true);
       setError(null);
       const data = await fetchDashboardStats();
       setStats(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar estatisticas");
+      const msg = err instanceof Error ? err.message : "Erro ao carregar estatisticas";
+      // Se 401 e ainda tem retries, aguardar token estar disponivel e tentar novamente
+      if (msg.includes("autenticado") && retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        return loadStats(retries - 1);
+      }
+      setError(msg);
       // Keep defaults on error so UI still renders
     } finally {
       setLoading(false);

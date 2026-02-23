@@ -11,6 +11,10 @@ export function setCrudTokenGetter(fn: () => Promise<string | null>) {
   getAccessTokenFn = fn;
 }
 
+export function getCrudTokenGetter(): (() => Promise<string | null>) | null {
+  return getAccessTokenFn;
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = { "Content-Type": "application/json" };
   if (getAccessTokenFn) {

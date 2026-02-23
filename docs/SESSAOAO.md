@@ -1,0 +1,28 @@
+egundo o docs/planejamento_17022026.md:                                                                                                                                                                  
+                                                                                                                                                                                                            
+  ┌──────────┬─────────────────────────────────────────────────────────────────┬──────────────────┐                                                                                                         
+  │ Conceito │                             O que é                             │     Duração      │                                                                                                         
+  ├──────────┼─────────────────────────────────────────────────────────────────┼──────────────────┤                                                                                                         
+  │ Sprint   │ Plano v3.0 (humano sequencial) — 10 sprints de 7 dias = 70 dias │ ~1 semana cada   │                                                                                                         
+  ├──────────┼─────────────────────────────────────────────────────────────────┼──────────────────┤                                                                                                         
+  │ Onda     │ Plano v4.0 (Agent Teams em paralelo) — 4 ondas = 3-4 dias total │ ~4-10 horas cada │                                                                                                         
+  └──────────┴─────────────────────────────────────────────────────────────────┴──────────────────┘                                                                                                         
+                                                                                                                                                                                                            
+  As ondas substituem as sprints. A relação é:                                                                                                                                                              
+                                                                                                                                                                                                            
+  ┌────────┬───────────────────┬────────────────────────────────────────────────────────────────────────┐                                                                                                   
+  │  Onda  │ Sprints que cobre │                                 Tasks                                  │                                                                                                   
+  ├────────┼───────────────────┼────────────────────────────────────────────────────────────────────────┤                                                                                                   
+  │ Onda 1 │ Sprint 1          │ T1-T7 (infraestrutura + 3 pages)                                       │                                                                                                   
+  ├────────┼───────────────────┼────────────────────────────────────────────────────────────────────────┤                                                                                                   
+  │ Onda 2 │ Sprints 2-3       │ T8-T18 (Captação, Validação, Precificação, Proposta, Submissão)        │                                                                                                   
+  ├────────┼───────────────────┼────────────────────────────────────────────────────────────────────────┤                                                                                                   
+  │ Onda 3 │ Sprints 4-7       │ T19-T40 (Jurídico, Follow-up, CRM, Alertas, Monitoria — a mais pesada) │                                                                                                   
+  ├────────┼───────────────────┼────────────────────────────────────────────────────────────────────────┤                                                                                                   
+  │ Onda 4 │ Sprints 8-10      │ T41-T52 (Analytics, Mercado, Lances, QA)                               │                                                                                                   
+  └────────┴───────────────────┴────────────────────────────────────────────────────────────────────────┘                                                                                                   
+                                                                                                                                                                                                            
+  Em resumo: O que um humano faria em 10 sprints (70 dias sequenciais), os agentes fazem em 4 ondas (~24-30 horas de execução paralela). Cada onda compacta várias sprints porque múltiplos agentes         
+  trabalham simultaneamente.                                                                                                                                                                                
+                                                                                                                                                                                                            
+  Os nomes dos agentes ainda referenciam sprints (ex: page-engineer-sprint1, page-engineer-sprint3-6) — isso é só para indicar quais pages cada agente cuida, não a duração.   

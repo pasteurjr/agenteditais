@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Lock } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
-import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import { crudList, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
 import type { CrudListResponse } from "../api/crud";
 
 interface EmpresaPageProps {
@@ -145,11 +145,11 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
       setDocumentos(docsRes.items.map(d => ({
         id: String(d.id ?? ""),
-        nome: String(d.nome ?? ""),
+        nome: String(d.nome_arquivo || d.nome || d.tipo || ""),
         tipo: String(d.tipo ?? ""),
-        validade: d.validade ? String(d.validade) : null,
-        status: (d.status as Documento["status"]) || "ok",
-        arquivo: d.arquivo ? String(d.arquivo) : undefined,
+        validade: d.data_vencimento ? String(d.data_vencimento) : (d.validade ? String(d.validade) : null),
+        status: (d.path_arquivo ? "ok" : "falta") as Documento["status"],
+        arquivo: d.path_arquivo ? String(d.path_arquivo) : (d.arquivo ? String(d.arquivo) : undefined),
       })));
 
       setCertidoes(certRes.items.map(c => ({
@@ -265,13 +265,31 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const handleSalvarDocumento = async () => {
     if (!novoDocTipo || !empresaId) return;
     try {
-      await crudCreate("empresa-documentos", {
-        empresa_id: empresaId,
-        tipo: novoDocTipo,
-        nome: novoDocTipo,
-        validade: novoDocValidade || null,
-        status: novoDocFile ? "ok" : "falta",
+      const formData = new FormData();
+      formData.append("empresa_id", empresaId);
+      formData.append("tipo", novoDocTipo);
+      if (novoDocValidade) formData.append("data_vencimento", novoDocValidade);
+      if (novoDocFile) {
+        formData.append("file", novoDocFile);
+      }
+
+      const headers: HeadersInit = {};
+      const tokenFn = getCrudTokenGetter();
+      if (tokenFn) {
+        const token = await tokenFn();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch("/api/empresa-documentos/upload", {
+        method: "POST",
+        headers,
+        body: formData,
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Erro ao fazer upload do documento");
+      }
+
       await loadSubTables(empresaId);
       setNovoDocTipo("");
       setNovoDocValidade("");
@@ -327,8 +345,17 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         <div className="table-actions">
           {d.arquivo ? (
             <>
-              <button title="Visualizar"><Eye size={16} /></button>
-              <button title="Download"><Download size={16} /></button>
+              <button title="Visualizar" onClick={() => window.open(`/api/empresa-documentos/${d.id}/download`, "_blank")}><Eye size={16} /></button>
+              <button title="Download" onClick={async () => {
+                const tokenFn = getCrudTokenGetter();
+                const token = tokenFn ? await tokenFn() : null;
+                const res = await fetch(`/api/empresa-documentos/${d.id}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = d.nome || "documento"; a.click(); URL.revokeObjectURL(url);
+                }
+              }}><Download size={16} /></button>
               <button title="Excluir" className="danger" onClick={() => handleExcluirDocumento(d.id)}><Trash2 size={16} /></button>
             </>
           ) : (

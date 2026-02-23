@@ -7489,6 +7489,701 @@ def exportar_proposta(proposta_id):
 
 
 # =============================================================================
+# B1: Upload real de arquivo na EmpresaPage (persistir no disco)
+# =============================================================================
+
+@app.route("/api/empresa-documentos/upload", methods=["POST"])
+@require_auth
+def upload_empresa_documento():
+    """
+    Upload de documento da empresa (contrato social, atestados, etc).
+    Salva arquivo no disco e cria/atualiza registro EmpresaDocumento.
+
+    Form data:
+    - file: arquivo (PDF, DOCX, etc.)
+    - empresa_id: ID da empresa
+    - tipo: tipo do documento (contrato_social, atestado_capacidade, etc.)
+    - data_emissao: (opcional) data de emissão
+    - data_vencimento: (opcional) data de vencimento
+    """
+    from models import Empresa, EmpresaDocumento
+    user_id = get_current_user_id()
+
+    if 'file' not in request.files:
+        return jsonify({"error": "Arquivo não enviado"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nenhum arquivo selecionado"}), 400
+
+    empresa_id = request.form.get('empresa_id')
+    tipo_raw = request.form.get('tipo', 'outro')
+    # Normalizar tipo: "Habilitacao Fiscal" -> "habilitacao_fiscal", "AFE" -> "afe"
+    tipo = tipo_raw.lower().replace(' ', '_').replace('de_', '')
+    # Mapear nomes do frontend para snake_case do BD
+    _tipo_map = {
+        'contrato_social': 'contrato_social', 'procuracao': 'procuracao',
+        'certidao_negativa': 'certidao_negativa', 'habilitacao_fiscal': 'habilitacao_fiscal',
+        'habilitacao_economica': 'habilitacao_economica', 'balanco_patrimonial': 'balanco',
+        'qualificacao_tecnica': 'qualificacao_tecnica', 'atestado_capacidade': 'atestado_capacidade',
+        'afe': 'afe', 'cbpad': 'cbpad', 'cbpp': 'cbpp',
+        'corpo_bombeiros': 'bombeiros', 'bombeiros': 'bombeiros',
+        'alvara': 'alvara', 'registro_conselho': 'registro_conselho',
+        'outro': 'outro',
+    }
+    tipo = _tipo_map.get(tipo, tipo)
+    # Fallback: se ainda não está no enum, usar 'outro'
+    _tipos_validos = {
+        'contrato_social', 'atestado_capacidade', 'balanco', 'alvara',
+        'registro_conselho', 'procuracao', 'certidao_negativa',
+        'habilitacao_fiscal', 'habilitacao_economica', 'qualificacao_tecnica',
+        'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
+    }
+    if tipo not in _tipos_validos:
+        tipo = 'outro'
+
+    if not empresa_id:
+        return jsonify({"error": "empresa_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        # Verificar que a empresa pertence ao usuário
+        empresa = db.query(Empresa).filter(
+            Empresa.id == empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+
+        # Criar diretório para a empresa
+        upload_dir = os.path.join(UPLOAD_FOLDER, 'empresa', empresa_id, tipo)
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Salvar arquivo com nome seguro
+        from werkzeug.utils import secure_filename
+        safe_name = secure_filename(file.filename) or f"doc_{uuid.uuid4().hex[:8]}.pdf"
+        filepath = os.path.join(upload_dir, f"{uuid.uuid4().hex[:8]}_{safe_name}")
+        file.save(filepath)
+
+        # Criar registro EmpresaDocumento
+        doc = EmpresaDocumento()
+        doc.id = str(uuid.uuid4())
+        doc.empresa_id = empresa_id
+        doc.tipo = tipo
+        doc.nome_arquivo = file.filename
+        doc.path_arquivo = filepath
+
+        # Datas opcionais
+        data_emissao = request.form.get('data_emissao')
+        data_vencimento = request.form.get('data_vencimento')
+        if data_emissao:
+            from datetime import date as date_type
+            try:
+                doc.data_emissao = date_type.fromisoformat(data_emissao)
+            except ValueError:
+                pass
+        if data_vencimento:
+            from datetime import date as date_type
+            try:
+                doc.data_vencimento = date_type.fromisoformat(data_vencimento)
+            except ValueError:
+                pass
+
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+
+        return jsonify({
+            "success": True,
+            "message": f"Documento '{file.filename}' enviado com sucesso",
+            "documento": doc.to_dict(),
+            "path": filepath
+        }), 201
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/empresa-documentos/<doc_id>/download", methods=["GET"])
+@require_auth
+def download_empresa_documento(doc_id):
+    """Download/visualização de documento da empresa."""
+    from models import Empresa, EmpresaDocumento
+    user_id = get_current_user_id()
+    download = request.args.get('download', 'false').lower() == 'true'
+
+    db = get_db()
+    try:
+        doc = db.query(EmpresaDocumento).filter(EmpresaDocumento.id == doc_id).first()
+        if not doc:
+            return jsonify({"error": "Documento não encontrado"}), 404
+
+        # Verificar propriedade via empresa
+        empresa = db.query(Empresa).filter(
+            Empresa.id == doc.empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Acesso negado"}), 403
+
+        if not doc.path_arquivo or not os.path.exists(doc.path_arquivo):
+            return jsonify({"error": "Arquivo não encontrado no disco"}), 404
+
+        # Detectar mimetype
+        mimetype = 'application/pdf'
+        nome = doc.nome_arquivo or 'documento'
+        if nome.lower().endswith('.docx'):
+            mimetype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        elif nome.lower().endswith('.doc'):
+            mimetype = 'application/msword'
+        elif nome.lower().endswith('.txt'):
+            mimetype = 'text/plain'
+
+        return send_file(
+            doc.path_arquivo,
+            mimetype=mimetype,
+            as_attachment=download,
+            download_name=nome
+        )
+    finally:
+        db.close()
+
+
+@app.route("/api/empresa-certidoes/<certidao_id>/download", methods=["GET"])
+@require_auth
+def download_empresa_certidao(certidao_id):
+    """Download/visualização de certidão da empresa."""
+    from models import Empresa, EmpresaCertidao
+    user_id = get_current_user_id()
+    download = request.args.get('download', 'false').lower() == 'true'
+
+    db = get_db()
+    try:
+        cert = db.query(EmpresaCertidao).filter(EmpresaCertidao.id == certidao_id).first()
+        if not cert:
+            return jsonify({"error": "Certidão não encontrada"}), 404
+
+        empresa = db.query(Empresa).filter(
+            Empresa.id == cert.empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Acesso negado"}), 403
+
+        if not cert.path_arquivo or not os.path.exists(cert.path_arquivo):
+            return jsonify({"error": "Arquivo não encontrado no disco"}), 404
+
+        return send_file(
+            cert.path_arquivo,
+            mimetype='application/pdf',
+            as_attachment=download,
+            download_name=f"certidao_{cert.tipo}_{cert.id[:8]}.pdf"
+        )
+    finally:
+        db.close()
+
+
+# =============================================================================
+# B4: Usar porte/regime da empresa no cálculo de validação
+# (Implementado em tools.py via PROMPT_SCORES_VALIDACAO)
+# =============================================================================
+
+
+# =============================================================================
+# B5: Gerar classes/subclasses automaticamente via IA
+# =============================================================================
+
+@app.route("/api/parametrizacoes/gerar-classes", methods=["POST"])
+@require_auth
+def gerar_classes_ia():
+    """
+    Gera classes e subclasses de produtos automaticamente via IA.
+    Lista todos os produtos do usuário, envia para DeepSeek e retorna
+    uma estrutura de classes/subclasses sugeridas.
+    """
+    from models import Produto
+    user_id = get_current_user_id()
+
+    db = get_db()
+    try:
+        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+
+        if not produtos:
+            return jsonify({"error": "Nenhum produto cadastrado. Cadastre produtos primeiro."}), 400
+
+        # Montar lista de produtos para o prompt
+        lista_produtos = []
+        for p in produtos:
+            lista_produtos.append(
+                f"- {p.nome} (categoria: {p.categoria}, NCM: {p.ncm or 'N/A'}, "
+                f"fabricante: {p.fabricante or 'N/A'})"
+            )
+
+        prompt = f"""Você é um especialista em classificação de produtos para licitações públicas.
+
+Dado os seguintes produtos cadastrados:
+
+{chr(10).join(lista_produtos)}
+
+Agrupe esses produtos em CLASSES e SUBCLASSES lógicas para facilitar a gestão em processos licitatórios.
+
+Para cada classe e subclasse, sugira o NCM (Nomenclatura Comum do Mercosul) mais adequado.
+
+RESPONDA APENAS EM JSON com a seguinte estrutura:
+{{
+  "classes": [
+    {{
+      "nome": "Nome da Classe",
+      "descricao": "Descrição breve",
+      "ncm_principal": "XXXX.XX.XX",
+      "subclasses": [
+        {{
+          "nome": "Nome da Subclasse",
+          "descricao": "Descrição breve",
+          "ncm": "XXXX.XX.XX",
+          "produtos_sugeridos": ["Nome Produto 1", "Nome Produto 2"]
+        }}
+      ]
+    }}
+  ]
+}}
+"""
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=3000,
+            model_override="deepseek-chat"
+        )
+
+        # Extrair JSON da resposta
+        import json, re
+        texto = resposta if isinstance(resposta, str) else str(resposta)
+        json_match = re.search(r'\{[\s\S]*\}', texto)
+        if json_match:
+            try:
+                resultado = json.loads(json_match.group(0))
+                return jsonify({
+                    "success": True,
+                    "classes": resultado.get("classes", []),
+                    "total_produtos": len(produtos)
+                })
+            except json.JSONDecodeError:
+                pass
+
+        return jsonify({
+            "success": True,
+            "classes": [],
+            "raw_response": texto[:2000],
+            "message": "IA retornou resposta mas não no formato JSON esperado"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# B6: Vincular documento da empresa a item/requisito do edital
+# =============================================================================
+
+@app.route("/api/editais/<edital_id>/vincular-documento", methods=["POST"])
+@require_auth
+def vincular_documento_edital(edital_id):
+    """
+    Vincula um documento da empresa a um requisito do edital.
+
+    JSON body:
+    - documento_id: ID do EmpresaDocumento ou EmpresaCertidao
+    - requisito_id: ID do EditalRequisito
+    - tipo_documento: "documento" ou "certidao"
+    """
+    from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
+    user_id = get_current_user_id()
+    data = request.json or {}
+
+    documento_id = data.get('documento_id')
+    requisito_id = data.get('requisito_id')
+    tipo_documento = data.get('tipo_documento', 'documento')
+
+    if not documento_id or not requisito_id:
+        return jsonify({"error": "documento_id e requisito_id são obrigatórios"}), 400
+
+    db = get_db()
+    try:
+        # Verificar edital pertence ao usuário
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Verificar requisito pertence ao edital
+        requisito = db.query(EditalRequisito).filter(
+            EditalRequisito.id == requisito_id,
+            EditalRequisito.edital_id == edital_id
+        ).first()
+        if not requisito:
+            return jsonify({"error": "Requisito não encontrado"}), 404
+
+        # Vincular (via campo edital_requisito_id no documento)
+        if tipo_documento == 'certidao':
+            cert = db.query(EmpresaCertidao).filter(EmpresaCertidao.id == documento_id).first()
+            if not cert:
+                return jsonify({"error": "Certidão não encontrada"}), 404
+            cert.edital_requisito_id = requisito_id
+        else:
+            doc = db.query(EmpresaDocumento).filter(EmpresaDocumento.id == documento_id).first()
+            if not doc:
+                return jsonify({"error": "Documento não encontrado"}), 404
+            doc.edital_requisito_id = requisito_id
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Documento vinculado ao requisito '{requisito.descricao[:60]}'"
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/documentacao-necessaria", methods=["GET"])
+@require_auth
+def documentacao_necessaria(edital_id):
+    """
+    Retorna os requisitos documentais do edital cruzados com os documentos da empresa.
+    Usado pela seção Processo Amanda (F6).
+    """
+    from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
+    user_id = get_current_user_id()
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Buscar empresa do usuário
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+
+        # Requisitos documentais do edital
+        requisitos_doc = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital_id,
+            EditalRequisito.tipo == 'documental'
+        ).all()
+
+        # Documentos e certidões da empresa
+        docs_empresa = []
+        certs_empresa = []
+        if empresa:
+            docs_empresa = db.query(EmpresaDocumento).filter(
+                EmpresaDocumento.empresa_id == empresa.id
+            ).all()
+            certs_empresa = db.query(EmpresaCertidao).filter(
+                EmpresaCertidao.empresa_id == empresa.id
+            ).all()
+
+        # Montar resposta organizada em 3 pastas
+        pastas = {
+            "documentos_empresa": {
+                "titulo": "Documentos da Empresa",
+                "itens": [{
+                    **d.to_dict(),
+                    "vinculado_requisito_id": getattr(d, 'edital_requisito_id', None)
+                } for d in docs_empresa]
+            },
+            "certidoes_fiscais": {
+                "titulo": "Documentos Fiscais e Certidões",
+                "itens": [{
+                    **c.to_dict(),
+                    "vinculado_requisito_id": getattr(c, 'edital_requisito_id', None)
+                } for c in certs_empresa]
+            },
+            "requisitos_edital": {
+                "titulo": "Requisitos Documentais do Edital",
+                "itens": [r.to_dict() for r in requisitos_doc]
+            }
+        }
+
+        return jsonify({
+            "success": True,
+            "edital_id": edital_id,
+            "edital_numero": edital.numero,
+            "empresa_id": empresa.id if empresa else None,
+            "pastas": pastas,
+            "total_requisitos": len(requisitos_doc),
+            "total_documentos": len(docs_empresa),
+            "total_certidoes": len(certs_empresa)
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# B7: SICONV como fonte de busca de editais
+# (Implementado em tools.py — parser + integração via Serper)
+# =============================================================================
+
+
+# =============================================================================
+# B8: Busca automática de certidões (portais oficiais)
+# =============================================================================
+
+@app.route("/api/empresa-certidoes/buscar-automatica", methods=["POST"])
+@require_auth
+def buscar_certidoes_automatica():
+    """
+    Busca certidões da empresa automaticamente nos portais oficiais.
+    Para cada tipo de certidão, tenta:
+    1. Buscar via web search a URL de consulta
+    2. Registrar a URL e status no BD
+
+    JSON body:
+    - empresa_id: ID da empresa
+    - tipos: (opcional) lista de tipos a buscar. Default: todos.
+    """
+    from models import Empresa, EmpresaCertidao
+    user_id = get_current_user_id()
+    data = request.json or {}
+
+    empresa_id = data.get('empresa_id')
+    if not empresa_id:
+        return jsonify({"error": "empresa_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(
+            Empresa.id == empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+
+        if not empresa.cnpj:
+            return jsonify({"error": "Empresa sem CNPJ cadastrado"}), 400
+
+        cnpj = empresa.cnpj.replace('.', '').replace('/', '').replace('-', '')
+        tipos_solicitados = data.get('tipos', [
+            'cnd_federal', 'cnd_estadual', 'cnd_municipal', 'fgts', 'trabalhista'
+        ])
+
+        # Mapeamento tipo → portal de consulta
+        portais = {
+            'cnd_federal': {
+                'orgao': 'Receita Federal / PGFN',
+                'url_consulta': 'https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir',
+                'descricao': 'Certidão Negativa de Débitos Federais (Receita Federal + PGFN)'
+            },
+            'cnd_estadual': {
+                'orgao': f'Secretaria da Fazenda - {empresa.uf or "SP"}',
+                'url_consulta': f'https://www.sefaz.{(empresa.uf or "sp").lower()}.gov.br',
+                'descricao': f'Certidão Negativa de Débitos Estaduais ({empresa.uf or "SP"})'
+            },
+            'cnd_municipal': {
+                'orgao': f'Prefeitura de {empresa.cidade or "São Paulo"}',
+                'url_consulta': '',
+                'descricao': f'Certidão Negativa de Débitos Municipais ({empresa.cidade or "N/A"})'
+            },
+            'fgts': {
+                'orgao': 'Caixa Econômica Federal',
+                'url_consulta': 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
+                'descricao': 'Certificado de Regularidade do FGTS (CRF)'
+            },
+            'trabalhista': {
+                'orgao': 'Tribunal Superior do Trabalho (TST)',
+                'url_consulta': 'https://cndt-certidao.tst.jus.br/inicio.faces',
+                'descricao': 'Certidão Negativa de Débitos Trabalhistas (CNDT)'
+            }
+        }
+
+        resultados = []
+        from datetime import date as date_type
+
+        for tipo in tipos_solicitados:
+            if tipo not in portais:
+                continue
+
+            portal = portais[tipo]
+
+            # Verificar se já existe certidão deste tipo
+            cert_existente = db.query(EmpresaCertidao).filter(
+                EmpresaCertidao.empresa_id == empresa_id,
+                EmpresaCertidao.tipo == tipo
+            ).first()
+
+            # Tentar buscar via web search para URLs atualizadas
+            url_consulta = portal['url_consulta']
+            try:
+                resultado_busca = tool_web_search(
+                    f"certidão negativa {portal['descricao']} CNPJ {empresa.cnpj} consultar emitir site oficial"
+                )
+                if resultado_busca.get('success'):
+                    links = resultado_busca.get('links', [])
+                    if links:
+                        # Usar primeiro link oficial como URL de consulta
+                        url_consulta = links[0].get('url', url_consulta)
+            except Exception:
+                pass
+
+            if cert_existente:
+                # Atualizar URL e status
+                cert_existente.url_consulta = url_consulta
+                cert_existente.orgao_emissor = portal['orgao']
+                if cert_existente.data_vencimento and cert_existente.data_vencimento < date_type.today():
+                    cert_existente.status = 'vencida'
+                resultados.append({
+                    "tipo": tipo,
+                    "status": "atualizado",
+                    "certidao": cert_existente.to_dict(),
+                    "url_consulta": url_consulta,
+                    "acao": "Acesse o link para emitir/renovar a certidão"
+                })
+            else:
+                # Criar nova certidão com status pendente
+                nova_cert = EmpresaCertidao()
+                nova_cert.id = str(uuid.uuid4())
+                nova_cert.empresa_id = empresa_id
+                nova_cert.tipo = tipo
+                nova_cert.orgao_emissor = portal['orgao']
+                nova_cert.url_consulta = url_consulta
+                nova_cert.status = 'pendente'
+                nova_cert.data_vencimento = date_type.today()  # Placeholder
+                db.add(nova_cert)
+                resultados.append({
+                    "tipo": tipo,
+                    "status": "criado",
+                    "certidao": nova_cert.to_dict(),
+                    "url_consulta": url_consulta,
+                    "acao": "Acesse o link para emitir a certidão"
+                })
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Busca concluída para {len(resultados)} certidões",
+            "resultados": resultados,
+            "cnpj": empresa.cnpj,
+            "nota": "Acesse os links de consulta para emitir cada certidão. "
+                    "Quando obtiver o arquivo, faça upload para atualizar o registro."
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# B3: Notificação real por email (SMTP)
+# =============================================================================
+
+@app.route("/api/notificacoes/enviar-email", methods=["POST"])
+@require_auth
+def enviar_notificacao_email():
+    """
+    Envia uma notificação por email.
+    Usa a configuração SMTP do scheduler.py.
+
+    JSON body:
+    - notificacao_id: (opcional) ID da notificação existente para reenviar
+    - assunto: assunto do email
+    - corpo: corpo do email (texto ou HTML)
+    - destinatario: (opcional) email. Se não informado, usa o email do usuário.
+    """
+    from models import Notificacao, PreferenciasNotificacao, User
+    user_id = get_current_user_id()
+    data = request.json or {}
+
+    db = get_db()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+
+        # Determinar destinatário
+        prefs = db.query(PreferenciasNotificacao).filter(
+            PreferenciasNotificacao.user_id == user_id
+        ).first()
+        destinatario = data.get('destinatario') or (prefs.email_notificacao if prefs else None) or user.email
+
+        assunto = data.get('assunto', 'Notificação - Agente Editais')
+        corpo = data.get('corpo', '')
+
+        # Se notificacao_id fornecido, buscar dados da notificação
+        notificacao_id = data.get('notificacao_id')
+        if notificacao_id:
+            notif = db.query(Notificacao).filter(
+                Notificacao.id == notificacao_id,
+                Notificacao.user_id == user_id
+            ).first()
+            if notif:
+                assunto = notif.titulo
+                corpo = notif.mensagem
+
+        if not corpo:
+            return jsonify({"error": "Corpo do email não pode ser vazio"}), 400
+
+        # Enviar via scheduler.enviar_email_alerta
+        from scheduler import enviar_email_alerta
+        sucesso = enviar_email_alerta(destinatario, assunto, corpo)
+
+        # Atualizar flag enviado_email na notificação
+        if notificacao_id and sucesso:
+            notif = db.query(Notificacao).filter(Notificacao.id == notificacao_id).first()
+            if notif:
+                notif.enviado_email = True
+                db.commit()
+
+        if sucesso:
+            return jsonify({
+                "success": True,
+                "message": f"Email enviado para {destinatario}"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "SMTP não configurado ou erro no envio. "
+                           "Configure SMTP_HOST, SMTP_USER e SMTP_PASSWORD nas variáveis de ambiente.",
+                "email_salvo": True
+            })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/notificacoes/config-smtp", methods=["GET"])
+@require_auth
+def verificar_config_smtp():
+    """Verifica se o SMTP está configurado."""
+    from scheduler import SMTP_HOST, SMTP_USER, SMTP_PASSWORD
+    configurado = bool(SMTP_USER and SMTP_PASSWORD)
+    return jsonify({
+        "smtp_configurado": configurado,
+        "smtp_host": SMTP_HOST if configurado else None,
+        "smtp_user": SMTP_USER[:3] + "***" if configurado else None
+    })
+
+
+# =============================================================================
 # Main
 # =============================================================================
 

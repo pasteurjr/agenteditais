@@ -9,6 +9,7 @@ import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, 
 import type { Column } from "../components/common";
 import { getProdutos, getProduto } from "../api/client";
 import type { Produto, ProdutoEspecificacao } from "../api/client";
+import { crudList } from "../api/crud";
 
 interface PortfolioPageProps {
   onSendToChat: (message: string, file?: File) => Promise<void>;
@@ -137,6 +138,12 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // === CLASSIFICACAO ===
   const [expandedClasse, setExpandedClasse] = useState<string | null>(null);
 
+  // === CLASSES DO BACKEND ===
+  const [classesBackend, setClassesBackend] = useState<Record<string, unknown>[]>([]);
+
+  // === FEEDBACK DE PROCESSAMENTO ===
+  const [processingMessage, setProcessingMessage] = useState<string | null>(null);
+
   // === MODALS ===
   const [showAnvisaModal, setShowAnvisaModal] = useState(false);
   const [showBuscaWebModal, setShowBuscaWebModal] = useState(false);
@@ -163,6 +170,20 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   useEffect(() => {
     fetchProdutos();
   }, [fetchProdutos]);
+
+  // Carregar classes de produto do backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await crudList("classes-produtos", { limit: 200 });
+        if (res.items && res.items.length > 0) {
+          setClassesBackend(res.items);
+        }
+      } catch {
+        // Fallback: mantém classesBackend vazio, usará CLASSES_PRODUTO
+      }
+    })();
+  }, []);
 
   // Carregar detalhes completos ao selecionar produto
   const handleSelectProduto = useCallback(async (produto: Produto) => {
@@ -211,10 +232,11 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
 
     if (uploadingType === "website") {
       if (!websiteUrl) return;
+      setProcessingMessage("Processando via IA...");
       await onSendToChat(`Busque produtos no website ${websiteUrl} e cadastre`);
       setWebsiteUrl("");
       setUploadingType(null);
-      setTimeout(() => fetchProdutos(), 5000);
+      setTimeout(() => { fetchProdutos(); setProcessingMessage(null); }, 5000);
       return;
     }
 
@@ -222,11 +244,12 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     const typeConfig = UPLOAD_TYPES.find(t => t.id === uploadingType);
     const prompt = typeConfig?.prompt || "Cadastre este produto";
     const msg = uploadNomeProduto ? `${prompt}: ${uploadNomeProduto}` : prompt;
+    setProcessingMessage("Processando via IA...");
     await onSendToChat(msg, uploadFile);
     setUploadFile(null);
     setUploadNomeProduto("");
     setUploadingType(null);
-    setTimeout(() => fetchProdutos(), 3000);
+    setTimeout(() => { fetchProdutos(); setProcessingMessage(null); }, 3000);
   };
 
   const handleUploadCancel = () => {
@@ -247,8 +270,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     if (cadastroFabricante) msg += `, Fabricante="${cadastroFabricante}"`;
     if (cadastroModelo) msg += `, Modelo="${cadastroModelo}"`;
     if (cadastroClasse) {
-      const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-      if (cls) msg += `, Categoria="${cls.label}"`;
+      msg += `, Categoria="${cadastroClasse}"`;
     }
     if (cadastroNcm) msg += `, NCM="${cadastroNcm}"`;
 
@@ -259,6 +281,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       msg += `. Especificacoes: ${specsStr}`;
     }
 
+    setProcessingMessage("Processando via IA...");
     await onSendToChat(msg);
 
     // Limpar form
@@ -269,7 +292,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     setCadastroModelo("");
     setCadastroNcm("");
     setCadastroSpecs({});
-    setTimeout(() => fetchProdutos(), 2000);
+    setTimeout(() => { fetchProdutos(); setProcessingMessage(null); }, 3000);
   };
 
   const handleSpecChange = (campo: string, valor: string) => {
@@ -280,16 +303,26 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const handleClasseChange = (classeId: string) => {
     setCadastroClasse(classeId);
     setCadastroSubclasse("");
-    const cls = CLASSES_PRODUTO.find(c => c.id === classeId);
-    if (cls) setCadastroNcm(cls.ncm.split(",")[0].trim());
+    if (useBackendClasses) {
+      const cls = classesBackend.find(c => String(c.id) === classeId);
+      if (cls && cls.ncms) setCadastroNcm(String(cls.ncms).split(",")[0].trim());
+    } else {
+      const cls = CLASSES_PRODUTO.find(c => c.id === classeId);
+      if (cls) setCadastroNcm(cls.ncm.split(",")[0].trim());
+    }
     setCadastroSpecs({});
   };
 
   const handleSubclasseChange = (subId: string) => {
     setCadastroSubclasse(subId);
-    const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-    const sub = cls?.subclasses.find(s => s.id === subId);
-    if (sub) setCadastroNcm(sub.ncm);
+    if (useBackendClasses) {
+      const sub = classesBackend.find(c => String(c.id) === subId);
+      if (sub && sub.ncms) setCadastroNcm(String(sub.ncms).split(",")[0].trim());
+    } else {
+      const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
+      const sub = cls?.subclasses.find(s => s.id === subId);
+      if (sub) setCadastroNcm(sub.ncm);
+    }
   };
 
   // ============================================================
@@ -346,9 +379,61 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     return Math.round((preenchidos / produto.especificacoes.length) * 100);
   };
 
-  // Specs da classe selecionada no cadastro
-  const specsClasse = cadastroClasse ? (SPECS_POR_CLASSE[cadastroClasse] || SPECS_POR_CLASSE["equipamento"]) : [];
-  const classeAtual = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
+  // === Dados derivados das classes do backend ===
+  const useBackendClasses = classesBackend.length > 0;
+
+  // Classes pai (tipo=classe) do backend
+  const classesBackendPai = classesBackend.filter(c => c.tipo === "classe" || !c.classe_pai_id);
+  // Subclasses do backend (tipo=subclasse ou tem classe_pai_id)
+  const subclassesBackendPorPai = (paiId: string) =>
+    classesBackend.filter(c => String(c.classe_pai_id) === paiId);
+
+  // Options para dropdown de classe
+  const classeOptions = useBackendClasses
+    ? [{ value: "", label: "Selecione a classe..." }, ...classesBackendPai.map(c => ({ value: String(c.id), label: String(c.nome || c.id) }))]
+    : [{ value: "", label: "Selecione a classe..." }, ...CLASSES_PRODUTO.map(c => ({ value: c.id, label: c.label }))];
+
+  // Subclasse options
+  const subclasseOptions = (() => {
+    const base = [{ value: "", label: "Selecione..." }];
+    if (!cadastroClasse) return base;
+    if (useBackendClasses) {
+      const subs = subclassesBackendPorPai(cadastroClasse);
+      return [...base, ...subs.map(s => ({ value: String(s.id), label: String(s.nome || s.id) }))];
+    }
+    const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
+    return [...base, ...(cls?.subclasses.map(s => ({ value: s.id, label: s.label })) || [])];
+  })();
+
+  // Specs da classe selecionada no cadastro (F2: campos_mascara do backend como prioridade)
+  const specsClasse = (() => {
+    if (!cadastroClasse) return [];
+    if (useBackendClasses) {
+      const cls = classesBackend.find(c => String(c.id) === cadastroClasse);
+      if (cls && cls.campos_mascara) {
+        try {
+          const mascara = typeof cls.campos_mascara === "string" ? JSON.parse(cls.campos_mascara as string) : cls.campos_mascara;
+          if (Array.isArray(mascara) && mascara.length > 0) {
+            return mascara.map((m: { campo?: string; placeholder?: string; nome?: string }) => ({
+              campo: m.campo || m.nome || "",
+              placeholder: m.placeholder || "",
+            }));
+          }
+        } catch { /* fallback abaixo */ }
+      }
+    }
+    // Fallback para SPECS_POR_CLASSE
+    return SPECS_POR_CLASSE[cadastroClasse] || SPECS_POR_CLASSE["equipamento"] || [];
+  })();
+
+  const classeAtualLabel = (() => {
+    if (useBackendClasses) {
+      const cls = classesBackend.find(c => String(c.id) === cadastroClasse);
+      return cls ? String(cls.nome) : "";
+    }
+    const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
+    return cls?.label || "";
+  })();
 
   // Colunas da tabela
   const columns: Column<Produto>[] = [
@@ -417,6 +502,13 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
             <AlertCircle size={16} />
             <span>{error}</span>
             <button onClick={fetchProdutos}>Tentar novamente</button>
+          </div>
+        )}
+
+        {processingMessage && (
+          <div className="portfolio-processing-toast">
+            <Loader2 size={16} className="spin" />
+            <span>{processingMessage}</span>
           </div>
         )}
 
@@ -657,7 +749,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                     <SelectInput
                       value={cadastroClasse}
                       onChange={handleClasseChange}
-                      options={[{ value: "", label: "Selecione a classe..." }, ...CLASSES_PRODUTO.map(c => ({ value: c.id, label: c.label }))]}
+                      options={classeOptions}
                     />
                   </FormField>
                 </div>
@@ -668,10 +760,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                     <SelectInput
                       value={cadastroSubclasse}
                       onChange={handleSubclasseChange}
-                      options={[
-                        { value: "", label: "Selecione..." },
-                        ...(classeAtual?.subclasses.map(s => ({ value: s.id, label: s.label })) || [])
-                      ]}
+                      options={subclasseOptions}
                     />
                   </FormField>
                   <FormField label="NCM">
@@ -695,7 +784,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                     <div className="cadastro-specs-header">
                       <h4>
                         <Sparkles size={16} style={{ color: "#8b5cf6" }} />
-                        Especificacoes Tecnicas — {classeAtual?.label}
+                        Especificacoes Tecnicas — {classeAtualLabel}
                       </h4>
                       <span className="ia-hint">A IA pode preencher estes campos automaticamente via upload</span>
                     </div>
@@ -745,34 +834,76 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
           <>
             <Card title="Cadastro da Estrutura de Classificacao" subtitle="Classe de Produtos → NCM de cada Classe → Subclasse de Produtos → NCM de cada Subclasse">
               <div className="classificacao-tree">
-                {CLASSES_PRODUTO.map((classe) => (
-                  <div key={classe.id} className="classificacao-classe">
-                    <div
-                      className="classificacao-classe-header"
-                      onClick={() => setExpandedClasse(expandedClasse === classe.id ? null : classe.id)}
-                    >
-                      {expandedClasse === classe.id ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      <span className="classificacao-classe-nome">{classe.label}</span>
-                      <span className="classificacao-ncm-badge">NCM: {classe.ncm}</span>
-                      <span className="classificacao-count">
-                        {produtos.filter(p => p.categoria === classe.id).length} produtos
-                      </span>
-                    </div>
-                    {expandedClasse === classe.id && (
-                      <div className="classificacao-subclasses">
-                        {classe.subclasses.map((sub) => (
-                          <div key={sub.id} className="classificacao-subclasse">
-                            <span className="classificacao-sub-nome">{sub.label}</span>
-                            <span className="classificacao-ncm-badge small">NCM: {sub.ncm}</span>
+                {useBackendClasses ? (
+                  classesBackendPai.length > 0 ? (
+                    classesBackendPai.map((classe) => {
+                      const cId = String(classe.id);
+                      const subs = subclassesBackendPorPai(cId);
+                      return (
+                        <div key={cId} className="classificacao-classe">
+                          <div
+                            className="classificacao-classe-header"
+                            onClick={() => setExpandedClasse(expandedClasse === cId ? null : cId)}
+                          >
+                            {expandedClasse === cId ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            <span className="classificacao-classe-nome">{String(classe.nome)}</span>
+                            {classe.ncms && <span className="classificacao-ncm-badge">NCM: {String(classe.ncms)}</span>}
                             <span className="classificacao-count">
-                              {produtos.filter(p => p.categoria === sub.id).length} produtos
+                              {produtos.filter(p => p.categoria === String(classe.nome) || p.categoria === cId).length} produtos
                             </span>
                           </div>
-                        ))}
+                          {expandedClasse === cId && subs.length > 0 && (
+                            <div className="classificacao-subclasses">
+                              {subs.map((sub) => (
+                                <div key={String(sub.id)} className="classificacao-subclasse">
+                                  <span className="classificacao-sub-nome">{String(sub.nome)}</span>
+                                  {sub.ncms && <span className="classificacao-ncm-badge small">NCM: {String(sub.ncms)}</span>}
+                                  <span className="classificacao-count">
+                                    {produtos.filter(p => p.categoria === String(sub.nome) || p.categoria === String(sub.id)).length} produtos
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="no-specs">
+                      <AlertCircle size={16} />
+                      <span>Nenhuma classe cadastrada. Configure na aba Parametrizacoes.</span>
+                    </div>
+                  )
+                ) : (
+                  CLASSES_PRODUTO.map((classe) => (
+                    <div key={classe.id} className="classificacao-classe">
+                      <div
+                        className="classificacao-classe-header"
+                        onClick={() => setExpandedClasse(expandedClasse === classe.id ? null : classe.id)}
+                      >
+                        {expandedClasse === classe.id ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        <span className="classificacao-classe-nome">{classe.label}</span>
+                        <span className="classificacao-ncm-badge">NCM: {classe.ncm}</span>
+                        <span className="classificacao-count">
+                          {produtos.filter(p => p.categoria === classe.id).length} produtos
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {expandedClasse === classe.id && (
+                        <div className="classificacao-subclasses">
+                          {classe.subclasses.map((sub) => (
+                            <div key={sub.id} className="classificacao-subclasse">
+                              <span className="classificacao-sub-nome">{sub.label}</span>
+                              <span className="classificacao-ncm-badge small">NCM: {sub.ncm}</span>
+                              <span className="classificacao-count">
+                                {produtos.filter(p => p.categoria === sub.id).length} produtos
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="classificacao-ia-note">

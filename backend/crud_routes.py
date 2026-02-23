@@ -19,7 +19,7 @@ from models import (
     Alerta, Monitoramento, Notificacao, PreferenciasNotificacao,
     Documento, Contrato, ContratoEntrega, Recurso,
     LeadCRM, AcaoPosPerda, AuditoriaLog, AprendizadoFeedback,
-    ParametroScore, Dispensa, EstrategiaEdital
+    ParametroScore, Dispensa, EstrategiaEdital, ClasseProduto
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 
@@ -320,9 +320,18 @@ CRUD_TABLES = {
     "estrategias-editais": {
         "model": EstrategiaEdital,
         "user_scoped": True,
-        "search_fields": ["justificativa", "decidido_por"],
+        "search_fields": ["justificativa", "decidido_por", "edital_id"],
         "label": "Estratégia de Edital",
         "required": ["edital_id"],
+    },
+    # === Classes de Produtos ===
+    "classes-produtos": {
+        "model": ClasseProduto,
+        "user_scoped": True,
+        "search_fields": ["nome"],
+        "label": "Classe de Produto",
+        "required": ["nome", "tipo"],
+        "parent_field": "classe_pai_id",
     },
 }
 

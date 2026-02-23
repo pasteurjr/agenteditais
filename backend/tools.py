@@ -17,7 +17,7 @@ from models import (
     FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital,
-    ParametroScore
+    ParametroScore, Empresa
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL
@@ -338,7 +338,8 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
             "gov.br/compras",
             "bec.sp.gov.br",
             "compras.mg.gov.br",
-            "licitacoes-e.com.br"
+            "licitacoes-e.com.br",
+            "transferegov.sistema.gov.br"
         ]
 
     print(f"[SCRAPER] Buscando '{termo}' em {len(fontes)} fontes: {fontes}")
@@ -2843,6 +2844,8 @@ def _extrair_dados_pagina_edital(url: str) -> Dict[str, Any]:
             return _parse_compras_mg(soup, url)
         elif 'portaldecompraspublicas.com.br' in url_lower:
             return _parse_portal_compras_publicas(soup, url)
+        elif 'siconv' in url_lower or 'plataformamaisbrasil' in url_lower or 'transferegov' in url_lower:
+            return _parse_siconv(soup, url)
         else:
             # Parser genérico
             return _parse_generico(soup, url)
@@ -3136,6 +3139,83 @@ def _parse_portal_compras_publicas(soup, url: str) -> Dict[str, Any]:
 
     except Exception as e:
         print(f"[PARSER] Erro no parser Portal Compras Públicas: {e}")
+
+    return dados
+
+
+def _parse_siconv(soup, url: str) -> Dict[str, Any]:
+    """Parser para SICONV / Plataforma +Brasil (convênios e contratos de repasse)"""
+    dados = {
+        'fonte': 'SICONV',
+        'fonte_tipo': 'scraper',
+        'url': url,
+    }
+
+    try:
+        # Número do convênio/contrato
+        for elem in soup.find_all(['span', 'td', 'div', 'h1', 'h2']):
+            text = elem.text.strip()
+            match = re.search(r'(Conv[êe]nio|Contrato)\s*(?:n[ºo.]?\s*)?\s*(\d+[/-]?\d*)', text, re.I)
+            if match:
+                dados['numero'] = match.group(0).strip()[:100]
+                break
+            # Número SICONV padrão
+            match2 = re.search(r'SICONV\s*[:\s]*(\d+)', text, re.I)
+            if match2:
+                dados['numero'] = f"SICONV {match2.group(1)}"
+                break
+
+        # Objeto
+        for selector in ['.objeto', '#objeto', '.descricao', 'td:contains("Objeto")']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['objeto'] = elem.text.strip()[:500]
+                break
+        if 'objeto' not in dados:
+            # Tentar por texto próximo a "objeto"
+            for elem in soup.find_all(string=re.compile(r'objeto', re.I)):
+                parent = elem.find_parent()
+                if parent:
+                    next_elem = parent.find_next_sibling()
+                    if next_elem and next_elem.text.strip():
+                        dados['objeto'] = next_elem.text.strip()[:500]
+                        break
+
+        # Órgão / Proponente
+        for selector in ['.proponente', '.orgao', '.concedente', '.entidade']:
+            elem = soup.select_one(selector)
+            if elem and elem.text.strip():
+                dados['orgao'] = elem.text.strip()[:200]
+                break
+
+        # Valor
+        for elem in soup.find_all(string=re.compile(r'R\$\s*[\d.,]+')):
+            match = re.search(r'R\$\s*([\d.,]+)', elem)
+            if match:
+                valor_str = match.group(1).replace('.', '').replace(',', '.')
+                try:
+                    dados['valor_referencia'] = float(valor_str)
+                    break
+                except ValueError:
+                    pass
+
+        # PDF / Documentos
+        for link in soup.find_all('a', href=True):
+            href = link.get('href', '').lower()
+            text = link.text.lower()
+            if '.pdf' in href or 'edital' in text or 'documento' in text or 'plano de trabalho' in text:
+                pdf_href = link.get('href')
+                if not pdf_href.startswith('http'):
+                    from urllib.parse import urljoin
+                    pdf_href = urljoin(url, pdf_href)
+                dados['pdf_url'] = pdf_href
+                dados['pdf_titulo'] = link.text.strip() or 'Documento SICONV'
+                break
+
+        print(f"[PARSER] SICONV extraiu: {dados.get('numero', 'sem numero')}")
+
+    except Exception as e:
+        print(f"[PARSER] Erro no parser SICONV: {e}")
 
     return dados
 
@@ -6178,6 +6258,9 @@ Analise o edital abaixo e calcule 6 scores de validação (0 a 100) e dê uma de
 ## PRODUTO/EMPRESA DO USUÁRIO:
 {produto_info}
 
+## DADOS DA EMPRESA:
+{empresa_info}
+
 ## SCORES A CALCULAR (0-100):
 
 1. **score_tecnico** (0-100): Aderência técnica do produto ao objeto do edital.
@@ -6216,10 +6299,16 @@ Analise o edital abaixo e calcule 6 scores de validação (0 a 100) e dê uma de
    - 50-69: Margem moderada, concorrência média
    - 0-49: Margem muito baixa ou alta concorrência
 
+## REGRA DE PORTE/REGIME:
+- Se a empresa for ME (Microempresa) ou EPP (Empresa de Pequeno Porte), ela tem benefícios na Lei 14.133/2021 (ex: licitações exclusivas ME/EPP, cota reservada).
+- Se o edital for exclusivo para ME/EPP e a empresa for de porte "medio" ou "grande", o resultado deve ser NO-GO com justificativa.
+- Se a empresa for ME/EPP e o edital for exclusivo para ME/EPP, aumente score_comercial em 10 pontos.
+- Considere também o regime tributário (Simples Nacional, Lucro Presumido, Lucro Real) ao avaliar viabilidade comercial.
+
 ## DECISÃO:
 Com base nos scores:
 - **GO**: score_final >= 70 E score_tecnico >= 60 E score_juridico >= 60
-- **NO-GO**: score_final < 40 OU score_tecnico < 30 OU score_juridico < 30
+- **NO-GO**: score_final < 40 OU score_tecnico < 30 OU score_juridico < 30 OU incompatibilidade de porte
 - **AVALIAR**: demais casos
 
 ## RESPONDA APENAS EM JSON:
@@ -6234,7 +6323,9 @@ Com base nos scores:
   "decisao": "GO" | "NO-GO" | "AVALIAR",
   "justificativa": "<2-3 frases explicando a decisão>",
   "pontos_positivos": ["<ponto 1>", "<ponto 2>"],
-  "pontos_atencao": ["<risco 1>", "<risco 2>"]
+  "pontos_atencao": ["<risco 1>", "<risco 2>"],
+  "compatibilidade_porte": true | false,
+  "observacao_porte": "<se houver restrição de porte/regime, explique>"
 }}
 
 O score_final deve ser calculado com os pesos:
@@ -6296,6 +6387,26 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         else:
             produto_info = "Produto não informado. Analise considerando um produto genérico da categoria do edital."
 
+        # B4: Carregar dados da empresa (porte, regime tributário)
+        empresa_info = "Dados da empresa não disponíveis."
+        try:
+            empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+            if empresa:
+                porte_map = {'me': 'Microempresa (ME)', 'epp': 'Empresa de Pequeno Porte (EPP)',
+                             'medio': 'Médio Porte', 'grande': 'Grande Empresa'}
+                regime_map = {'simples': 'Simples Nacional', 'lucro_presumido': 'Lucro Presumido',
+                              'lucro_real': 'Lucro Real'}
+                empresa_info = (
+                    f"Razão Social: {empresa.razao_social}\n"
+                    f"CNPJ: {empresa.cnpj}\n"
+                    f"Porte: {porte_map.get(empresa.porte, empresa.porte or 'Não informado')}\n"
+                    f"Regime Tributário: {regime_map.get(empresa.regime_tributario, empresa.regime_tributario or 'Não informado')}\n"
+                    f"UF: {empresa.uf or 'N/A'}\n"
+                    f"Cidade: {empresa.cidade or 'N/A'}"
+                )
+        except Exception as e:
+            print(f"[SCORES_VALIDACAO] Erro ao carregar empresa: {e}")
+
         valor_str = "Não informado"
         if edital.valor_referencia:
             v = float(edital.valor_referencia)
@@ -6309,7 +6420,8 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             modalidade=edital.modalidade or "pregao_eletronico",
             uf=edital.uf or "N/A",
             data_abertura=edital.data_abertura.strftime('%d/%m/%Y %H:%M') if edital.data_abertura else "N/A",
-            produto_info=produto_info
+            produto_info=produto_info,
+            empresa_info=empresa_info
         )
 
         print(f"[SCORES_VALIDACAO] Calculando para edital {edital.numero}...")

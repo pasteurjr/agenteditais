@@ -3,14 +3,14 @@ import type { PageProps } from "../types";
 import {
   ClipboardCheck, Eye, Download, MessageSquare, FileText, CheckCircle, XCircle, Clock,
   AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, X, Sparkles, Building,
-  AlertCircle, Scale
+  AlertCircle, Scale, FolderOpen
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, TextArea,
   SelectInput, ScoreBadge, ScoreBar, ScoreCircle, StatusBadge, TabPanel, RadioGroup
 } from "../components/common";
 import type { Column } from "../components/common";
-import { crudCreate, crudUpdate } from "../api/crud";
+import { crudList, crudCreate, crudUpdate } from "../api/crud";
 
 // === INTERFACES ===
 
@@ -95,7 +95,8 @@ interface ScoresValidacaoResponse {
   scores: EditalScores;
   score_geral: number;
   potencial_ganho: Edital["potencialGanho"];
-  decisao_ia: "GO" | "NO-GO" | "CONDICIONAL";
+  decisao_ia?: "GO" | "NO-GO" | "CONDICIONAL";
+  decisao?: string; // "go" | "nogo" | "acompanhar" — campo alternativo do endpoint
   justificativa_ia?: string;
   sub_scores_tecnicos?: { label: string; score: number }[];
   certificacoes?: Certificacao[];
@@ -105,6 +106,31 @@ interface ScoresValidacaoResponse {
   sinais_mercado?: string[];
   fatal_flaws?: string[];
   flags_juridicos?: string[];
+}
+
+// === INTERFACES PARA DOCUMENTACAO NECESSARIA (Processo Amanda) ===
+
+interface DocNecessariaItem {
+  nome: string;
+  categoria: string; // "empresa", "fiscal", "tecnica"
+  status: "ok" | "faltando" | "vencido";
+  validade?: string;
+  exigido?: boolean;
+}
+
+interface DocNecessariaResponse {
+  documentos: DocNecessariaItem[];
+}
+
+// === INTERFACES PARA HISTORICO SEMELHANTE REAL ===
+
+interface HistoricoRealItem {
+  id: string;
+  numero: string;
+  orgao: string;
+  objeto: string;
+  score?: number;
+  decisao?: string;
 }
 
 // === HELPERS ===
@@ -157,6 +183,7 @@ async function calcularScoresValidacao(editalId: string): Promise<ScoresValidaca
     const res = await fetch(`/api/editais/${editalId}/scores-validacao`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({}),
     });
     if (!res.ok) return null;
     return await res.json() as ScoresValidacaoResponse;
@@ -192,6 +219,16 @@ export function ValidacaoPage(_props?: PageProps) {
   const [subScoresTecnicos, setSubScoresTecnicos] = useState<{ label: string; score: number }[]>([]);
   const [decisaoIA, setDecisaoIA] = useState<"GO" | "NO-GO" | "CONDICIONAL" | null>(null);
 
+  // V1: Processo Amanda — documentação necessária real
+  const [docsNecessaria, setDocsNecessaria] = useState<DocNecessariaItem[]>([]);
+  const [docsNecessariaLoading, setDocsNecessariaLoading] = useState(false);
+  const [docsNecessariaErro, setDocsNecessariaErro] = useState("");
+
+  // V3/V4: Histórico semelhante real e reputação do órgão
+  const [historicoReal, setHistoricoReal] = useState<HistoricoRealItem[]>([]);
+  const [historicoRealLoading, setHistoricoRealLoading] = useState(false);
+  const [reputacaoCalculada, setReputacaoCalculada] = useState<{ total: number; goCount: number; nogoCount: number } | null>(null);
+
   // T18: Carregar editais reais do backend ao montar
   useEffect(() => {
     setLoadingEditais(true);
@@ -210,6 +247,113 @@ export function ValidacaoPage(_props?: PageProps) {
       .catch(err => setErroCarregamento(String(err?.message || "Erro ao carregar editais")))
       .finally(() => setLoadingEditais(false));
   }, []);
+
+  // V1: Carregar documentação necessária quando edital é selecionado
+  useEffect(() => {
+    if (!selectedEdital) {
+      setDocsNecessaria([]);
+      setDocsNecessariaErro("");
+      return;
+    }
+    const editalId = selectedEdital.id;
+    setDocsNecessariaLoading(true);
+    setDocsNecessariaErro("");
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const resp = await fetch(`/api/editais/${editalId}/documentacao-necessaria`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) {
+          setDocsNecessaria([]);
+          setDocsNecessariaErro("Configure documentos da empresa na aba Empresa");
+          return;
+        }
+        const data: DocNecessariaResponse = await resp.json();
+        const docs = data.documentos || [];
+        if (docs.length === 0) {
+          setDocsNecessariaErro("Configure documentos da empresa na aba Empresa");
+        }
+        setDocsNecessaria(docs);
+      } catch {
+        setDocsNecessaria([]);
+        setDocsNecessariaErro("Configure documentos da empresa na aba Empresa");
+      } finally {
+        setDocsNecessariaLoading(false);
+      }
+    })();
+  }, [selectedEdital?.id]);
+
+  // V3/V4: Carregar histórico semelhante real e calcular reputação do órgão
+  useEffect(() => {
+    if (!selectedEdital) {
+      setHistoricoReal([]);
+      setReputacaoCalculada(null);
+      return;
+    }
+    const editalAtual = selectedEdital;
+    setHistoricoRealLoading(true);
+    (async () => {
+      try {
+        const resultado = await crudList("editais", { q: editalAtual.orgao, limit: 10 });
+        const editaisOrgao = (resultado.items || []) as Record<string, unknown>[];
+        // Filtrar para excluir o edital atual
+        const outrosEditais = editaisOrgao.filter(
+          (e) => String(e.id || e.edital_id || "") !== editalAtual.id
+        );
+
+        // Buscar estratégias para cada edital encontrado
+        const historicoComDecisao: HistoricoRealItem[] = [];
+        for (const e of outrosEditais.slice(0, 5)) {
+          const item: HistoricoRealItem = {
+            id: String(e.id || e.edital_id || ""),
+            numero: String(e.numero || e.numero_edital || ""),
+            orgao: String(e.orgao || ""),
+            objeto: String(e.objeto || ""),
+            score: Number(e.score_geral || e.score || 0),
+          };
+          try {
+            const estrategias = await crudList("estrategias-editais", { q: item.id });
+            const estratList = (estrategias.items || []) as Record<string, unknown>[];
+            if (estratList.length > 0) {
+              item.decisao = String(estratList[0].decisao || estratList[0].intencao_estrategica || "");
+            }
+          } catch {
+            // sem estratégia — ok
+          }
+          historicoComDecisao.push(item);
+        }
+        setHistoricoReal(historicoComDecisao);
+
+        // V4: Calcular reputação do órgão
+        const total = outrosEditais.length;
+        if (total > 0) {
+          let goCount = 0;
+          let nogoCount = 0;
+          // Contar decisões de validacao_decisoes para os editais deste órgão
+          try {
+            const decisoes = await crudList("validacao_decisoes", { q: editalAtual.orgao, limit: 50 });
+            const decList = (decisoes.items || []) as Record<string, unknown>[];
+            for (const d of decList) {
+              const dec = String(d.decisao || "").toLowerCase();
+              if (dec.includes("participar") || dec === "go") goCount++;
+              if (dec.includes("ignorar") || dec === "nogo" || dec === "no-go") nogoCount++;
+            }
+          } catch {
+            // sem decisões — ok
+          }
+          setReputacaoCalculada({ total, goCount, nogoCount });
+        } else {
+          setReputacaoCalculada(null);
+        }
+      } catch {
+        setHistoricoReal([]);
+        setReputacaoCalculada(null);
+      } finally {
+        setHistoricoRealLoading(false);
+      }
+    })();
+  }, [selectedEdital?.id, selectedEdital?.orgao]);
 
   const filteredEditais = editais.filter((e) => {
     const matchSearch = e.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -411,8 +555,15 @@ export function ValidacaoPage(_props?: PageProps) {
         if (resultado.sub_scores_tecnicos?.length) {
           setSubScoresTecnicos(resultado.sub_scores_tecnicos);
         }
-        // Decisão GO/NO-GO da IA
-        if (resultado.decisao_ia) setDecisaoIA(resultado.decisao_ia);
+        // V2: Decisão GO/NO-GO da IA — aceita tanto decisao_ia quanto decisao
+        if (resultado.decisao_ia) {
+          setDecisaoIA(resultado.decisao_ia);
+        } else if (resultado.decisao) {
+          const d = resultado.decisao.toLowerCase();
+          if (d === "go") setDecisaoIA("GO");
+          else if (d === "nogo" || d === "no-go") setDecisaoIA("NO-GO");
+          else if (d === "acompanhar") setDecisaoIA("CONDICIONAL");
+        }
       }
     } catch {
       // Silent fail
@@ -540,6 +691,59 @@ export function ValidacaoPage(_props?: PageProps) {
         </table>
       </div>
 
+      {/* Mapa Logístico (F5) */}
+      <div className="section-block">
+        <h4><Target size={16} /> Mapa Logistico</h4>
+        {(() => {
+          const scoreLog = edital.scores.logistico;
+          const distancia = scoreLog >= 70 ? "Proximo" : scoreLog >= 40 ? "Medio" : "Distante";
+          const distanciaCor = scoreLog >= 70 ? "#22c55e" : scoreLog >= 40 ? "#eab308" : "#ef4444";
+          const diasEstimados = scoreLog >= 70 ? "3-5" : scoreLog >= 40 ? "7-12" : "15-25";
+          return (
+            <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
+                  {"\uD83D\uDCCD"}
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>UF Edital</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600 }}>{edital.uf || "N/A"}</div>
+                </div>
+              </div>
+              <div style={{ color: "#64748b", fontSize: "20px" }}>{"\u2192"}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
+                  {"\uD83C\uDFE2"}
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>Empresa</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600 }}>SP</div>
+                </div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: "12px", alignItems: "center" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>Distancia</div>
+                  <span style={{
+                    display: "inline-block",
+                    padding: "3px 10px",
+                    borderRadius: "12px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    backgroundColor: distanciaCor + "20",
+                    color: distanciaCor,
+                    border: `1px solid ${distanciaCor}40`,
+                  }}>{distancia}</span>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>Entrega Estimada</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>{diasEstimados} dias</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* Analise de Lote */}
       <div className="section-block">
         <h4><FileText size={16} /> Analise de Lote ({edital.analiseLote.length} itens)</h4>
@@ -604,7 +808,7 @@ export function ValidacaoPage(_props?: PageProps) {
         </div>
       )}
 
-      {/* Reputacao do Orgao */}
+      {/* Reputacao do Orgao — V4: dados reais calculados do histórico */}
       <div className="section-block">
         <h4><Building size={16} /> Reputacao do Orgao - {edital.orgao}</h4>
         <div className="reputacao-grid">
@@ -614,11 +818,17 @@ export function ValidacaoPage(_props?: PageProps) {
           </div>
           <div className="reputacao-item">
             <label>Pagamento</label>
-            <span>{edital.reputacaoOrgao.pagador}</span>
+            <span>{reputacaoCalculada && reputacaoCalculada.total >= 3 ? (reputacaoCalculada.goCount > 0 ? "Pagador regular" : "Sem dados de contrato") : edital.reputacaoOrgao.pagador}</span>
           </div>
           <div className="reputacao-item">
             <label>Historico</label>
-            <span>{edital.reputacaoOrgao.historico}</span>
+            <span>
+              {reputacaoCalculada && reputacaoCalculada.total >= 3
+                ? `${reputacaoCalculada.total} participacoes (${reputacaoCalculada.goCount} GO / ${reputacaoCalculada.nogoCount} NO-GO)`
+                : reputacaoCalculada && reputacaoCalculada.total > 0
+                  ? `${reputacaoCalculada.total} edital(is) encontrado(s)`
+                  : edital.reputacaoOrgao.historico}
+            </span>
           </div>
         </div>
       </div>
@@ -669,10 +879,38 @@ export function ValidacaoPage(_props?: PageProps) {
         )}
       </div>
 
-      {/* Historico Semelhante */}
+      {/* Historico Semelhante — V3: dados reais do mesmo órgão */}
       <div className="section-block">
         <h4><Clock size={16} /> Historico de Editais Semelhantes</h4>
-        {edital.historicoSemelhante.length > 0 ? (
+        {historicoRealLoading ? (
+          <p className="empty-message">Buscando editais semelhantes...</p>
+        ) : historicoReal.length > 0 ? (
+          <div className="historico-list">
+            {historicoReal.map((h) => (
+              <div key={h.id} className="historico-item" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <span className="historico-nome" style={{ fontWeight: 600 }}>
+                  Edital {h.numero || h.id}
+                </span>
+                {h.decisao && (
+                  <StatusBadge
+                    status={h.decisao.toLowerCase().includes("go") && !h.decisao.toLowerCase().includes("no") ? "success" : h.decisao.toLowerCase().includes("no") ? "error" : "warning"}
+                    label={`Decisao: ${h.decisao}`}
+                    size="small"
+                  />
+                )}
+                {h.score !== undefined && h.score > 0 && (
+                  <span style={{ fontSize: "12px", color: "#94a3b8" }}>Score: {h.score}%</span>
+                )}
+                {h.objeto && (
+                  <span style={{ fontSize: "12px", color: "#64748b", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {h.objeto.length > 60 ? h.objeto.substring(0, 60) + "..." : h.objeto}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : edital.historicoSemelhante.length > 0 ? (
+          /* Fallback: dados originais do backend se a busca real não trouxe nada */
           <div className="historico-list">
             {edital.historicoSemelhante.map((h, i) => (
               <div key={i} className="historico-item">
@@ -762,9 +1000,13 @@ export function ValidacaoPage(_props?: PageProps) {
             columns={columns}
             idKey="id"
             onRowClick={(edital) => {
-              // Limpar sub-scores e decisão IA ao trocar edital
+              // Limpar sub-scores, decisão IA e dados dependentes ao trocar edital
               setSubScoresTecnicos([]);
               setDecisaoIA(null);
+              setDocsNecessaria([]);
+              setDocsNecessariaErro("");
+              setHistoricoReal([]);
+              setReputacaoCalculada(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}
@@ -854,7 +1096,30 @@ export function ValidacaoPage(_props?: PageProps) {
               {/* Direita: Score Dashboard */}
               <div className="score-dashboard">
                 <div className="score-dashboard-header">
-                  <ScoreCircle score={selectedEdital.score} size={120} label="Score Geral" />
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                    <ScoreCircle score={selectedEdital.score} size={120} label="Score Geral" />
+                    {/* V2: Decisão GO/NO-GO da IA */}
+                    {decisaoIA && (
+                      <span style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 16px",
+                        borderRadius: "20px",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        letterSpacing: "0.5px",
+                        backgroundColor: decisaoIA === "GO" ? "#22c55e20" : decisaoIA === "NO-GO" ? "#ef444420" : "#eab30820",
+                        color: decisaoIA === "GO" ? "#22c55e" : decisaoIA === "NO-GO" ? "#ef4444" : "#eab308",
+                        border: `2px solid ${decisaoIA === "GO" ? "#22c55e60" : decisaoIA === "NO-GO" ? "#ef444460" : "#eab30860"}`,
+                      }}>
+                        {decisaoIA === "GO" && <CheckCircle size={16} />}
+                        {decisaoIA === "NO-GO" && <XCircle size={16} />}
+                        {decisaoIA === "CONDICIONAL" && <AlertTriangle size={16} />}
+                        {decisaoIA === "GO" ? "GO - Participar" : decisaoIA === "NO-GO" ? "NO-GO" : "ACOMPANHAR"}
+                      </span>
+                    )}
+                  </div>
                   <div className="potencial-ganho">
                     <label>Potencial de Ganho</label>
                     {getPotencialBadge(selectedEdital.potencialGanho)}
@@ -870,12 +1135,12 @@ export function ValidacaoPage(_props?: PageProps) {
                 </div>
 
                 <div className="score-bars-6d">
-                  <ScoreBar score={selectedEdital.scores.tecnico} label="Aderencia Tecnica" size="small" />
-                  <ScoreBar score={selectedEdital.scores.documental} label="Aderencia Documental" size="small" />
-                  <ScoreBar score={selectedEdital.scores.complexidade} label="Complexidade Edital" size="small" />
-                  <ScoreBar score={selectedEdital.scores.juridico} label="Risco Juridico" size="small" />
-                  <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" />
-                  <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" />
+                  <ScoreBar score={selectedEdital.scores.tecnico} label="Aderencia Tecnica" size="small" showLevel />
+                  <ScoreBar score={selectedEdital.scores.documental} label="Aderencia Documental" size="small" showLevel />
+                  <ScoreBar score={selectedEdital.scores.complexidade} label="Complexidade Edital" size="small" showLevel />
+                  <ScoreBar score={selectedEdital.scores.juridico} label="Risco Juridico" size="small" showLevel />
+                  <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
+                  <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
                 </div>
 
                 <div className="intencao-margem">
@@ -924,6 +1189,103 @@ export function ValidacaoPage(_props?: PageProps) {
                   }
                 }}
               </TabPanel>
+            </Card>
+
+            {/* Processo Amanda — Documentação por Edital (V1: dados reais) */}
+            <Card title="Processo Amanda - Documentacao" icon={<FolderOpen size={18} />}>
+              {docsNecessariaLoading ? (
+                <p className="empty-message">Carregando documentacao necessaria...</p>
+              ) : docsNecessariaErro && docsNecessaria.length === 0 ? (
+                <div style={{ padding: "16px", textAlign: "center" }}>
+                  <AlertCircle size={24} style={{ color: "#f59e0b", marginBottom: "8px" }} />
+                  <p style={{ color: "#94a3b8", fontSize: "14px" }}>{docsNecessariaErro}</p>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                    {/* Pasta 1: Documentos da Empresa (azul) */}
+                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                        <FolderOpen size={18} style={{ color: "#3b82f6" }} />
+                        <h4 style={{ margin: 0, fontSize: "14px" }}>Documentos da Empresa</h4>
+                      </div>
+                      {(() => {
+                        const docs = docsNecessaria.filter(d => d.categoria === "empresa");
+                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                        return docs.map((doc, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                              {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
+                            </div>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
+                              <StatusBadge
+                                status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                                label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                                size="small"
+                              />
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+
+                    {/* Pasta 2: Documentos Fiscais e Certidões (amarelo) */}
+                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                        <FolderOpen size={18} style={{ color: "#eab308" }} />
+                        <h4 style={{ margin: 0, fontSize: "14px" }}>Certidoes e Fiscal</h4>
+                      </div>
+                      {(() => {
+                        const docs = docsNecessaria.filter(d => d.categoria === "fiscal");
+                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                        return docs.map((doc, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                            <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
+                              <StatusBadge
+                                status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                                label={doc.status === "ok" ? "OK" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                                size="small"
+                              />
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+
+                    {/* Pasta 3: Qualificação Técnica (verde) */}
+                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                        <FolderOpen size={18} style={{ color: "#22c55e" }} />
+                        <h4 style={{ margin: 0, fontSize: "14px" }}>Qualificacao Tecnica</h4>
+                      </div>
+                      {(() => {
+                        const docs = docsNecessaria.filter(d => d.categoria === "tecnica");
+                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                        return docs.map((doc, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                              {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
+                            </div>
+                            <StatusBadge
+                              status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                              label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                              size="small"
+                            />
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "12px", fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
+                    Documentos carregados automaticamente cruzando requisitos do edital com cadastro da empresa.
+                  </div>
+                </>
+              )}
             </Card>
           </>
         )}
