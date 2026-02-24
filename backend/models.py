@@ -969,6 +969,7 @@ class Empresa(Base):
     emails = Column(Text, nullable=True)
     porte = Column(Enum('me', 'epp', 'medio', 'grande'), nullable=True)
     areas_atuacao = Column(JSON, nullable=True)
+    frequencia_busca_certidoes = Column(String(20), default='diaria', nullable=True)
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -1002,6 +1003,7 @@ class Empresa(Base):
             "emails": self.emails,
             "porte": self.porte,
             "areas_atuacao": self.areas_atuacao,
+            "frequencia_busca_certidoes": self.frequencia_busca_certidoes,
             "ativo": self.ativo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -1058,13 +1060,15 @@ class EmpresaCertidao(Base):
     data_emissao = Column(Date, nullable=True)
     data_vencimento = Column(Date, nullable=False)
     path_arquivo = Column(String(500), nullable=True)
-    status = Column(Enum('valida', 'vencida', 'pendente'), default='valida')
+    status = Column(Enum('valida', 'vencida', 'pendente', 'buscando', 'erro', 'nao_disponivel'), default='pendente')
     url_consulta = Column(String(500), nullable=True)
+    fonte_certidao_id = Column(String(36), ForeignKey('fontes_certidoes.id', ondelete='SET NULL'), nullable=True)
     edital_requisito_id = Column(String(36), ForeignKey('editais_requisitos.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     empresa = relationship("Empresa", back_populates="certidoes")
+    fonte = relationship("FonteCertidao", lazy="joined")
 
     def to_dict(self):
         return {
@@ -1078,6 +1082,9 @@ class EmpresaCertidao(Base):
             "path_arquivo": self.path_arquivo,
             "status": self.status,
             "url_consulta": self.url_consulta,
+            "fonte_certidao_id": self.fonte_certidao_id,
+            "fonte_nome": (self.fonte.nome if self.fonte else None) if self.fonte_certidao_id else None,
+            "permite_busca_automatica": (self.fonte.permite_busca_automatica if self.fonte else True) if self.fonte_certidao_id else True,
             "edital_requisito_id": self.edital_requisito_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -1112,6 +1119,68 @@ class EmpresaResponsavel(Base):
             "telefone": self.telefone,
             "tipo": self.tipo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== FONTES DE CERTIDÕES ====================
+
+class FonteCertidao(Base):
+    """Fontes/portais oficiais para busca de certidões da empresa.
+    Cadastra cada portal com URL, tipo de certidão, e credenciais opcionais
+    para busca automatizada via IA."""
+    __tablename__ = 'fontes_certidoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo_certidao = Column(Enum(
+        'cnd_federal', 'cnd_estadual', 'cnd_municipal', 'fgts', 'trabalhista', 'outro'
+    ), nullable=False)
+    nome = Column(String(255), nullable=False)  # Ex: "Receita Federal", "SEFAZ-SP"
+    orgao_emissor = Column(String(255), nullable=True)  # Ex: "Receita Federal / PGFN"
+    url_portal = Column(String(500), nullable=False)  # URL do portal de consulta
+    url_api = Column(String(500), nullable=True)  # URL de API, se disponível (ex: SERPRO)
+    metodo_acesso = Column(Enum('publico', 'login_senha', 'certificado_digital', 'api_key'), default='publico')
+    usuario = Column(String(255), nullable=True)  # Login/usuário no portal (se requer autenticação)
+    senha_criptografada = Column(String(500), nullable=True)  # Senha criptografada (se requer autenticação)
+    certificado_path = Column(String(500), nullable=True)  # Caminho do certificado digital A1/A3
+    api_key = Column(String(500), nullable=True)  # API key se acesso via API
+    cnpj_consulta = Column(String(18), nullable=True)  # CNPJ usado para consulta (se diferente do da empresa)
+    uf = Column(String(2), nullable=True)  # UF relevante (para SEFAZ estaduais)
+    cidade = Column(String(100), nullable=True)  # Cidade relevante (para CND municipal)
+    requer_autenticacao = Column(Boolean, default=False)  # Se precisa login para consultar
+    permite_busca_automatica = Column(Boolean, default=True)  # Se a IA pode buscar automaticamente
+    observacoes = Column(Text, nullable=True)  # Notas sobre como acessar o portal
+    ativo = Column(Boolean, default=True)
+    ultima_consulta = Column(DateTime, nullable=True)
+    resultado_ultima_consulta = Column(Enum('sucesso', 'erro', 'timeout', 'login_invalido'), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "tipo_certidao": self.tipo_certidao,
+            "nome": self.nome,
+            "orgao_emissor": self.orgao_emissor,
+            "url_portal": self.url_portal,
+            "url_api": self.url_api,
+            "metodo_acesso": self.metodo_acesso,
+            "usuario": self.usuario,
+            "senha_criptografada": "***" if self.senha_criptografada else None,  # Nunca expor senha
+            "certificado_path": self.certificado_path,
+            "api_key": "***" if self.api_key else None,  # Nunca expor API key
+            "cnpj_consulta": self.cnpj_consulta,
+            "uf": self.uf,
+            "cidade": self.cidade,
+            "requer_autenticacao": self.requer_autenticacao,
+            "permite_busca_automatica": self.permite_busca_automatica,
+            "observacoes": self.observacoes,
+            "ativo": self.ativo,
+            "ultima_consulta": self.ultima_consulta.isoformat() if self.ultima_consulta else None,
+            "resultado_ultima_consulta": self.resultado_ultima_consulta,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

@@ -3,7 +3,7 @@ import {
   Briefcase, Upload, Globe, Search, RefreshCw, Trash2, Eye, Plus, Shield,
   Sparkles, Radio, AlertCircle, Loader2, FileText, BookOpen, Receipt,
   ClipboardList, FolderOpen, MonitorSmartphone, ChevronDown, ChevronRight,
-  Filter, Zap, ArrowDown, ArrowRight, CheckCircle
+  Filter, Zap, ArrowDown, ArrowRight, CheckCircle, DollarSign
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
@@ -72,6 +72,7 @@ const CATEGORIAS_FILTER = [
   { value: "redes", label: "Redes" },
   { value: "mobiliario", label: "Mobiliario" },
   { value: "eletronico", label: "Eletronico" },
+  { value: "comodato", label: "Comodato" },
   { value: "outro", label: "Outro" },
 ];
 
@@ -102,6 +103,41 @@ const SPECS_POR_CLASSE: Record<string, { campo: string; placeholder: string }[]>
     { campo: "Memoria RAM", placeholder: "Ex: 16GB" },
     { campo: "Armazenamento", placeholder: "Ex: 512GB SSD" },
     { campo: "Sistema Operacional", placeholder: "Ex: Windows 11" },
+  ],
+  insumo_laboratorial: [
+    { campo: "Tipo de Insumo", placeholder: "Ex: Ponteira, Tubo, Lamina" },
+    { campo: "Volume/Quantidade", placeholder: "Ex: 1000uL" },
+    { campo: "Validade", placeholder: "Ex: 24 meses" },
+    { campo: "Condicoes de Armazenamento", placeholder: "Ex: Temperatura ambiente" },
+    { campo: "Fabricante", placeholder: "Ex: Eppendorf" },
+  ],
+  redes: [
+    { campo: "Tipo de Equipamento", placeholder: "Ex: Switch, Roteador, Access Point" },
+    { campo: "Velocidade/Throughput", placeholder: "Ex: 1Gbps" },
+    { campo: "Numero de Portas", placeholder: "Ex: 24 portas" },
+    { campo: "Protocolos Suportados", placeholder: "Ex: TCP/IP, SNMP" },
+    { campo: "Alimentacao", placeholder: "Ex: PoE, 110/220V" },
+  ],
+  mobiliario: [
+    { campo: "Tipo de Movel", placeholder: "Ex: Mesa, Cadeira, Armario" },
+    { campo: "Material", placeholder: "Ex: MDP, Aco, Madeira" },
+    { campo: "Dimensoes (LxAxP)", placeholder: "Ex: 120x75x60cm" },
+    { campo: "Capacidade de Peso", placeholder: "Ex: 150kg" },
+    { campo: "Cor/Acabamento", placeholder: "Ex: Cinza, Amadeirado" },
+  ],
+  eletronico: [
+    { campo: "Tipo de Dispositivo", placeholder: "Ex: Monitor, Impressora, Tablet" },
+    { campo: "Processador", placeholder: "Ex: Intel i5" },
+    { campo: "Memoria RAM", placeholder: "Ex: 8GB" },
+    { campo: "Armazenamento", placeholder: "Ex: 256GB SSD" },
+    { campo: "Conectividade", placeholder: "Ex: Wi-Fi 6, Bluetooth 5.0" },
+  ],
+  comodato: [
+    { campo: "Equipamento Principal", placeholder: "Ex: Analisador Bioquimico" },
+    { campo: "Reagentes Vinculados", placeholder: "Ex: Kit Glicose, Kit Colesterol" },
+    { campo: "Producao Mensal Estimada", placeholder: "Ex: 5000 testes/mes" },
+    { campo: "Prazo do Contrato", placeholder: "Ex: 48 meses" },
+    { campo: "Manutencao Incluida", placeholder: "Ex: Preventiva e Corretiva" },
   ],
 };
 
@@ -140,6 +176,10 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
 
   // === CLASSES DO BACKEND ===
   const [classesBackend, setClassesBackend] = useState<Record<string, unknown>[]>([]);
+
+  // === MONITORAMENTOS ===
+  const [monitoramentos, setMonitoramentos] = useState<Record<string, unknown>[]>([]);
+  const [monitoramentosLoading, setMonitoramentosLoading] = useState(false);
 
   // === FEEDBACK DE PROCESSAMENTO ===
   const [processingMessage, setProcessingMessage] = useState<string | null>(null);
@@ -181,6 +221,18 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         }
       } catch {
         // Fallback: mantém classesBackend vazio, usará CLASSES_PRODUTO
+      }
+    })();
+    // Carregar monitoramentos
+    (async () => {
+      setMonitoramentosLoading(true);
+      try {
+        const res = await crudList("monitoramentos", { limit: 10 });
+        setMonitoramentos(res.items || []);
+      } catch {
+        // silencioso
+      } finally {
+        setMonitoramentosLoading(false);
       }
     })();
   }, []);
@@ -547,6 +599,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                   <div className="card-actions">
                     <ActionButton icon={<RefreshCw size={14} />} label="Reprocessar IA" onClick={() => handleReprocessar(detalhe)} />
                     <ActionButton icon={<Search size={14} />} label="Verificar Completude" onClick={() => handleVerificarCompletude(detalhe)} />
+                    <ActionButton icon={<DollarSign size={14} />} label="Precos de Mercado" onClick={() => onSendToChat("Busque precos de " + detalhe.nome + " no PNCP")} />
                     <ActionButton icon={<Trash2 size={14} />} label="Excluir" onClick={() => handleExcluir(detalhe)} />
                   </div>
                 }
@@ -908,62 +961,90 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
 
               <div className="classificacao-ia-note">
                 <Sparkles size={16} style={{ color: "#8b5cf6" }} />
-                <span>A IA deveria gerar esses agrupamentos, caso o cliente nao os parametrize no sistema (na area de parametrizacao)</span>
+                <span>As classes de produtos sao gerenciadas na pagina de Parametrizacoes. Aqui voce visualiza a estrutura atual.</span>
               </div>
             </Card>
 
             {/* Card Agente de Monitoramento + Funil */}
             <Card
-              title="Do ruido de milhares de editais a clareza das oportunidades certas"
+              title="Funil de Monitoramento"
               icon={<Radio size={18} />}
               subtitle="O Agente Autonomo que Monitora o Mercado por Voce"
             >
-              <div className="funil-monitoramento">
-                <div className="funil-steps">
-                  <div className="funil-step">
-                    <div className="funil-step-icon" style={{ background: "rgba(59,130,246,0.15)" }}>
-                      <Radio size={24} style={{ color: "#3b82f6" }} />
+              {monitoramentosLoading ? (
+                <div className="loading-detail">
+                  <Loader2 size={20} className="spin" />
+                  <span>Carregando monitoramentos...</span>
+                </div>
+              ) : (
+                <div className="funil-monitoramento">
+                  <div className="funil-steps">
+                    <div className="funil-step">
+                      <div className="funil-step-icon" style={{ background: "rgba(59,130,246,0.15)" }}>
+                        <Radio size={24} style={{ color: "#3b82f6" }} />
+                      </div>
+                      <div className="funil-step-content">
+                        <h4>Monitoramento Continuo</h4>
+                        <p>
+                          {monitoramentos.filter(m => m.status === "ativo").length} monitoramento(s) ativo(s)
+                          {monitoramentos.length > 0 && ` de ${monitoramentos.length} cadastrado(s)`}
+                          {monitoramentos.length === 0 && " — nenhum monitoramento cadastrado ainda"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="funil-step-content">
-                      <h4>Monitoramento Continuo</h4>
-                      <p>Um agente de IA monitora diariamente todas as fontes publicas (federal, estaduais, municipais), capturando e pre-qualificando novos editais</p>
-                    </div>
-                  </div>
-                  <div className="funil-arrow"><ArrowDown size={20} /></div>
+                    <div className="funil-arrow"><ArrowDown size={20} /></div>
 
-                  <div className="funil-step">
-                    <div className="funil-step-icon" style={{ background: "rgba(168,85,247,0.15)" }}>
-                      <Filter size={24} style={{ color: "#a855f7" }} />
+                    <div className="funil-step">
+                      <div className="funil-step-icon" style={{ background: "rgba(168,85,247,0.15)" }}>
+                        <Filter size={24} style={{ color: "#a855f7" }} />
+                      </div>
+                      <div className="funil-step-content">
+                        <h4>Filtro Inteligente</h4>
+                        <p>O sistema classifica automaticamente as oportunidades por categorias estrategicas:</p>
+                        <div className="funil-categorias">
+                          {classesBackend.length > 0
+                            ? classesBackend.filter(c => c.tipo === "classe" || !c.classe_pai_id).map((c) => (
+                                <span key={String(c.id)} className="monitor-tag">{String(c.nome)}</span>
+                              ))
+                            : (
+                              <>
+                                <span className="monitor-tag">Comodato de equipamentos</span>
+                                <span className="monitor-tag">Alugueis com/sem consumo de reagentes</span>
+                                <span className="monitor-tag">Venda de equipamentos</span>
+                                <span className="monitor-tag">Consumo de insumos hospitalares</span>
+                              </>
+                            )
+                          }
+                        </div>
+                      </div>
                     </div>
-                    <div className="funil-step-content">
-                      <h4>Filtro Inteligente</h4>
-                      <p>O sistema classifica automaticamente as oportunidades por categorias estrategicas:</p>
-                      <div className="funil-categorias">
-                        <span className="monitor-tag">Comodato de equipamentos</span>
-                        <span className="monitor-tag">Alugueis com/sem consumo de reagentes</span>
-                        <span className="monitor-tag">Venda de equipamentos</span>
-                        <span className="monitor-tag">Consumo de insumos hospitalares</span>
+                    <div className="funil-arrow"><ArrowDown size={20} /></div>
+
+                    <div className="funil-step">
+                      <div className="funil-step-icon" style={{ background: "rgba(34,197,94,0.15)" }}>
+                        <Zap size={24} style={{ color: "#22c55e" }} />
+                      </div>
+                      <div className="funil-step-content">
+                        <h4>Classificacao Automatica</h4>
+                        <p>Classificacao parametrizada em {classesBackend.length > 0 ? classesBackend.length : CLASSES_PRODUTO.length} classes</p>
                       </div>
                     </div>
                   </div>
-                  <div className="funil-arrow"><ArrowDown size={20} /></div>
 
-                  <div className="funil-step">
-                    <div className="funil-step-icon" style={{ background: "rgba(34,197,94,0.15)" }}>
-                      <Zap size={24} style={{ color: "#22c55e" }} />
-                    </div>
-                    <div className="funil-step-content">
-                      <h4>Classificacao Automatica</h4>
-                      <p>Classificacao parametrizavel e pre-estabelecida na pagina de cadastro — Etapa de Fundacao</p>
-                    </div>
+                  <div className="funil-status">
+                    <StatusBadge
+                      status={monitoramentos.some(m => m.status === "ativo") ? "success" : "neutral"}
+                      label={monitoramentos.some(m => m.status === "ativo") ? "Agente Ativo" : "Agente Inativo"}
+                      size="small"
+                    />
+                    <span>Ultima verificacao: {(() => {
+                      const dt = monitoramentos[0]?.updated_at || monitoramentos[0]?.ultimo_check;
+                      if (!dt) return "Nenhuma verificacao ainda";
+                      try { return new Date(dt as string).toLocaleString("pt-BR"); } catch { return "Nenhuma verificacao ainda"; }
+                    })()}</span>
                   </div>
                 </div>
-
-                <div className="funil-status">
-                  <StatusBadge status="success" label="Agente Ativo" size="small" />
-                  <span>Ultima verificacao: {new Date().toLocaleDateString("pt-BR")} 06:00</span>
-                </div>
-              </div>
+              )}
             </Card>
           </>
         )}

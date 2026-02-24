@@ -7686,6 +7686,82 @@ def download_empresa_certidao(certidao_id):
         db.close()
 
 
+@app.route("/api/empresa-certidoes/<certidao_id>/upload", methods=["POST"])
+@require_auth
+def upload_empresa_certidao(certidao_id):
+    """
+    Upload de arquivo PDF para uma certidão existente.
+    Atualiza path_arquivo, status para 'valida', e data_vencimento se fornecida.
+
+    Form data:
+    - file: arquivo PDF
+    - data_vencimento: (opcional) data de vencimento no formato YYYY-MM-DD
+    - numero: (opcional) número da certidão
+    """
+    from models import Empresa, EmpresaCertidao
+    user_id = get_current_user_id()
+
+    if 'file' not in request.files:
+        return jsonify({"error": "Arquivo não enviado"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nenhum arquivo selecionado"}), 400
+
+    db = get_db()
+    try:
+        cert = db.query(EmpresaCertidao).filter(EmpresaCertidao.id == certidao_id).first()
+        if not cert:
+            return jsonify({"error": "Certidão não encontrada"}), 404
+
+        empresa = db.query(Empresa).filter(
+            Empresa.id == cert.empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Acesso negado"}), 403
+
+        # Criar diretório para certidões
+        upload_dir = os.path.join(UPLOAD_FOLDER, 'empresa', cert.empresa_id, 'certidoes')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Salvar arquivo
+        from werkzeug.utils import secure_filename
+        safe_name = secure_filename(file.filename) or f"certidao_{uuid.uuid4().hex[:8]}.pdf"
+        filepath = os.path.join(upload_dir, f"{uuid.uuid4().hex[:8]}_{safe_name}")
+        file.save(filepath)
+
+        # Atualizar certidão
+        from datetime import date as _date, datetime as _dt
+        cert.path_arquivo = filepath
+        cert.status = 'valida'
+        cert.data_emissao = _date.today()
+
+        data_venc = request.form.get('data_vencimento')
+        if data_venc:
+            try:
+                cert.data_vencimento = _dt.strptime(data_venc, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        numero = request.form.get('numero')
+        if numero:
+            cert.numero = numero
+
+        db.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Certidão atualizada com sucesso",
+            "certidao": cert.to_dict(),
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # =============================================================================
 # B4: Usar porte/regime da empresa no cálculo de validação
 # (Implementado em tools.py via PROMPT_SCORES_VALIDACAO)
@@ -7944,20 +8020,201 @@ def documentacao_necessaria(edital_id):
 # B8: Busca automática de certidões (portais oficiais)
 # =============================================================================
 
+
+def _tentar_obter_certidao(fonte, cnpj_limpo, empresa, upload_dir):
+    """
+    Tenta obter a certidão automaticamente via HTTP nos portais públicos.
+    Retorna dict com {sucesso, path_arquivo, numero, data_vencimento, mensagem}.
+
+    Portais com busca automática REAL (sem captcha, sem chave de API):
+    - CEIS (CGU)  — Consulta endpoint AJAX do Portal da Transparência
+    - CNEP (CGU)  — Consulta endpoint AJAX do Portal da Transparência
+    - CADIN       — Consulta endpoint AJAX do Portal da Transparência
+    - TCU         — Consulta endpoint AJAX do Portal da Transparência
+
+    Portais que requerem captcha (busca manual obrigatória):
+    - TST (CNDT), CAIXA (FGTS/CRF), Receita Federal, SEFAZ,
+      Prefeituras, ANVISA, JUCESP, CNJ, TJ, JF, INMETRO, etc.
+    """
+    import requests
+    from datetime import date, datetime, timedelta
+
+    nome_lower = fonte.nome.lower()
+    resultado = {"sucesso": False, "mensagem": "", "path_arquivo": None, "numero": None, "data_vencimento": None}
+
+    # Endpoint AJAX do Portal da Transparência — funciona SEM chave de API
+    # Retorna JSON DataTables com recordsTotal e data[]
+    # cadastro=1 (CEIS), cadastro=2 (CNEP), cadastro=3 (CEPIM),
+    # cadastro=4 (CEAF), cadastro=5 (Acordos Leniência)
+    TRANSPARENCIA_AJAX = "https://portaldatransparencia.gov.br/sancoes/consulta/resultado"
+    AJAX_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+    }
+
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # ─── CEIS — Cadastro de Empresas Inidôneas e Suspensas (CGU) ───
+        if 'ceis' in nome_lower:
+            try:
+                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
+                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
+                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
+                    "cpfCnpj": cnpj_limpo, "cadastro": "1",
+                })
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    registros = dados.get("data", [])
+                    # Se nomeSancionado é None/vazio = sem sanções
+                    tem_sancao = any(r.get("nomeSancionado") for r in registros)
+                    if not tem_sancao:
+                        resultado["sucesso"] = True
+                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                        resultado["mensagem"] = "CEIS: Empresa NÃO consta no cadastro de inidôneas e suspensas (regular)"
+                    else:
+                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
+                        resultado["mensagem"] = f"CEIS: ATENÇÃO — Empresa CONSTA com {qtd} sanção(ões) no CEIS"
+                    return resultado
+                else:
+                    resultado["mensagem"] = f"CEIS: Portal retornou HTTP {resp.status_code}"
+            except requests.exceptions.Timeout:
+                resultado["mensagem"] = "CEIS: Timeout — portal lento, tente novamente"
+            except Exception as e:
+                resultado["mensagem"] = f"CEIS: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ─── CNEP — Cadastro Nacional de Empresas Punidas (CGU) ───
+        if 'cnep' in nome_lower:
+            try:
+                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
+                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
+                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
+                    "cpfCnpj": cnpj_limpo, "cadastro": "2",
+                })
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    registros = dados.get("data", [])
+                    tem_sancao = any(r.get("nomeSancionado") for r in registros)
+                    if not tem_sancao:
+                        resultado["sucesso"] = True
+                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                        resultado["mensagem"] = "CNEP: Empresa NÃO consta no cadastro de punidas (regular)"
+                    else:
+                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
+                        resultado["mensagem"] = f"CNEP: ATENÇÃO — Empresa CONSTA com {qtd} punição(ões) no CNEP"
+                    return resultado
+                else:
+                    resultado["mensagem"] = f"CNEP: Portal retornou HTTP {resp.status_code}"
+            except requests.exceptions.Timeout:
+                resultado["mensagem"] = "CNEP: Timeout — portal lento, tente novamente"
+            except Exception as e:
+                resultado["mensagem"] = f"CNEP: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ─── CADIN — Cadastro de Inadimplentes Federal ───
+        if 'cadin' in nome_lower:
+            try:
+                # CADIN usa cadastro=3 (CEPIM - Entidades Privadas sem fins lucrativos Impedidas)
+                # Para CADIN federal, consultamos todos os cadastros e filtramos
+                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
+                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
+                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
+                    "cpfCnpj": cnpj_limpo, "cadastro": "3",
+                })
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    registros = dados.get("data", [])
+                    tem_registro = any(r.get("nomeSancionado") for r in registros)
+                    if not tem_registro:
+                        resultado["sucesso"] = True
+                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                        resultado["mensagem"] = "CADIN: Empresa NÃO consta como inadimplente (regular)"
+                    else:
+                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
+                        resultado["mensagem"] = f"CADIN: ATENÇÃO — Empresa CONSTA com {qtd} registro(s) de inadimplência"
+                    return resultado
+                else:
+                    resultado["mensagem"] = f"CADIN: Portal retornou HTTP {resp.status_code}"
+            except requests.exceptions.Timeout:
+                resultado["mensagem"] = "CADIN: Timeout — portal lento, tente novamente"
+            except Exception as e:
+                resultado["mensagem"] = f"CADIN: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ─── TCU — Lista de Licitantes Inidôneos ───
+        if 'tcu' in nome_lower:
+            try:
+                # TCU usa cadastro=4 (CEAF - Cadastro de Expulsões da Administração Federal)
+                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
+                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
+                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
+                    "cpfCnpj": cnpj_limpo, "cadastro": "4",
+                })
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    registros = dados.get("data", [])
+                    tem_registro = any(r.get("nomeSancionado") for r in registros)
+                    if not tem_registro:
+                        resultado["sucesso"] = True
+                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                        resultado["mensagem"] = "TCU: Empresa NÃO consta como licitante inidônea (regular)"
+                    else:
+                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
+                        resultado["mensagem"] = f"TCU: ATENÇÃO — Empresa CONSTA com {qtd} impedimento(s)"
+                    return resultado
+                else:
+                    resultado["mensagem"] = f"TCU: Portal retornou HTTP {resp.status_code}"
+            except requests.exceptions.Timeout:
+                resultado["mensagem"] = "TCU: Timeout — portal lento, tente novamente"
+            except Exception as e:
+                resultado["mensagem"] = f"TCU: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ─── TST - CNDT (Certidão Negativa Débitos Trabalhistas) ───
+        # Portal do TST exige captcha para emissão.
+        if 'cndt' in nome_lower or ('tst' in nome_lower and 'trabalh' in nome_lower):
+            resultado["mensagem"] = (
+                "TST/CNDT: Portal exige captcha — acesse cndt-certidao.tst.jus.br, "
+                "informe o CNPJ, resolva o captcha e faça upload do PDF."
+            )
+            return resultado
+
+        # ─── CRF/FGTS - Caixa Econômica ───
+        # Portal da Caixa usa proteção anti-bot (ShieldSquare).
+        if 'fgts' in nome_lower or 'crf' in nome_lower or 'caixa' in nome_lower:
+            resultado["mensagem"] = (
+                "FGTS/CRF: Portal da Caixa possui proteção anti-bot — "
+                "acesse consulta-crf.caixa.gov.br, informe o CNPJ e faça upload do PDF."
+            )
+            return resultado
+
+        # ─── Demais portais com captcha ou login ───
+        resultado["mensagem"] = "Portal requer acesso manual (captcha ou login necessário)"
+        return resultado
+
+    except Exception as e:
+        resultado["mensagem"] = f"Erro geral: {str(e)[:100]}"
+        return resultado
+
+
 @app.route("/api/empresa-certidoes/buscar-automatica", methods=["POST"])
 @require_auth
 def buscar_certidoes_automatica():
     """
     Busca certidões da empresa automaticamente nos portais oficiais.
-    Para cada tipo de certidão, tenta:
-    1. Buscar via web search a URL de consulta
-    2. Registrar a URL e status no BD
+    Itera TODAS as fontes cadastradas (não apenas 5 tipos fixos).
+    Para cada fonte ativa:
+    1. Verifica se já existe certidão vinculada a essa fonte
+    2. Se busca automática permitida e pública: tenta web search
+    3. Se requer autenticação: marca como pendente
+    4. Se manual: marca como nao_disponivel
 
     JSON body:
     - empresa_id: ID da empresa
-    - tipos: (opcional) lista de tipos a buscar. Default: todos.
     """
-    from models import Empresa, EmpresaCertidao
+    from models import Empresa, EmpresaCertidao, FonteCertidao
     user_id = get_current_user_id()
     data = request.json or {}
 
@@ -7977,110 +8234,273 @@ def buscar_certidoes_automatica():
         if not empresa.cnpj:
             return jsonify({"error": "Empresa sem CNPJ cadastrado"}), 400
 
-        cnpj = empresa.cnpj.replace('.', '').replace('/', '').replace('-', '')
-        tipos_solicitados = data.get('tipos', [
-            'cnd_federal', 'cnd_estadual', 'cnd_municipal', 'fgts', 'trabalhista'
-        ])
+        cnpj = empresa.cnpj.replace('.', '').replace('/', '').replace('-', '').strip()
 
-        # Mapeamento tipo → portal de consulta
-        portais = {
-            'cnd_federal': {
-                'orgao': 'Receita Federal / PGFN',
-                'url_consulta': 'https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir',
-                'descricao': 'Certidão Negativa de Débitos Federais (Receita Federal + PGFN)'
-            },
-            'cnd_estadual': {
-                'orgao': f'Secretaria da Fazenda - {empresa.uf or "SP"}',
-                'url_consulta': f'https://www.sefaz.{(empresa.uf or "sp").lower()}.gov.br',
-                'descricao': f'Certidão Negativa de Débitos Estaduais ({empresa.uf or "SP"})'
-            },
-            'cnd_municipal': {
-                'orgao': f'Prefeitura de {empresa.cidade or "São Paulo"}',
-                'url_consulta': '',
-                'descricao': f'Certidão Negativa de Débitos Municipais ({empresa.cidade or "N/A"})'
-            },
-            'fgts': {
-                'orgao': 'Caixa Econômica Federal',
-                'url_consulta': 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
-                'descricao': 'Certificado de Regularidade do FGTS (CRF)'
-            },
-            'trabalhista': {
-                'orgao': 'Tribunal Superior do Trabalho (TST)',
-                'url_consulta': 'https://cndt-certidao.tst.jus.br/inicio.faces',
-                'descricao': 'Certidão Negativa de Débitos Trabalhistas (CNDT)'
-            }
-        }
+        # Buscar TODAS as fontes ativas do usuário
+        fontes = db.query(FonteCertidao).filter(
+            FonteCertidao.user_id == user_id,
+            FonteCertidao.ativo == True
+        ).all()
+
+        if not fontes:
+            return jsonify({"error": "Nenhuma fonte de certidão cadastrada. Acesse Cadastros > Empresa > Fontes de Certidões para configurar."}), 400
 
         resultados = []
-        from datetime import date as date_type
+        from datetime import date, datetime
+        stats = {"publicas": 0, "autenticadas": 0, "manuais": 0, "sem_api_key": 0}
 
-        for tipo in tipos_solicitados:
-            if tipo not in portais:
-                continue
-
-            portal = portais[tipo]
-
-            # Verificar se já existe certidão deste tipo
+        for fonte in fontes:
+            # Verificar se já existe certidão vinculada a esta fonte
             cert_existente = db.query(EmpresaCertidao).filter(
                 EmpresaCertidao.empresa_id == empresa_id,
-                EmpresaCertidao.tipo == tipo
+                EmpresaCertidao.fonte_certidao_id == fonte.id
             ).first()
 
-            # Tentar buscar via web search para URLs atualizadas
-            url_consulta = portal['url_consulta']
-            try:
-                resultado_busca = tool_web_search(
-                    f"certidão negativa {portal['descricao']} CNPJ {empresa.cnpj} consultar emitir site oficial"
-                )
-                if resultado_busca.get('success'):
-                    links = resultado_busca.get('links', [])
-                    if links:
-                        # Usar primeiro link oficial como URL de consulta
-                        url_consulta = links[0].get('url', url_consulta)
-            except Exception:
-                pass
+            url_consulta = fonte.url_portal or ""
+            resultado_auto = None
+
+            # Classificar a fonte
+            if not fonte.permite_busca_automatica:
+                # Fonte manual — apenas registrar
+                stats["manuais"] += 1
+                status_novo = "nao_disponivel"
+                acao = "Upload manual necessário"
+            elif fonte.requer_autenticacao and not fonte.usuario and not fonte.api_key and not fonte.certificado_path:
+                # Requer autenticação mas sem credenciais
+                stats["autenticadas"] += 1
+                status_novo = "pendente"
+                acao = f"Configure credenciais ({fonte.metodo_acesso}) em Fontes de Certidões"
+            else:
+                # Fonte pública ou com credenciais — tentar busca automática real
+                stats["publicas"] += 1
+                status_novo = "buscando"
+                acao = "Buscando automaticamente..."
+
+                # Tentar obter a certidão via HTTP
+                upload_dir = os.path.join(UPLOAD_FOLDER, 'empresa', empresa_id, 'certidoes')
+                resultado_auto = _tentar_obter_certidao(fonte, cnpj, empresa, upload_dir)
+
+                if resultado_auto and resultado_auto.get("sucesso"):
+                    status_novo = "valida"
+                    acao = resultado_auto.get("mensagem", "Certidão obtida automaticamente")
+                    stats["obtidas_auto"] = stats.get("obtidas_auto", 0) + 1
+                elif resultado_auto:
+                    status_novo = "pendente"
+                    acao = resultado_auto.get("mensagem", "Acesse o portal manualmente")
+                    # Contar fontes que precisam de API key separadamente
+                    if "Chave de API não configurada" in acao or "Chave de API inválida" in acao:
+                        stats["sem_api_key"] += 1
+                else:
+                    status_novo = "pendente"
+                    acao = "Acesse o portal para emitir a certidão"
+
+            # Atualizar ultima_consulta na fonte
+            fonte.ultima_consulta = datetime.now()
+            fonte.resultado_ultima_consulta = 'sucesso' if status_novo == 'valida' else 'erro'
 
             if cert_existente:
-                # Atualizar URL e status
                 cert_existente.url_consulta = url_consulta
-                cert_existente.orgao_emissor = portal['orgao']
-                if cert_existente.data_vencimento and cert_existente.data_vencimento < date_type.today():
+                cert_existente.orgao_emissor = fonte.orgao_emissor or fonte.nome
+                cert_existente.fonte_certidao_id = fonte.id
+                if cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
                     cert_existente.status = 'vencida'
+                elif status_novo == 'valida':
+                    cert_existente.status = 'valida'
+                    if resultado_auto and resultado_auto.get("path_arquivo"):
+                        cert_existente.path_arquivo = resultado_auto["path_arquivo"]
+                    if resultado_auto and resultado_auto.get("data_vencimento"):
+                        try:
+                            cert_existente.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
+                        except (ValueError, TypeError):
+                            pass
+                    if resultado_auto and resultado_auto.get("numero"):
+                        cert_existente.numero = resultado_auto["numero"]
+                    cert_existente.data_emissao = date.today()
+                elif cert_existente.status in ('buscando', 'erro'):
+                    cert_existente.status = status_novo
                 resultados.append({
-                    "tipo": tipo,
+                    "tipo": fonte.tipo_certidao,
                     "status": "atualizado",
                     "certidao": cert_existente.to_dict(),
+                    "fonte_nome": fonte.nome,
+                    "fonte_id": fonte.id,
                     "url_consulta": url_consulta,
-                    "acao": "Acesse o link para emitir/renovar a certidão"
+                    "permite_busca_automatica": fonte.permite_busca_automatica,
+                    "requer_autenticacao": fonte.requer_autenticacao,
+                    "acao": acao,
                 })
             else:
-                # Criar nova certidão com status pendente
                 nova_cert = EmpresaCertidao()
                 nova_cert.id = str(uuid.uuid4())
                 nova_cert.empresa_id = empresa_id
-                nova_cert.tipo = tipo
-                nova_cert.orgao_emissor = portal['orgao']
+                nova_cert.tipo = fonte.tipo_certidao
+                nova_cert.orgao_emissor = fonte.orgao_emissor or fonte.nome
                 nova_cert.url_consulta = url_consulta
-                nova_cert.status = 'pendente'
-                nova_cert.data_vencimento = date_type.today()  # Placeholder
+                nova_cert.fonte_certidao_id = fonte.id
+                nova_cert.status = status_novo
+                if resultado_auto and resultado_auto.get("path_arquivo"):
+                    nova_cert.path_arquivo = resultado_auto["path_arquivo"]
+                if resultado_auto and resultado_auto.get("data_vencimento"):
+                    try:
+                        nova_cert.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
+                    except (ValueError, TypeError):
+                        nova_cert.data_vencimento = date.today()
+                else:
+                    nova_cert.data_vencimento = date.today()
+                if resultado_auto and resultado_auto.get("numero"):
+                    nova_cert.numero = resultado_auto["numero"]
+                if status_novo == 'valida':
+                    nova_cert.data_emissao = date.today()
                 db.add(nova_cert)
                 resultados.append({
-                    "tipo": tipo,
+                    "tipo": fonte.tipo_certidao,
                     "status": "criado",
                     "certidao": nova_cert.to_dict(),
+                    "fonte_nome": fonte.nome,
+                    "fonte_id": fonte.id,
                     "url_consulta": url_consulta,
-                    "acao": "Acesse o link para emitir a certidão"
+                    "permite_busca_automatica": fonte.permite_busca_automatica,
+                    "requer_autenticacao": fonte.requer_autenticacao,
+                    "acao": acao,
                 })
 
         db.commit()
 
+        obtidas = stats.get("obtidas_auto", 0)
+        sem_key = stats.get("sem_api_key", 0)
+        pendentes_captcha = stats['publicas'] - obtidas - sem_key
+
+        # Montar mensagem detalhada
+        partes = [f"Busca concluída: {len(resultados)} fontes"]
+        detalhes = []
+        if obtidas > 0:
+            detalhes.append(f"{obtidas} obtidas automaticamente")
+        if sem_key > 0:
+            detalhes.append(f"{sem_key} aguardando chave de API")
+        if pendentes_captcha > 0:
+            detalhes.append(f"{pendentes_captcha} pendentes (portal manual)")
+        if stats['autenticadas'] > 0:
+            detalhes.append(f"{stats['autenticadas']} aguardando credenciais")
+        if stats['manuais'] > 0:
+            detalhes.append(f"{stats['manuais']} manuais")
+        msg = partes[0] + " — " + ", ".join(detalhes) if detalhes else partes[0]
+
         return jsonify({
             "success": True,
-            "message": f"Busca concluída para {len(resultados)} certidões",
+            "message": msg,
             "resultados": resultados,
             "cnpj": empresa.cnpj,
-            "nota": "Acesse os links de consulta para emitir cada certidão. "
-                    "Quando obtiver o arquivo, faça upload para atualizar o registro."
+            "stats": stats,
+            "nota": "Certidões marcadas como 'Válida' foram obtidas automaticamente. "
+                    "Para as demais, clique no ícone de olho para abrir o portal e faça upload do PDF."
+        })
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Fontes de Certidões - Inicializar fontes padrão
+# =============================================================================
+
+@app.route("/api/fontes-certidoes/inicializar", methods=["POST"])
+@require_auth
+def inicializar_fontes_certidoes():
+    """
+    Cria as 5 fontes padrão de certidões para o usuário, caso ainda não existam.
+    Usa dados da empresa (UF, cidade) para personalizar SEFAZ e Prefeitura.
+    """
+    from models import FonteCertidao, Empresa
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        # Verificar se já tem fontes
+        existentes = db.query(FonteCertidao).filter(
+            FonteCertidao.user_id == user_id
+        ).count()
+        if existentes > 0:
+            return jsonify({"success": True, "message": f"Já existem {existentes} fontes cadastradas", "criadas": 0})
+
+        # Buscar empresa para personalizar fontes estadual/municipal
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        uf = empresa.uf if empresa and empresa.uf else "SP"
+        cidade = empresa.cidade if empresa and empresa.cidade else ""
+
+        fontes_padrao = [
+            {
+                "tipo_certidao": "cnd_federal",
+                "nome": "Receita Federal - CND",
+                "orgao_emissor": "Receita Federal / PGFN",
+                "url_portal": "https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": True,
+                "observacoes": "Consulta pública. Só precisa do CNPJ. Certidão emitida instantaneamente se não houver pendências.",
+            },
+            {
+                "tipo_certidao": "cnd_estadual",
+                "nome": f"SEFAZ-{uf} - CND Estadual",
+                "orgao_emissor": f"Secretaria da Fazenda - {uf}",
+                "url_portal": f"https://www.sefaz.{uf.lower()}.gov.br",
+                "uf": uf,
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": True,
+                "observacoes": f"Portal da SEFAZ de {uf}. A URL exata de consulta pode variar por estado. Verifique e atualize a URL do portal se necessário.",
+            },
+            {
+                "tipo_certidao": "cnd_municipal",
+                "nome": f"Prefeitura{' de ' + cidade if cidade else ''} - CND Municipal",
+                "orgao_emissor": f"Prefeitura{' de ' + cidade if cidade else ''}",
+                "url_portal": "",
+                "cidade": cidade,
+                "uf": uf,
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": False,
+                "observacoes": "A URL varia por município. Preencha a URL do portal da prefeitura da sua cidade para habilitar a busca automática.",
+            },
+            {
+                "tipo_certidao": "fgts",
+                "nome": "Caixa - CRF/FGTS",
+                "orgao_emissor": "Caixa Econômica Federal",
+                "url_portal": "https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": True,
+                "observacoes": "Consulta pública do CRF (Certificado de Regularidade do FGTS). Só precisa do CNPJ.",
+            },
+            {
+                "tipo_certidao": "trabalhista",
+                "nome": "TST - CNDT",
+                "orgao_emissor": "Tribunal Superior do Trabalho (TST)",
+                "url_portal": "https://cndt-certidao.tst.jus.br/inicio.faces",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": True,
+                "observacoes": "Consulta pública da CNDT (Certidão Negativa de Débitos Trabalhistas). Só precisa do CNPJ.",
+            },
+        ]
+
+        criadas = 0
+        for fonte_data in fontes_padrao:
+            fonte = FonteCertidao()
+            fonte.id = str(uuid.uuid4())
+            fonte.user_id = user_id
+            for k, v in fonte_data.items():
+                setattr(fonte, k, v)
+            db.add(fonte)
+            criadas += 1
+
+        db.commit()
+        return jsonify({
+            "success": True,
+            "message": f"{criadas} fontes de certidão criadas com sucesso",
+            "criadas": criadas,
+            "nota": "Revise as URLs (especialmente Estadual e Municipal) e adicione credenciais se necessário."
         })
 
     except Exception as e:

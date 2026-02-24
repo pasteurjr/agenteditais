@@ -13,7 +13,7 @@ from models import (
     get_db, Base,
     User, Empresa, EmpresaDocumento, EmpresaCertidao, EmpresaResponsavel,
     Produto, ProdutoEspecificacao, ProdutoDocumento,
-    FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
+    FonteEdital, FonteCertidao, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital,
     Alerta, Monitoramento, Notificacao, PreferenciasNotificacao,
@@ -76,7 +76,7 @@ CRUD_TABLES = {
         "user_scoped": False,
         "parent_fk": "empresa_id",
         "parent_model": Empresa,
-        "search_fields": ["tipo", "orgao_emissor", "numero"],
+        "search_fields": ["tipo", "orgao_emissor", "numero", "fonte_certidao_id"],
         "label": "Certidão da Empresa",
         "required": ["empresa_id", "tipo", "data_vencimento"],
     },
@@ -123,6 +123,13 @@ CRUD_TABLES = {
         "search_fields": ["nome", "tipo", "url_base"],
         "label": "Fonte de Edital",
         "required": ["nome", "tipo"],
+    },
+    "fontes-certidoes": {
+        "model": FonteCertidao,
+        "user_scoped": True,
+        "search_fields": ["nome", "tipo_certidao", "orgao_emissor", "url_portal", "uf", "cidade"],
+        "label": "Fonte de Certidão",
+        "required": ["tipo_certidao", "nome", "url_portal"],
     },
     # === Editais ===
     "editais": {

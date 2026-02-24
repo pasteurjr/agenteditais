@@ -23,7 +23,7 @@ except ImportError:
     SCHEDULER_AVAILABLE = False
     print("[SCHEDULER] APScheduler não instalado. pip install apscheduler")
 
-from models import SessionLocal, Alerta, Monitoramento, Notificacao, PreferenciasNotificacao, Edital, User
+from models import SessionLocal, Alerta, Monitoramento, Notificacao, PreferenciasNotificacao, Edital, User, EmpresaCertidao, FonteCertidao, Empresa
 from sqlalchemy import and_, or_
 
 # Importar templates de notificação
@@ -342,6 +342,184 @@ def enviar_email_alerta(destinatario: str, titulo: str, mensagem: str) -> bool:
 
 
 # =============================================================================
+# JOB: VERIFICAR CERTIDÕES (vencimento + busca automática)
+# =============================================================================
+
+def job_verificar_certidoes():
+    """
+    Job diário que:
+    1. Verifica certidões que vencem nos próximos 15 dias → cria Alerta + Notificação
+    2. Verifica certidões vencidas com fonte automática → registra alerta de renovação
+    """
+    db = SessionLocal()
+    try:
+        from datetime import date, timedelta
+        import uuid
+
+        hoje = date.today()
+        prazo_alerta = hoje + timedelta(days=15)
+
+        # Buscar todas as empresas com certidões
+        empresas = db.query(Empresa).all()
+        total_alertas = 0
+        total_vencidas = 0
+
+        for empresa in empresas:
+            if not empresa.user_id:
+                continue
+
+            # 1. Certidões que vencem nos próximos 15 dias
+            certidoes_vencendo = db.query(EmpresaCertidao).filter(
+                EmpresaCertidao.empresa_id == empresa.id,
+                EmpresaCertidao.status == 'valida',
+                EmpresaCertidao.data_vencimento != None,
+                EmpresaCertidao.data_vencimento <= prazo_alerta,
+                EmpresaCertidao.data_vencimento > hoje,
+            ).all()
+
+            for cert in certidoes_vencendo:
+                dias_restantes = (cert.data_vencimento - hoje).days
+                nome_cert = cert.orgao_emissor or cert.tipo
+
+                # Verificar se já existe alerta recente para esta certidão
+                alerta_existente = db.query(Alerta).filter(
+                    Alerta.user_id == empresa.user_id,
+                    Alerta.tipo == 'prazo',
+                    Alerta.referencia_id == cert.id,
+                    Alerta.status.in_(['agendado', 'disparado']),
+                ).first()
+
+                if not alerta_existente:
+                    # Criar alerta
+                    alerta = Alerta()
+                    alerta.id = str(uuid.uuid4())
+                    alerta.user_id = empresa.user_id
+                    alerta.tipo = 'prazo'
+                    alerta.titulo = f"Certidão vencendo: {nome_cert}"
+                    alerta.mensagem = f"A certidão '{nome_cert}' da empresa {empresa.razao_social} vence em {dias_restantes} dia(s) ({cert.data_vencimento.isoformat()})."
+                    alerta.referencia_tipo = 'certidao'
+                    alerta.referencia_id = cert.id
+                    alerta.data_disparo = datetime.now()
+                    alerta.status = 'disparado'
+                    db.add(alerta)
+
+                    # Criar notificação no sistema
+                    notif = Notificacao()
+                    notif.id = str(uuid.uuid4())
+                    notif.user_id = empresa.user_id
+                    notif.tipo = 'sistema'
+                    notif.titulo = f"Certidão vencendo em {dias_restantes} dias"
+                    notif.mensagem = f"A certidão '{nome_cert}' vence em {cert.data_vencimento.isoformat()}. Renove antes do vencimento."
+                    notif.lida = False
+                    notif.created_at = datetime.now()
+                    db.add(notif)
+                    total_alertas += 1
+
+            # 2. Certidões já vencidas → marcar status
+            certidoes_expiradas = db.query(EmpresaCertidao).filter(
+                EmpresaCertidao.empresa_id == empresa.id,
+                EmpresaCertidao.status == 'valida',
+                EmpresaCertidao.data_vencimento != None,
+                EmpresaCertidao.data_vencimento <= hoje,
+            ).all()
+
+            for cert in certidoes_expiradas:
+                cert.status = 'vencida'
+                total_vencidas += 1
+
+                nome_cert = cert.orgao_emissor or cert.tipo
+                # Criar notificação de vencimento
+                notif = Notificacao()
+                notif.id = str(uuid.uuid4())
+                notif.user_id = empresa.user_id
+                notif.tipo = 'sistema'
+                notif.titulo = f"Certidão vencida: {nome_cert}"
+                notif.mensagem = f"A certidão '{nome_cert}' da empresa {empresa.razao_social} venceu em {cert.data_vencimento.isoformat()}. Providencie a renovação."
+                notif.lida = False
+                notif.created_at = datetime.now()
+                db.add(notif)
+
+        # 3. Re-buscar certidões automaticamente conforme frequência configurada
+        freq_map = {
+            'diaria': timedelta(days=1),
+            'semanal': timedelta(days=7),
+            'quinzenal': timedelta(days=15),
+            'mensal': timedelta(days=30),
+        }
+        total_rebuscadas = 0
+
+        for empresa in empresas:
+            freq = getattr(empresa, 'frequencia_busca_certidoes', None) or 'diaria'
+            if freq == 'desativada':
+                continue
+
+            intervalo = freq_map.get(freq, timedelta(days=1))
+
+            # Buscar fontes ativas do usuário com busca automática
+            fontes_auto = db.query(FonteCertidao).filter(
+                FonteCertidao.user_id == empresa.user_id,
+                FonteCertidao.ativo == True,
+                FonteCertidao.permite_busca_automatica == True,
+            ).all()
+
+            cnpj = (empresa.cnpj or "").replace('.', '').replace('/', '').replace('-', '').strip()
+            if not cnpj:
+                continue
+
+            upload_dir = os.path.join(os.path.dirname(__file__), 'uploads', 'certidoes')
+            os.makedirs(upload_dir, exist_ok=True)
+
+            rebuscadas_empresa = 0
+            for fonte in fontes_auto:
+                # Verificar se precisa re-buscar (última consulta + intervalo < agora)
+                ultima = fonte.ultima_consulta
+                if ultima and (datetime.now() - ultima) < intervalo:
+                    continue  # Ainda dentro do intervalo, pular
+
+                # Buscar certidão existente
+                cert = db.query(EmpresaCertidao).filter(
+                    EmpresaCertidao.empresa_id == empresa.id,
+                    EmpresaCertidao.fonte_certidao_id == fonte.id,
+                ).first()
+
+                # Chamar função de busca real
+                try:
+                    from app import _tentar_obter_certidao
+                    resultado = _tentar_obter_certidao(fonte, cnpj, empresa, upload_dir)
+
+                    if resultado["sucesso"] and cert:
+                        from datetime import date
+                        cert.status = 'valida'
+                        cert.data_emissao = date.today()
+                        if resultado.get("data_vencimento"):
+                            cert.data_vencimento = resultado["data_vencimento"]
+                        if resultado.get("path_arquivo"):
+                            cert.path_arquivo = resultado["path_arquivo"]
+                        if resultado.get("numero"):
+                            cert.numero_certidao = resultado["numero"]
+                        cert.observacoes = resultado.get("mensagem", "")
+                        rebuscadas_empresa += 1
+
+                    # Atualizar última consulta na fonte
+                    fonte.ultima_consulta = datetime.now()
+                except Exception as ex:
+                    print(f"[CERTIDÕES] Erro ao re-buscar {fonte.nome}: {ex}")
+
+            total_rebuscadas += rebuscadas_empresa
+            if rebuscadas_empresa > 0:
+                print(f"[CERTIDÕES] Empresa {empresa.razao_social}: {rebuscadas_empresa} certidões re-buscadas")
+
+        db.commit()
+        print(f"[CERTIDÕES] Verificação concluída: {total_alertas} alertas criados, {total_vencidas} certidões marcadas como vencidas, {total_rebuscadas} certidões re-buscadas")
+
+    except Exception as e:
+        db.rollback()
+        print(f"[CERTIDÕES] Erro na verificação: {e}")
+    finally:
+        db.close()
+
+
+# =============================================================================
 # INICIALIZAÇÃO DO SCHEDULER
 # =============================================================================
 
@@ -391,11 +569,21 @@ def iniciar_scheduler():
             replace_existing=True
         )
 
+        # Job de verificação de certidões - diário às 6h
+        scheduler.add_job(
+            job_verificar_certidoes,
+            CronTrigger(hour=6, minute=0),
+            id='verificar_certidoes',
+            name='Verificar Certidões (vencimento e alertas)',
+            replace_existing=True
+        )
+
         scheduler.start()
         print(f"[SCHEDULER] Iniciado com sucesso!")
         print(f"[SCHEDULER] - Verificação de alertas: a cada {CHECK_ALERTAS_INTERVAL} minutos")
         print(f"[SCHEDULER] - Monitoramentos: a cada {CHECK_MONITORAMENTOS_INTERVAL} minutos")
         print(f"[SCHEDULER] - Limpeza de notificações: diária às 3h")
+        print(f"[SCHEDULER] - Verificação de certidões: diária às 6h")
 
         return True
 

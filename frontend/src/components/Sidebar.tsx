@@ -5,7 +5,7 @@ import {
   Gavel, Clock, AlertCircle, Package, BarChart2, Flag, Eye, Users,
   TrendingUp, Scale, AlertTriangle, XCircle, Settings, Building,
   Briefcase, Sliders, GitBranch, Database, Shield, Layers, FileCheck,
-  Bell, Mail, Target, BookOpen, Zap
+  Bell, Mail, Target, BookOpen, Zap, Globe
 } from "lucide-react";
 
 interface User {
@@ -71,6 +71,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-empresas", icon: <Building size={14} />, label: "Dados Cadastrais", page: "crud:empresas" },
           { id: "crud-empresa-documentos", icon: <FileText size={14} />, label: "Documentos", page: "crud:empresa-documentos" },
           { id: "crud-empresa-certidoes", icon: <Shield size={14} />, label: "Certidoes", page: "crud:empresa-certidoes" },
+          { id: "crud-fontes-certidoes", icon: <Globe size={14} />, label: "Fontes de Certidoes", page: "crud:fontes-certidoes" },
           { id: "crud-empresa-responsaveis", icon: <Users size={14} />, label: "Responsaveis", page: "crud:empresa-responsaveis" },
         ],
       },

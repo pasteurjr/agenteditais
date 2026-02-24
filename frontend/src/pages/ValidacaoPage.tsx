@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import {
   ClipboardCheck, Eye, Download, MessageSquare, FileText, CheckCircle, XCircle, Clock,
   AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, X, Sparkles, Building,
-  AlertCircle, Scale, FolderOpen
+  AlertCircle, Scale, FolderOpen, Search
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, TextArea,
@@ -194,7 +194,9 @@ async function calcularScoresValidacao(editalId: string): Promise<ScoresValidaca
 
 // === COMPONENTE PRINCIPAL ===
 
-export function ValidacaoPage(_props?: PageProps) {
+export function ValidacaoPage(props?: PageProps) {
+  const onSendToChat = props?.onSendToChat;
+
   // T18: inicia vazio — alimentado exclusivamente pelo backend
   const [editais, setEditais] = useState<Edital[]>([]);
   const [loadingEditais, setLoadingEditais] = useState(true);
@@ -228,6 +230,26 @@ export function ValidacaoPage(_props?: PageProps) {
   const [historicoReal, setHistoricoReal] = useState<HistoricoRealItem[]>([]);
   const [historicoRealLoading, setHistoricoRealLoading] = useState(false);
   const [reputacaoCalculada, setReputacaoCalculada] = useState<{ total: number; goCount: number; nogoCount: number } | null>(null);
+
+  // UF da empresa (carregada dinamicamente)
+  const [empresaUf, setEmpresaUf] = useState("--");
+
+  // Carregar UF da empresa ao montar
+  useEffect(() => {
+    (async () => {
+      try {
+        const resultado = await crudList("empresas", { limit: 1 });
+        const items = resultado.items || [];
+        if (items.length > 0) {
+          const empresa = items[0] as Record<string, unknown>;
+          const uf = String(empresa.uf || empresa.UF || "");
+          if (uf) setEmpresaUf(uf);
+        }
+      } catch {
+        // Silent fail — mantém "--"
+      }
+    })();
+  }, []);
 
   // T18: Carregar editais reais do backend ao montar
   useEffect(() => {
@@ -602,6 +624,13 @@ export function ValidacaoPage(_props?: PageProps) {
     }
   };
 
+  // Helper: badge de risco por dimensão de score
+  const getScoreDimensionBadge = (score: number) => {
+    if (score > 70) return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 600, backgroundColor: "#22c55e20", color: "#22c55e", border: "1px solid #22c55e40" }}>Atendido</span>;
+    if (score >= 30) return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 600, backgroundColor: "#eab30820", color: "#eab308", border: "1px solid #eab30840" }}>Ponto de Atencao</span>;
+    return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 600, backgroundColor: "#ef444420", color: "#ef4444", border: "1px solid #ef444440" }}>Impeditivo</span>;
+  };
+
   const columns: Column<Edital>[] = [
     { key: "numero", header: "Numero", sortable: true },
     { key: "orgao", header: "Orgao", sortable: true },
@@ -616,9 +645,10 @@ export function ValidacaoPage(_props?: PageProps) {
     { key: "score", header: "Score", width: "80px", render: (e) => <ScoreCircle score={e.score} size={40} />, sortable: true },
   ];
 
-  // === ABAS ===
+  // === 5 ABAS REORGANIZADAS ===
 
-  const renderAbaObjetiva = (edital: Edital) => (
+  // Aba 1: Aderencia (antigo conteudo da Objetiva + Intencao/Margem do dashboard)
+  const renderAbaAderencia = (edital: Edital) => (
     <div className="aba-content">
       {/* Decisão GO/NO-GO da IA (T22) */}
       {decisaoIA && (
@@ -627,7 +657,7 @@ export function ValidacaoPage(_props?: PageProps) {
             {decisaoIA === "GO" && <CheckCircle size={16} />}
             {decisaoIA === "NO-GO" && <XCircle size={16} />}
             {decisaoIA === "CONDICIONAL" && <AlertTriangle size={16} />}
-            {" "}Recomendação da IA: {decisaoIA}
+            {" "}Recomendacao da IA: {decisaoIA}
           </h4>
         </div>
       )}
@@ -650,7 +680,7 @@ export function ValidacaoPage(_props?: PageProps) {
         ) : (
           <div className="scores-placeholder">
             <ActionButton icon={<TrendingUp size={14} />} label="Calcular Scores" onClick={() => handleCalcularScores(edital)} loading={scoresLoading} variant="primary" />
-            <p className="empty-message">Clique para calcular a análise detalhada deste edital.</p>
+            <p className="empty-message">Clique para calcular a analise detalhada deste edital.</p>
           </div>
         )}
       </div>
@@ -672,26 +702,27 @@ export function ValidacaoPage(_props?: PageProps) {
         </div>
       </div>
 
-      {/* Checklist Documental */}
+      {/* Analise de Lote */}
       <div className="section-block">
-        <h4><ClipboardCheck size={16} /> Checklist Documental</h4>
-        <table className="mini-table">
-          <thead>
-            <tr><th>Documento</th><th>Status</th><th>Validade</th></tr>
-          </thead>
-          <tbody>
-            {edital.checklistDocumental.map((item, i) => (
-              <tr key={i}>
-                <td>{item.documento}</td>
-                <td>{getChecklistStatusBadge(item.status)}</td>
-                <td>{item.validade || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <h4><FileText size={16} /> Analise de Lote ({edital.analiseLote.length} itens)</h4>
+        <div className="lote-bar">
+          {edital.analiseLote.map((item, i) => (
+            <div
+              key={i}
+              className={`lote-segment ${item.tipo}`}
+              title={`${item.item} (${item.tipo})`}
+            >
+              <span className="lote-segment-label">{item.item.length > 12 ? item.item.substring(0, 12) + "..." : item.item}</span>
+            </div>
+          ))}
+        </div>
+        <div className="lote-legenda">
+          <span className="lote-legenda-item"><span className="lote-dot aderente" /> Aderente ({edital.analiseLote.filter(i => i.tipo === "aderente").length})</span>
+          <span className="lote-legenda-item"><span className="lote-dot intruso" /> Item Intruso ({edital.analiseLote.filter(i => i.tipo === "intruso").length})</span>
+        </div>
       </div>
 
-      {/* Mapa Logístico (F5) */}
+      {/* Mapa Logístico (F5) — UF empresa carregada dinamicamente */}
       <div className="section-block">
         <h4><Target size={16} /> Mapa Logistico</h4>
         {(() => {
@@ -717,7 +748,7 @@ export function ValidacaoPage(_props?: PageProps) {
                 </div>
                 <div>
                   <div style={{ fontSize: "12px", color: "#94a3b8" }}>Empresa</div>
-                  <div style={{ fontSize: "14px", fontWeight: 600 }}>SP</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600 }}>{empresaUf}</div>
                 </div>
               </div>
               <div style={{ marginLeft: "auto", display: "flex", gap: "12px", alignItems: "center" }}>
@@ -744,29 +775,180 @@ export function ValidacaoPage(_props?: PageProps) {
         })()}
       </div>
 
-      {/* Analise de Lote */}
+      {/* Intencao Estrategica + Margem Expectativa (movido do score dashboard) */}
       <div className="section-block">
-        <h4><FileText size={16} /> Analise de Lote ({edital.analiseLote.length} itens)</h4>
-        <div className="lote-bar">
-          {edital.analiseLote.map((item, i) => (
-            <div
-              key={i}
-              className={`lote-segment ${item.tipo}`}
-              title={`${item.item} (${item.tipo})`}
-            >
-              <span className="lote-segment-label">{item.item.length > 12 ? item.item.substring(0, 12) + "..." : item.item}</span>
+        <h4><TrendingUp size={16} /> Intencao Estrategica e Margem</h4>
+        <div className="intencao-margem">
+          <div className="intencao-section">
+            <label>Intencao Estrategica</label>
+            <RadioGroup
+              name="intencao"
+              value={edital.intencaoEstrategica}
+              onChange={handleIntencaoChange}
+              options={[
+                { value: "estrategico", label: "Estrategico" },
+                { value: "defensivo", label: "Defensivo" },
+                { value: "acompanhamento", label: "Acompanhamento" },
+                { value: "aprendizado", label: "Aprendizado" },
+              ]}
+            />
+          </div>
+          <div className="margem-section">
+            <label>Expectativa de Margem: {edital.margemExpectativa}%</label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={edital.margemExpectativa}
+              onChange={(e) => handleMargemChange(Number(e.target.value))}
+              className="margem-slider"
+            />
+            <div className="margem-labels">
+              <span>Varia por Produto</span>
+              <span>Varia por Regiao</span>
             </div>
-          ))}
-        </div>
-        <div className="lote-legenda">
-          <span className="lote-legenda-item"><span className="lote-dot aderente" /> Aderente ({edital.analiseLote.filter(i => i.tipo === "aderente").length})</span>
-          <span className="lote-legenda-item"><span className="lote-dot intruso" /> Item Intruso ({edital.analiseLote.filter(i => i.tipo === "intruso").length})</span>
+          </div>
         </div>
       </div>
     </div>
   );
 
-  const renderAbaAnalitica = (edital: Edital) => (
+  // Aba 2: Documentos (Processo Amanda + Checklist Documental + botão IA)
+  const renderAbaDocumentos = (edital: Edital) => (
+    <div className="aba-content">
+      {/* Processo Amanda — Documentação por Edital (V1: dados reais) — MOVIDO de fora das abas */}
+      <div className="section-block">
+        <h4><FolderOpen size={16} /> Processo Amanda - Documentacao</h4>
+        {docsNecessariaLoading ? (
+          <p className="empty-message">Carregando documentacao necessaria...</p>
+        ) : docsNecessariaErro && docsNecessaria.length === 0 ? (
+          <div style={{ padding: "16px", textAlign: "center" }}>
+            <AlertCircle size={24} style={{ color: "#f59e0b", marginBottom: "8px" }} />
+            <p style={{ color: "#94a3b8", fontSize: "14px" }}>{docsNecessariaErro}</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+              {/* Pasta 1: Documentos da Empresa (azul) */}
+              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <FolderOpen size={18} style={{ color: "#3b82f6" }} />
+                  <h4 style={{ margin: 0, fontSize: "14px" }}>Documentos da Empresa</h4>
+                </div>
+                {(() => {
+                  const docs = docsNecessaria.filter(d => d.categoria === "empresa");
+                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                  return docs.map((doc, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                        {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
+                        <StatusBadge
+                          status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                          label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Pasta 2: Documentos Fiscais e Certidões (amarelo) */}
+              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <FolderOpen size={18} style={{ color: "#eab308" }} />
+                  <h4 style={{ margin: 0, fontSize: "14px" }}>Certidoes e Fiscal</h4>
+                </div>
+                {(() => {
+                  const docs = docsNecessaria.filter(d => d.categoria === "fiscal");
+                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                  return docs.map((doc, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                      <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
+                        <StatusBadge
+                          status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                          label={doc.status === "ok" ? "OK" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                          size="small"
+                        />
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Pasta 3: Qualificação Técnica (verde) */}
+              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <FolderOpen size={18} style={{ color: "#22c55e" }} />
+                  <h4 style={{ margin: 0, fontSize: "14px" }}>Qualificacao Tecnica</h4>
+                </div>
+                {(() => {
+                  const docs = docsNecessaria.filter(d => d.categoria === "tecnica");
+                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
+                  return docs.map((doc, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <span style={{ fontSize: "13px" }}>{doc.nome}</span>
+                        {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
+                      </div>
+                      <StatusBadge
+                        status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                        label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                        size="small"
+                      />
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+            <div style={{ marginTop: "12px", fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
+              Documentos carregados automaticamente cruzando requisitos do edital com cadastro da empresa.
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Checklist Documental (movido da aba Objetiva antiga) */}
+      <div className="section-block">
+        <h4><ClipboardCheck size={16} /> Checklist Documental</h4>
+        <table className="mini-table">
+          <thead>
+            <tr><th>Documento</th><th>Status</th><th>Validade</th></tr>
+          </thead>
+          <tbody>
+            {edital.checklistDocumental.map((item, i) => (
+              <tr key={i}>
+                <td>{item.documento}</td>
+                <td>{getChecklistStatusBadge(item.status)}</td>
+                <td>{item.validade || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Botão: Documentos Exigidos via IA */}
+      {onSendToChat && (
+        <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <ActionButton
+            icon={<Sparkles size={14} />}
+            label="Documentos Exigidos via IA"
+            variant="primary"
+            onClick={() => onSendToChat("Quais documentos são exigidos no edital " + edital.numero + "?")}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // Aba 3: Riscos (antigo conteudo da Analitica, sem Reputação do Órgão)
+  const renderAbaRiscos = (edital: Edital) => (
     <div className="aba-content">
       {/* Pipeline de Riscos */}
       <div className="section-block">
@@ -808,31 +990,6 @@ export function ValidacaoPage(_props?: PageProps) {
         </div>
       )}
 
-      {/* Reputacao do Orgao — V4: dados reais calculados do histórico */}
-      <div className="section-block">
-        <h4><Building size={16} /> Reputacao do Orgao - {edital.orgao}</h4>
-        <div className="reputacao-grid">
-          <div className="reputacao-item">
-            <label>Pregoeiro</label>
-            <span>{edital.reputacaoOrgao.pregoeiro}</span>
-          </div>
-          <div className="reputacao-item">
-            <label>Pagamento</label>
-            <span>{reputacaoCalculada && reputacaoCalculada.total >= 3 ? (reputacaoCalculada.goCount > 0 ? "Pagador regular" : "Sem dados de contrato") : edital.reputacaoOrgao.pagador}</span>
-          </div>
-          <div className="reputacao-item">
-            <label>Historico</label>
-            <span>
-              {reputacaoCalculada && reputacaoCalculada.total >= 3
-                ? `${reputacaoCalculada.total} participacoes (${reputacaoCalculada.goCount} GO / ${reputacaoCalculada.nogoCount} NO-GO)`
-                : reputacaoCalculada && reputacaoCalculada.total > 0
-                  ? `${reputacaoCalculada.total} edital(is) encontrado(s)`
-                  : edital.reputacaoOrgao.historico}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Alerta de Recorrencia */}
       {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
         <div className="section-block alerta-recorrencia">
@@ -859,27 +1016,69 @@ export function ValidacaoPage(_props?: PageProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Badges de risco por dimensão de score */}
+      <div className="section-block">
+        <h4><Shield size={16} /> Avaliacao por Dimensao</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Tecnico ({edital.scores.tecnico}%)</span>
+            {getScoreDimensionBadge(edital.scores.tecnico)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Documental ({edital.scores.documental}%)</span>
+            {getScoreDimensionBadge(edital.scores.documental)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Complexidade ({edital.scores.complexidade}%)</span>
+            {getScoreDimensionBadge(edital.scores.complexidade)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Juridico ({edital.scores.juridico}%)</span>
+            {getScoreDimensionBadge(edital.scores.juridico)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Logistico ({edital.scores.logistico}%)</span>
+            {getScoreDimensionBadge(edital.scores.logistico)}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+            <span style={{ fontSize: "13px" }}>Comercial ({edital.scores.comercial}%)</span>
+            {getScoreDimensionBadge(edital.scores.comercial)}
+          </div>
+        </div>
+      </div>
     </div>
   );
 
-  const renderAbaCognitiva = (edital: Edital) => (
+  // Aba 4: Mercado (Reputação do Órgão da Analítica + Histórico da Cognitiva + botões IA)
+  const renderAbaMercado = (edital: Edital) => (
     <div className="aba-content">
-      {/* Resumo IA */}
+      {/* Reputacao do Orgao — V4: dados reais calculados do histórico */}
       <div className="section-block">
-        <h4><Sparkles size={16} /> Resumo Gerado pela IA</h4>
-        {edital.resumo ? (
-          <div>
-            <p className="resumo-text">{edital.resumo}</p>
-            <ActionButton icon={<Sparkles size={14} />} label="Regerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="neutral" />
+        <h4><Building size={16} /> Reputacao do Orgao - {edital.orgao}</h4>
+        <div className="reputacao-grid">
+          <div className="reputacao-item">
+            <label>Pregoeiro</label>
+            <span>{edital.reputacaoOrgao.pregoeiro}</span>
           </div>
-        ) : (
-          <div className="resumo-placeholder">
-            <ActionButton icon={<Sparkles size={14} />} label="Gerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="primary" />
+          <div className="reputacao-item">
+            <label>Pagamento</label>
+            <span>{reputacaoCalculada && reputacaoCalculada.total >= 3 ? (reputacaoCalculada.goCount > 0 ? "Pagador regular" : "Sem dados de contrato") : edital.reputacaoOrgao.pagador}</span>
           </div>
-        )}
+          <div className="reputacao-item">
+            <label>Historico</label>
+            <span>
+              {reputacaoCalculada && reputacaoCalculada.total >= 3
+                ? `${reputacaoCalculada.total} participacoes (${reputacaoCalculada.goCount} GO / ${reputacaoCalculada.nogoCount} NO-GO)`
+                : reputacaoCalculada && reputacaoCalculada.total > 0
+                  ? `${reputacaoCalculada.total} edital(is) encontrado(s)`
+                  : edital.reputacaoOrgao.historico}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Historico Semelhante — V3: dados reais do mesmo órgão */}
+      {/* Historico Semelhante — V3: dados reais do mesmo órgão (movido da Cognitiva) */}
       <div className="section-block">
         <h4><Clock size={16} /> Historico de Editais Semelhantes</h4>
         {historicoRealLoading ? (
@@ -929,6 +1128,44 @@ export function ValidacaoPage(_props?: PageProps) {
         )}
       </div>
 
+      {/* Botões: Buscar Preços + Analisar Concorrentes */}
+      {onSendToChat && (
+        <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <ActionButton
+            icon={<Search size={14} />}
+            label="Buscar Precos"
+            variant="primary"
+            onClick={() => onSendToChat("Busque preços de " + edital.objeto + " no PNCP")}
+          />
+          <ActionButton
+            icon={<Building size={14} />}
+            label="Analisar Concorrentes"
+            variant="neutral"
+            onClick={() => onSendToChat("Liste os concorrentes conhecidos")}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // Aba 5: IA (antigo conteudo da Cognitiva — Resumo + Pergunte + botões rápidos)
+  const renderAbaIA = (edital: Edital) => (
+    <div className="aba-content">
+      {/* Resumo IA */}
+      <div className="section-block">
+        <h4><Sparkles size={16} /> Resumo Gerado pela IA</h4>
+        {edital.resumo ? (
+          <div>
+            <p className="resumo-text">{edital.resumo}</p>
+            <ActionButton icon={<Sparkles size={14} />} label="Regerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="neutral" />
+          </div>
+        ) : (
+          <div className="resumo-placeholder">
+            <ActionButton icon={<Sparkles size={14} />} label="Gerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="primary" />
+          </div>
+        )}
+      </div>
+
       {/* Pergunte a IA */}
       <div className="section-block">
         <h4><MessageSquare size={16} /> Pergunte a IA sobre este Edital</h4>
@@ -943,13 +1180,42 @@ export function ValidacaoPage(_props?: PageProps) {
           </div>
         )}
       </div>
+
+      {/* Botões rápidos via chat */}
+      {onSendToChat && (
+        <div className="section-block">
+          <h4><Sparkles size={16} /> Acoes Rapidas via IA</h4>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <ActionButton
+              icon={<Target size={14} />}
+              label="Requisitos Tecnicos"
+              variant="neutral"
+              onClick={() => onSendToChat("Quais são os requisitos técnicos do edital " + edital.numero + "?")}
+            />
+            <ActionButton
+              icon={<ClipboardCheck size={14} />}
+              label="Classificar Edital"
+              variant="neutral"
+              onClick={() => onSendToChat("Classifique este edital: " + edital.objeto)}
+            />
+            <ActionButton
+              icon={<FileText size={14} />}
+              label="Gerar Proposta"
+              variant="primary"
+              onClick={() => onSendToChat("Gere uma proposta do produto " + (edital.produtoCorrespondente || "[produto]") + " para o edital " + edital.numero)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 
   const analysisTabs = [
-    { id: "objetiva", label: "Objetiva", icon: <Target size={16} /> },
-    { id: "analitica", label: "Analitica", icon: <AlertTriangle size={16} /> },
-    { id: "cognitiva", label: "Cognitiva", icon: <Sparkles size={16} /> },
+    { id: "aderencia", label: "Aderencia", icon: <Target size={16} /> },
+    { id: "documentos", label: "Documentos", icon: <FolderOpen size={16} /> },
+    { id: "riscos", label: "Riscos", icon: <AlertTriangle size={16} /> },
+    { id: "mercado", label: "Mercado", icon: <Building size={16} /> },
+    { id: "ia", label: "IA", icon: <Sparkles size={16} /> },
   ];
 
   return (
@@ -1093,7 +1359,7 @@ export function ValidacaoPage(_props?: PageProps) {
                 </div>
               </Card>
 
-              {/* Direita: Score Dashboard */}
+              {/* Direita: Score Dashboard (sem Intencao/Margem — movidos para aba Aderencia) */}
               <div className="score-dashboard">
                 <div className="score-dashboard-header">
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
@@ -1142,150 +1408,23 @@ export function ValidacaoPage(_props?: PageProps) {
                   <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
                   <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
                 </div>
-
-                <div className="intencao-margem">
-                  <div className="intencao-section">
-                    <label>Intencao Estrategica</label>
-                    <RadioGroup
-                      name="intencao"
-                      value={selectedEdital.intencaoEstrategica}
-                      onChange={handleIntencaoChange}
-                      options={[
-                        { value: "estrategico", label: "Estrategico" },
-                        { value: "defensivo", label: "Defensivo" },
-                        { value: "acompanhamento", label: "Acompanhamento" },
-                        { value: "aprendizado", label: "Aprendizado" },
-                      ]}
-                    />
-                  </div>
-                  <div className="margem-section">
-                    <label>Expectativa de Margem: {selectedEdital.margemExpectativa}%</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="50"
-                      value={selectedEdital.margemExpectativa}
-                      onChange={(e) => handleMargemChange(Number(e.target.value))}
-                      className="margem-slider"
-                    />
-                    <div className="margem-labels">
-                      <span>Varia por Produto</span>
-                      <span>Varia por Regiao</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* Abas: Objetiva / Analitica / Cognitiva */}
+            {/* 5 Abas: Aderencia / Documentos / Riscos / Mercado / IA */}
             <Card>
               <TabPanel tabs={analysisTabs}>
                 {(activeTab) => {
                   switch (activeTab) {
-                    case "objetiva": return renderAbaObjetiva(selectedEdital);
-                    case "analitica": return renderAbaAnalitica(selectedEdital);
-                    case "cognitiva": return renderAbaCognitiva(selectedEdital);
+                    case "aderencia": return renderAbaAderencia(selectedEdital);
+                    case "documentos": return renderAbaDocumentos(selectedEdital);
+                    case "riscos": return renderAbaRiscos(selectedEdital);
+                    case "mercado": return renderAbaMercado(selectedEdital);
+                    case "ia": return renderAbaIA(selectedEdital);
                     default: return null;
                   }
                 }}
               </TabPanel>
-            </Card>
-
-            {/* Processo Amanda — Documentação por Edital (V1: dados reais) */}
-            <Card title="Processo Amanda - Documentacao" icon={<FolderOpen size={18} />}>
-              {docsNecessariaLoading ? (
-                <p className="empty-message">Carregando documentacao necessaria...</p>
-              ) : docsNecessariaErro && docsNecessaria.length === 0 ? (
-                <div style={{ padding: "16px", textAlign: "center" }}>
-                  <AlertCircle size={24} style={{ color: "#f59e0b", marginBottom: "8px" }} />
-                  <p style={{ color: "#94a3b8", fontSize: "14px" }}>{docsNecessariaErro}</p>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-                    {/* Pasta 1: Documentos da Empresa (azul) */}
-                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                        <FolderOpen size={18} style={{ color: "#3b82f6" }} />
-                        <h4 style={{ margin: 0, fontSize: "14px" }}>Documentos da Empresa</h4>
-                      </div>
-                      {(() => {
-                        const docs = docsNecessaria.filter(d => d.categoria === "empresa");
-                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                        return docs.map((doc, i) => (
-                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                              {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
-                            </div>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
-                              <StatusBadge
-                                status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                                label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                                size="small"
-                              />
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-
-                    {/* Pasta 2: Documentos Fiscais e Certidões (amarelo) */}
-                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                        <FolderOpen size={18} style={{ color: "#eab308" }} />
-                        <h4 style={{ margin: 0, fontSize: "14px" }}>Certidoes e Fiscal</h4>
-                      </div>
-                      {(() => {
-                        const docs = docsNecessaria.filter(d => d.categoria === "fiscal");
-                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                        return docs.map((doc, i) => (
-                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                            <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
-                              <StatusBadge
-                                status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                                label={doc.status === "ok" ? "OK" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                                size="small"
-                              />
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-
-                    {/* Pasta 3: Qualificação Técnica (verde) */}
-                    <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                        <FolderOpen size={18} style={{ color: "#22c55e" }} />
-                        <h4 style={{ margin: 0, fontSize: "14px" }}>Qualificacao Tecnica</h4>
-                      </div>
-                      {(() => {
-                        const docs = docsNecessaria.filter(d => d.categoria === "tecnica");
-                        if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                        return docs.map((doc, i) => (
-                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                              {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
-                            </div>
-                            <StatusBadge
-                              status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                              label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                              size="small"
-                            />
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: "12px", fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
-                    Documentos carregados automaticamente cruzando requisitos do edital com cadastro da empresa.
-                  </div>
-                </>
-              )}
             </Card>
           </>
         )}

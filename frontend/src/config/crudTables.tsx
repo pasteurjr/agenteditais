@@ -6,7 +6,7 @@ import {
   Building, FileText, Shield, Users, Package, Sliders, Search,
   FileCheck, Layers, BarChart2, Gavel, DollarSign, Scale, Eye,
   Bell, Clock, Mail, Send, Briefcase, TrendingUp, AlertTriangle,
-  Database, BookOpen, Target, Zap
+  Database, BookOpen, Target, Zap, Globe
 } from "lucide-react";
 import type { CrudPageConfig, FieldConfig } from "../components/CrudPage";
 
@@ -169,6 +169,33 @@ export const fontesEditaisConfig: CrudPageConfig = {
     { name: "api_key", label: "API Key", type: "text", width: "half" },
     { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
     { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
+  ],
+};
+
+export const fontesCertidoesConfig: CrudPageConfig = {
+  table: "fontes-certidoes",
+  title: "Fontes de Certidões",
+  icon: <Globe size={24} />,
+  fields: [
+    { name: "tipo_certidao", label: "Tipo de Certidão", type: "select", required: true, options: enumOpts(["cnd_federal", "cnd_estadual", "cnd_municipal", "fgts", "trabalhista", "outro"]), width: "half" },
+    { name: "nome", label: "Nome da Fonte", type: "text", required: true, width: "half", placeholder: "Ex: Receita Federal - CND" },
+    { name: "orgao_emissor", label: "Órgão Emissor", type: "text", width: "half", placeholder: "Ex: Receita Federal / PGFN" },
+    { name: "url_portal", label: "URL do Portal", type: "text", required: true, width: "full", placeholder: "https://..." },
+    { name: "url_api", label: "URL da API (se disponível)", type: "text", width: "full", placeholder: "https://api..." },
+    { name: "metodo_acesso", label: "Método de Acesso", type: "select", options: enumOpts(["publico", "login_senha", "certificado_digital", "api_key"]), width: "half" },
+    { name: "requer_autenticacao", label: "Requer Autenticação", type: "boolean", width: "half" },
+    { name: "usuario", label: "Usuário/Login", type: "text", width: "half", placeholder: "Login no portal (se necessário)" },
+    { name: "senha_criptografada", label: "Senha", type: "text", width: "half", placeholder: "Senha (se necessário)" },
+    { name: "certificado_path", label: "Caminho do Certificado Digital", type: "text", width: "full", placeholder: "/caminho/certificado.pfx" },
+    { name: "api_key", label: "API Key", type: "text", width: "half", placeholder: "Chave de API (se necessário)" },
+    { name: "cnpj_consulta", label: "CNPJ para Consulta", type: "text", width: "half", placeholder: "Se diferente do CNPJ da empresa" },
+    { name: "uf", label: "UF", type: "text", width: "half", placeholder: "SP (para CND Estadual)" },
+    { name: "cidade", label: "Cidade", type: "text", width: "half", placeholder: "São Paulo (para CND Municipal)" },
+    { name: "permite_busca_automatica", label: "Permitir Busca Automática (IA)", type: "boolean", width: "half" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "observacoes", label: "Observações", type: "textarea", width: "full", placeholder: "Notas sobre como acessar o portal, requisitos especiais, etc." },
+    { name: "ultima_consulta", label: "Última Consulta", type: "datetime", width: "half" },
+    { name: "resultado_ultima_consulta", label: "Resultado Última Consulta", type: "select", options: enumOpts(["sucesso", "erro", "timeout", "login_invalido"]), width: "half" },
   ],
 };
 
@@ -620,6 +647,7 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "produtos-especificacoes": produtosEspecificacoesConfig,
   "produtos-documentos": produtosDocumentosConfig,
   "fontes-editais": fontesEditaisConfig,
+  "fontes-certidoes": fontesCertidoesConfig,
   "editais": editaisConfig,
   "editais-requisitos": editaisRequisitosConfig,
   "editais-documentos": editaisDocumentosConfig,

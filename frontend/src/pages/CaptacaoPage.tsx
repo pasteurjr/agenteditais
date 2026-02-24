@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import type { PageProps } from "../types";
-import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle } from "lucide-react";
+import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle, Plus, Pause, Trash2, Brain, DollarSign, History } from "lucide-react";
 import {
   Card, StatCard, DataTable, ActionButton, FormField, TextInput, Checkbox,
   SelectInput, ScoreCircle, StarRating, RadioGroup, StatusBadge,
 } from "../components/common";
 import type { Column } from "../components/common";
-import { crudList, crudCreate, crudUpdate } from "../api/crud";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 
 // --- Interfaces ---
 
@@ -55,6 +55,7 @@ interface MonitoramentoInfo {
   ultimo_check?: string;
   editais_encontrados?: number;
   ufs?: string[];
+  frequencia?: string;
 }
 
 // --- UFs brasileiras ---
@@ -112,15 +113,99 @@ function inferirPotencialGanho(score: number): "elevado" | "medio" | "baixo" {
   return "baixo";
 }
 
+// Mapa de estados vizinhos (adjacentes) para calculo de score comercial
+const UF_VIZINHOS: Record<string, string[]> = {
+  AC: ["AM", "RO"],
+  AL: ["BA", "PE", "SE"],
+  AP: ["PA"],
+  AM: ["AC", "RO", "MT", "PA", "RR"],
+  BA: ["AL", "SE", "PE", "PI", "TO", "GO", "MG", "ES"],
+  CE: ["PI", "PE", "PB", "RN"],
+  DF: ["GO", "MG"],
+  ES: ["BA", "MG", "RJ"],
+  GO: ["BA", "TO", "MT", "MS", "MG", "DF"],
+  MA: ["PI", "TO", "PA"],
+  MT: ["AM", "PA", "TO", "GO", "MS", "RO"],
+  MS: ["MT", "GO", "MG", "SP", "PR"],
+  MG: ["BA", "ES", "RJ", "SP", "MS", "GO", "DF"],
+  PA: ["AM", "MT", "TO", "MA", "AP", "RR"],
+  PB: ["PE", "RN", "CE"],
+  PR: ["SP", "MS", "SC"],
+  PE: ["AL", "BA", "PI", "CE", "PB"],
+  PI: ["MA", "CE", "PE", "BA", "TO"],
+  RJ: ["ES", "MG", "SP"],
+  RN: ["CE", "PB"],
+  RS: ["SC"],
+  RO: ["AC", "AM", "MT"],
+  RR: ["AM", "PA"],
+  SC: ["PR", "RS"],
+  SP: ["MG", "RJ", "MS", "PR"],
+  SE: ["AL", "BA"],
+  TO: ["MA", "PI", "BA", "GO", "MT", "PA"],
+};
+
+function calcularScoreComercial(ufEdital: string, estadosAtuacao: string[]): number {
+  if (!ufEdital || estadosAtuacao.length === 0) return 20;
+  const ufUpper = ufEdital.toUpperCase().trim();
+  // UF esta nos estados de atuacao
+  if (estadosAtuacao.some(u => u.toUpperCase().trim() === ufUpper)) return 100;
+  // UF adjacente a algum estado de atuacao
+  const vizinhos = new Set<string>();
+  for (const uf of estadosAtuacao) {
+    const adj = UF_VIZINHOS[uf.toUpperCase().trim()] || [];
+    adj.forEach(v => vizinhos.add(v));
+  }
+  if (vizinhos.has(ufUpper)) return 60;
+  // Fora da regiao
+  return 20;
+}
+
 // Mapeia dados do endpoint /api/editais/buscar para EditalBusca
-function normalizarEditalDaBusca(e: Record<string, unknown>): EditalBusca {
-  const score = Number(e.score_tecnico ?? 0);
+function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: string[]): EditalBusca {
+  const scoreTecnico = Number(e.score_tecnico ?? 0);
   const dataAbertura = formatarDataBr(String(e.data_abertura ?? ""));
   const diasRestantes = calcularDiasRestantes(String(e.data_abertura ?? ""));
+
+  // C1: Score comercial corrigido (RF-020)
+  let scoreComercial: number;
+  if (e.score_comercial !== undefined && e.score_comercial !== null) {
+    scoreComercial = Number(e.score_comercial);
+  } else {
+    scoreComercial = calcularScoreComercial(String(e.uf ?? ""), estadosAtuacao);
+  }
+
+  const scoreGeral = Math.round((scoreTecnico + scoreComercial) / 2);
 
   // Extrair produto correspondente da lista de produtos aderentes
   const produtos = e.produtos_aderentes as string[] | undefined;
   const produtoCorrespondente = produtos && produtos.length > 0 ? produtos[0] : null;
+
+  // C2: Gaps reais do backend (RF-024)
+  let gaps: GapItem[] = [];
+  const rawGaps = e.analise_gaps ?? e.gaps;
+  if (Array.isArray(rawGaps) && rawGaps.length > 0) {
+    gaps = rawGaps.map((g: unknown) => {
+      if (typeof g === "object" && g !== null && "item" in (g as Record<string, unknown>)) {
+        const gObj = g as Record<string, unknown>;
+        return {
+          item: String(gObj.item ?? ""),
+          tipo: (String(gObj.tipo ?? "nao_atendido")) as GapItem["tipo"],
+        };
+      }
+      return { item: String(g), tipo: "nao_atendido" as const };
+    });
+  } else if (scoreTecnico > 0 || scoreComercial > 0) {
+    // Gerar gaps basicos quando o array esta vazio mas temos scores
+    if (scoreTecnico < 70) {
+      gaps.push({ item: "Aderencia tecnica insuficiente", tipo: scoreTecnico >= 40 ? "parcial" : "nao_atendido" });
+    }
+    if (scoreComercial < 70) {
+      gaps.push({ item: "Regiao de atuacao fora do ideal", tipo: scoreComercial >= 40 ? "parcial" : "nao_atendido" });
+    }
+    if (scoreTecnico >= 70 && scoreComercial >= 70) {
+      gaps.push({ item: "Requisitos basicos atendidos", tipo: "atendido" });
+    }
+  }
 
   return {
     id: String(e.id ?? ""),
@@ -131,20 +216,20 @@ function normalizarEditalDaBusca(e: Record<string, unknown>): EditalBusca {
     valor: Number(e.valor_estimado ?? 0),
     dataAbertura,
     diasRestantes,
-    score,
+    score: scoreGeral,
     scores: {
-      tecnico: score,
-      comercial: score,
-      recomendacao: Number(e.recomendacao ?? score),
+      tecnico: scoreTecnico,
+      comercial: scoreComercial,
+      recomendacao: Number(e.recomendacao ?? scoreGeral),
     },
     status: Boolean(e.encerrado) ? "encerrado" : (diasRestantes > 0 ? "aberto" : "encerrado"),
     produtoCorrespondente,
     classificacaoTipo: String(e.modalidade ?? "—"),
     classificacaoOrigem: String(e.fonte ?? "—"),
-    potencialGanho: inferirPotencialGanho(score),
+    potencialGanho: inferirPotencialGanho(scoreGeral),
     intencaoEstrategica: "acompanhamento",
     margemExpectativa: 15,
-    gaps: [],
+    gaps,
     url: String(e.url ?? ""),
     fonte: String(e.fonte ?? ""),
   };
@@ -163,7 +248,8 @@ function contarPrazos(editais: EditalBusca[]) {
 
 // --- Componente ---
 
-export function CaptacaoPage(_props?: PageProps) {
+export function CaptacaoPage(props?: PageProps) {
+  const onSendToChat = props?.onSendToChat;
   const [termo, setTermo] = useState("");
   const [uf, setUf] = useState("todas");
   const [fonte, setFonte] = useState("pncp");
@@ -186,16 +272,37 @@ export function CaptacaoPage(_props?: PageProps) {
   const [monitoramentos, setMonitoramentos] = useState<MonitoramentoInfo[]>([]);
   const [loadingMonitoramentos, setLoadingMonitoramentos] = useState(false);
 
+  // C1: Estados de atuacao carregados de parametros-score
+  const [estadosAtuacao, setEstadosAtuacao] = useState<string[]>([]);
+
   // C3: NCM search field
   const [ncm, setNcm] = useState("");
+
+  // C3: Novo monitoramento inline form
+  const [showNovoMonitoramento, setShowNovoMonitoramento] = useState(false);
+  const [novoMonTermo, setNovoMonTermo] = useState("");
+  const [novoMonUfs, setNovoMonUfs] = useState("");
+  const [novoMonFreq, setNovoMonFreq] = useState("24h");
 
   // C2: Scores de validacao (gaps reais do endpoint)
   const [scoresValidacao, setScoresValidacao] = useState<Record<string, unknown> | null>(null);
   const [loadingScores, setLoadingScores] = useState(false);
 
-  // Carrega monitoramentos ao montar (T17)
+  // Carrega monitoramentos e parametros ao montar (T17 + C1)
   useEffect(() => {
     carregarMonitoramentos();
+    // C1: Carregar estados de atuacao para calculo de score comercial
+    (async () => {
+      try {
+        const paramRes = await crudList("parametros-score", { limit: 1 });
+        const estados = paramRes.items[0]?.estados_atuacao;
+        if (Array.isArray(estados)) {
+          setEstadosAtuacao(estados as string[]);
+        }
+      } catch {
+        // Silencioso - usara fallback score=20
+      }
+    })();
   }, []);
 
   const carregarMonitoramentos = async () => {
@@ -257,7 +364,7 @@ export function CaptacaoPage(_props?: PageProps) {
         throw new Error(data.error || "Busca sem resultados");
       }
 
-      let editais = (data.editais ?? []).map(normalizarEditalDaBusca);
+      let editais = (data.editais ?? []).map(e => normalizarEditalDaBusca(e, estadosAtuacao));
 
       // Filtros client-side por tipo e origem (mapeados dos campos retornados)
       if (classificacaoTipo !== "todos") {
@@ -748,6 +855,10 @@ export function CaptacaoPage(_props?: PageProps) {
                   { value: "LACEN", label: "LACEN" },
                   { value: "Forca Armada", label: "Forca Armada" },
                   { value: "Autarquia", label: "Autarquia" },
+                  { value: "Centros de Pesquisas", label: "Centros de Pesquisas" },
+                  { value: "Campanhas Governamentais", label: "Campanhas Governamentais" },
+                  { value: "Fundacoes de Pesquisa", label: "Fundacoes de Pesquisa" },
+                  { value: "Fundacoes Diversas", label: "Fundacoes Diversas" },
                 ]}
               />
             </FormField>
@@ -1100,15 +1211,107 @@ export function CaptacaoPage(_props?: PageProps) {
                       />
                     )}
                   </div>
+
+                  {/* C4: Botoes de IA */}
+                  {onSendToChat && (
+                    <div className="panel-section">
+                      <h4>Acoes de IA</h4>
+                      <div className="panel-actions">
+                        <ActionButton
+                          icon={<Brain size={14} />}
+                          label="Classificar Edital via IA"
+                          onClick={() => onSendToChat("Classifique este edital: " + painelEdital.objeto)}
+                        />
+                        <ActionButton
+                          icon={<DollarSign size={14} />}
+                          label="Recomendar Preco"
+                          onClick={() => onSendToChat("Recomende preco para " + painelEdital.objeto)}
+                        />
+                        <ActionButton
+                          icon={<History size={14} />}
+                          label="Historico de Precos"
+                          onClick={() => onSendToChat("Busque precos de " + painelEdital.objeto + " no PNCP")}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </Card>
               </div>
             )}
           </div>
         )}
 
-        {/* Monitoramento automatico - T17 */}
-        <Card title="Monitoramento Automatico" icon={<Eye size={18} />}>
+        {/* Monitoramento automatico - T17 + C3 */}
+        <Card
+          title="Monitoramento Automatico"
+          icon={<Eye size={18} />}
+          actions={
+            <ActionButton
+              icon={<Plus size={14} />}
+              label="Novo Monitoramento"
+              variant="primary"
+              onClick={() => setShowNovoMonitoramento(!showNovoMonitoramento)}
+            />
+          }
+        >
           <div className="monitoramento-info">
+            {/* C3: Formulario inline para novo monitoramento */}
+            {showNovoMonitoramento && (
+              <div style={{ marginBottom: "16px", padding: "12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #334155" }}>
+                <div className="form-grid form-grid-4">
+                  <FormField label="Termo de busca">
+                    <TextInput
+                      value={novoMonTermo}
+                      onChange={setNovoMonTermo}
+                      placeholder="Ex: equipamentos laboratoriais"
+                    />
+                  </FormField>
+                  <FormField label="UFs (separadas por virgula)">
+                    <TextInput
+                      value={novoMonUfs}
+                      onChange={setNovoMonUfs}
+                      placeholder="Ex: SP, RJ, MG"
+                    />
+                  </FormField>
+                  <FormField label="Frequencia">
+                    <SelectInput
+                      value={novoMonFreq}
+                      onChange={setNovoMonFreq}
+                      options={[
+                        { value: "6h", label: "A cada 6 horas" },
+                        { value: "12h", label: "A cada 12 horas" },
+                        { value: "24h", label: "A cada 24 horas" },
+                        { value: "semanal", label: "Semanal" },
+                      ]}
+                    />
+                  </FormField>
+                  <div className="form-field-actions">
+                    <ActionButton
+                      icon={<Plus size={14} />}
+                      label="Criar"
+                      variant="primary"
+                      onClick={async () => {
+                        if (!novoMonTermo.trim()) return;
+                        if (onSendToChat) {
+                          await onSendToChat(
+                            "Monitore editais de " + novoMonTermo.trim() +
+                            (novoMonUfs.trim() ? " nos estados " + novoMonUfs.trim() : "") +
+                            " a cada " + novoMonFreq
+                          );
+                        }
+                        setNovoMonTermo("");
+                        setNovoMonUfs("");
+                        setNovoMonFreq("24h");
+                        setShowNovoMonitoramento(false);
+                        // Recarregar lista apos um breve delay
+                        setTimeout(() => carregarMonitoramentos(), 2000);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {loadingMonitoramentos ? (
               <p className="text-muted">Carregando monitoramentos...</p>
             ) : monitoramentos.length > 0 ? (
@@ -1116,7 +1319,7 @@ export function CaptacaoPage(_props?: PageProps) {
                 <p><strong>Monitoramentos ativos:</strong> {monitoramentos.filter(m => m.ativo).length} de {monitoramentos.length}</p>
                 <div style={{ marginTop: "8px" }}>
                   {monitoramentos.slice(0, 5).map(m => (
-                    <div key={m.id} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
+                    <div key={m.id} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px", flexWrap: "wrap" }}>
                       <StatusBadge
                         status={m.ativo ? "success" : "neutral"}
                         label={m.ativo ? "Ativo" : "Inativo"}
@@ -1132,6 +1335,58 @@ export function CaptacaoPage(_props?: PageProps) {
                       {m.ultimo_check && (
                         <span className="text-muted">— ultimo: {m.ultimo_check}</span>
                       )}
+                      {/* C3: Botoes Pausar e Excluir por monitoramento */}
+                      <div style={{ display: "flex", gap: "4px", marginLeft: "auto" }}>
+                        {onSendToChat && (
+                          <button
+                            title={m.ativo ? "Pausar monitoramento" : "Retomar monitoramento"}
+                            onClick={() => onSendToChat(
+                              m.ativo ? "Pare de monitorar " + m.termo : "Retome o monitoramento de " + m.termo
+                            )}
+                            style={{
+                              padding: "3px 8px",
+                              fontSize: "11px",
+                              border: "1px solid #334155",
+                              borderRadius: "4px",
+                              backgroundColor: "transparent",
+                              color: m.ativo ? "#eab308" : "#22c55e",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <Pause size={12} />
+                            {m.ativo ? "Pausar" : "Retomar"}
+                          </button>
+                        )}
+                        <button
+                          title="Excluir monitoramento"
+                          onClick={async () => {
+                            try {
+                              await crudDelete("monitoramentos", m.id);
+                              await carregarMonitoramentos();
+                            } catch {
+                              alert("Erro ao excluir monitoramento");
+                            }
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            fontSize: "11px",
+                            border: "1px solid #334155",
+                            borderRadius: "4px",
+                            backgroundColor: "transparent",
+                            color: "#ef4444",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <Trash2 size={12} />
+                          Excluir
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

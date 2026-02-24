@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { PageProps } from "../types";
-import { Settings, Globe, Bell, Palette, Plus, Play, Pause, Trash2, ChevronDown, ChevronRight, Pencil, MapPin, CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2, AlertCircle, Lock } from "lucide-react";
+import { Settings, Globe, Bell, Palette, Plus, Play, Pause, Trash2, ChevronDown, ChevronRight, Pencil, MapPin, CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2, AlertCircle, Lock, Info } from "lucide-react";
 import { Card, DataTable, ActionButton, TabPanel, FormField, TextInput, Checkbox, SelectInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
@@ -69,6 +69,19 @@ const ESTADOS_BR = [
   { uf: "RJ", nome: "Rio de Janeiro" }, { uf: "RN", nome: "Rio Grande do Norte" }, { uf: "RS", nome: "Rio Grande do Sul" },
   { uf: "RO", nome: "Rondonia" }, { uf: "RR", nome: "Roraima" }, { uf: "SC", nome: "Santa Catarina" },
   { uf: "SP", nome: "Sao Paulo" }, { uf: "SE", nome: "Sergipe" }, { uf: "TO", nome: "Tocantins" },
+];
+
+const DOCS_EXIGIDOS = [
+  { tipo: "contrato_social", label: "Contrato Social" },
+  { tipo: "habilitacao_fiscal", label: "Habilitacao Fiscal" },
+  { tipo: "habilitacao_economica", label: "Habilitacao Economica" },
+  { tipo: "qualificacao_tecnica", label: "Qualificacao Tecnica" },
+  { tipo: "atestado_capacidade", label: "Atestado de Capacidade" },
+  { tipo: "afe", label: "AFE (Alvara Funcionamento)" },
+  { tipo: "cbpad", label: "CBPAD" },
+  { tipo: "cbpp", label: "CBPP" },
+  { tipo: "corpo_bombeiros", label: "Corpo de Bombeiros" },
+  { tipo: "balanco_patrimonial", label: "Balanco Patrimonial" },
 ];
 
 export function ParametrizacoesPage({ onSendToChat }: PageProps) {
@@ -149,6 +162,26 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
   // Campos do formulario de subclasse
   const [novaSubclasseNome, setNovaSubclasseNome] = useState("");
   const [novaSubclasseNCMs, setNovaSubclasseNCMs] = useState("");
+
+  // R1: Feedback salvar notificacoes
+  const [notifSalvas, setNotifSalvas] = useState(false);
+
+  // R2: Feedback salvar preferencias
+  const [prefSalvas, setPrefSalvas] = useState(false);
+
+  // R3: Fontes documentais da empresa
+  const [empresaDocs, setEmpresaDocs] = useState<string[]>([]);
+  const [empresaDocsLoaded, setEmpresaDocsLoaded] = useState(false);
+
+  // R4: Editar subclasse
+  const [editingSubclasseId, setEditingSubclasseId] = useState<string | null>(null);
+  const [editingSubclasseClasseId, setEditingSubclasseClasseId] = useState<string | null>(null);
+
+  // R5: Norteadores - tooltip state
+  const [showPortfolioHint, setShowPortfolioHint] = useState(false);
+
+  // Ref for tab container to programmatically switch tabs
+  const tabContainerRef = useRef<HTMLDivElement>(null);
 
   const loadFontes = useCallback(async () => {
     try {
@@ -264,6 +297,17 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     loadParametros();
     loadClasses();
     loadParamScore();
+
+    // R3: Carregar documentos da empresa
+    crudList("empresas", { limit: 1 }).then(async (empRes) => {
+      if (empRes.items.length > 0) {
+        const docsRes = await crudList("empresa-documentos", { parent_id: String(empRes.items[0].id) });
+        setEmpresaDocs(docsRes.items.map(d => String(d.tipo || "")).filter(Boolean));
+      }
+      setEmpresaDocsLoaded(true);
+    }).catch(() => {
+      setEmpresaDocsLoaded(true);
+    });
   }, [loadFontes, loadParametros, loadClasses, loadParamScore]);
 
   const handleToggleFonte = async (id: string) => {
@@ -430,6 +474,59 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     setEditingNcms(false);
   };
 
+  // R1: Salvar notificacoes
+  const handleSalvarNotificacoes = async () => {
+    try {
+      await saveParamScore({
+        email_notificacao: emailNotif,
+        notif_email: notifEmail,
+        notif_sistema: notifSistema,
+        notif_sms: notifSms,
+        frequencia_resumo: frequenciaResumo,
+      });
+      setNotifSalvas(true);
+      setTimeout(() => setNotifSalvas(false), 3000);
+    } catch (e) {
+      console.error("Erro ao salvar notificacoes:", e);
+    }
+  };
+
+  // R2: Salvar preferencias
+  const handleSalvarPreferencias = async () => {
+    try {
+      await saveParamScore({
+        tema: tema,
+        idioma: idioma,
+        fuso_horario: fusoHorario,
+      });
+      setPrefSalvas(true);
+      setTimeout(() => setPrefSalvas(false), 3000);
+    } catch (e) {
+      console.error("Erro ao salvar preferencias:", e);
+    }
+  };
+
+  // R5: Helper to switch tab programmatically
+  const switchToTab = (tabId: string) => {
+    const container = tabContainerRef.current;
+    if (!container) return;
+    const tabBtn = container.querySelector<HTMLButtonElement>(`.tab-panel-tab:nth-child(${tabs.findIndex(t => t.id === tabId) + 1})`);
+    if (tabBtn) tabBtn.click();
+  };
+
+  // R5: Helper to scroll to a card by title text
+  const scrollToCard = (titleText: string) => {
+    const container = tabContainerRef.current;
+    if (!container) return;
+    const headings = container.querySelectorAll<HTMLElement>(".card-title, h3");
+    for (const h of headings) {
+      if (h.textContent?.includes(titleText)) {
+        h.closest(".card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    }
+  };
+
   // Funcao placeholder — tool_gerar_classes_portfolio sera criada na Onda 4 (T48)
   const handleGerarComIA = () => {};
 
@@ -520,29 +617,54 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     setSavingClasse(true);
     try {
       const ncmsArray = novaSubclasseNCMs.split(",").map(n => n.trim()).filter(Boolean);
-      const created = await crudCreate("classes-produtos", {
-        nome: novaSubclasseNome,
-        tipo: "subclasse",
-        classe_pai_id: Number(selectedClasseId),
-        ncms: ncmsArray,
-      });
-      setClasses(classes.map(c => {
-        if (c.id === selectedClasseId) {
-          return {
-            ...c,
-            subclasses: [
-              ...c.subclasses,
-              {
-                id: String(created.id),
-                nome: novaSubclasseNome,
-                ncms: novaSubclasseNCMs,
-                produtos: 0,
-              },
-            ],
-          };
-        }
-        return c;
-      }));
+
+      if (editingSubclasseId) {
+        // R4: Update existing subclasse
+        await crudUpdate("classes-produtos", editingSubclasseId, {
+          nome: novaSubclasseNome,
+          ncms: ncmsArray,
+        });
+        setClasses(classes.map(c => {
+          if (c.id === editingSubclasseClasseId) {
+            return {
+              ...c,
+              subclasses: c.subclasses.map(s =>
+                s.id === editingSubclasseId
+                  ? { ...s, nome: novaSubclasseNome, ncms: novaSubclasseNCMs }
+                  : s
+              ),
+            };
+          }
+          return c;
+        }));
+        setEditingSubclasseId(null);
+        setEditingSubclasseClasseId(null);
+      } else {
+        // Create new subclasse
+        const created = await crudCreate("classes-produtos", {
+          nome: novaSubclasseNome,
+          tipo: "subclasse",
+          classe_pai_id: Number(selectedClasseId),
+          ncms: ncmsArray,
+        });
+        setClasses(classes.map(c => {
+          if (c.id === selectedClasseId) {
+            return {
+              ...c,
+              subclasses: [
+                ...c.subclasses,
+                {
+                  id: String(created.id),
+                  nome: novaSubclasseNome,
+                  ncms: novaSubclasseNCMs,
+                  produtos: 0,
+                },
+              ],
+            };
+          }
+          return c;
+        }));
+      }
       setNovaSubclasseNome("");
       setNovaSubclasseNCMs("");
       setShowSubclasseModal(false);
@@ -605,7 +727,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="page-content" ref={tabContainerRef}>
         <TabPanel tabs={tabs}>
           {(activeTab) => {
             switch (activeTab) {
@@ -669,7 +791,15 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                                     <span className="subclasse-ncm">NCMs: {sub.ncms}</span>
                                     <span className="subclasse-count">{sub.produtos} produtos</span>
                                     <div className="subclasse-actions">
-                                      <button title="Editar"><Pencil size={14} /></button>
+                                      <button title="Editar" onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingSubclasseId(sub.id);
+                                        setEditingSubclasseClasseId(classe.id);
+                                        setNovaSubclasseNome(sub.nome);
+                                        setNovaSubclasseNCMs(sub.ncms || "");
+                                        setSelectedClasseId(classe.id);
+                                        setShowSubclasseModal(true);
+                                      }}><Pencil size={14} /></button>
                                       <button title="Excluir" className="danger" onClick={() => handleExcluirSubclasse(classe.id, sub.id)}><Trash2 size={14} /></button>
                                     </div>
                                   </div>
@@ -723,7 +853,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                     {/* Norteadores de Score */}
                     <Card title="Norteadores de Score" subtitle="Configuracoes que alimentam o calculo de scores multi-dimensionais">
                       <div className="norteadores-grid">
-                        <div className="norteador-item">
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Estrutura de Classificacao")}>
                           <div className="norteador-header">
                             {classes.length > 0
                               ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
@@ -737,7 +867,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                             : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
-                        <div className="norteador-item">
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => switchToTab("comercial")}>
                           <div className="norteador-header">
                             {estadosSelecionados.size > 0
                               ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
@@ -751,7 +881,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                             : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
-                        <div className="norteador-item">
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Tipos de Edital Desejados")}>
                           <div className="norteador-header">
                             {tiposStateToArray(tiposEdital).length > 0
                               ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
@@ -765,7 +895,10 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                             : <StatusBadge status="error" label="Nao configurado" size="small" />}
                         </div>
 
-                        <div className="norteador-item">
+                        <div className="norteador-item" style={{ cursor: "pointer", position: "relative" }} onClick={() => {
+                          setShowPortfolioHint(true);
+                          setTimeout(() => setShowPortfolioHint(false), 3000);
+                        }}>
                           <div className="norteador-header">
                             <CheckCircle size={16} style={{ color: "#22c55e" }} />
                             <span className="norteador-label">(d) Score Tecnico</span>
@@ -773,9 +906,19 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                           </div>
                           <p className="norteador-desc">Baseado nas especificacoes dos produtos do Portfolio</p>
                           <StatusBadge status="success" label="Configurar no Portfolio" size="small" />
+                          {showPortfolioHint && (
+                            <div style={{
+                              position: "absolute", bottom: "-32px", left: "50%", transform: "translateX(-50%)",
+                              background: "#1e293b", color: "#fff", padding: "6px 12px", borderRadius: "6px",
+                              fontSize: "12px", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                            }}>
+                              <Info size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                              Configure na pagina Portfolio
+                            </div>
+                          )}
                         </div>
 
-                        <div className="norteador-item">
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => switchToTab("comercial")}>
                           <div className="norteador-header">
                             <AlertTriangle size={16} style={{ color: "#eab308" }} />
                             <span className="norteador-label">(e) Score Participacao</span>
@@ -823,35 +966,43 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                       title="Fontes Documentais Exigidas por Editais"
                       subtitle="Documentos que editais costumam solicitar - ligado ao cadastro da Empresa"
                     >
-                      <div className="docs-exigidos-grid">
-                        {[
-                          { doc: "Certidao Negativa de Debitos", temos: true },
-                          { doc: "Atestado de Capacidade Tecnica", temos: false },
-                          { doc: "Registro ANVISA", temos: true },
-                          { doc: "Balanco Patrimonial", temos: true },
-                          { doc: "Contrato Social Atualizado", temos: true },
-                          { doc: "AFE (Autorizacao Funcionamento)", temos: true },
-                          { doc: "CBPAD", temos: true },
-                          { doc: "CBPP", temos: false },
-                          { doc: "Certidao FGTS", temos: true },
-                          { doc: "Certidao Trabalhista (TST)", temos: true },
-                        ].map((item, i) => (
-                          <div key={i} className="doc-exigido-item">
-                            <Checkbox
-                              checked={true}
-                              onChange={() => {}}
-                              label={item.doc}
-                            />
-                            <StatusBadge
-                              status={item.temos ? "success" : "error"}
-                              label={item.temos ? "Temos" : "Nao temos"}
-                              size="small"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      {!empresaDocsLoaded ? (
+                        <div className="loading-center">
+                          <Loader2 size={16} className="spin" />
+                          <span>Carregando documentos da empresa...</span>
+                        </div>
+                      ) : empresaDocs.length === 0 && empresaDocsLoaded ? (
+                        <div className="docs-exigidos-grid">
+                          {DOCS_EXIGIDOS.map((doc, i) => (
+                            <div key={i} className="doc-exigido-item">
+                              <span style={{ fontSize: "14px" }}>{doc.label}</span>
+                              <StatusBadge
+                                status="error"
+                                label="Nao temos"
+                                size="small"
+                              />
+                            </div>
+                          ))}
+                          <p className="text-muted" style={{ marginTop: "12px", fontSize: "12px", gridColumn: "1 / -1" }}>
+                            Configure documentos na pagina Empresa
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="docs-exigidos-grid">
+                          {DOCS_EXIGIDOS.map((doc, i) => (
+                            <div key={i} className="doc-exigido-item">
+                              <span style={{ fontSize: "14px" }}>{doc.label}</span>
+                              <StatusBadge
+                                status={empresaDocs.includes(doc.tipo) ? "success" : "error"}
+                                label={empresaDocs.includes(doc.tipo) ? "Temos" : "Nao temos"}
+                                size="small"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <p className="text-muted" style={{ marginTop: "12px", fontSize: "12px" }}>
-                        Status "Temos/Nao temos" e sincronizado com a pagina Empresa → Documentos
+                        Status "Temos/Nao temos" e sincronizado com a pagina Empresa &rarr; Documentos
                       </p>
                     </Card>
                   </>
@@ -1084,7 +1235,10 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                     </FormField>
 
                     <div className="form-actions">
-                      <ActionButton label="Salvar" variant="primary" onClick={() => {}} />
+                      <ActionButton label={savingParamScore ? "Salvando..." : "Salvar"} variant="primary" onClick={handleSalvarNotificacoes} disabled={savingParamScore} />
+                      {notifSalvas && (
+                        <span className="status-badge status-badge-success" style={{ marginLeft: "8px" }}>Salvo!</span>
+                      )}
                     </div>
                   </Card>
                 );
@@ -1138,7 +1292,10 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                     </FormField>
 
                     <div className="form-actions">
-                      <ActionButton label="Salvar" variant="primary" onClick={() => {}} />
+                      <ActionButton label={savingParamScore ? "Salvando..." : "Salvar"} variant="primary" onClick={handleSalvarPreferencias} disabled={savingParamScore} />
+                      {prefSalvas && (
+                        <span className="status-badge status-badge-success" style={{ marginLeft: "8px" }}>Salvo!</span>
+                      )}
                     </div>
                   </Card>
                 );
@@ -1205,14 +1362,14 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         </FormField>
       </Modal>
 
-      {/* Modal Nova Subclasse */}
+      {/* Modal Nova/Editar Subclasse */}
       <Modal
         isOpen={showSubclasseModal}
-        onClose={() => { setShowSubclasseModal(false); setSelectedClasseId(null); }}
-        title="Nova Subclasse de Produto"
+        onClose={() => { setShowSubclasseModal(false); setSelectedClasseId(null); setEditingSubclasseId(null); setEditingSubclasseClasseId(null); setNovaSubclasseNome(""); setNovaSubclasseNCMs(""); }}
+        title={editingSubclasseId ? "Editar Subclasse de Produto" : "Nova Subclasse de Produto"}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowSubclasseModal(false)}>Cancelar</button>
+            <button className="btn btn-secondary" onClick={() => { setShowSubclasseModal(false); setSelectedClasseId(null); setEditingSubclasseId(null); setEditingSubclasseClasseId(null); setNovaSubclasseNome(""); setNovaSubclasseNCMs(""); }}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSalvarSubclasse} disabled={savingClasse || !novaSubclasseNome}>
               {savingClasse ? <Loader2 size={14} className="spin" /> : null} Salvar
             </button>

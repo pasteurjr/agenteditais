@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Lock } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, TextInput, Modal, StatusBadge } from "../components/common";
+import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Pencil, Search, Sparkles } from "lucide-react";
+import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
 import type { CrudListResponse } from "../api/crud";
@@ -39,6 +39,7 @@ interface Documento {
 interface Responsavel {
   id: string;
   nome: string;
+  tipo?: string;
   cargo?: string;
   email?: string;
   telefone?: string;
@@ -47,9 +48,40 @@ interface Responsavel {
 interface CertidaoAutomatica {
   id: string;
   certidao: string;
-  status: "obtida" | "pendente" | "erro";
+  tipo?: string;
+  status: "valida" | "vencida" | "pendente" | "buscando" | "erro" | "nao_disponivel";
   data_obtencao: string | null;
   validade: string | null;
+  path_arquivo?: string;
+  url_consulta?: string;
+  orgao_emissor?: string;
+  fonte_certidao_id?: string;
+  fonte_nome?: string;
+  permite_busca_automatica?: boolean;
+}
+
+const TIPO_RESPONSAVEL_OPTIONS = [
+  { value: "representante_legal", label: "Representante Legal" },
+  { value: "preposto", label: "Preposto" },
+  { value: "tecnico", label: "Responsavel Tecnico" },
+];
+
+const TIPO_RESPONSAVEL_LABELS: Record<string, string> = {
+  representante_legal: "Representante Legal",
+  preposto: "Preposto",
+  tecnico: "Responsavel Tecnico",
+};
+
+function calcDocStatus(hasArquivo: boolean, dataVencimento: string | null): "ok" | "vence" | "falta" {
+  if (!hasArquivo) return "falta";
+  if (!dataVencimento) return "ok";
+  const hoje = new Date();
+  const venc = new Date(dataVencimento);
+  const diffMs = venc.getTime() - hoje.getTime();
+  const diffDias = diffMs / (1000 * 60 * 60 * 24);
+  if (diffDias <= 0) return "falta";
+  if (diffDias <= 30) return "vence";
+  return "ok";
 }
 
 export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
@@ -88,7 +120,17 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [showDocModal, setShowDocModal] = useState(false);
   const [showRespModal, setShowRespModal] = useState(false);
 
-  // New responsavel form
+  // Alertas IA
+  const [alertasIA] = useState<string>("");
+
+  // Certidoes loading
+  const [buscandoCertidoes, setBuscandoCertidoes] = useState(false);
+  const [certidoesMsg, setCertidoesMsg] = useState<string | null>(null);
+  const [freqCertidoes, setFreqCertidoes] = useState<string>("diaria");
+
+  // New/Edit responsavel form
+  const [editingRespId, setEditingRespId] = useState<string | null>(null);
+  const [novoRespTipo, setNovoRespTipo] = useState("");
   const [novoRespNome, setNovoRespNome] = useState("");
   const [novoRespCargo, setNovoRespCargo] = useState("");
   const [novoRespEmail, setNovoRespEmail] = useState("");
@@ -98,6 +140,14 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [novoDocTipo, setNovoDocTipo] = useState("");
   const [novoDocValidade, setNovoDocValidade] = useState("");
   const [novoDocFile, setNovoDocFile] = useState<File | null>(null);
+
+  // Upload certidao modal
+  const [showCertUploadModal, setShowCertUploadModal] = useState(false);
+  const [uploadCertId, setUploadCertId] = useState<string | null>(null);
+  const [uploadCertNome, setUploadCertNome] = useState("");
+  const [uploadCertFile, setUploadCertFile] = useState<File | null>(null);
+  const [uploadCertValidade, setUploadCertValidade] = useState("");
+  const [uploadCertNumero, setUploadCertNumero] = useState("");
 
   const loadEmpresa = useCallback(async () => {
     try {
@@ -124,6 +174,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         setEmails(emailsStr ? emailsStr.split(",").map(e => e.trim()).filter(Boolean) : []);
         const celStr = String(emp.celulares ?? "");
         setCelulares(celStr ? celStr.split(",").map(c => c.trim()).filter(Boolean) : []);
+        setFreqCertidoes(String(emp.frequencia_busca_certidoes ?? "diaria"));
 
         // Load sub-tables
         await loadSubTables(id);
@@ -143,26 +194,38 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         crudList("empresa-responsaveis", { parent_id: id }),
       ]);
 
-      setDocumentos(docsRes.items.map(d => ({
-        id: String(d.id ?? ""),
-        nome: String(d.nome_arquivo || d.nome || d.tipo || ""),
-        tipo: String(d.tipo ?? ""),
-        validade: d.data_vencimento ? String(d.data_vencimento) : (d.validade ? String(d.validade) : null),
-        status: (d.path_arquivo ? "ok" : "falta") as Documento["status"],
-        arquivo: d.path_arquivo ? String(d.path_arquivo) : (d.arquivo ? String(d.arquivo) : undefined),
-      })));
+      setDocumentos(docsRes.items.map(d => {
+        const hasArquivo = !!(d.path_arquivo || d.arquivo);
+        const dataVenc = d.data_vencimento ? String(d.data_vencimento) : (d.validade ? String(d.validade) : null);
+        return {
+          id: String(d.id ?? ""),
+          nome: String(d.nome_arquivo || d.nome || d.tipo || ""),
+          tipo: String(d.tipo ?? ""),
+          validade: dataVenc,
+          status: calcDocStatus(hasArquivo, dataVenc),
+          arquivo: d.path_arquivo ? String(d.path_arquivo) : (d.arquivo ? String(d.arquivo) : undefined),
+        };
+      }));
 
       setCertidoes(certRes.items.map(c => ({
-        id: String(c.id ?? ""),
-        certidao: String(c.certidao ?? ""),
-        status: (c.status as CertidaoAutomatica["status"]) || "pendente",
-        data_obtencao: c.data_obtencao ? String(c.data_obtencao) : null,
-        validade: c.validade ? String(c.validade) : null,
+          id: String(c.id ?? ""),
+          certidao: String(c.fonte_nome || c.orgao_emissor || c.tipo || "Certidão"),
+          tipo: c.tipo ? String(c.tipo) : undefined,
+          status: (c.status as CertidaoAutomatica["status"]) || "pendente",
+          data_obtencao: c.data_obtencao ? String(c.data_obtencao) : null,
+          validade: c.data_vencimento ? String(c.data_vencimento) : (c.validade ? String(c.validade) : null),
+          path_arquivo: c.path_arquivo ? String(c.path_arquivo) : undefined,
+          url_consulta: c.url_consulta ? String(c.url_consulta) : undefined,
+          orgao_emissor: c.orgao_emissor ? String(c.orgao_emissor) : undefined,
+          fonte_certidao_id: c.fonte_certidao_id ? String(c.fonte_certidao_id) : undefined,
+          fonte_nome: c.fonte_nome ? String(c.fonte_nome) : undefined,
+          permite_busca_automatica: c.permite_busca_automatica !== false,
       })));
 
       setResponsaveis(respRes.items.map(r => ({
         id: String(r.id ?? ""),
         nome: String(r.nome ?? ""),
+        tipo: r.tipo ? String(r.tipo) : undefined,
         cargo: r.cargo ? String(r.cargo) : undefined,
         email: r.email ? String(r.email) : undefined,
         telefone: r.telefone ? String(r.telefone) : undefined,
@@ -234,13 +297,21 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const handleSalvarResponsavel = async () => {
     if (!novoRespNome.trim() || !empresaId) return;
     try {
-      await crudCreate("empresa-responsaveis", {
+      const payload = {
         empresa_id: empresaId,
+        tipo: novoRespTipo,
         nome: novoRespNome,
         cargo: novoRespCargo,
         email: novoRespEmail,
         telefone: novoRespTel,
-      });
+      };
+      if (editingRespId) {
+        await crudUpdate("empresa-responsaveis", editingRespId, payload);
+      } else {
+        await crudCreate("empresa-responsaveis", payload);
+      }
+      setEditingRespId(null);
+      setNovoRespTipo("");
       setNovoRespNome("");
       setNovoRespCargo("");
       setNovoRespEmail("");
@@ -250,6 +321,16 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao salvar responsavel");
     }
+  };
+
+  const handleEditarResponsavel = (r: Responsavel) => {
+    setEditingRespId(r.id);
+    setNovoRespTipo(r.tipo || "");
+    setNovoRespNome(r.nome);
+    setNovoRespCargo(r.cargo || "");
+    setNovoRespEmail(r.email || "");
+    setNovoRespTel(r.telefone || "");
+    setShowRespModal(true);
   };
 
   const handleExcluirResponsavel = async (id: string) => {
@@ -310,6 +391,101 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     }
   };
 
+  const getAuthHeaders = async (): Promise<HeadersInit> => {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    const tokenFn = getCrudTokenGetter();
+    if (tokenFn) {
+      const token = await tokenFn();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
+  const handleFreqCertidoesChange = async (valor: string) => {
+    setFreqCertidoes(valor);
+    if (empresaId) {
+      try {
+        await crudUpdate("empresas", empresaId, { frequencia_busca_certidoes: valor });
+      } catch (err) {
+        console.error("Erro ao salvar frequência:", err);
+      }
+    }
+  };
+
+  const handleBuscarCertidoes = async () => {
+    if (!empresaId) {
+      setError("Cadastre a empresa primeiro (com CNPJ) antes de buscar certidoes.");
+      return;
+    }
+    if (!cnpj) {
+      setError("A empresa precisa ter um CNPJ cadastrado para buscar certidoes.");
+      return;
+    }
+    setBuscandoCertidoes(true);
+    setCertidoesMsg(null);
+    try {
+      const headers = await getAuthHeaders();
+
+      const res = await fetch("/api/empresa-certidoes/buscar-automatica", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ empresa_id: empresaId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao buscar certidoes");
+      }
+
+      setCertidoesMsg(`${data.message}. ${data.nota || ""}`);
+      await loadSubTables(empresaId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao buscar certidoes");
+    } finally {
+      setBuscandoCertidoes(false);
+    }
+  };
+
+  const handleOpenCertUpload = (cert: CertidaoAutomatica) => {
+    setUploadCertId(cert.id);
+    setUploadCertNome(cert.certidao);
+    setUploadCertFile(null);
+    setUploadCertValidade("");
+    setUploadCertNumero("");
+    setShowCertUploadModal(true);
+  };
+
+  const handleUploadCertidao = async () => {
+    if (!uploadCertId || !uploadCertFile) return;
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadCertFile);
+      if (uploadCertValidade) formData.append("data_vencimento", uploadCertValidade);
+      if (uploadCertNumero) formData.append("numero", uploadCertNumero);
+
+      const headers: HeadersInit = {};
+      const tokenFn = getCrudTokenGetter();
+      if (tokenFn) {
+        const token = await tokenFn();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/empresa-certidoes/${uploadCertId}/upload`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Erro ao fazer upload da certidao");
+      }
+
+      setShowCertUploadModal(false);
+      if (empresaId) await loadSubTables(empresaId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao fazer upload da certidao");
+    }
+  };
+
   const getStatusBadge = (status: Documento["status"]) => {
     switch (status) {
       case "ok":
@@ -323,12 +499,18 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   const getCertidaoStatus = (status: CertidaoAutomatica["status"]) => {
     switch (status) {
-      case "obtida":
-        return <StatusBadge status="success" label="Obtida" size="small" />;
+      case "valida":
+        return <StatusBadge status="success" label="Valida" size="small" />;
+      case "vencida":
+        return <StatusBadge status="error" label="Vencida" size="small" />;
       case "pendente":
         return <StatusBadge status="warning" label="Pendente" size="small" />;
+      case "buscando":
+        return <StatusBadge status="info" label="Buscando..." size="small" />;
       case "erro":
         return <StatusBadge status="error" label="Erro" size="small" />;
+      case "nao_disponivel":
+        return <StatusBadge status="neutral" label="Manual" size="small" />;
     }
   };
 
@@ -370,36 +552,57 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   const certidaoColumns: Column<CertidaoAutomatica>[] = [
     { key: "certidao", header: "Certidao", sortable: true },
+    { key: "orgao_emissor", header: "Orgao Emissor", render: (c) => c.orgao_emissor || "-" },
     { key: "status", header: "Status", render: (c) => getCertidaoStatus(c.status) },
-    { key: "data_obtencao", header: "Data Obtencao", render: (c) => c.data_obtencao || "-" },
     { key: "validade", header: "Validade", render: (c) => c.validade || "-" },
     {
       key: "acoes",
       header: "Acoes",
-      width: "80px",
-      render: (c) => c.status === "obtida" ? (
+      width: "220px",
+      render: (c) => (
         <div className="table-actions">
-          <button title="Visualizar"><Eye size={16} /></button>
-          <button title="Download"><Download size={16} /></button>
-        </div>
-      ) : (
-        <div className="table-actions">
-          <button title="Tentar novamente"><RefreshCw size={16} /></button>
+          {c.url_consulta && (
+            <button title={`Abrir portal: ${c.orgao_emissor || c.certidao}`} onClick={() => window.open(c.url_consulta, "_blank")} style={{ color: "var(--color-primary, #3b82f6)" }}>
+              <Eye size={16} />
+            </button>
+          )}
+          <button title="Upload certidao (PDF)" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
+            <Upload size={16} />
+          </button>
+          {c.path_arquivo && (
+            <button title="Download certidao" onClick={async () => {
+              const tokenFn = getCrudTokenGetter();
+              const token = tokenFn ? await tokenFn() : null;
+              const res = await fetch(`/api/empresa-certidoes/${c.id}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+              if (res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = c.certidao || "certidao"; a.click(); URL.revokeObjectURL(url);
+              }
+            }}><Download size={16} /></button>
+          )}
+          {c.permite_busca_automatica !== false && (
+            <button title="Atualizar esta certidao" disabled={buscandoCertidoes} onClick={() => handleBuscarCertidoes()}>
+              <RefreshCw size={16} className={buscandoCertidoes ? "spin" : ""} />
+            </button>
+          )}
         </div>
       ),
     },
   ];
 
   const respColumns: Column<Responsavel>[] = [
+    { key: "tipo", header: "Tipo", render: (r) => TIPO_RESPONSAVEL_LABELS[r.tipo || ""] || r.tipo || "-" },
     { key: "nome", header: "Nome", sortable: true },
     { key: "cargo", header: "Cargo", render: (r) => r.cargo || "-" },
     { key: "email", header: "Email", render: (r) => r.email || "-" },
     {
       key: "acoes",
       header: "Acoes",
-      width: "80px",
+      width: "120px",
       render: (r) => (
         <div className="table-actions">
+          <button title="Editar" onClick={() => handleEditarResponsavel(r)}><Pencil size={16} /></button>
           <button title="Excluir" className="danger" onClick={() => handleExcluirResponsavel(r.id)}><Trash2 size={16} /></button>
         </div>
       ),
@@ -429,10 +632,10 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         </div>
         <div className="page-header-actions">
           <ActionButton
-            icon={<Lock size={16} />}
-            label="Verificar Documentos (Em breve)"
-            onClick={() => {}}
-            disabled
+            icon={<Search size={16} />}
+            label="Verificar Documentos"
+            variant="primary"
+            onClick={() => onSendToChat?.("Verifique os documentos da nossa empresa contra os editais que estamos participando. Liste documentos faltantes, vencidos e exigencias possivelmente ilegais.")}
           />
         </div>
       </div>
@@ -564,6 +767,32 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           </div>
         </Card>
 
+        {/* Alertas IA sobre Documentos */}
+        <Card
+          title="Alertas IA sobre Documentos"
+          subtitle="A IA verifica seus documentos contra requisitos de editais"
+          icon={<Sparkles size={18} />}
+          actions={
+            <ActionButton
+              icon={<Search size={14} />}
+              label="Verificar Documentos"
+              variant="primary"
+              onClick={() => onSendToChat?.("Verifique os documentos da nossa empresa contra os editais que estamos participando. Liste documentos faltantes, vencidos e exigencias possivelmente ilegais.")}
+            />
+          }
+        >
+          {alertasIA ? (
+            <div className="alertas-ia-content" style={{ whiteSpace: "pre-wrap", padding: "12px", background: "var(--bg-secondary, #f5f5f5)", borderRadius: "8px", fontSize: "14px", lineHeight: "1.6" }}>
+              {alertasIA}
+            </div>
+          ) : (
+            <div style={{ padding: "24px", textAlign: "center", color: "var(--text-muted, #888)" }}>
+              <Sparkles size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
+              <p>Clique em &quot;Verificar Documentos&quot; para a IA analisar sua documentacao.</p>
+            </div>
+          )}
+        </Card>
+
         {/* Documentos */}
         <Card
           title="Documentos da Empresa"
@@ -587,23 +816,56 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         {/* Certidoes Automaticas */}
         <Card
           title="Certidoes Automaticas"
-          subtitle="O sistema busca certidoes automaticamente nos orgaos emissores"
+          subtitle={cnpj ? `Busca certidoes para CNPJ ${cnpj} nos portais oficiais` : "Cadastre o CNPJ da empresa para buscar certidoes"}
           icon={<RefreshCw size={18} />}
           actions={
             <ActionButton
-              icon={<Lock size={14} />}
-              label="Buscar Certidoes (Em breve)"
-              onClick={() => {}}
-              disabled
+              icon={buscandoCertidoes ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+              label={buscandoCertidoes ? "Buscando..." : "Buscar Certidoes"}
+              variant="primary"
+              disabled={buscandoCertidoes || !cnpj}
+              onClick={() => handleBuscarCertidoes()}
             />
           }
         >
+          {certidoesMsg && (
+            <div style={{ padding: "8px 12px", marginBottom: "12px", background: "var(--bg-success, #dcfce7)", borderRadius: "6px", fontSize: "13px", color: "var(--text-success, #166534)" }}>
+              {certidoesMsg}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 12px", marginBottom: "8px" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-secondary, #666)" }}>Frequencia de busca automatica:</span>
+            <select
+              value={freqCertidoes}
+              onChange={(e) => handleFreqCertidoesChange(e.target.value)}
+              style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--border, #ddd)", fontSize: "13px", background: "var(--bg-primary, #fff)", color: "var(--text-primary, #333)" }}
+            >
+              <option value="desativada">Desativada</option>
+              <option value="diaria">Diaria</option>
+              <option value="semanal">Semanal</option>
+              <option value="quinzenal">Quinzenal</option>
+              <option value="mensal">Mensal</option>
+            </select>
+          </div>
           <DataTable
             data={certidoes}
             columns={certidaoColumns}
             idKey="id"
-            emptyMessage="Nenhuma certidao automatica configurada"
+            emptyMessage={cnpj
+              ? 'Clique em "Buscar Certidoes" para consultar todas as fontes cadastradas'
+              : "Cadastre o CNPJ da empresa primeiro"
+            }
           />
+          {certidoes.length > 0 && (
+            <div style={{ padding: "8px 12px", marginTop: "8px", fontSize: "12px", color: "var(--text-muted, #888)" }}>
+              {(() => {
+                const publicas = certidoes.filter(c => c.permite_busca_automatica !== false && c.status !== "nao_disponivel").length;
+                const manuais = certidoes.filter(c => c.status === "nao_disponivel").length;
+                return `${certidoes.length} certidões (${publicas} com busca automática, ${manuais} manuais). `;
+              })()}
+              Clique no icone <Eye size={12} style={{ display: "inline", verticalAlign: "middle" }} /> para abrir o portal do orgao emissor.
+            </div>
+          )}
         </Card>
 
         {/* Responsaveis */}
@@ -679,15 +941,39 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       {/* Modal Responsavel */}
       <Modal
         isOpen={showRespModal}
-        onClose={() => setShowRespModal(false)}
-        title="Adicionar Responsavel"
+        onClose={() => {
+          setShowRespModal(false);
+          setEditingRespId(null);
+          setNovoRespTipo("");
+          setNovoRespNome("");
+          setNovoRespCargo("");
+          setNovoRespEmail("");
+          setNovoRespTel("");
+        }}
+        title={editingRespId ? "Editar Responsavel" : "Adicionar Responsavel"}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowRespModal(false)}>Cancelar</button>
+            <button className="btn btn-secondary" onClick={() => {
+              setShowRespModal(false);
+              setEditingRespId(null);
+              setNovoRespTipo("");
+              setNovoRespNome("");
+              setNovoRespCargo("");
+              setNovoRespEmail("");
+              setNovoRespTel("");
+            }}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSalvarResponsavel} disabled={!novoRespNome}>Salvar</button>
           </>
         }
       >
+        <FormField label="Tipo">
+          <SelectInput
+            value={novoRespTipo}
+            onChange={setNovoRespTipo}
+            options={TIPO_RESPONSAVEL_OPTIONS}
+            placeholder="Selecione o tipo..."
+          />
+        </FormField>
         <FormField label="Nome" required>
           <TextInput value={novoRespNome} onChange={setNovoRespNome} />
         </FormField>
@@ -700,6 +986,49 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         <FormField label="Telefone">
           <TextInput value={novoRespTel} onChange={setNovoRespTel} />
         </FormField>
+      </Modal>
+
+      {/* Modal Upload Certidao */}
+      <Modal
+        isOpen={showCertUploadModal}
+        onClose={() => setShowCertUploadModal(false)}
+        title={`Upload Certidao: ${uploadCertNome}`}
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setShowCertUploadModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleUploadCertidao} disabled={!uploadCertFile}>
+              <Upload size={14} /> Enviar
+            </button>
+          </>
+        }
+      >
+        <FormField label="Arquivo (PDF)" required>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            onChange={(e) => setUploadCertFile(e.target.files?.[0] || null)}
+            style={{ width: "100%", padding: "8px", border: "1px solid var(--border-color, #e2e8f0)", borderRadius: "6px" }}
+          />
+        </FormField>
+        <FormField label="Data de Vencimento">
+          <TextInput
+            value={uploadCertValidade}
+            onChange={setUploadCertValidade}
+            type="date"
+            placeholder="YYYY-MM-DD"
+          />
+        </FormField>
+        <FormField label="Numero da Certidao">
+          <TextInput
+            value={uploadCertNumero}
+            onChange={setUploadCertNumero}
+            placeholder="Ex: 12345/2026"
+          />
+        </FormField>
+        <div style={{ padding: "8px 0", fontSize: "12px", color: "var(--text-muted, #888)" }}>
+          Apos o upload, a certidao sera marcada como <strong>Valida</strong>.
+          Informe a data de vencimento para receber alertas automaticos antes do vencimento.
+        </div>
       </Modal>
     </div>
   );
