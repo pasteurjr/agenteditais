@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle, Clock, FileText, TrendingUp, CheckCircle,
-  DollarSign, Target, Calendar, ArrowRight, Lightbulb, Search, Sparkles, Brain, Loader2, AlertCircle, RefreshCw
+  DollarSign, Target, Calendar, ArrowRight, Lightbulb, Search, Sparkles, Brain, Loader2, AlertCircle, RefreshCw,
+  Bell, Eye, CheckCheck, XCircle
 } from "lucide-react";
 
 interface DashboardProps {
@@ -50,6 +51,33 @@ interface DashboardStats {
   insights: string[];
   eventos: Array<{ dia: string; mes: string; titulo: string; subtitulo: string }>;
   aprendizados: string[];
+}
+
+interface SchedulerStatus {
+  scheduler_ativo: boolean;
+  scheduler_disponivel: boolean;
+  monitoramentos_ativos: number;
+  monitoramentos_inativos: number;
+  notificacoes_nao_lidas: number;
+  monitoramentos: Array<{
+    id: string;
+    termo: string;
+    ncm?: string;
+    ufs?: string[];
+    ativo: boolean;
+    frequencia_horas: number;
+    ultima_execucao?: string;
+    proximo_check?: string;
+    editais_encontrados: number;
+  }>;
+}
+
+interface NotificacaoItem {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  created_at?: string;
 }
 
 const STATS_DEFAULTS: DashboardStats = {
@@ -149,6 +177,48 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Monitoramento & Notificações
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
+  const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([]);
+  const [showNotifs, setShowNotifs] = useState(false);
+
+  const loadSchedulerStatus = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const [statusRes, notifsRes] = await Promise.all([
+        fetch("/api/scheduler/status", { headers }),
+        fetch("/api/notificacoes/nao-lidas", { headers }),
+      ]);
+
+      if (statusRes.ok) {
+        setSchedulerStatus(await statusRes.json());
+      }
+      if (notifsRes.ok) {
+        const data = await notifsRes.json();
+        setNotificacoes(data.notificacoes || []);
+      }
+    } catch {
+      // Silencioso
+    }
+  }, []);
+
+  const marcarTodasLidas = async () => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      await fetch("/api/notificacoes/marcar-todas-lidas", {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      setNotificacoes([]);
+      if (schedulerStatus) {
+        setSchedulerStatus({ ...schedulerStatus, notificacoes_nao_lidas: 0 });
+      }
+    } catch { /* silencioso */ }
+  };
+
   const loadStats = useCallback(async (retries = 2) => {
     try {
       setLoading(true);
@@ -171,7 +241,8 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
 
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    loadSchedulerStatus();
+  }, [loadStats, loadSchedulerStatus]);
 
   const maxFunil = Math.max(stats.funil?.captacao ?? 0, 1);
 
@@ -196,6 +267,62 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
           <button className="dashboard-btn secondary" onClick={loadStats} disabled={loading} title="Atualizar">
             <RefreshCw size={16} className={loading ? "spin" : ""} />
           </button>
+          {/* Sininho de notificações */}
+          <div style={{ position: "relative" }}>
+            <button
+              className="dashboard-btn secondary"
+              onClick={() => setShowNotifs(!showNotifs)}
+              title={`${schedulerStatus?.notificacoes_nao_lidas || 0} notificacoes nao lidas`}
+            >
+              <Bell size={16} />
+              {(schedulerStatus?.notificacoes_nao_lidas || 0) > 0 && (
+                <span style={{
+                  position: "absolute", top: "-4px", right: "-4px",
+                  background: "#ef4444", color: "white", borderRadius: "50%",
+                  width: "18px", height: "18px", fontSize: "10px", fontWeight: "bold",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{schedulerStatus?.notificacoes_nao_lidas}</span>
+              )}
+            </button>
+            {showNotifs && (
+              <div style={{
+                position: "absolute", top: "100%", right: 0, zIndex: 1000,
+                width: "380px", maxHeight: "400px", overflowY: "auto",
+                background: "#1e293b", border: "1px solid #334155", borderRadius: "8px",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.4)", marginTop: "8px",
+              }}>
+                <div style={{ padding: "12px 16px", borderBottom: "1px solid #334155", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ color: "#e2e8f0" }}>Notificacoes</strong>
+                  {notificacoes.length > 0 && (
+                    <button onClick={marcarTodasLidas} style={{
+                      background: "none", border: "none", color: "#60a5fa", cursor: "pointer", fontSize: "12px",
+                      display: "flex", alignItems: "center", gap: "4px",
+                    }}><CheckCheck size={14} /> Marcar todas lidas</button>
+                  )}
+                </div>
+                {notificacoes.length === 0 ? (
+                  <div style={{ padding: "24px 16px", textAlign: "center", color: "#94a3b8" }}>
+                    Nenhuma notificacao pendente
+                  </div>
+                ) : (
+                  notificacoes.map(n => (
+                    <div key={n.id} style={{
+                      padding: "10px 16px", borderBottom: "1px solid #1e293b",
+                      background: "#0f172a",
+                    }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>{n.titulo}</div>
+                      <div style={{ fontSize: "12px", color: "#94a3b8", whiteSpace: "pre-line" }}>{n.mensagem?.slice(0, 150)}</div>
+                      {n.created_at && (
+                        <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                          {new Date(n.created_at).toLocaleString("pt-BR")}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <button className="dashboard-btn primary" onClick={onOpenChat}>
             <Lightbulb size={18} />
             Perguntar ao Dr. Licita
@@ -408,6 +535,70 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
           </div>
           <button className="dashboard-card-action" onClick={onOpenChat}>
             Explorar insights <ArrowRight size={16} />
+          </button>
+        </div>
+
+        {/* Monitoramento Automático */}
+        <div className="dashboard-card" style={{ borderLeft: schedulerStatus?.scheduler_ativo ? "3px solid #22c55e" : "3px solid #ef4444" }}>
+          <div className="dashboard-card-header">
+            <Eye size={20} />
+            <h2>Monitoramento Automatico</h2>
+            {schedulerStatus && (
+              <span className="badge" style={{
+                background: schedulerStatus.scheduler_ativo ? "#22c55e" : "#ef4444",
+                color: "white", fontSize: "11px", padding: "2px 8px", borderRadius: "4px",
+              }}>
+                {schedulerStatus.scheduler_ativo ? "Ativo" : "Inativo"}
+              </span>
+            )}
+          </div>
+          <div className="dashboard-card-content">
+            {!schedulerStatus ? (
+              <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando...</span></div>
+            ) : !schedulerStatus.scheduler_disponivel ? (
+              <div className="empty-state-small" style={{ color: "#ef4444" }}>
+                <XCircle size={16} style={{ marginRight: "6px" }} />
+                Scheduler nao disponivel (APScheduler nao instalado)
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: "16px", marginBottom: "12px", flexWrap: "wrap" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: "bold", color: "#22c55e" }}>{schedulerStatus.monitoramentos_ativos}</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Ativos</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: "bold", color: "#64748b" }}>{schedulerStatus.monitoramentos_inativos}</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Pausados</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "24px", fontWeight: "bold", color: "#60a5fa" }}>{schedulerStatus.notificacoes_nao_lidas}</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Alertas</div>
+                  </div>
+                </div>
+                {schedulerStatus.monitoramentos.filter(m => m.ativo).slice(0, 3).map(m => (
+                  <div key={m.id} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "6px 0", borderBottom: "1px solid #1e293b", fontSize: "13px",
+                  }}>
+                    <div>
+                      <strong style={{ color: "#e2e8f0" }}>{m.termo}</strong>
+                      {m.ufs && m.ufs.length > 0 && <span style={{ color: "#64748b", marginLeft: "6px" }}>({m.ufs.join(", ")})</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "11px", color: "#94a3b8" }}>
+                      <span>{m.editais_encontrados} encontr.</span>
+                      <span>a cada {m.frequencia_horas}h</span>
+                    </div>
+                  </div>
+                ))}
+                {schedulerStatus.monitoramentos_ativos === 0 && (
+                  <div className="empty-state-small">Nenhum monitoramento ativo</div>
+                )}
+              </>
+            )}
+          </div>
+          <button className="dashboard-card-action" onClick={() => onNavigate('captacao')}>
+            Gerenciar monitoramentos <ArrowRight size={16} />
           </button>
         </div>
 

@@ -8632,6 +8632,124 @@ def verificar_config_smtp():
 
 
 # =============================================================================
+# Scheduler Status + Notificações não-lidas
+# =============================================================================
+
+@app.route("/api/scheduler/status", methods=["GET"])
+@require_auth
+def scheduler_status():
+    """Retorna status do scheduler e monitoramentos ativos."""
+    from scheduler import scheduler, SCHEDULER_AVAILABLE, CHECK_MONITORAMENTOS_INTERVAL
+
+    user_id = get_current_user_id()
+    db = get_db()
+
+    # Status do scheduler
+    scheduler_ativo = bool(scheduler and scheduler.running) if SCHEDULER_AVAILABLE else False
+
+    # Monitoramentos do usuário
+    monitoramentos = db.query(Monitoramento).filter(
+        Monitoramento.user_id == user_id
+    ).all()
+
+    ativos = [m for m in monitoramentos if m.ativo]
+    inativos = [m for m in monitoramentos if not m.ativo]
+
+    # Notificações não lidas
+    from models import Notificacao
+    nao_lidas = db.query(Notificacao).filter(
+        Notificacao.user_id == user_id,
+        Notificacao.lida == False
+    ).count()
+
+    return jsonify({
+        "scheduler_disponivel": SCHEDULER_AVAILABLE,
+        "scheduler_ativo": scheduler_ativo,
+        "intervalo_verificacao_min": CHECK_MONITORAMENTOS_INTERVAL,
+        "monitoramentos_ativos": len(ativos),
+        "monitoramentos_inativos": len(inativos),
+        "notificacoes_nao_lidas": nao_lidas,
+        "monitoramentos": [{
+            "id": m.id,
+            "termo": m.termo,
+            "ncm": m.ncm,
+            "ufs": m.ufs,
+            "ativo": m.ativo,
+            "frequencia_horas": m.frequencia_horas,
+            "ultima_execucao": m.ultima_execucao.isoformat() if m.ultima_execucao else None,
+            "proximo_check": m.proximo_check.isoformat() if m.proximo_check else None,
+            "editais_encontrados": m.editais_encontrados or 0,
+        } for m in monitoramentos],
+    })
+
+
+@app.route("/api/notificacoes/nao-lidas", methods=["GET"])
+@require_auth
+def notificacoes_nao_lidas():
+    """Retorna notificações não lidas do usuário."""
+    from models import Notificacao
+    user_id = get_current_user_id()
+    db = get_db()
+
+    notifs = db.query(Notificacao).filter(
+        Notificacao.user_id == user_id,
+        Notificacao.lida == False
+    ).order_by(Notificacao.created_at.desc()).limit(20).all()
+
+    return jsonify({
+        "total": len(notifs),
+        "notificacoes": [{
+            "id": n.id,
+            "tipo": n.tipo,
+            "titulo": n.titulo,
+            "mensagem": n.mensagem,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        } for n in notifs],
+    })
+
+
+@app.route("/api/notificacoes/<notif_id>/lida", methods=["PUT"])
+@require_auth
+def marcar_notificacao_lida(notif_id):
+    """Marca uma notificação como lida."""
+    from models import Notificacao
+    user_id = get_current_user_id()
+    db = get_db()
+
+    notif = db.query(Notificacao).filter(
+        Notificacao.id == notif_id,
+        Notificacao.user_id == user_id
+    ).first()
+
+    if not notif:
+        return jsonify({"error": "Notificação não encontrada"}), 404
+
+    notif.lida = True
+    notif.lida_em = datetime.now()
+    db.commit()
+
+    return jsonify({"success": True})
+
+
+@app.route("/api/notificacoes/marcar-todas-lidas", methods=["PUT"])
+@require_auth
+def marcar_todas_notificacoes_lidas():
+    """Marca todas as notificações do usuário como lidas."""
+    from models import Notificacao
+    user_id = get_current_user_id()
+    db = get_db()
+
+    atualizadas = db.query(Notificacao).filter(
+        Notificacao.user_id == user_id,
+        Notificacao.lida == False
+    ).update({"lida": True, "lida_em": datetime.now()})
+
+    db.commit()
+
+    return jsonify({"success": True, "atualizadas": atualizadas})
+
+
+# =============================================================================
 # Main
 # =============================================================================
 

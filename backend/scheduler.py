@@ -176,7 +176,8 @@ Acesse o Agente Editais para mais detalhes.
 def job_executar_monitoramentos():
     """
     Job que executa monitoramentos ativos e busca novos editais.
-    Executa a cada hora (configurável por monitoramento).
+    Usa _buscar_editais_multifonte (mesma lógica da Captação e Chat).
+    Executa a cada hora; cada monitoramento respeita sua frequencia_horas.
     """
     print(f"[SCHEDULER] {datetime.now()} - Executando monitoramentos...")
 
@@ -189,64 +190,76 @@ def job_executar_monitoramentos():
             Monitoramento.ativo == True
         ).all()
 
+        executados = 0
+        pulados = 0
+
         for mon in monitoramentos:
             try:
                 # Verificar se é hora de executar
                 if mon.ultima_execucao:
-                    proxima_execucao = mon.ultima_execucao + timedelta(hours=mon.frequencia_horas)
+                    proxima_execucao = mon.ultima_execucao + timedelta(hours=mon.frequencia_horas or 24)
                     if agora < proxima_execucao:
+                        pulados += 1
                         continue
 
-                print(f"[SCHEDULER] Executando monitoramento: {mon.termo}")
+                # Montar termo de busca (termo + NCM, igual à Captação)
+                termo_busca = mon.termo
+                if mon.ncm:
+                    termo_busca += " NCM " + mon.ncm
 
-                # Importar função de busca
-                from tools import tool_buscar_editais_scraper
+                # UF: pegar primeira UF da lista (API aceita uma)
+                uf_filtro = None
+                if mon.ufs and len(mon.ufs) > 0:
+                    uf_filtro = mon.ufs[0]
 
-                # Executar busca para cada fonte
-                fontes = mon.fontes or ['pncp']
-                editais_encontrados = []
+                print(f"[SCHEDULER] Executando monitoramento: '{termo_busca}' UF={uf_filtro} encerrados={mon.incluir_encerrados}")
 
-                for fonte in fontes:
-                    try:
-                        resultado = tool_buscar_editais_scraper(
-                            termo=mon.termo,
-                            fonte=fonte,
-                            user_id=mon.user_id
-                        )
+                # Usar mesma função da Captação e do Chat
+                from app import _buscar_editais_multifonte
+                resultado = _buscar_editais_multifonte(
+                    termo=termo_busca,
+                    user_id=mon.user_id,
+                    uf=uf_filtro,
+                    incluir_encerrados=bool(mon.incluir_encerrados),
+                    buscar_detalhes=False,
+                )
 
-                        if resultado.get('success'):
-                            editais = resultado.get('editais', [])
+                editais = resultado.get("editais", [])
 
-                            # Filtrar por UF se especificado
-                            if mon.ufs:
-                                editais = [e for e in editais if e.get('uf') in mon.ufs]
+                # Filtrar por UFs adicionais (se há mais de uma)
+                if mon.ufs and len(mon.ufs) > 1:
+                    ufs_set = set(u.upper() for u in mon.ufs)
+                    editais = [e for e in editais if (e.get('uf') or '').upper() in ufs_set]
 
-                            # Filtrar por valor se especificado
-                            if mon.valor_minimo:
-                                editais = [e for e in editais if e.get('valor', 0) >= mon.valor_minimo]
-                            if mon.valor_maximo:
-                                editais = [e for e in editais if e.get('valor', float('inf')) <= mon.valor_maximo]
+                # Filtrar por valor se especificado
+                if mon.valor_minimo:
+                    editais = [e for e in editais
+                               if (e.get('valor_referencia') or e.get('valor_estimado') or 0) >= float(mon.valor_minimo)]
+                if mon.valor_maximo:
+                    editais = [e for e in editais
+                               if (e.get('valor_referencia') or e.get('valor_estimado') or float('inf')) <= float(mon.valor_maximo)]
 
-                            editais_encontrados.extend(editais)
-
-                    except Exception as e:
-                        print(f"[SCHEDULER] Erro na fonte {fonte}: {e}")
+                # Filtrar por score mínimo se especificado
+                if mon.score_minimo_alerta and mon.score_minimo_alerta > 0:
+                    editais = [e for e in editais
+                               if (e.get('score_tecnico') or 0) >= mon.score_minimo_alerta]
 
                 # Atualizar contagem e última execução
                 mon.ultima_execucao = agora
-                mon.editais_encontrados = (mon.editais_encontrados or 0) + len(editais_encontrados)
+                mon.proximo_check = agora + timedelta(hours=mon.frequencia_horas or 24)
+                mon.editais_encontrados = (mon.editais_encontrados or 0) + len(editais)
+                executados += 1
 
                 # Se encontrou editais, notificar
-                if editais_encontrados:
-                    # Criar notificação
-                    titulo = f"📋 {len(editais_encontrados)} novos editais - {mon.termo}"
-                    mensagem = f"O monitoramento '{mon.termo}' encontrou {len(editais_encontrados)} novos editais!\n\n"
+                if editais:
+                    titulo = f"{len(editais)} novos editais - {mon.termo}"
+                    mensagem = f"O monitoramento '{mon.termo}' encontrou {len(editais)} novos editais!\n\n"
 
-                    for i, e in enumerate(editais_encontrados[:5], 1):
-                        mensagem += f"{i}. {e.get('numero', 'S/N')} - {e.get('orgao', 'N/A')[:40]}\n"
+                    for i, e in enumerate(editais[:5], 1):
+                        mensagem += f"{i}. {e.get('numero', 'S/N')} - {(e.get('orgao', 'N/A') or 'N/A')[:40]}\n"
 
-                    if len(editais_encontrados) > 5:
-                        mensagem += f"\n... e mais {len(editais_encontrados) - 5} editais."
+                    if len(editais) > 5:
+                        mensagem += f"\n... e mais {len(editais) - 5} editais."
 
                     notificacao = Notificacao(
                         user_id=mon.user_id,
@@ -257,7 +270,7 @@ def job_executar_monitoramentos():
                     )
                     db.add(notificacao)
 
-                    # Enviar email
+                    # Enviar email se configurado
                     user = db.query(User).filter(User.id == mon.user_id).first()
                     prefs = db.query(PreferenciasNotificacao).filter(
                         PreferenciasNotificacao.user_id == mon.user_id
@@ -266,19 +279,19 @@ def job_executar_monitoramentos():
                     if user and prefs and prefs.email_habilitado:
                         email_destino = prefs.email_notificacao or user.email
                         if email_destino:
-                            # Usar template HTML se disponível
                             if NOTIFICATIONS_AVAILABLE:
-                                assunto_html, corpo_html = template_novo_edital(editais_encontrados, mon.termo)
+                                assunto_html, corpo_html = template_novo_edital(editais, mon.termo)
                                 enviar_email_notificacao(email_destino, assunto_html, corpo_html)
                             else:
                                 enviar_email_alerta(email_destino, titulo, mensagem)
 
-                print(f"[SCHEDULER] Monitoramento '{mon.termo}' concluído: {len(editais_encontrados)} editais")
+                print(f"[SCHEDULER] Monitoramento '{mon.termo}' concluido: {len(editais)} editais")
 
             except Exception as e:
                 print(f"[SCHEDULER] Erro no monitoramento {mon.id}: {e}")
 
         db.commit()
+        print(f"[SCHEDULER] Monitoramentos: {executados} executados, {pulados} aguardando proximo ciclo")
 
     except Exception as e:
         print(f"[SCHEDULER] Erro no job de monitoramentos: {e}")
