@@ -1293,19 +1293,25 @@ export function CaptacaoPage(props?: PageProps) {
                       variant="primary"
                       onClick={async () => {
                         if (!novoMonTermo.trim()) return;
-                        if (onSendToChat) {
-                          await onSendToChat(
-                            "Monitore editais de " + novoMonTermo.trim() +
-                            (novoMonUfs.trim() ? " nos estados " + novoMonUfs.trim() : "") +
-                            " a cada " + novoMonFreq
-                          );
+                        try {
+                          const freqMap: Record<string, number> = { "6h": 6, "12h": 12, "24h": 24, "semanal": 168 };
+                          const ufsArray = novoMonUfs.trim()
+                            ? novoMonUfs.split(",").map(u => u.trim().toUpperCase()).filter(Boolean)
+                            : null;
+                          await crudCreate("monitoramentos", {
+                            termo: novoMonTermo.trim(),
+                            ufs: ufsArray,
+                            frequencia_horas: freqMap[novoMonFreq] || 24,
+                            ativo: true,
+                          });
+                          setNovoMonTermo("");
+                          setNovoMonUfs("");
+                          setNovoMonFreq("24h");
+                          setShowNovoMonitoramento(false);
+                          await carregarMonitoramentos();
+                        } catch {
+                          alert("Erro ao criar monitoramento");
                         }
-                        setNovoMonTermo("");
-                        setNovoMonUfs("");
-                        setNovoMonFreq("24h");
-                        setShowNovoMonitoramento(false);
-                        // Recarregar lista apos um breve delay
-                        setTimeout(() => carregarMonitoramentos(), 2000);
                       }}
                     />
                   </div>
@@ -1338,29 +1344,32 @@ export function CaptacaoPage(props?: PageProps) {
                       )}
                       {/* C3: Botoes Pausar e Excluir por monitoramento */}
                       <div style={{ display: "flex", gap: "4px", marginLeft: "auto" }}>
-                        {onSendToChat && (
-                          <button
-                            title={m.ativo ? "Pausar monitoramento" : "Retomar monitoramento"}
-                            onClick={() => onSendToChat(
-                              m.ativo ? "Pare de monitorar " + m.termo : "Retome o monitoramento de " + m.termo
-                            )}
-                            style={{
-                              padding: "3px 8px",
-                              fontSize: "11px",
-                              border: "1px solid #334155",
-                              borderRadius: "4px",
-                              backgroundColor: "transparent",
-                              color: m.ativo ? "#eab308" : "#22c55e",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <Pause size={12} />
-                            {m.ativo ? "Pausar" : "Retomar"}
-                          </button>
-                        )}
+                        <button
+                          title={m.ativo ? "Pausar monitoramento" : "Retomar monitoramento"}
+                          onClick={async () => {
+                            try {
+                              await crudUpdate("monitoramentos", m.id, { ativo: !m.ativo });
+                              await carregarMonitoramentos();
+                            } catch {
+                              alert("Erro ao atualizar monitoramento");
+                            }
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            fontSize: "11px",
+                            border: "1px solid #334155",
+                            borderRadius: "4px",
+                            backgroundColor: "transparent",
+                            color: m.ativo ? "#eab308" : "#22c55e",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <Pause size={12} />
+                          {m.ativo ? "Pausar" : "Retomar"}
+                        </button>
                         <button
                           title="Excluir monitoramento"
                           onClick={async () => {
