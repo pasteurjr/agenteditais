@@ -258,7 +258,7 @@ export function CaptacaoPage(props?: PageProps) {
   const onSendToChat = props?.onSendToChat;
   const [termo, setTermo] = useState("");
   const [uf, setUf] = useState("todas");
-  const [fonte, setFonte] = useState("pncp");
+  const [fonte, setFonte] = useState("todas");
   const [classificacaoTipo, setClassificacaoTipo] = useState("todos");
   const [classificacaoOrigem, setClassificacaoOrigem] = useState("todos");
   const [calcularScore, setCalcularScore] = useState(true);
@@ -298,9 +298,35 @@ export function CaptacaoPage(props?: PageProps) {
   const [scoresValidacao, setScoresValidacao] = useState<Record<string, unknown> | null>(null);
   const [loadingScores, setLoadingScores] = useState(false);
 
-  // Carrega monitoramentos e parametros ao montar (T17 + C1)
+  // Fontes de editais carregadas do banco
+  const [fontesDisponiveis, setFontesDisponiveis] = useState<{ value: string; label: string }[]>([]);
+
+  // Carrega monitoramentos, fontes e parametros ao montar
   useEffect(() => {
     carregarMonitoramentos();
+    // Carregar fontes de editais do banco
+    (async () => {
+      try {
+        const res = await crudList("fontes-editais", { limit: 50 });
+        const items = res.items as Record<string, unknown>[];
+        // Deduplicar por nome (lowercase) e só ativas
+        const vistos = new Set<string>();
+        const opcoes: { value: string; label: string }[] = [];
+        for (const f of items) {
+          if (!f.ativo) continue;
+          const nome = String(f.nome ?? "").trim();
+          const chave = nome.toLowerCase();
+          if (chave && !vistos.has(chave)) {
+            vistos.add(chave);
+            opcoes.push({ value: String(f.id), label: nome });
+          }
+        }
+        opcoes.sort((a, b) => a.label.localeCompare(b.label));
+        setFontesDisponiveis(opcoes);
+      } catch {
+        // Fallback vazio
+      }
+    })();
     // C1: Carregar estados de atuacao para calculo de score comercial
     (async () => {
       try {
@@ -825,11 +851,8 @@ export function CaptacaoPage(props?: PageProps) {
                 value={fonte}
                 onChange={setFonte}
                 options={[
-                  { value: "pncp", label: "PNCP" },
-                  { value: "comprasnet", label: "ComprasNET" },
-                  { value: "bec", label: "BEC-SP" },
-                  { value: "siconv", label: "SICONV" },
                   { value: "todas", label: "Todas as fontes" },
+                  ...fontesDisponiveis,
                 ]}
               />
             </FormField>
@@ -1303,8 +1326,8 @@ export function CaptacaoPage(props?: PageProps) {
                       value={novoMonFonte}
                       onChange={setNovoMonFonte}
                       options={[
-                        { value: "pncp", label: "PNCP" },
-                        { value: "todas", label: "Todas (PNCP + Web)" },
+                        { value: "todas", label: "Todas as fontes" },
+                        ...fontesDisponiveis,
                       ]}
                     />
                   </FormField>
