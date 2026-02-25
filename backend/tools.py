@@ -1559,15 +1559,15 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
                 print(f"[TOOLS] Termo de busca: '{termo}'")
 
-                # Buscar múltiplas páginas até encontrar 10 editais ou esgotar 5 páginas
+                # Buscar múltiplas páginas até encontrar 10 editais ou esgotar 3 páginas
                 all_items = []
-                for pagina in range(1, 6):  # Páginas 1 a 5
+                for pagina in range(1, 4):  # Páginas 1 a 3 (150 editais)
                     params = {**base_params, "pagina": pagina}
 
                     response = requests.get(
                         f"{PNCP_BASE_URL}/contratacoes/publicacao",
                         params=params,
-                        timeout=30,
+                        timeout=20,
                         headers={"Accept": "application/json"}
                     )
 
@@ -2550,6 +2550,7 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
     """
     Busca dados completos de um edital no PNCP pelo número.
     Retorna dict com dados ou None se não encontrar.
+    Otimizado: máx 2 páginas, timeout 15s, para assim que encontrar.
     """
     import re
     from datetime import datetime, timedelta
@@ -2567,9 +2568,10 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
     ano = match.group(2)
 
     try:
-        # Buscar no PNCP com filtro de data (últimos 365 dias)
-        data_final = datetime.now()
-        data_inicial = data_final - timedelta(days=365)
+        # Restringir janela de data ao ano do edital (muito mais eficiente)
+        ano_int = int(ano)
+        data_inicial = datetime(ano_int, 1, 1)
+        data_final = min(datetime(ano_int, 12, 31), datetime.now())
 
         params = {
             "dataInicial": data_inicial.strftime("%Y%m%d"),
@@ -2579,15 +2581,15 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
             "pagina": 1
         }
 
-        # Buscar múltiplas páginas até encontrar o edital
+        # Buscar no máximo 2 páginas (100 editais), timeout reduzido
         all_items = []
-        for pagina in range(1, 6):  # Até 5 páginas (250 editais)
+        for pagina in range(1, 3):  # Máx 2 páginas (era 5)
             params["pagina"] = pagina
             response = requests.get(
                 f"{PNCP_BASE_URL}/contratacoes/publicacao",
                 params=params,
                 headers={"Accept": "application/json"},
-                timeout=30
+                timeout=15  # Reduzido de 30s para 15s
             )
 
             if response.status_code != 200:
@@ -2600,7 +2602,7 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
                 break
             all_items.extend(items)
 
-            # Verificar se já encontrou o edital nesta página
+            # Verificar se já encontrou o edital nesta página — para imediatamente
             for item in items:
                 numero_compra = str(item.get('numeroCompra', ''))
                 seq_compra = str(item.get('sequencialCompra', ''))

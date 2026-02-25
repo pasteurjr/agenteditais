@@ -1583,6 +1583,8 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         ]
 
         editais_novos = []
+        editais_para_enriquecer = []  # (indice, numero_edital, fonte_nome)
+
         for ed in editais_scraper:
             if ed.get('link') not in links_pncp and ed.get('link'):
                 texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
@@ -1604,12 +1606,34 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     'data_abertura': 'Ver no portal'
                 }
 
-                if numero_edital and '/' in numero_edital:
+                idx = len(editais_novos)
+                editais_novos.append(ed_normalizado)
+
+                # Marcar para enriquecimento (máx 3 editais para evitar timeout)
+                if numero_edital and '/' in numero_edital and len(editais_para_enriquecer) < 3:
+                    editais_para_enriquecer.append((idx, numero_edital, ed.get('fonte', 'Web')))
+
+        # Enriquecer editais do scraper em paralelo (máx 3, com timeout global de 30s)
+        if editais_para_enriquecer:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            from tools import _buscar_edital_pncp_por_numero
+
+            def _enriquecer(args):
+                idx, numero, fonte = args
+                try:
+                    return idx, numero, fonte, _buscar_edital_pncp_por_numero(numero)
+                except Exception as e:
+                    print(f"[BUSCA-MULTI] Erro ao enriquecer {numero}: {e}")
+                    return idx, numero, fonte, None
+
+            print(f"[BUSCA-MULTI] Enriquecendo {len(editais_para_enriquecer)} editais em paralelo...")
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {executor.submit(_enriquecer, args): args for args in editais_para_enriquecer}
+                for future in as_completed(futures, timeout=30):
                     try:
-                        from tools import _buscar_edital_pncp_por_numero
-                        dados_pncp = _buscar_edital_pncp_por_numero(numero_edital)
+                        idx, numero, fonte, dados_pncp = future.result(timeout=15)
                         if dados_pncp:
-                            ed_normalizado.update({
+                            editais_novos[idx].update({
                                 'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
                                 'ano_compra': dados_pncp.get('ano_compra'),
                                 'seq_compra': dados_pncp.get('seq_compra'),
@@ -1618,18 +1642,16 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                                 'data_abertura': dados_pncp.get('data_abertura'),
                                 'uf': dados_pncp.get('uf'),
                                 'cidade': dados_pncp.get('cidade'),
-                                'orgao': dados_pncp.get('orgao') or ed_normalizado['orgao'],
-                                'objeto': dados_pncp.get('objeto') or ed_normalizado['objeto'],
-                                'url': dados_pncp.get('url') or ed_normalizado['url'],
-                                'fonte': f"{ed.get('fonte', 'Web')} → PNCP",
+                                'orgao': dados_pncp.get('orgao') or editais_novos[idx]['orgao'],
+                                'objeto': dados_pncp.get('objeto') or editais_novos[idx]['objeto'],
+                                'url': dados_pncp.get('url') or editais_novos[idx]['url'],
+                                'fonte': f"{fonte} → PNCP",
                                 'fonte_tipo': 'api',
                                 'dados_completos': True,
                             })
-                            print(f"[BUSCA-MULTI] Edital {numero_edital} enriquecido com dados PNCP")
+                            print(f"[BUSCA-MULTI] Edital {numero} enriquecido com dados PNCP")
                     except Exception as e:
-                        print(f"[BUSCA-MULTI] Erro ao enriquecer {numero_edital}: {e}")
-
-                editais_novos.append(ed_normalizado)
+                        print(f"[BUSCA-MULTI] Timeout/erro no enriquecimento: {e}")
         editais.extend(editais_novos)
         fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
         fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
