@@ -754,10 +754,12 @@ class Monitoramento(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
-    # Filtros de busca
+    # Filtros de busca (mesmos parâmetros da tela de Captação)
     termo = Column(String(255), nullable=False)  # "hematologia", "equipamento laboratorial"
+    ncm = Column(String(50), nullable=True)  # NCM complementar (ex: "9018.19.90")
     fontes = Column(JSON, nullable=True)  # ["pncp", "comprasnet", "bec"]
     ufs = Column(JSON, nullable=True)  # ["SP", "RJ", "MG"] ou null = todas
+    incluir_encerrados = Column(Boolean, default=False)  # Incluir editais com prazo vencido
     valor_minimo = Column(DECIMAL(15, 2), nullable=True)
     valor_maximo = Column(DECIMAL(15, 2), nullable=True)
 
@@ -787,8 +789,10 @@ class Monitoramento(Base):
             "id": self.id,
             "user_id": self.user_id,
             "termo": self.termo,
+            "ncm": self.ncm,
             "fontes": self.fontes,
             "ufs": self.ufs,
+            "incluir_encerrados": self.incluir_encerrados,
             "valor_minimo": float(self.valor_minimo) if self.valor_minimo else None,
             "valor_maximo": float(self.valor_maximo) if self.valor_maximo else None,
             "frequencia_horas": self.frequencia_horas,
@@ -798,6 +802,7 @@ class Monitoramento(Base):
             "notificar_push": self.notificar_push,
             "score_minimo_alerta": self.score_minimo_alerta,
             "ativo": self.ativo,
+            "editais_encontrados": self.editais_encontrados,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

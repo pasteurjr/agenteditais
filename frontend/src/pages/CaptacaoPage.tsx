@@ -51,11 +51,17 @@ interface EditalBusca {
 interface MonitoramentoInfo {
   id: string;
   termo: string;
+  ncm?: string;
+  fontes?: string[];
+  ufs?: string[];
+  incluir_encerrados?: boolean;
+  valor_minimo?: number;
+  valor_maximo?: number;
+  frequencia_horas?: number;
+  score_minimo_alerta?: number;
   ativo: boolean;
   ultimo_check?: string;
   editais_encontrados?: number;
-  ufs?: string[];
-  frequencia?: string;
 }
 
 // --- UFs brasileiras ---
@@ -278,11 +284,15 @@ export function CaptacaoPage(props?: PageProps) {
   // C3: NCM search field
   const [ncm, setNcm] = useState("");
 
-  // C3: Novo monitoramento inline form
+  // C3: Novo monitoramento inline form (mesmos parâmetros da busca)
   const [showNovoMonitoramento, setShowNovoMonitoramento] = useState(false);
   const [novoMonTermo, setNovoMonTermo] = useState("");
+  const [novoMonNcm, setNovoMonNcm] = useState("");
   const [novoMonUfs, setNovoMonUfs] = useState("");
+  const [novoMonFonte, setNovoMonFonte] = useState("pncp");
+  const [novoMonEncerrados, setNovoMonEncerrados] = useState(false);
   const [novoMonFreq, setNovoMonFreq] = useState("24h");
+  const [novoMonScoreMin, setNovoMonScoreMin] = useState(70);
 
   // C2: Scores de validacao (gaps reais do endpoint)
   const [scoresValidacao, setScoresValidacao] = useState<Record<string, unknown> | null>(null);
@@ -313,10 +323,17 @@ export function CaptacaoPage(props?: PageProps) {
       setMonitoramentos(items.map(m => ({
         id: String(m.id ?? ""),
         termo: String(m.termo ?? ""),
+        ncm: m.ncm ? String(m.ncm) : undefined,
+        fontes: m.fontes as string[] | undefined,
+        ufs: m.ufs as string[] | undefined,
+        incluir_encerrados: Boolean(m.incluir_encerrados ?? false),
+        valor_minimo: m.valor_minimo ? Number(m.valor_minimo) : undefined,
+        valor_maximo: m.valor_maximo ? Number(m.valor_maximo) : undefined,
+        frequencia_horas: Number(m.frequencia_horas ?? 24),
+        score_minimo_alerta: m.score_minimo_alerta ? Number(m.score_minimo_alerta) : undefined,
         ativo: Boolean(m.ativo ?? true),
         ultimo_check: m.ultima_execucao ? formatarDataBr(String(m.ultima_execucao)) : undefined,
         editais_encontrados: Number(m.editais_encontrados ?? 0),
-        ufs: m.ufs as string[] | undefined,
       })));
     } catch {
       // Silencioso - monitoramentos são opcionais
@@ -1256,24 +1273,43 @@ export function CaptacaoPage(props?: PageProps) {
           }
         >
           <div className="monitoramento-info">
-            {/* C3: Formulario inline para novo monitoramento */}
+            {/* Formulario completo para novo monitoramento (mesmos parâmetros da busca) */}
             {showNovoMonitoramento && (
               <div style={{ marginBottom: "16px", padding: "12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #334155" }}>
                 <div className="form-grid form-grid-4">
-                  <FormField label="Termo de busca">
+                  <FormField label="Termo de busca *">
                     <TextInput
                       value={novoMonTermo}
                       onChange={setNovoMonTermo}
                       placeholder="Ex: equipamentos laboratoriais"
                     />
                   </FormField>
+                  <FormField label="NCM (opcional)">
+                    <TextInput
+                      value={novoMonNcm}
+                      onChange={setNovoMonNcm}
+                      placeholder="Ex: 9018.19.90"
+                    />
+                  </FormField>
                   <FormField label="UFs (separadas por virgula)">
                     <TextInput
                       value={novoMonUfs}
                       onChange={setNovoMonUfs}
-                      placeholder="Ex: SP, RJ, MG"
+                      placeholder="Ex: SP, RJ, MG (vazio = todas)"
                     />
                   </FormField>
+                  <FormField label="Fonte">
+                    <SelectInput
+                      value={novoMonFonte}
+                      onChange={setNovoMonFonte}
+                      options={[
+                        { value: "pncp", label: "PNCP" },
+                        { value: "todas", label: "Todas (PNCP + Web)" },
+                      ]}
+                    />
+                  </FormField>
+                </div>
+                <div className="form-grid form-grid-4" style={{ marginTop: "8px" }}>
                   <FormField label="Frequencia">
                     <SelectInput
                       value={novoMonFreq}
@@ -1283,6 +1319,29 @@ export function CaptacaoPage(props?: PageProps) {
                         { value: "12h", label: "A cada 12 horas" },
                         { value: "24h", label: "A cada 24 horas" },
                         { value: "semanal", label: "Semanal" },
+                      ]}
+                    />
+                  </FormField>
+                  <FormField label="Score minimo alerta">
+                    <SelectInput
+                      value={String(novoMonScoreMin)}
+                      onChange={(v) => setNovoMonScoreMin(Number(v))}
+                      options={[
+                        { value: "0", label: "Todos (sem filtro)" },
+                        { value: "50", label: "50% ou mais" },
+                        { value: "60", label: "60% ou mais" },
+                        { value: "70", label: "70% ou mais" },
+                        { value: "80", label: "80% ou mais" },
+                      ]}
+                    />
+                  </FormField>
+                  <FormField label="Incluir encerrados">
+                    <SelectInput
+                      value={novoMonEncerrados ? "sim" : "nao"}
+                      onChange={(v) => setNovoMonEncerrados(v === "sim")}
+                      options={[
+                        { value: "nao", label: "Nao (somente abertos)" },
+                        { value: "sim", label: "Sim" },
                       ]}
                     />
                   </FormField>
@@ -1298,15 +1357,24 @@ export function CaptacaoPage(props?: PageProps) {
                           const ufsArray = novoMonUfs.trim()
                             ? novoMonUfs.split(",").map(u => u.trim().toUpperCase()).filter(Boolean)
                             : null;
+                          const fontesArray = novoMonFonte === "todas" ? null : [novoMonFonte];
                           await crudCreate("monitoramentos", {
                             termo: novoMonTermo.trim(),
+                            ncm: novoMonNcm.trim() || null,
+                            fontes: fontesArray,
                             ufs: ufsArray,
+                            incluir_encerrados: novoMonEncerrados,
                             frequencia_horas: freqMap[novoMonFreq] || 24,
+                            score_minimo_alerta: novoMonScoreMin,
                             ativo: true,
                           });
                           setNovoMonTermo("");
+                          setNovoMonNcm("");
                           setNovoMonUfs("");
+                          setNovoMonFonte("pncp");
+                          setNovoMonEncerrados(false);
                           setNovoMonFreq("24h");
+                          setNovoMonScoreMin(70);
                           setShowNovoMonitoramento(false);
                           await carregarMonitoramentos();
                         } catch {
@@ -1333,10 +1401,22 @@ export function CaptacaoPage(props?: PageProps) {
                         size="small"
                       />
                       <span><strong>{m.termo}</strong></span>
+                      {m.ncm && (
+                        <span className="text-muted">NCM: {m.ncm}</span>
+                      )}
                       {m.ufs && m.ufs.length > 0 && (
                         <span className="text-muted">({m.ufs.join(", ")})</span>
                       )}
-                      {m.editais_encontrados !== undefined && (
+                      {m.fontes && m.fontes.length > 0 && (
+                        <span className="text-muted">[{m.fontes.join(", ")}]</span>
+                      )}
+                      {m.frequencia_horas && (
+                        <span className="text-muted">a cada {m.frequencia_horas}h</span>
+                      )}
+                      {m.score_minimo_alerta && m.score_minimo_alerta > 0 && (
+                        <span className="text-muted">score&ge;{m.score_minimo_alerta}%</span>
+                      )}
+                      {m.editais_encontrados !== undefined && m.editais_encontrados > 0 && (
                         <span className="text-muted">{m.editais_encontrados} encontrado(s)</span>
                       )}
                       {m.ultimo_check && (
