@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento
 from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -8639,33 +8639,36 @@ def verificar_config_smtp():
 @require_auth
 def scheduler_status():
     """Retorna status do scheduler e monitoramentos ativos."""
-    from scheduler import scheduler, SCHEDULER_AVAILABLE, CHECK_MONITORAMENTOS_INTERVAL
+    from models import Monitoramento as Mon, Notificacao as Notif
+    import scheduler as sched_mod
 
     user_id = get_current_user_id()
     db = get_db()
 
     # Status do scheduler
-    scheduler_ativo = bool(scheduler and scheduler.running) if SCHEDULER_AVAILABLE else False
+    sched_available = getattr(sched_mod, 'SCHEDULER_AVAILABLE', False)
+    sched_instance = getattr(sched_mod, 'scheduler', None)
+    scheduler_ativo = bool(sched_instance and sched_instance.running) if sched_available else False
+    check_interval = getattr(sched_mod, 'CHECK_MONITORAMENTOS_INTERVAL', 60)
 
     # Monitoramentos do usuário
-    monitoramentos = db.query(Monitoramento).filter(
-        Monitoramento.user_id == user_id
+    monitoramentos = db.query(Mon).filter(
+        Mon.user_id == user_id
     ).all()
 
     ativos = [m for m in monitoramentos if m.ativo]
     inativos = [m for m in monitoramentos if not m.ativo]
 
     # Notificações não lidas
-    from models import Notificacao
-    nao_lidas = db.query(Notificacao).filter(
-        Notificacao.user_id == user_id,
-        Notificacao.lida == False
+    nao_lidas = db.query(Notif).filter(
+        Notif.user_id == user_id,
+        Notif.lida == False
     ).count()
 
     return jsonify({
-        "scheduler_disponivel": SCHEDULER_AVAILABLE,
+        "scheduler_disponivel": sched_available,
         "scheduler_ativo": scheduler_ativo,
-        "intervalo_verificacao_min": CHECK_MONITORAMENTOS_INTERVAL,
+        "intervalo_verificacao_min": check_interval,
         "monitoramentos_ativos": len(ativos),
         "monitoramentos_inativos": len(inativos),
         "notificacoes_nao_lidas": nao_lidas,
