@@ -7142,9 +7142,15 @@ def buscar_editais_rest():
 
         # Normalizar campos de retorno para o frontend
         editais_normalizados = []
-        for e in editais:
+        for i, e in enumerate(editais):
+            # Gerar ID único: usar ID do banco se existir, senão criar hash do número+órgão
+            edital_id = e.get("id")
+            if not edital_id:
+                import hashlib
+                chave = f"{e.get('numero', '')}-{e.get('orgao', '')}-{i}"
+                edital_id = hashlib.md5(chave.encode()).hexdigest()
             editais_normalizados.append({
-                "id": e.get("id"),
+                "id": edital_id,
                 "numero": e.get("numero"),
                 "orgao": e.get("orgao"),
                 "objeto": e.get("objeto") or e.get("descricao"),

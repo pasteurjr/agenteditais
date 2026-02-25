@@ -624,6 +624,7 @@ export function CaptacaoPage(props?: PageProps) {
         <input
           type="checkbox"
           checked={e.selected || false}
+          onClick={(ev) => ev.stopPropagation()}
           onChange={() => handleToggleSelect(e.id)}
         />
       ),
