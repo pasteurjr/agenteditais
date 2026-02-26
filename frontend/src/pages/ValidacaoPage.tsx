@@ -106,9 +106,11 @@ interface ScoresValidacaoResponse {
   sinais_mercado?: string[];
   fatal_flaws?: string[];
   flags_juridicos?: string[];
+  pontos_positivos?: string[];
+  pontos_atencao?: string[];
 }
 
-// === INTERFACES PARA DOCUMENTACAO NECESSARIA (Processo Amanda) ===
+// === INTERFACES PARA DOCUMENTACAO NECESSARIA ===
 
 interface DocNecessariaItem {
   nome: string;
@@ -180,14 +182,25 @@ async function loadEditaisSalvos(): Promise<Edital[]> {
 async function calcularScoresValidacao(editalId: string): Promise<ScoresValidacaoResponse | null> {
   try {
     const token = localStorage.getItem("editais_ia_access_token");
+    console.log(`[SCORES] POST /api/editais/${editalId}/scores-validacao ...`);
     const res = await fetch(`/api/editais/${editalId}/scores-validacao`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({}),
     });
-    if (!res.ok) return null;
-    return await res.json() as ScoresValidacaoResponse;
-  } catch {
+    if (!res.ok) {
+      console.error(`[SCORES] Erro HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
+    const data = await res.json();
+    console.log("[SCORES] Resposta:", data);
+    if (!data.success) {
+      console.error("[SCORES] Backend retornou erro:", data.error);
+      return null;
+    }
+    return data as ScoresValidacaoResponse;
+  } catch (err) {
+    console.error("[SCORES] Erro de rede:", err);
     return null;
   }
 }
@@ -220,8 +233,11 @@ export function ValidacaoPage(props?: PageProps) {
   // T22: sub-scores técnicos da aba Objetiva (vindos do endpoint scores-validacao)
   const [subScoresTecnicos, setSubScoresTecnicos] = useState<{ label: string; score: number }[]>([]);
   const [decisaoIA, setDecisaoIA] = useState<"GO" | "NO-GO" | "CONDICIONAL" | null>(null);
+  const [justificativaIA, setJustificativaIA] = useState("");
+  const [pontosPositivos, setPontosPositivos] = useState<string[]>([]);
+  const [pontosAtencao, setPontosAtencao] = useState<string[]>([]);
 
-  // V1: Processo Amanda — documentação necessária real
+  // Documentação necessária — dados reais do backend
   const [docsNecessaria, setDocsNecessaria] = useState<DocNecessariaItem[]>([]);
   const [docsNecessariaLoading, setDocsNecessariaLoading] = useState(false);
   const [docsNecessariaErro, setDocsNecessariaErro] = useState("");
@@ -549,13 +565,26 @@ export function ValidacaoPage(props?: PageProps) {
   // T19: Calcular scores reais via POST /api/editais/{id}/scores-validacao
   const handleCalcularScores = async (edital?: Edital) => {
     const alvo = edital || selectedEdital;
-    if (!alvo) return;
+    if (!alvo) { console.warn("[SCORES] Nenhum edital selecionado"); return; }
+    console.log(`[SCORES] Calculando para edital ${alvo.numero} (${alvo.id})...`);
     setScoresLoading(true);
     try {
       const resultado = await calcularScoresValidacao(alvo.id);
       if (resultado) {
-        const novosScores = resultado.scores;
-        const scoreGeral = resultado.score_geral ?? Math.round(Object.values(novosScores).reduce((a, b) => a + b, 0) / 6);
+        const novosScores: EditalScores = {
+          tecnico: resultado.scores?.tecnico ?? 0,
+          documental: resultado.scores?.documental ?? 0,
+          complexidade: resultado.scores?.complexidade ?? 0,
+          juridico: resultado.scores?.juridico ?? 0,
+          logistico: resultado.scores?.logistico ?? 0,
+          comercial: resultado.scores?.comercial ?? 0,
+        };
+        const scoreGeral = resultado.score_geral ?? Math.round(
+          (novosScores.tecnico + novosScores.documental + novosScores.complexidade +
+           novosScores.juridico + novosScores.logistico + novosScores.comercial) / 6
+        );
+        console.log(`[SCORES] Score geral: ${scoreGeral}, Scores:`, novosScores);
+
         const atualizado: Partial<Edital> = {
           scores: novosScores,
           score: scoreGeral,
@@ -586,9 +615,15 @@ export function ValidacaoPage(props?: PageProps) {
           else if (d === "nogo" || d === "no-go") setDecisaoIA("NO-GO");
           else if (d === "acompanhar") setDecisaoIA("CONDICIONAL");
         }
+        // V3: Justificativa e pontos — dados já retornados pelo backend
+        if (resultado.justificativa_ia) setJustificativaIA(resultado.justificativa_ia);
+        if (resultado.pontos_positivos?.length) setPontosPositivos(resultado.pontos_positivos);
+        if (resultado.pontos_atencao?.length) setPontosAtencao(resultado.pontos_atencao);
+      } else {
+        console.error("[SCORES] Resultado nulo — verifique o console para detalhes");
       }
-    } catch {
-      // Silent fail
+    } catch (err) {
+      console.error("[SCORES] Erro ao calcular scores:", err);
     } finally {
       setScoresLoading(false);
     }
@@ -813,12 +848,12 @@ export function ValidacaoPage(props?: PageProps) {
     </div>
   );
 
-  // Aba 2: Documentos (Processo Amanda + Checklist Documental + botão IA)
+  // Aba 2: Documentos (Documentação Necessária + Checklist Documental + botão IA)
   const renderAbaDocumentos = (edital: Edital) => (
     <div className="aba-content">
-      {/* Processo Amanda — Documentação por Edital (V1: dados reais) — MOVIDO de fora das abas */}
+      {/* Documentação Necessária — 3 pastas (empresa/fiscal/técnica) */}
       <div className="section-block">
-        <h4><FolderOpen size={16} /> Processo Amanda - Documentacao</h4>
+        <h4><FolderOpen size={16} /> Documentacao Necessaria</h4>
         {docsNecessariaLoading ? (
           <p className="empty-message">Carregando documentacao necessaria...</p>
         ) : docsNecessariaErro && docsNecessaria.length === 0 ? (
@@ -914,24 +949,67 @@ export function ValidacaoPage(props?: PageProps) {
         )}
       </div>
 
-      {/* Checklist Documental (movido da aba Objetiva antiga) */}
-      <div className="section-block">
-        <h4><ClipboardCheck size={16} /> Checklist Documental</h4>
-        <table className="mini-table">
-          <thead>
-            <tr><th>Documento</th><th>Status</th><th>Validade</th></tr>
-          </thead>
-          <tbody>
-            {edital.checklistDocumental.map((item, i) => (
-              <tr key={i}>
-                <td>{item.documento}</td>
-                <td>{getChecklistStatusBadge(item.status)}</td>
-                <td>{item.validade || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Resumo de Completude Documental */}
+      {docsNecessaria.length > 0 && (
+        <div className="section-block">
+          <h4><ClipboardCheck size={16} /> Resumo de Completude</h4>
+          {(() => {
+            const ok = docsNecessaria.filter(d => d.status === "ok").length;
+            const vencidos = docsNecessaria.filter(d => d.status === "vencido").length;
+            const faltantes = docsNecessaria.filter(d => d.status === "faltando").length;
+            const total = docsNecessaria.length;
+            const pct = total > 0 ? Math.round((ok / total) * 100) : 0;
+            return (
+              <div style={{ display: "flex", gap: "24px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: "200px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>Completude</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600 }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: "8px", backgroundColor: "#1e293b", borderRadius: "4px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, backgroundColor: pct === 100 ? "#22c55e" : pct >= 70 ? "#eab308" : "#ef4444", borderRadius: "4px", transition: "width 0.3s" }} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "16px" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#22c55e" }}>{ok}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>Disponiveis</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#eab308" }}>{vencidos}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>Vencidos</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "20px", fontWeight: 700, color: "#ef4444" }}>{faltantes}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b" }}>Faltantes</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Checklist Documental via IA (só aparece quando IA analisou) */}
+      {edital.checklistDocumental.length > 0 && (
+        <div className="section-block">
+          <h4><ClipboardCheck size={16} /> Checklist Documental (IA)</h4>
+          <table className="mini-table">
+            <thead>
+              <tr><th>Documento</th><th>Status</th><th>Validade</th></tr>
+            </thead>
+            <tbody>
+              {edital.checklistDocumental.map((item, i) => (
+                <tr key={i}>
+                  <td>{item.documento}</td>
+                  <td>{getChecklistStatusBadge(item.status)}</td>
+                  <td>{item.validade || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Botão: Documentos Exigidos via IA */}
       {onSendToChat && (
@@ -1269,6 +1347,9 @@ export function ValidacaoPage(props?: PageProps) {
               // Limpar sub-scores, decisão IA e dados dependentes ao trocar edital
               setSubScoresTecnicos([]);
               setDecisaoIA(null);
+              setJustificativaIA("");
+              setPontosPositivos([]);
+              setPontosAtencao([]);
               setDocsNecessaria([]);
               setDocsNecessariaErro("");
               setHistoricoReal([]);
@@ -1359,55 +1440,86 @@ export function ValidacaoPage(props?: PageProps) {
                 </div>
               </Card>
 
-              {/* Direita: Score Dashboard (sem Intencao/Margem — movidos para aba Aderencia) */}
+              {/* Direita: Score Dashboard */}
               <div className="score-dashboard">
                 <div className="score-dashboard-header">
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                    <ScoreCircle score={selectedEdital.score} size={120} label="Score Geral" />
-                    {/* V2: Decisão GO/NO-GO da IA */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", minWidth: "130px" }}>
+                    <ScoreCircle score={selectedEdital.score} size={110} label="Score Geral" />
+                    <div style={{ height: "14px" }} /> {/* Espaço para o label absoluto */}
+                    {/* Decisão GO/NO-GO da IA */}
                     {decisaoIA && (
                       <span style={{
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "6px",
-                        padding: "6px 16px",
+                        padding: "5px 14px",
                         borderRadius: "20px",
-                        fontSize: "14px",
+                        fontSize: "13px",
                         fontWeight: 700,
                         letterSpacing: "0.5px",
                         backgroundColor: decisaoIA === "GO" ? "#22c55e20" : decisaoIA === "NO-GO" ? "#ef444420" : "#eab30820",
                         color: decisaoIA === "GO" ? "#22c55e" : decisaoIA === "NO-GO" ? "#ef4444" : "#eab308",
                         border: `2px solid ${decisaoIA === "GO" ? "#22c55e60" : decisaoIA === "NO-GO" ? "#ef444460" : "#eab30860"}`,
                       }}>
-                        {decisaoIA === "GO" && <CheckCircle size={16} />}
-                        {decisaoIA === "NO-GO" && <XCircle size={16} />}
-                        {decisaoIA === "CONDICIONAL" && <AlertTriangle size={16} />}
+                        {decisaoIA === "GO" && <CheckCircle size={14} />}
+                        {decisaoIA === "NO-GO" && <XCircle size={14} />}
+                        {decisaoIA === "CONDICIONAL" && <AlertTriangle size={14} />}
                         {decisaoIA === "GO" ? "GO - Participar" : decisaoIA === "NO-GO" ? "NO-GO" : "ACOMPANHAR"}
                       </span>
                     )}
-                  </div>
-                  <div className="potencial-ganho">
-                    <label>Potencial de Ganho</label>
-                    {getPotencialBadge(selectedEdital.potencialGanho)}
-                    {/* T19: Botão para recalcular scores via IA */}
+                    {/* Botão calcular */}
                     <ActionButton
                       icon={<TrendingUp size={12} />}
-                      label="Calcular Scores IA"
-                      onClick={handleCalcularScores}
+                      label={scoresLoading ? "Calculando..." : "Calcular Scores IA"}
+                      onClick={() => handleCalcularScores()}
                       loading={scoresLoading}
                       variant="neutral"
                     />
                   </div>
+
+                  {/* 6 barras de score */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <ScoreBar score={selectedEdital.scores.tecnico} label="Aderencia Tecnica" size="small" showLevel />
+                    <ScoreBar score={selectedEdital.scores.documental} label="Aderencia Documental" size="small" showLevel />
+                    <ScoreBar score={selectedEdital.scores.complexidade} label="Complexidade Edital" size="small" showLevel />
+                    <ScoreBar score={selectedEdital.scores.juridico} label="Risco Juridico" size="small" showLevel />
+                    <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
+                    <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
+                  </div>
+
+                  <div className="potencial-ganho">
+                    <label>Potencial</label>
+                    {getPotencialBadge(selectedEdital.potencialGanho)}
+                  </div>
                 </div>
 
-                <div className="score-bars-6d">
-                  <ScoreBar score={selectedEdital.scores.tecnico} label="Aderencia Tecnica" size="small" showLevel />
-                  <ScoreBar score={selectedEdital.scores.documental} label="Aderencia Documental" size="small" showLevel />
-                  <ScoreBar score={selectedEdital.scores.complexidade} label="Complexidade Edital" size="small" showLevel />
-                  <ScoreBar score={selectedEdital.scores.juridico} label="Risco Juridico" size="small" showLevel />
-                  <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
-                  <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
-                </div>
+                {/* Justificativa da IA — aparece apos calcular scores */}
+                {justificativaIA && (
+                  <div className="score-justificativa-panel">
+                    <p className="justificativa-titulo"><Sparkles size={14} /> Analise da IA</p>
+                    <p className="justificativa-texto">{justificativaIA}</p>
+                    {(pontosPositivos.length > 0 || pontosAtencao.length > 0) && (
+                      <div className="score-pontos-grid">
+                        {pontosPositivos.length > 0 && (
+                          <div className="score-pontos-col positivos">
+                            <h5 className="positivos"><ThumbsUp size={12} /> Pontos Positivos</h5>
+                            <ul>
+                              {pontosPositivos.map((p, i) => <li key={i}>{p}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {pontosAtencao.length > 0 && (
+                          <div className="score-pontos-col atencao">
+                            <h5 className="atencao"><AlertTriangle size={12} /> Pontos de Atencao</h5>
+                            <ul>
+                              {pontosAtencao.map((p, i) => <li key={i}>{p}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -6184,6 +6184,202 @@ body {
   gap: 8px;
 }
 
+/* ScoreCircle */
+.score-circle-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.score-circle-bg {
+  fill: none;
+  stroke: var(--bg-input, #e5e7eb);
+}
+
+.score-circle-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.score-circle-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 1px;
+}
+
+.score-circle-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.score-circle-max {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  align-self: flex-end;
+  margin-bottom: 4px;
+}
+
+.score-circle-label {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Score bars 6-dimensoes */
+.score-bars-6d {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.score-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-bar-container .score-bar-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.score-bar-container .score-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-input, #e5e7eb);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.score-bar-container .score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.score-bar-container .score-bar-value {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
+.score-bar-small .score-bar-label {
+  min-width: 110px;
+}
+
+/* Score justificativa panel */
+.score-justificativa-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--bg-hover, #f8f9fa);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.score-justificativa-panel .justificativa-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-justificativa-panel .justificativa-texto {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+.score-pontos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.score-pontos-col h5 {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.score-pontos-col h5.positivos {
+  color: #22c55e;
+}
+
+.score-pontos-col h5.atencao {
+  color: #eab308;
+}
+
+.score-pontos-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.score-pontos-col li {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-left: 16px;
+  position: relative;
+  line-height: 1.4;
+}
+
+.score-pontos-col li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.score-pontos-col.positivos li::before {
+  background: #22c55e;
+}
+
+.score-pontos-col.atencao li::before {
+  background: #eab308;
+}
+
+/* Potencial ganho area */
+.potencial-ganho {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .intencao-section {
   margin-top: 16px;
   padding-top: 16px;

@@ -6475,24 +6475,42 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
 
         print(f"[SCORES_VALIDACAO] {edital.numero}: score_final={scores_data.get('score_final')}, decisao={scores_data.get('decisao')}")
 
+        scores_out = {
+            "tecnico": scores_data.get('score_tecnico') or 0,
+            "documental": scores_data.get('score_documental') or 0,
+            "complexidade": scores_data.get('score_complexidade') or 0,
+            "juridico": scores_data.get('score_juridico') or 0,
+            "logistico": scores_data.get('score_logistico') or 0,
+            "comercial": scores_data.get('score_comercial') or 0,
+        }
+        score_final = scores_data.get('score_final') or round(sum(scores_out.values()) / 6)
+
         return {
             "success": True,
             "edital_id": edital_id,
             "edital_numero": edital.numero,
             "analise_id": analise.id,
-            "scores": {
-                "tecnico": scores_data.get('score_tecnico'),
-                "documental": scores_data.get('score_documental'),
-                "complexidade": scores_data.get('score_complexidade'),
-                "juridico": scores_data.get('score_juridico'),
-                "logistico": scores_data.get('score_logistico'),
-                "comercial": scores_data.get('score_comercial'),
-                "final": scores_data.get('score_final')
-            },
+            "scores": scores_out,
+            "score_geral": score_final,
             "decisao": scores_data.get('decisao', 'AVALIAR'),
+            "decisao_ia": scores_data.get('decisao', 'AVALIAR').upper().replace("NOGO", "NO-GO"),
             "justificativa": scores_data.get('justificativa', ''),
+            "justificativa_ia": scores_data.get('justificativa', ''),
             "pontos_positivos": scores_data.get('pontos_positivos', []),
-            "pontos_atencao": scores_data.get('pontos_atencao', [])
+            "pontos_atencao": scores_data.get('pontos_atencao', []),
+            "sub_scores_tecnicos": [
+                {"label": "Aderencia Tecnica", "score": scores_out["tecnico"]},
+                {"label": "Aderencia Documental", "score": scores_out["documental"]},
+                {"label": "Complexidade Edital", "score": scores_out["complexidade"]},
+                {"label": "Risco Juridico", "score": scores_out["juridico"]},
+                {"label": "Viabilidade Logistica", "score": scores_out["logistico"]},
+                {"label": "Atratividade Comercial", "score": scores_out["comercial"]},
+            ],
+            "potencial_ganho": (
+                "elevado" if score_final >= 70 else
+                "medio" if score_final >= 40 else
+                "baixo"
+            ),
         }
 
     except json.JSONDecodeError as e:

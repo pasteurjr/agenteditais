@@ -7964,10 +7964,12 @@ def vincular_documento_edital(edital_id):
 @require_auth
 def documentacao_necessaria(edital_id):
     """
-    Retorna os requisitos documentais do edital cruzados com os documentos da empresa.
-    Usado pela seção Processo Amanda (F6).
+    Retorna documentação necessária para o edital, cruzando com documentos da empresa.
+    Formato: { documentos: [{ nome, categoria, status, validade, exigido }] }
+    Categorias: "empresa", "fiscal", "tecnica" — mapeiam para as 3 pastas do Processo Amanda.
     """
     from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
+    from datetime import date
     user_id = get_current_user_id()
 
     db = get_db()
@@ -7979,10 +7981,9 @@ def documentacao_necessaria(edital_id):
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
-        # Buscar empresa do usuário
         empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
 
-        # Requisitos documentais do edital
+        # Requisitos documentais extraídos do edital (se houver)
         requisitos_doc = db.query(EditalRequisito).filter(
             EditalRequisito.edital_id == edital_id,
             EditalRequisito.tipo == 'documental'
@@ -7999,40 +8000,140 @@ def documentacao_necessaria(edital_id):
                 EmpresaCertidao.empresa_id == empresa.id
             ).all()
 
-        # Montar resposta organizada em 3 pastas
-        pastas = {
-            "documentos_empresa": {
-                "titulo": "Documentos da Empresa",
-                "itens": [{
-                    **d.to_dict(),
-                    "vinculado_requisito_id": getattr(d, 'edital_requisito_id', None)
-                } for d in docs_empresa]
-            },
-            "certidoes_fiscais": {
-                "titulo": "Documentos Fiscais e Certidões",
-                "itens": [{
-                    **c.to_dict(),
-                    "vinculado_requisito_id": getattr(c, 'edital_requisito_id', None)
-                } for c in certs_empresa]
-            },
-            "requisitos_edital": {
-                "titulo": "Requisitos Documentais do Edital",
-                "itens": [r.to_dict() for r in requisitos_doc]
-            }
+        hoje = date.today()
+        documentos = []
+
+        # --- Pasta 1: Documentos da Empresa (categoria "empresa") ---
+        # Documentos padrão exigidos em licitações
+        docs_padrao_empresa = {
+            "contrato_social": "Contrato Social / Ato Constitutivo",
+            "alvara": "Alvara de Funcionamento",
+            "procuracao": "Procuracao do Representante Legal",
+            "afe": "AFE - Autorizacao de Funcionamento (ANVISA)",
+            "cbpad": "CBPAD",
+            "cbpp": "CBPP",
+            "bombeiros": "Auto de Vistoria do Corpo de Bombeiros",
         }
+        docs_empresa_por_tipo = {}
+        for d in docs_empresa:
+            docs_empresa_por_tipo.setdefault(d.tipo, []).append(d)
+
+        for tipo, nome in docs_padrao_empresa.items():
+            encontrados = docs_empresa_por_tipo.get(tipo, [])
+            if encontrados:
+                doc = encontrados[0]
+                venc = doc.data_vencimento
+                if venc and venc < hoje:
+                    status = "vencido"
+                else:
+                    status = "ok"
+                validade = venc.strftime("%d/%m/%Y") if venc else None
+            else:
+                status = "faltando"
+                validade = None
+            documentos.append({
+                "nome": nome,
+                "categoria": "empresa",
+                "status": status,
+                "validade": validade,
+                "exigido": True,
+            })
+
+        # Documentos extras da empresa não nos padrões
+        tipos_padrao = set(docs_padrao_empresa.keys())
+        for d in docs_empresa:
+            if d.tipo not in tipos_padrao:
+                venc = d.data_vencimento
+                status = "vencido" if venc and venc < hoje else "ok"
+                validade = venc.strftime("%d/%m/%Y") if venc else None
+                documentos.append({
+                    "nome": d.nome_arquivo or d.tipo.replace("_", " ").title(),
+                    "categoria": "empresa",
+                    "status": status,
+                    "validade": validade,
+                    "exigido": False,
+                })
+
+        # --- Pasta 2: Certidões e Fiscal (categoria "fiscal") ---
+        certs_padrao = {
+            "cnd_federal": "CND Federal (Receita Federal / PGFN)",
+            "cnd_estadual": "CND Estadual (SEFAZ)",
+            "cnd_municipal": "CND Municipal (Prefeitura)",
+            "fgts": "CRF - Certificado de Regularidade do FGTS",
+            "trabalhista": "CNDT - Certidao Negativa de Debitos Trabalhistas",
+        }
+        certs_por_tipo = {}
+        for c in certs_empresa:
+            certs_por_tipo.setdefault(c.tipo, []).append(c)
+
+        for tipo, nome in certs_padrao.items():
+            encontrados = certs_por_tipo.get(tipo, [])
+            if encontrados:
+                cert = encontrados[0]
+                venc = cert.data_vencimento
+                if cert.status == "vencida" or (venc and venc < hoje):
+                    status = "vencido"
+                elif cert.status in ("valida",):
+                    status = "ok"
+                else:
+                    status = "faltando"
+                validade = venc.strftime("%d/%m/%Y") if venc else None
+            else:
+                status = "faltando"
+                validade = None
+            documentos.append({
+                "nome": nome,
+                "categoria": "fiscal",
+                "status": status,
+                "validade": validade,
+                "exigido": True,
+            })
+
+        # --- Pasta 3: Qualificação Técnica (categoria "tecnica") ---
+        docs_padrao_tecnica = {
+            "atestado_capacidade": "Atestado de Capacidade Tecnica",
+            "registro_conselho": "Registro no Conselho de Classe",
+            "balanco": "Balanco Patrimonial",
+            "qualificacao_tecnica": "Qualificacao Tecnica Complementar",
+        }
+        for tipo, nome in docs_padrao_tecnica.items():
+            encontrados = docs_empresa_por_tipo.get(tipo, [])
+            if encontrados:
+                doc = encontrados[0]
+                venc = doc.data_vencimento
+                status = "vencido" if venc and venc < hoje else "ok"
+                validade = venc.strftime("%d/%m/%Y") if venc else None
+            else:
+                status = "faltando"
+                validade = None
+            documentos.append({
+                "nome": nome,
+                "categoria": "tecnica",
+                "status": status,
+                "validade": validade,
+                "exigido": True,
+            })
+
+        # Se o edital tem requisitos documentais extraídos, marcar como exigidos
+        for req in requisitos_doc:
+            desc_lower = (req.descricao or "").lower()
+            for doc in documentos:
+                nome_lower = doc["nome"].lower()
+                # Associar requisito ao documento correspondente
+                if any(kw in desc_lower for kw in nome_lower.split()):
+                    doc["exigido"] = True
 
         return jsonify({
             "success": True,
             "edital_id": edital_id,
             "edital_numero": edital.numero,
-            "empresa_id": empresa.id if empresa else None,
-            "pastas": pastas,
-            "total_requisitos": len(requisitos_doc),
-            "total_documentos": len(docs_empresa),
-            "total_certidoes": len(certs_empresa)
+            "documentos": documentos,
+            "total": len(documentos),
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()

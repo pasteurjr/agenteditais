@@ -200,7 +200,11 @@ test.describe.serial("GRUPO 4 — CAPTACAO (T-20 a T-27)", () => {
     const ufSelect = selectByLabel(page, "UF");
     if (await ufSelect.isVisible().catch(() => false)) { await ufSelect.selectOption("MG"); await page.waitForTimeout(300); }
     const fonteSelect = selectByLabel(page, "Fonte");
-    if (await fonteSelect.isVisible().catch(() => false)) { await fonteSelect.selectOption("PNCP"); await page.waitForTimeout(300); }
+    if (await fonteSelect.isVisible().catch(() => false)) {
+      // Fontes agora carregam do banco com value=ID numerico; selecionar por label
+      await fonteSelect.selectOption({ label: "PNCP" }).catch(() => fonteSelect.selectOption("todas").catch(() => {}));
+      await page.waitForTimeout(300);
+    }
     const cbScore = page.locator(".checkbox-inline label").filter({ hasText: "Calcular score" }).first();
     if (await cbScore.isVisible().catch(() => false)) {
       const isChecked = await cbScore.locator("input[type='checkbox']").isChecked().catch(() => true);
@@ -228,9 +232,9 @@ test.describe.serial("GRUPO 4 — CAPTACAO (T-20 a T-27)", () => {
     await termoInput.waitFor({ timeout: 5000 });
     await termoInput.fill("reagentes hematologia");
     const ufSelect = selectByLabel(page, "UF");
-    if (await ufSelect.isVisible().catch(() => false)) { await ufSelect.selectOption("").catch(() => {}); }
+    if (await ufSelect.isVisible().catch(() => false)) { await ufSelect.selectOption("todas").catch(() => {}); }
     const fonteSelect = selectByLabel(page, "Fonte");
-    if (await fonteSelect.isVisible().catch(() => false)) { await fonteSelect.selectOption("").catch(() => {}); }
+    if (await fonteSelect.isVisible().catch(() => false)) { await fonteSelect.selectOption("todas").catch(() => {}); }
     const tipoSelect = selectByLabel(page, "Classificacao Tipo");
     if (await tipoSelect.isVisible().catch(() => false)) { await tipoSelect.selectOption("Reagentes").catch(() => {}); }
     const buscarBtn = page.locator("button.action-button:has-text('Buscar Editais')").first();
