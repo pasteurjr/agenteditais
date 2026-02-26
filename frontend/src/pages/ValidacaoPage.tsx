@@ -118,10 +118,12 @@ interface DocNecessariaItem {
   status: "ok" | "faltando" | "vencido";
   validade?: string;
   exigido?: boolean;
+  descricao_edital?: string; // descrição do requisito extraído do PDF do edital
 }
 
 interface DocNecessariaResponse {
   documentos: DocNecessariaItem[];
+  fonte?: string; // "requisitos_edital" | "padrao_licitacao"
 }
 
 // === INTERFACES PARA HISTORICO SEMELHANTE REAL ===
@@ -241,6 +243,7 @@ export function ValidacaoPage(props?: PageProps) {
   const [docsNecessaria, setDocsNecessaria] = useState<DocNecessariaItem[]>([]);
   const [docsNecessariaLoading, setDocsNecessariaLoading] = useState(false);
   const [docsNecessariaErro, setDocsNecessariaErro] = useState("");
+  const [docsNecessariaFonte, setDocsNecessariaFonte] = useState<string>("");
 
   // V3/V4: Histórico semelhante real e reputação do órgão
   const [historicoReal, setHistoricoReal] = useState<HistoricoRealItem[]>([]);
@@ -313,6 +316,7 @@ export function ValidacaoPage(props?: PageProps) {
           setDocsNecessariaErro("Configure documentos da empresa na aba Empresa");
         }
         setDocsNecessaria(docs);
+        setDocsNecessariaFonte(data.fonte || "");
       } catch {
         setDocsNecessaria([]);
         setDocsNecessariaErro("Configure documentos da empresa na aba Empresa");
@@ -943,7 +947,9 @@ export function ValidacaoPage(props?: PageProps) {
               </div>
             </div>
             <div style={{ marginTop: "12px", fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
-              Documentos carregados automaticamente cruzando requisitos do edital com cadastro da empresa.
+              {docsNecessariaFonte === "requisitos_edital"
+                ? "Documentos exigidos extraidos do PDF deste edital, cruzados com cadastro da empresa."
+                : "Lista padrao de licitacoes. Baixe o PDF do edital para ver requisitos especificos."}
             </div>
           </>
         )}

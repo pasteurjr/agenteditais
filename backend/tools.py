@@ -54,11 +54,21 @@ Analise o texto do edital abaixo e extraia TODOS os requisitos técnicos, docume
 Para cada requisito, retorne um objeto JSON com:
 - tipo: "tecnico", "documental" ou "comercial"
 - descricao: descrição completa do requisito
-- nome_especificacao: nome da especificação técnica se houver (ex: "Sensibilidade", "Voltagem")
-- valor_exigido: valor exigido se houver (ex: "≤ 0.05 mg/dL", "220V")
+- nome_especificacao: para tipo "documental", use o código do documento/certidão da lista abaixo. Para tipo "tecnico", nome da especificação (ex: "Sensibilidade", "Voltagem")
+- valor_exigido: para tipo "documental", use a subcategoria: "documento", "certidao" ou "tecnico". Para outros tipos, o valor exigido (ex: "≤ 0.05 mg/dL")
 - operador: operador se houver ("<", "<=", "=", ">=", ">")
 - valor_numerico: valor numérico extraído
 - obrigatorio: true se for obrigatório, false se for desejável
+
+CÓDIGOS DE DOCUMENTOS para nome_especificacao (tipo "documental"):
+Documentos da empresa (valor_exigido="documento"):
+  contrato_social, alvara, procuracao, afe, cbpad, cbpp, bombeiros
+Certidões fiscais (valor_exigido="certidao"):
+  cnd_federal, cnd_estadual, cnd_municipal, fgts, trabalhista
+Qualificação técnica (valor_exigido="tecnico"):
+  atestado_capacidade, registro_conselho, balanco, qualificacao_tecnica
+
+Se o edital pedir um documento que não está na lista, use nome_especificacao="outro" e coloque o nome real na descricao.
 
 Retorne APENAS um array JSON válido, sem texto adicional.
 

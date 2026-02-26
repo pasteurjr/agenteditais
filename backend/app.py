@@ -5667,6 +5667,18 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
                     db.commit()
 
                     response_text += "## ✅ PDF Salvo com Sucesso!\n\n"
+
+                    # Extrair requisitos automaticamente (incluindo documentais/certidões)
+                    requisitos_extraidos = 0
+                    if texto_extraido and len(texto_extraido) > 200:
+                        try:
+                            resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id)
+                            requisitos_extraidos = resultado_req.get("requisitos_extraidos", 0)
+                            if requisitos_extraidos > 0:
+                                response_text += f"📋 **Requisitos extraídos:** {requisitos_extraidos} (técnicos, documentais e comerciais)\n\n"
+                        except Exception as e_req:
+                            response_text += f"⚠️ Não foi possível extrair requisitos automaticamente: {str(e_req)}\n\n"
+
                     response_text += "Agora você pode fazer perguntas sobre o edital:\n"
                     response_text += f"- \"Quais itens o edital {edital.numero} comporta?\"\n"
                     response_text += f"- \"Qual o local de entrega do edital {edital.numero}?\"\n"
@@ -5677,6 +5689,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
                         "arquivo": filename,
                         "tamanho": filesize,
                         "texto_extraido": len(texto_extraido),
+                        "requisitos_extraidos": requisitos_extraidos,
                         "fonte": "PNCP"
                     }
                 else:
@@ -5875,6 +5888,18 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
             db.commit()
 
             response_text += "## ✅ PDF Salvo com Sucesso!\n\n"
+
+            # Extrair requisitos automaticamente (incluindo documentais/certidões)
+            requisitos_extraidos = 0
+            if texto_extraido and len(texto_extraido) > 200:
+                try:
+                    resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id)
+                    requisitos_extraidos = resultado_req.get("requisitos_extraidos", 0)
+                    if requisitos_extraidos > 0:
+                        response_text += f"📋 **Requisitos extraídos:** {requisitos_extraidos} (técnicos, documentais e comerciais)\n\n"
+                except Exception as e_req:
+                    response_text += f"⚠️ Não foi possível extrair requisitos automaticamente: {str(e_req)}\n\n"
+
             response_text += "Agora você pode fazer perguntas sobre o edital:\n"
             response_text += f"- \"Quais itens o edital {edital.numero} comporta?\"\n"
             response_text += f"- \"Qual o local de entrega do edital {edital.numero}?\"\n"
@@ -5885,7 +5910,8 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
                 "edital": edital.numero,
                 "arquivo": filename,
                 "tamanho": filesize,
-                "texto_extraido": len(texto_extraido)
+                "texto_extraido": len(texto_extraido),
+                "requisitos_extraidos": requisitos_extraidos
             }
 
         except requests.exceptions.RequestException as e:
@@ -7964,9 +7990,10 @@ def vincular_documento_edital(edital_id):
 @require_auth
 def documentacao_necessaria(edital_id):
     """
-    Retorna documentação necessária para o edital, cruzando com documentos da empresa.
+    Retorna documentação necessária para o edital, cruzando requisitos extraídos
+    do PDF com documentos/certidões reais da empresa.
+    Se o edital não tem requisitos documentais extraídos, usa lista padrão de licitações.
     Formato: { documentos: [{ nome, categoria, status, validade, exigido }] }
-    Categorias: "empresa", "fiscal", "tecnica" — mapeiam para as 3 pastas do Processo Amanda.
     """
     from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
     from datetime import date
@@ -7989,139 +8016,117 @@ def documentacao_necessaria(edital_id):
             EditalRequisito.tipo == 'documental'
         ).all()
 
-        # Documentos e certidões da empresa
-        docs_empresa = []
-        certs_empresa = []
+        # Documentos e certidões da empresa (indexados por tipo)
+        docs_empresa_por_tipo = {}
+        certs_por_tipo = {}
         if empresa:
-            docs_empresa = db.query(EmpresaDocumento).filter(
-                EmpresaDocumento.empresa_id == empresa.id
-            ).all()
-            certs_empresa = db.query(EmpresaCertidao).filter(
-                EmpresaCertidao.empresa_id == empresa.id
-            ).all()
+            for d in db.query(EmpresaDocumento).filter(EmpresaDocumento.empresa_id == empresa.id).all():
+                docs_empresa_por_tipo.setdefault(d.tipo, []).append(d)
+            for c in db.query(EmpresaCertidao).filter(EmpresaCertidao.empresa_id == empresa.id).all():
+                certs_por_tipo.setdefault(c.tipo, []).append(c)
 
         hoje = date.today()
         documentos = []
 
-        # --- Pasta 1: Documentos da Empresa (categoria "empresa") ---
-        # Documentos padrão exigidos em licitações
-        docs_padrao_empresa = {
-            "contrato_social": "Contrato Social / Ato Constitutivo",
-            "alvara": "Alvara de Funcionamento",
-            "procuracao": "Procuracao do Representante Legal",
-            "afe": "AFE - Autorizacao de Funcionamento (ANVISA)",
-            "cbpad": "CBPAD",
-            "cbpp": "CBPP",
-            "bombeiros": "Auto de Vistoria do Corpo de Bombeiros",
+        # Mapeamento de código -> (nome legível, categoria na pasta)
+        DOCS_CONHECIDOS = {
+            # Documentos da empresa (pasta azul)
+            "contrato_social": ("Contrato Social / Ato Constitutivo", "empresa"),
+            "alvara": ("Alvara de Funcionamento", "empresa"),
+            "procuracao": ("Procuracao do Representante Legal", "empresa"),
+            "afe": ("AFE - Autorizacao de Funcionamento (ANVISA)", "empresa"),
+            "cbpad": ("CBPAD", "empresa"),
+            "cbpp": ("CBPP", "empresa"),
+            "bombeiros": ("Auto de Vistoria do Corpo de Bombeiros", "empresa"),
+            # Certidões fiscais (pasta amarela)
+            "cnd_federal": ("CND Federal (Receita Federal / PGFN)", "fiscal"),
+            "cnd_estadual": ("CND Estadual (SEFAZ)", "fiscal"),
+            "cnd_municipal": ("CND Municipal (Prefeitura)", "fiscal"),
+            "fgts": ("CRF - Certificado de Regularidade do FGTS", "fiscal"),
+            "trabalhista": ("CNDT - Certidao Negativa de Debitos Trabalhistas", "fiscal"),
+            # Qualificação técnica (pasta verde)
+            "atestado_capacidade": ("Atestado de Capacidade Tecnica", "tecnica"),
+            "registro_conselho": ("Registro no Conselho de Classe", "tecnica"),
+            "balanco": ("Balanco Patrimonial", "tecnica"),
+            "qualificacao_tecnica": ("Qualificacao Tecnica Complementar", "tecnica"),
         }
-        docs_empresa_por_tipo = {}
-        for d in docs_empresa:
-            docs_empresa_por_tipo.setdefault(d.tipo, []).append(d)
 
-        for tipo, nome in docs_padrao_empresa.items():
-            encontrados = docs_empresa_por_tipo.get(tipo, [])
-            if encontrados:
-                doc = encontrados[0]
-                venc = doc.data_vencimento
-                if venc and venc < hoje:
-                    status = "vencido"
-                else:
-                    status = "ok"
-                validade = venc.strftime("%d/%m/%Y") if venc else None
+        # Tipos que são certidões (buscam em empresa_certidoes ao invés de empresa_documentos)
+        TIPOS_CERTIDAO = {"cnd_federal", "cnd_estadual", "cnd_municipal", "fgts", "trabalhista"}
+
+        def checar_status_documento(tipo_ref):
+            """Cruza tipo_ref com documentos/certidões reais da empresa."""
+            if tipo_ref in TIPOS_CERTIDAO:
+                encontrados = certs_por_tipo.get(tipo_ref, [])
+                if encontrados:
+                    cert = encontrados[0]
+                    venc = cert.data_vencimento
+                    if cert.status == "vencida" or (venc and venc < hoje):
+                        return "vencido", venc.strftime("%d/%m/%Y") if venc else None
+                    elif cert.status in ("valida",):
+                        return "ok", venc.strftime("%d/%m/%Y") if venc else None
+                    else:
+                        return "faltando", None
+                return "faltando", None
             else:
-                status = "faltando"
-                validade = None
-            documentos.append({
-                "nome": nome,
-                "categoria": "empresa",
-                "status": status,
-                "validade": validade,
-                "exigido": True,
-            })
+                encontrados = docs_empresa_por_tipo.get(tipo_ref, [])
+                if encontrados:
+                    doc = encontrados[0]
+                    venc = doc.data_vencimento
+                    if venc and venc < hoje:
+                        return "vencido", venc.strftime("%d/%m/%Y") if venc else None
+                    return "ok", venc.strftime("%d/%m/%Y") if venc else None
+                return "faltando", None
 
-        # Documentos extras da empresa não nos padrões
-        tipos_padrao = set(docs_padrao_empresa.keys())
-        for d in docs_empresa:
-            if d.tipo not in tipos_padrao:
-                venc = d.data_vencimento
-                status = "vencido" if venc and venc < hoje else "ok"
-                validade = venc.strftime("%d/%m/%Y") if venc else None
+        # ====================================================================
+        # MODO 1: Edital tem requisitos documentais extraídos do PDF → lista específica
+        # ====================================================================
+        if requisitos_doc:
+            tipos_ja_adicionados = set()
+            for req in requisitos_doc:
+                tipo_ref = (req.nome_especificacao or "").strip().lower()
+                subcategoria = (req.valor_exigido or "").strip().lower()
+
+                if tipo_ref in DOCS_CONHECIDOS:
+                    nome, categoria = DOCS_CONHECIDOS[tipo_ref]
+                    status, validade = checar_status_documento(tipo_ref)
+                    tipos_ja_adicionados.add(tipo_ref)
+                elif tipo_ref == "outro" or tipo_ref not in DOCS_CONHECIDOS:
+                    # Documento não-padrão extraído pelo IA
+                    nome = req.descricao[:80] if req.descricao else "Documento exigido"
+                    # Inferir categoria pela subcategoria ou texto
+                    if subcategoria == "certidao":
+                        categoria = "fiscal"
+                    elif subcategoria == "tecnico":
+                        categoria = "tecnica"
+                    else:
+                        categoria = "empresa"
+                    status, validade = "faltando", None  # não temos match automático
+                else:
+                    continue
+
                 documentos.append({
-                    "nome": d.nome_arquivo or d.tipo.replace("_", " ").title(),
-                    "categoria": "empresa",
+                    "nome": nome,
+                    "categoria": categoria,
                     "status": status,
                     "validade": validade,
-                    "exigido": False,
+                    "exigido": req.obrigatorio if req.obrigatorio is not None else True,
+                    "descricao_edital": req.descricao,
                 })
 
-        # --- Pasta 2: Certidões e Fiscal (categoria "fiscal") ---
-        certs_padrao = {
-            "cnd_federal": "CND Federal (Receita Federal / PGFN)",
-            "cnd_estadual": "CND Estadual (SEFAZ)",
-            "cnd_municipal": "CND Municipal (Prefeitura)",
-            "fgts": "CRF - Certificado de Regularidade do FGTS",
-            "trabalhista": "CNDT - Certidao Negativa de Debitos Trabalhistas",
-        }
-        certs_por_tipo = {}
-        for c in certs_empresa:
-            certs_por_tipo.setdefault(c.tipo, []).append(c)
-
-        for tipo, nome in certs_padrao.items():
-            encontrados = certs_por_tipo.get(tipo, [])
-            if encontrados:
-                cert = encontrados[0]
-                venc = cert.data_vencimento
-                if cert.status == "vencida" or (venc and venc < hoje):
-                    status = "vencido"
-                elif cert.status in ("valida",):
-                    status = "ok"
-                else:
-                    status = "faltando"
-                validade = venc.strftime("%d/%m/%Y") if venc else None
-            else:
-                status = "faltando"
-                validade = None
-            documentos.append({
-                "nome": nome,
-                "categoria": "fiscal",
-                "status": status,
-                "validade": validade,
-                "exigido": True,
-            })
-
-        # --- Pasta 3: Qualificação Técnica (categoria "tecnica") ---
-        docs_padrao_tecnica = {
-            "atestado_capacidade": "Atestado de Capacidade Tecnica",
-            "registro_conselho": "Registro no Conselho de Classe",
-            "balanco": "Balanco Patrimonial",
-            "qualificacao_tecnica": "Qualificacao Tecnica Complementar",
-        }
-        for tipo, nome in docs_padrao_tecnica.items():
-            encontrados = docs_empresa_por_tipo.get(tipo, [])
-            if encontrados:
-                doc = encontrados[0]
-                venc = doc.data_vencimento
-                status = "vencido" if venc and venc < hoje else "ok"
-                validade = venc.strftime("%d/%m/%Y") if venc else None
-            else:
-                status = "faltando"
-                validade = None
-            documentos.append({
-                "nome": nome,
-                "categoria": "tecnica",
-                "status": status,
-                "validade": validade,
-                "exigido": True,
-            })
-
-        # Se o edital tem requisitos documentais extraídos, marcar como exigidos
-        for req in requisitos_doc:
-            desc_lower = (req.descricao or "").lower()
-            for doc in documentos:
-                nome_lower = doc["nome"].lower()
-                # Associar requisito ao documento correspondente
-                if any(kw in desc_lower for kw in nome_lower.split()):
-                    doc["exigido"] = True
+        # ====================================================================
+        # MODO 2: Sem requisitos extraídos → lista padrão de licitações
+        # ====================================================================
+        else:
+            for tipo_ref, (nome, categoria) in DOCS_CONHECIDOS.items():
+                status, validade = checar_status_documento(tipo_ref)
+                documentos.append({
+                    "nome": nome,
+                    "categoria": categoria,
+                    "status": status,
+                    "validade": validade,
+                    "exigido": True,
+                })
 
         return jsonify({
             "success": True,
@@ -8129,6 +8134,7 @@ def documentacao_necessaria(edital_id):
             "edital_numero": edital.numero,
             "documentos": documentos,
             "total": len(documentos),
+            "fonte": "requisitos_edital" if requisitos_doc else "padrao_licitacao",
         })
 
     except Exception as e:
