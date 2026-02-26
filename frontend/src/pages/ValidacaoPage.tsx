@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import {
   ClipboardCheck, Eye, Download, MessageSquare, FileText, CheckCircle, XCircle, Clock,
   AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, X, Sparkles, Building,
-  AlertCircle, Scale, FolderOpen, Search
+  AlertCircle, Scale, FolderOpen, Search, RefreshCw
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, TextArea,
@@ -244,6 +244,7 @@ export function ValidacaoPage(props?: PageProps) {
   const [docsNecessariaLoading, setDocsNecessariaLoading] = useState(false);
   const [docsNecessariaErro, setDocsNecessariaErro] = useState("");
   const [docsNecessariaFonte, setDocsNecessariaFonte] = useState<string>("");
+  const [extraindoRequisitos, setExtraindoRequisitos] = useState(false);
 
   // V3/V4: Histórico semelhante real e reputação do órgão
   const [historicoReal, setHistoricoReal] = useState<HistoricoRealItem[]>([]);
@@ -1017,17 +1018,54 @@ export function ValidacaoPage(props?: PageProps) {
         </div>
       )}
 
-      {/* Botão: Documentos Exigidos via IA */}
-      {onSendToChat && (
-        <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+      {/* Botões: Extrair Requisitos + Documentos Exigidos via IA */}
+      <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        {docsNecessariaFonte === "padrao_licitacao" && (
+          <ActionButton
+            icon={extraindoRequisitos ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
+            label={extraindoRequisitos ? "Extraindo..." : "Extrair Requisitos do Edital"}
+            variant="primary"
+            onClick={async () => {
+              if (extraindoRequisitos) return;
+              setExtraindoRequisitos(true);
+              try {
+                const token = localStorage.getItem("editais_ia_access_token");
+                const resp = await fetch(`/api/editais/${edital.id}/extrair-requisitos`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                  // Recarregar documentação com requisitos novos
+                  const resp2 = await fetch(`/api/editais/${edital.id}/documentacao-necessaria`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (resp2.ok) {
+                    const data2: DocNecessariaResponse = await resp2.json();
+                    setDocsNecessaria(data2.documentos || []);
+                    setDocsNecessariaFonte(data2.fonte || "");
+                    setDocsNecessariaErro("");
+                  }
+                } else {
+                  setDocsNecessariaErro(data.error || "Erro ao extrair requisitos");
+                }
+              } catch {
+                setDocsNecessariaErro("Erro de conexao ao extrair requisitos");
+              } finally {
+                setExtraindoRequisitos(false);
+              }
+            }}
+          />
+        )}
+        {onSendToChat && (
           <ActionButton
             icon={<Sparkles size={14} />}
             label="Documentos Exigidos via IA"
-            variant="primary"
+            variant="secondary"
             onClick={() => onSendToChat("Quais documentos são exigidos no edital " + edital.numero + "?")}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 

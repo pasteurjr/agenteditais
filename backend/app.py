@@ -8145,6 +8145,69 @@ def documentacao_necessaria(edital_id):
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/extrair-requisitos", methods=["POST"])
+@require_auth
+def extrair_requisitos_edital(edital_id):
+    """
+    Extrai requisitos (técnicos, documentais, comerciais) do PDF já baixado do edital.
+    Chamado pela aba Documentos quando o edital tem PDF mas não tem requisitos extraídos.
+    """
+    from models import Edital, EditalDocumento, EditalRequisito
+    user_id = get_current_user_id()
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Verificar se já tem requisitos extraídos
+        requisitos_existentes = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital_id
+        ).count()
+        if requisitos_existentes > 0:
+            return jsonify({
+                "success": True,
+                "message": f"Edital já possui {requisitos_existentes} requisitos extraídos",
+                "requisitos_extraidos": requisitos_existentes,
+                "ja_existia": True,
+            })
+
+        # Buscar texto do PDF do edital
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.texto_extraido != None
+        ).first()
+
+        if not doc or not doc.texto_extraido or len(doc.texto_extraido) < 200:
+            return jsonify({
+                "error": "Edital não possui PDF com texto extraído. Baixe o PDF primeiro.",
+                "sem_pdf": True,
+            }), 400
+
+        # Extrair requisitos via IA
+        resultado = tool_extrair_requisitos(edital_id, doc.texto_extraido, user_id)
+
+        if resultado.get("success"):
+            return jsonify({
+                "success": True,
+                "requisitos_extraidos": resultado.get("requisitos_extraidos", 0),
+                "categoria": resultado.get("categoria"),
+            })
+        else:
+            return jsonify({"error": resultado.get("error", "Erro na extração")}), 500
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # =============================================================================
 # B7: SICONV como fonte de busca de editais
 # (Implementado em tools.py — parser + integração via Serper)
