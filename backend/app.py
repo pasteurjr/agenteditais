@@ -1674,6 +1674,42 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         print(f"[BUSCA-MULTI] Removidas {len(editais) - len(editais_unicos)} duplicatas")
     editais = editais_unicos
 
+    # 4. Filtro final de encerrados (pega scraper + PNCP enriquecidos)
+    if not incluir_encerrados:
+        from datetime import datetime as dt_check
+        hoje_check = dt_check.now()
+        editais_filtrados = []
+        encerrados_removidos = 0
+        for ed in editais:
+            data_ab = ed.get('data_abertura', '')
+            if data_ab and data_ab not in ('Ver no portal', 'N/A', ''):
+                try:
+                    # Aceitar formatos: "2026-03-15T08:00:00", "2026-03-15", "15/03/2026"
+                    if 'T' in str(data_ab):
+                        dt_ab = dt_check.fromisoformat(str(data_ab).replace('Z', ''))
+                    elif '/' in str(data_ab):
+                        partes = str(data_ab).split('/')
+                        if len(partes) == 3:
+                            dt_ab = dt_check(int(partes[2]), int(partes[1]), int(partes[0]))
+                        else:
+                            editais_filtrados.append(ed)
+                            continue
+                    elif '-' in str(data_ab):
+                        dt_ab = dt_check.fromisoformat(str(data_ab)[:10])
+                    else:
+                        editais_filtrados.append(ed)
+                        continue
+                    if dt_ab < hoje_check:
+                        ed['encerrado'] = True
+                        encerrados_removidos += 1
+                        continue  # Remover encerrado
+                except (ValueError, TypeError):
+                    pass  # Se não parsear, mantém
+            editais_filtrados.append(ed)
+        if encerrados_removidos > 0:
+            print(f"[BUSCA-MULTI] Removidos {encerrados_removidos} editais encerrados (filtro final)")
+        editais = editais_filtrados
+
     return {
         "success": len(editais) > 0,
         "termo": termo,
