@@ -1539,6 +1539,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     deduplica e retorna resultado consolidado.
     Reutilizada pelo chat (processar_buscar_editais) e pelo endpoint REST (/api/editais/buscar).
     """
+    import re
     editais = []
     fontes_consultadas = []
     erros_fontes = []
@@ -1594,6 +1595,17 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     continue
 
                 numero_edital = ed.get('numero', ed.get('titulo', '')[:50])
+
+                # Filtrar encerrados pelo ano no número (ex: "04/2025" → ano 2025 < atual)
+                if not incluir_encerrados and numero_edital:
+                    ano_match = re.search(r'/(\d{4})', numero_edital)
+                    if ano_match:
+                        ano_edital = int(ano_match.group(1))
+                        ano_atual = hoje.year
+                        if ano_edital < ano_atual:
+                            print(f"[BUSCA-MULTI] Filtrando (ano {ano_edital}): {numero_edital}")
+                            continue
+
                 ed_normalizado = {
                     'numero': numero_edital,
                     'orgao': ed.get('orgao', 'Não identificado'),
