@@ -1540,6 +1540,8 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     Reutilizada pelo chat (processar_buscar_editais) e pelo endpoint REST (/api/editais/buscar).
     """
     import re
+    from datetime import datetime as _dt
+    hoje = _dt.now()
     editais = []
     fontes_consultadas = []
     erros_fontes = []
