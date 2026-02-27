@@ -1633,13 +1633,24 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     try:
                         idx, numero, fonte, dados_pncp = future.result(timeout=15)
                         if dados_pncp:
+                            # Filtrar encerrado direto aqui, antes de adicionar
+                            data_ab = dados_pncp.get('data_abertura', '')
+                            if not incluir_encerrados and data_ab:
+                                try:
+                                    dt_ab = datetime.fromisoformat(str(data_ab).replace('Z', '')[:19])
+                                    if dt_ab < hoje:
+                                        editais_novos[idx]['_remover'] = True
+                                        print(f"[BUSCA-MULTI] Edital {numero} encerrado, removendo")
+                                        continue
+                                except (ValueError, TypeError):
+                                    pass
                             editais_novos[idx].update({
                                 'cnpj_orgao': dados_pncp.get('cnpj_orgao'),
                                 'ano_compra': dados_pncp.get('ano_compra'),
                                 'seq_compra': dados_pncp.get('seq_compra'),
                                 'numero_pncp': dados_pncp.get('numero_pncp'),
                                 'valor_referencia': dados_pncp.get('valor_referencia'),
-                                'data_abertura': dados_pncp.get('data_abertura'),
+                                'data_abertura': data_ab,
                                 'uf': dados_pncp.get('uf'),
                                 'cidade': dados_pncp.get('cidade'),
                                 'orgao': dados_pncp.get('orgao') or editais_novos[idx]['orgao'],
@@ -1652,7 +1663,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                             print(f"[BUSCA-MULTI] Edital {numero} enriquecido com dados PNCP")
                     except Exception as e:
                         print(f"[BUSCA-MULTI] Timeout/erro no enriquecimento: {e}")
-        editais.extend(editais_novos)
+        editais.extend([e for e in editais_novos if not e.get('_remover')])
         fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
         fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
         print(f"[BUSCA-MULTI] Scraper: {len(editais_novos)} editais adicionais encontrados")
@@ -1673,42 +1684,6 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     if len(editais) != len(editais_unicos):
         print(f"[BUSCA-MULTI] Removidas {len(editais) - len(editais_unicos)} duplicatas")
     editais = editais_unicos
-
-    # 4. Filtro final de encerrados (pega scraper + PNCP enriquecidos)
-    if not incluir_encerrados:
-        from datetime import datetime as dt_check
-        hoje_check = dt_check.now()
-        editais_filtrados = []
-        encerrados_removidos = 0
-        for ed in editais:
-            data_ab = ed.get('data_abertura', '')
-            if data_ab and data_ab not in ('Ver no portal', 'N/A', ''):
-                try:
-                    # Aceitar formatos: "2026-03-15T08:00:00", "2026-03-15", "15/03/2026"
-                    if 'T' in str(data_ab):
-                        dt_ab = dt_check.fromisoformat(str(data_ab).replace('Z', ''))
-                    elif '/' in str(data_ab):
-                        partes = str(data_ab).split('/')
-                        if len(partes) == 3:
-                            dt_ab = dt_check(int(partes[2]), int(partes[1]), int(partes[0]))
-                        else:
-                            editais_filtrados.append(ed)
-                            continue
-                    elif '-' in str(data_ab):
-                        dt_ab = dt_check.fromisoformat(str(data_ab)[:10])
-                    else:
-                        editais_filtrados.append(ed)
-                        continue
-                    if dt_ab < hoje_check:
-                        ed['encerrado'] = True
-                        encerrados_removidos += 1
-                        continue  # Remover encerrado
-                except (ValueError, TypeError):
-                    pass  # Se não parsear, mantém
-            editais_filtrados.append(ed)
-        if encerrados_removidos > 0:
-            print(f"[BUSCA-MULTI] Removidos {encerrados_removidos} editais encerrados (filtro final)")
-        editais = editais_filtrados
 
     return {
         "success": len(editais) > 0,
