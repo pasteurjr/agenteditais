@@ -1623,11 +1623,17 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                 idx = len(editais_novos)
                 editais_novos.append(ed_normalizado)
 
-                # Marcar para enriquecimento (máx 3 editais para evitar timeout)
-                if numero_edital and '/' in numero_edital and len(editais_para_enriquecer) < 3:
-                    editais_para_enriquecer.append((idx, numero_edital, ed.get('fonte', 'Web')))
+                # Marcar para enriquecimento via PNCP
+                # Se NÃO incluir encerrados: enriquecer TODOS de 2026+ (precisamos checar data real)
+                # Se incluir encerrados: enriquecer até 5 (só para dados extras)
+                if numero_edital and '/' in numero_edital:
+                    if not incluir_encerrados:
+                        # Precisa verificar data de TODOS os editais do ano atual ou futuro
+                        editais_para_enriquecer.append((idx, numero_edital, ed.get('fonte', 'Web')))
+                    elif len(editais_para_enriquecer) < 5:
+                        editais_para_enriquecer.append((idx, numero_edital, ed.get('fonte', 'Web')))
 
-        # Enriquecer editais do scraper em paralelo (máx 3, com timeout global de 30s)
+        # Enriquecer editais do scraper em paralelo via PNCP
         if editais_para_enriquecer:
             from concurrent.futures import ThreadPoolExecutor, as_completed
             from tools import _buscar_edital_pncp_por_numero
@@ -1640,12 +1646,15 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     print(f"[BUSCA-MULTI] Erro ao enriquecer {numero}: {e}")
                     return idx, numero, fonte, None
 
-            print(f"[BUSCA-MULTI] Enriquecendo {len(editais_para_enriquecer)} editais em paralelo...")
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            n_enriquecer = len(editais_para_enriquecer)
+            max_workers = min(n_enriquecer, 8)
+            timeout_global = max(30, n_enriquecer * 5)  # 5s por edital, mínimo 30s
+            print(f"[BUSCA-MULTI] Enriquecendo {n_enriquecer} editais em paralelo ({max_workers} workers, timeout {timeout_global}s)...")
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(_enriquecer, args): args for args in editais_para_enriquecer}
-                for future in as_completed(futures, timeout=30):
+                for future in as_completed(futures, timeout=timeout_global):
                     try:
-                        idx, numero, fonte, dados_pncp = future.result(timeout=15)
+                        idx, numero, fonte, dados_pncp = future.result(timeout=10)
                         if dados_pncp:
                             # Filtrar encerrado direto aqui, antes de adicionar
                             data_ab = dados_pncp.get('data_abertura', '')
@@ -1677,10 +1686,27 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                             print(f"[BUSCA-MULTI] Edital {numero} enriquecido com dados PNCP")
                     except Exception as e:
                         print(f"[BUSCA-MULTI] Timeout/erro no enriquecimento: {e}")
+        # Se NÃO incluir encerrados, remover editais do scraper que não foram verificados
+        # (data continua "Ver no portal" = não sabemos se está aberto)
+        if not incluir_encerrados:
+            indices_enriquecidos = {args[0] for args in editais_para_enriquecer}
+            removidos_nao_verificados = 0
+            for i, ed in enumerate(editais_novos):
+                if ed.get('_remover'):
+                    continue
+                if i in indices_enriquecidos and not ed.get('dados_completos'):
+                    # Foi enviado para enriquecimento mas PNCP não encontrou → não verificável
+                    ed['_remover'] = True
+                    removidos_nao_verificados += 1
+                    print(f"[BUSCA-MULTI] Removendo (não verificado no PNCP): {ed.get('numero', '?')}")
+            if removidos_nao_verificados:
+                print(f"[BUSCA-MULTI] {removidos_nao_verificados} editais removidos por data não verificável")
+
         editais.extend([e for e in editais_novos if not e.get('_remover')])
         fontes_scraper = resultado_scraper.get('fontes_consultadas', [])
         fontes_consultadas.extend([f"{f} (Scraper)" for f in fontes_scraper if 'pncp' not in f.lower()])
-        print(f"[BUSCA-MULTI] Scraper: {len(editais_novos)} editais adicionais encontrados")
+        total_scraper_final = len([e for e in editais_novos if not e.get('_remover')])
+        print(f"[BUSCA-MULTI] Scraper: {total_scraper_final} editais adicionais após filtragem")
         if resultado_scraper.get('erros'):
             for err in resultado_scraper.get('erros', []):
                 erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
@@ -6704,11 +6730,17 @@ def get_edital(edital_id):
 @app.route("/api/editais/<edital_id>/pdf", methods=["GET"])
 @require_auth
 def download_edital_pdf(edital_id):
-    """Download ou visualização do PDF do edital"""
+    """Download ou visualização do PDF do edital.
+    Reutiliza a mesma lógica do chat: baixa, salva localmente, cria EditalDocumento.
+    Na segunda vez, serve do disco instantaneamente.
+    """
+    import re
+    import requests as req
+    from models import EditalDocumento
+    from datetime import datetime
     user_id = get_current_user_id()
     db = get_db()
     try:
-        # Buscar edital
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
             Edital.user_id == user_id
@@ -6717,19 +6749,9 @@ def download_edital_pdf(edital_id):
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
-        # Parâmetro para forçar download (ao invés de visualizar)
-        download = request.args.get('download', 'false').lower() == 'true'
+        download_flag = request.args.get('download', 'false').lower() == 'true'
 
-        # Opção 1: Arquivo local já baixado (pdf_path)
-        if edital.pdf_path and os.path.exists(edital.pdf_path):
-            return send_file(
-                edital.pdf_path,
-                mimetype='application/pdf',
-                as_attachment=download,
-                download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
-            )
-
-        # Opção 2: Buscar documento salvo localmente (EditalDocumento)
+        # === 1. Já tem arquivo local? Servir direto ===
         doc = db.query(EditalDocumento).filter(
             EditalDocumento.edital_id == edital_id,
             EditalDocumento.tipo == 'edital_principal'
@@ -6739,62 +6761,190 @@ def download_edital_pdf(edital_id):
             return send_file(
                 doc.path_arquivo,
                 mimetype='application/pdf',
-                as_attachment=download,
+                as_attachment=download_flag,
                 download_name=doc.nome_arquivo or f"edital_{edital.numero}.pdf"
             )
 
-        # Opção 3: Fazer proxy do PDF da URL do PNCP
-        if edital.pdf_url:
-            try:
-                import requests as req
-                print(f"[PDF] Fazendo proxy de: {edital.pdf_url}")
-                resp = req.get(edital.pdf_url, timeout=60, stream=True)
-                if resp.status_code == 200:
-                    from io import BytesIO
-                    pdf_content = BytesIO(resp.content)
-                    return send_file(
-                        pdf_content,
-                        mimetype='application/pdf',
-                        as_attachment=download,
-                        download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
-                    )
-                else:
-                    print(f"[PDF] Erro ao baixar: {resp.status_code}")
-            except Exception as e:
-                print(f"[PDF] Erro no proxy: {e}")
+        # Se doc existe mas sem arquivo no disco, deletar para permitir re-download
+        if doc and (not doc.path_arquivo or not os.path.exists(doc.path_arquivo or "")):
+            db.delete(doc)
+            db.commit()
+            doc = None
 
-        # Opção 4: Se tem dados do PNCP, buscar arquivos dinamicamente
+        if edital.pdf_path and os.path.exists(edital.pdf_path):
+            return send_file(
+                edital.pdf_path,
+                mimetype='application/pdf',
+                as_attachment=download_flag,
+                download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
+            )
+
+        # === 2. Extrair dados PNCP da URL se necessário ===
+        if not (edital.cnpj_orgao and edital.ano_compra and edital.seq_compra):
+            if edital.url and 'pncp.gov.br' in edital.url:
+                match = re.search(r'/editais/(\d{14}\d{0,2})-(\d+)-(\d+)/(\d{4})', edital.url)
+                if match:
+                    edital.cnpj_orgao = match.group(1)
+                    edital.ano_compra = int(match.group(4))
+                    edital.seq_compra = int(match.group(3))
+                    db.commit()
+                    print(f"[PDF] Dados PNCP extraídos da URL: cnpj={edital.cnpj_orgao}, ano={edital.ano_compra}, seq={edital.seq_compra}")
+
+        # === 3. Baixar via PNCP e SALVAR localmente (igual ao chat) ===
         if edital.cnpj_orgao and edital.ano_compra and edital.seq_compra:
             try:
-                from tools import tool_buscar_arquivos_edital_pncp
-                resultado = tool_buscar_arquivos_edital_pncp(
-                    cnpj=edital.cnpj_orgao,
-                    ano=edital.ano_compra,
-                    seq=edital.seq_compra
-                )
-                if resultado.get('success') and resultado.get('arquivo_edital'):
-                    pdf_url = resultado['arquivo_edital'].get('url_download') or resultado['arquivo_edital'].get('url')
-                    if pdf_url:
-                        import requests as req
-                        resp = req.get(pdf_url, timeout=60, stream=True)
-                        if resp.status_code == 200:
-                            # Salvar URL para próxima vez
-                            edital.pdf_url = pdf_url
-                            edital.pdf_titulo = resultado['arquivo_edital'].get('titulo')
-                            db.commit()
+                from tools import tool_buscar_arquivos_edital_pncp, tool_baixar_pdf_pncp
 
-                            from io import BytesIO
-                            pdf_content = BytesIO(resp.content)
-                            return send_file(
-                                pdf_content,
-                                mimetype='application/pdf',
-                                as_attachment=download,
-                                download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
-                            )
+                arquivos_result = tool_buscar_arquivos_edital_pncp(
+                    cnpj=edital.cnpj_orgao, ano=edital.ano_compra, seq=edital.seq_compra
+                )
+
+                if arquivos_result.get('success') and arquivos_result.get('arquivos'):
+                    arquivo_edital = arquivos_result.get('arquivo_edital') or arquivos_result['arquivos'][0]
+
+                    # Baixar e salvar no disco (tool_baixar_pdf_pncp salva em uploads/{user_id}/editais/)
+                    download_result = tool_baixar_pdf_pncp(
+                        cnpj=edital.cnpj_orgao,
+                        ano=edital.ano_compra,
+                        seq=edital.seq_compra,
+                        sequencial_arquivo=arquivo_edital['sequencial'],
+                        user_id=user_id,
+                        edital_id=edital.id
+                    )
+
+                    if download_result.get('success'):
+                        filepath = download_result['filepath']
+                        filename = download_result['filename']
+
+                        # Extrair texto do PDF
+                        texto_extraido = ""
+                        try:
+                            from PyPDF2 import PdfReader
+                            reader = PdfReader(filepath)
+                            for page in reader.pages:
+                                texto_extraido += page.extract_text() or ""
+                        except Exception:
+                            pass
+
+                        # Salvar no banco (EditalDocumento) — igual processar_baixar_pdf_edital
+                        novo_doc = EditalDocumento(
+                            id=str(uuid.uuid4()),
+                            edital_id=edital.id,
+                            tipo='edital_principal',
+                            nome_arquivo=filename,
+                            path_arquivo=filepath,
+                            texto_extraido=texto_extraido[:100000] if texto_extraido else None,
+                            processado=True,
+                            created_at=datetime.now()
+                        )
+                        db.add(novo_doc)
+
+                        # Atualizar edital com pdf_path, pdf_url, pdf_titulo
+                        edital.pdf_path = filepath
+                        edital.pdf_url = download_result.get('url') or edital.pdf_url
+                        edital.pdf_titulo = arquivo_edital.get('titulo')
+                        db.commit()
+
+                        print(f"[PDF] Salvo localmente: {filepath} ({download_result['filesize']/1024:.1f} KB)")
+
+                        return send_file(
+                            filepath,
+                            mimetype='application/pdf',
+                            as_attachment=download_flag,
+                            download_name=filename
+                        )
             except Exception as e:
-                print(f"[PDF] Erro ao buscar arquivos PNCP: {e}")
+                print(f"[PDF] Erro ao baixar via PNCP: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # === 4. Fallback: proxy da pdf_url ou url genérica ===
+        fallback_url = edital.pdf_url or edital.url
+        if fallback_url:
+            try:
+                resp = req.get(fallback_url, timeout=60, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }, allow_redirects=True)
+                content_type = resp.headers.get('Content-Type', '')
+                if resp.status_code == 200 and ('pdf' in content_type.lower() or fallback_url.lower().endswith('.pdf')):
+                    # Salvar localmente
+                    upload_dir = os.path.join(UPLOAD_FOLDER, user_id, "editais")
+                    os.makedirs(upload_dir, exist_ok=True)
+                    safe_numero = re.sub(r'[^\w\-.]', '_', edital.numero or edital_id)
+                    filepath = os.path.join(upload_dir, f"edital_{safe_numero}.pdf")
+                    with open(filepath, 'wb') as f:
+                        f.write(resp.content)
+
+                    novo_doc = EditalDocumento(
+                        id=str(uuid.uuid4()),
+                        edital_id=edital.id,
+                        tipo='edital_principal',
+                        nome_arquivo=f"edital_{safe_numero}.pdf",
+                        path_arquivo=filepath,
+                        processado=False,
+                        created_at=datetime.now()
+                    )
+                    db.add(novo_doc)
+                    edital.pdf_path = filepath
+                    db.commit()
+
+                    return send_file(
+                        filepath,
+                        mimetype='application/pdf',
+                        as_attachment=download_flag,
+                        download_name=f"edital_{safe_numero}.pdf"
+                    )
+            except Exception as e:
+                print(f"[PDF] Erro fallback URL: {e}")
 
         return jsonify({"error": "PDF não disponível para este edital"}), 404
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/pdf/view", methods=["GET"])
+def view_edital_pdf(edital_id):
+    """Serve PDF já baixado para visualização inline (iframe/object).
+    Usa token via query param para permitir acesso direto pelo browser.
+    """
+    from models import EditalDocumento
+    token = request.args.get('token')
+    if not token:
+        return jsonify({"error": "Token não fornecido"}), 401
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        user_id = payload.get('user_id')
+    except Exception:
+        return jsonify({"error": "Token inválido"}), 401
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.tipo == 'edital_principal'
+        ).first()
+
+        pdf_path = None
+        if doc and doc.path_arquivo and os.path.exists(doc.path_arquivo):
+            pdf_path = doc.path_arquivo
+        elif edital.pdf_path and os.path.exists(edital.pdf_path):
+            pdf_path = edital.pdf_path
+
+        if not pdf_path:
+            return jsonify({"error": "PDF não encontrado. Clique em 'Baixar PDF do Edital' na aba IA primeiro."}), 404
+
+        # Ler o arquivo e retornar como response puro — sem Content-Disposition
+        # para evitar que o browser trate como download dentro de iframe
+        with open(pdf_path, 'rb') as f:
+            pdf_bytes = f.read()
+        resp = app.response_class(pdf_bytes, mimetype='application/pdf')
+        resp.headers['Content-Length'] = str(len(pdf_bytes))
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        return resp
     finally:
         db.close()
 
@@ -6803,6 +6953,7 @@ def download_edital_pdf(edital_id):
 @require_auth
 def download_edital_pdf_by_numero(numero):
     """Download ou visualização do PDF do edital pelo número"""
+    from models import EditalDocumento
     user_id = get_current_user_id()
     db = get_db()
     try:
@@ -7204,10 +7355,12 @@ def buscar_editais_rest():
                 "id": edital_id,
                 "numero": e.get("numero"),
                 "orgao": e.get("orgao"),
+                "orgao_tipo": e.get("orgao_tipo", "municipal"),
                 "objeto": e.get("objeto") or e.get("descricao"),
                 "modalidade": e.get("modalidade"),
                 "valor_estimado": e.get("valor_referencia") or e.get("valor_estimado"),
                 "data_abertura": e.get("data_abertura"),
+                "data_encerramento": e.get("data_encerramento"),
                 "uf": e.get("uf") or uf,
                 "url": e.get("url") or e.get("link"),
                 "fonte": e.get("fonte"),

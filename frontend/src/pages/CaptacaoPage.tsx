@@ -43,6 +43,7 @@ interface EditalBusca {
   selected?: boolean;
   url?: string;
   fonte?: string;
+  orgaoTipo?: string;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -170,7 +171,10 @@ function calcularScoreComercial(ufEdital: string, estadosAtuacao: string[]): num
 function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: string[]): EditalBusca {
   const scoreTecnico = Number(e.score_tecnico ?? 0);
   const dataAbertura = formatarDataBr(String(e.data_abertura ?? ""));
-  const diasRestantes = calcularDiasRestantes(String(e.data_abertura ?? ""));
+  // Usar data_encerramento para calcular prazo restante (é a data limite real).
+  // Fallback para data_abertura se encerramento não existir.
+  const dataParaPrazo = String(e.data_encerramento ?? e.data_abertura ?? "");
+  const diasRestantes = calcularDiasRestantes(dataParaPrazo);
 
   // C1: Score comercial corrigido (RF-020)
   let scoreComercial: number;
@@ -238,6 +242,7 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     gaps,
     url: String(e.url ?? ""),
     fonte: String(e.fonte ?? ""),
+    orgaoTipo: String(e.orgao_tipo ?? "outro"),
   };
 }
 
@@ -261,7 +266,7 @@ export function CaptacaoPage(props?: PageProps) {
   const [fonte, setFonte] = useState("todas");
   const [classificacaoTipo, setClassificacaoTipo] = useState("todos");
   const [classificacaoOrigem, setClassificacaoOrigem] = useState("todos");
-  const [calcularScore, setCalcularScore] = useState(true);
+  const [calcularScore, setCalcularScore] = useState(false);
   const [incluirEncerrados, setIncluirEncerrados] = useState(false);
 
   const [resultados, setResultados] = useState<EditalBusca[]>([]);
@@ -429,15 +434,36 @@ export function CaptacaoPage(props?: PageProps) {
   // T14: Salvar edital via CRUD
   const salvarEditalNoBanco = async (edital: EditalBusca): Promise<string | null> => {
     try {
+      // Mapear modalidade para ENUM válido do banco
+      const modalidadeMap: Record<string, string> = {
+        "pregao_eletronico": "pregao_eletronico",
+        "pregao_presencial": "pregao_presencial",
+        "concorrencia": "concorrencia",
+        "tomada_precos": "tomada_precos",
+        "convite": "convite",
+        "dispensa": "dispensa",
+        "inexigibilidade": "inexigibilidade",
+      };
+      const modalidade = modalidadeMap[edital.classificacaoTipo] || "pregao_eletronico";
+
       const payload: Record<string, unknown> = {
         numero: edital.numero,
         orgao: edital.orgao,
-        orgao_tipo: edital.classificacaoOrigem,
-        uf: edital.uf,
+        orgao_tipo: edital.orgaoTipo || "municipal",
+        uf: edital.uf !== "—" ? edital.uf : null,
         objeto: edital.objeto,
-        modalidade: edital.classificacaoTipo,
+        modalidade,
         valor_referencia: edital.valor || null,
-        data_abertura: edital.dataAbertura || null,
+        data_abertura: (() => {
+          // Converter DD/MM/YYYY para YYYY-MM-DD para o MySQL
+          const d = edital.dataAbertura;
+          if (!d || d === "—") return null;
+          if (d.includes("/")) {
+            const [dia, mes, ano] = d.split("/");
+            return `${ano}-${mes}-${dia}`;
+          }
+          return d; // Já em formato ISO
+        })(),
         status: "novo",
         fonte: edital.fonte || "pncp",
         url: edital.url || null,

@@ -11,6 +11,7 @@ import {
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate } from "../api/crud";
+import { PdfViewer } from "../components/PdfViewer";
 
 // === INTERFACES ===
 
@@ -82,9 +83,22 @@ interface Edital {
   historicoSemelhante: HistoricoItem[];
   resumo?: string;
   pdfUrl?: string;
+  pdfPath?: string;
+  url?: string;
   produtoCorrespondente?: string;
   // IDs para persistência
   decisaoId?: string;
+}
+
+interface EditalItemData {
+  id: string;
+  numero_item: number;
+  descricao: string;
+  unidade_medida: string;
+  quantidade: number;
+  valor_unitario_estimado: number;
+  valor_total_estimado: number;
+  tipo_beneficio?: string;
 }
 
 // Sem dados mock — tabela alimentada 100% pelo backend (T18)
@@ -175,6 +189,8 @@ async function loadEditaisSalvos(): Promise<Edital[]> {
     historicoSemelhante: (e.historico_semelhante as HistoricoItem[]) || [],
     resumo: e.resumo as string | undefined,
     pdfUrl: (e.pdf_url || e.pdfUrl) as string | undefined,
+    pdfPath: (e.pdf_path || e.pdfPath) as string | undefined,
+    url: (e.url) as string | undefined,
     produtoCorrespondente: (e.produto_correspondente || e.produtoCorrespondente) as string | undefined,
     decisaoId: e.decisao_id as string | undefined,
   }));
@@ -246,6 +262,13 @@ export function ValidacaoPage(props?: PageProps) {
   const [docsNecessariaFonte, setDocsNecessariaFonte] = useState<string>("");
   const [extraindoRequisitos, setExtraindoRequisitos] = useState(false);
 
+  // Itens do edital
+  const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
+  const [itensLoading, setItensLoading] = useState(false);
+
+  // PdfViewer modal
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+
   // V3/V4: Histórico semelhante real e reputação do órgão
   const [historicoReal, setHistoricoReal] = useState<HistoricoRealItem[]>([]);
   const [historicoRealLoading, setHistoricoRealLoading] = useState(false);
@@ -289,6 +312,19 @@ export function ValidacaoPage(props?: PageProps) {
       .catch(err => setErroCarregamento(String(err?.message || "Erro ao carregar editais")))
       .finally(() => setLoadingEditais(false));
   }, []);
+
+  // Carregar itens do edital quando edital é selecionado
+  useEffect(() => {
+    if (!selectedEdital) {
+      setItensEdital([]);
+      return;
+    }
+    setItensLoading(true);
+    crudList("editais-itens", { edital_id: selectedEdital.id, per_page: 200 })
+      .then(res => setItensEdital((res.items || []) as EditalItemData[]))
+      .catch(() => setItensEdital([]))
+      .finally(() => setItensLoading(false));
+  }, [selectedEdital?.id]);
 
   // V1: Carregar documentação necessária quando edital é selecionado
   useEffect(() => {
@@ -464,8 +500,9 @@ export function ValidacaoPage(props?: PageProps) {
     }
   };
 
-  const handleBaixarPdf = (edital: Edital) => {
-    if (edital.pdfUrl) window.open(edital.pdfUrl, "_blank");
+  const handleVerPdf = () => {
+    if (!selectedEdital) return;
+    setPdfViewerOpen(true);
   };
 
   const handleMudarStatus = useCallback((editalId: string, novoStatus: Edital["status"]) => {
@@ -853,9 +890,42 @@ export function ValidacaoPage(props?: PageProps) {
     </div>
   );
 
-  // Aba 2: Documentos (Documentação Necessária + Checklist Documental + botão IA)
+  // Aba 2: Documentos (Itens + Documentação Necessária + Checklist Documental + botão IA)
   const renderAbaDocumentos = (edital: Edital) => (
     <div className="aba-content">
+      {/* Itens/Lotes do Edital */}
+      <div className="section-block">
+        <h4><FileText size={16} /> Itens do Edital ({itensEdital.length})</h4>
+        {itensLoading ? (
+          <p className="empty-message">Carregando itens...</p>
+        ) : itensEdital.length === 0 ? (
+          <div style={{ padding: "16px", textAlign: "center" }}>
+            <p style={{ color: "#94a3b8", fontSize: "14px" }}>Nenhum item carregado.</p>
+            {onSendToChat && (
+              <ActionButton
+                icon={<Search size={14} />}
+                label="Buscar Itens no PNCP"
+                variant="neutral"
+                onClick={() => onSendToChat("Busque os itens do edital " + edital.numero)}
+              />
+            )}
+          </div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: "numero_item", header: "#", width: "50px" },
+              { key: "descricao", header: "Descricao" },
+              { key: "quantidade", header: "Qtd", width: "80px" },
+              { key: "unidade_medida", header: "Unid", width: "80px" },
+              { key: "valor_unitario_estimado", header: "Vlr Unit", width: "100px", render: (item) => formatCurrency(Number(item.valor_unitario_estimado) || 0) },
+              { key: "valor_total_estimado", header: "Vlr Total", width: "110px", render: (item) => formatCurrency(Number(item.valor_total_estimado) || 0) },
+            ]}
+            data={itensEdital}
+            emptyMessage="Sem itens"
+          />
+        )}
+      </div>
+
       {/* Documentação Necessária — 3 pastas (empresa/fiscal/técnica) */}
       <div className="section-block">
         <h4><FolderOpen size={16} /> Documentacao Necessaria</h4>
@@ -1326,6 +1396,18 @@ export function ValidacaoPage(props?: PageProps) {
               variant="primary"
               onClick={() => onSendToChat("Gere uma proposta do produto " + (edital.produtoCorrespondente || "[produto]") + " para o edital " + edital.numero)}
             />
+            <ActionButton
+              icon={<Download size={14} />}
+              label="Baixar PDF do Edital"
+              variant="neutral"
+              onClick={() => onSendToChat("Baixe o PDF do edital " + edital.numero)}
+            />
+            <ActionButton
+              icon={<Search size={14} />}
+              label="Buscar Itens"
+              variant="neutral"
+              onClick={() => onSendToChat("Busque os itens do edital " + edital.numero)}
+            />
           </div>
         </div>
       )}
@@ -1464,7 +1546,7 @@ export function ValidacaoPage(props?: PageProps) {
               <Card title={`${selectedEdital.numero} - ${selectedEdital.orgao}`} icon={<ClipboardCheck size={18} />}
                 actions={
                   <div className="card-actions">
-                    {selectedEdital.pdfUrl && <ActionButton icon={<Download size={14} />} label="PDF" onClick={() => handleBaixarPdf(selectedEdital)} />}
+                    <ActionButton icon={<Eye size={14} />} label="Ver Edital" onClick={handleVerPdf} />
                     <SelectInput value={selectedEdital.status} onChange={(v) => handleMudarStatus(selectedEdital.id, v as Edital["status"])}
                       options={[
                         { value: "novo", label: "Novo" },
@@ -1604,6 +1686,26 @@ export function ValidacaoPage(props?: PageProps) {
           </div>
         )}
       </Modal>
+
+      {/* PdfViewer fullscreen modal */}
+      {selectedEdital && (
+        <PdfViewer
+          isOpen={pdfViewerOpen}
+          onClose={() => setPdfViewerOpen(false)}
+          editalId={selectedEdital.id}
+          pdfUrl={selectedEdital.pdfUrl}
+          titulo={`Edital ${selectedEdital.numero} - ${selectedEdital.orgao}`}
+          editalNumero={selectedEdital.numero}
+          pdfJaSalvo={!!selectedEdital.pdfPath}
+          onPdfSalvo={() => {
+            // Atualizar pdfPath no estado para refletir que foi salvo
+            setEditais(prev => prev.map(e =>
+              e.id === selectedEdital.id ? { ...e, pdfPath: "saved" } : e
+            ));
+            setSelectedEdital(prev => prev ? { ...prev, pdfPath: "saved" } : prev);
+          }}
+        />
+      )}
     </div>
   );
 }

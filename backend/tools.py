@@ -1550,9 +1550,14 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         if 'PNCP' in fonte_obj.nome.upper():
             # API do PNCP - endpoint de busca com parâmetros obrigatórios
             try:
-                # Datas de PUBLICAÇÃO: últimos 180 dias
+                # A API PNCP NÃO filtra por texto (param q é ignorado).
+                # Estratégia: buscar publicações recentes em PARALELO (muitas páginas
+                # simultâneas) e filtrar localmente pelo objeto do edital.
+                # Usamos dataEncerramentoProposta para determinar se está aberto.
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
                 data_final = datetime.now()
-                data_inicial = data_final - timedelta(days=180)
+                data_inicial = data_final - timedelta(days=30)
 
                 base_params = {
                     "dataInicial": data_inicial.strftime("%Y%m%d"),
@@ -1563,37 +1568,57 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 if uf:
                     base_params["uf"] = uf.upper()
 
-                # Data atual para filtrar apenas editais EM ABERTO
                 hoje = datetime.now()
 
                 print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
                 print(f"[TOOLS] Termo de busca: '{termo}'")
 
-                # Buscar múltiplas páginas até encontrar 10 editais ou esgotar 3 páginas
+                # Função para buscar uma página
+                def _buscar_pagina(pagina):
+                    try:
+                        params = {**base_params, "pagina": pagina}
+                        resp = requests.get(
+                            f"{PNCP_BASE_URL}/contratacoes/publicacao",
+                            params=params, timeout=15,
+                            headers={"Accept": "application/json"}
+                        )
+                        if resp.status_code == 200 and resp.text:
+                            return pagina, resp.json().get('data', [])
+                    except Exception as e:
+                        print(f"[TOOLS] Erro página {pagina}: {e}")
+                    return pagina, []
+
+                # Buscar páginas 1-5 em paralelo (250 editais)
                 all_items = []
-                for pagina in range(1, 4):  # Páginas 1 a 3 (150 editais)
-                    params = {**base_params, "pagina": pagina}
+                max_paginas = 20  # Até 1000 editais
+                lote_size = 5
 
-                    response = requests.get(
-                        f"{PNCP_BASE_URL}/contratacoes/publicacao",
-                        params=params,
-                        timeout=20,
-                        headers={"Accept": "application/json"}
-                    )
+                for lote_inicio in range(1, max_paginas + 1, lote_size):
+                    paginas_lote = list(range(lote_inicio, min(lote_inicio + lote_size, max_paginas + 1)))
+                    with ThreadPoolExecutor(max_workers=lote_size) as executor:
+                        futures = {executor.submit(_buscar_pagina, p): p for p in paginas_lote}
+                        resultados_lote = []
+                        for future in as_completed(futures, timeout=20):
+                            try:
+                                pag, items = future.result(timeout=15)
+                                resultados_lote.append((pag, items))
+                            except Exception:
+                                pass
 
-                    if response.status_code == 200 and response.text:
-                        data = response.json()
-                        items = data.get('data', [])
-                        all_items.extend(items)
-                        print(f"[TOOLS] Página {pagina}: +{len(items)} itens (total: {len(all_items)})")
+                    # Ordenar por página e adicionar
+                    resultados_lote.sort(key=lambda x: x[0])
+                    lote_vazio = True
+                    for pag, items in resultados_lote:
+                        if items:
+                            lote_vazio = False
+                            all_items.extend(items)
 
-                        # Se não há mais páginas, parar
-                        if not items or data.get('paginasRestantes', 0) == 0:
-                            break
-                    else:
-                        break
+                    print(f"[TOOLS] Lote págs {paginas_lote[0]}-{paginas_lote[-1]}: total acumulado {len(all_items)}")
 
-                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens")
+                    if lote_vazio:
+                        break  # Sem mais dados
+
+                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens (em paralelo)")
                 items = all_items
 
                 # Expandir termo para termos relacionados (mais específicos)
@@ -1639,21 +1664,21 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 editais_encerrados = 0
 
                 for item in items:
-                    # FILTRO 1: Verificar se edital está EM ABERTO (data de abertura futura)
-                    # Se incluir_encerrados=True, não filtra por data
+                    # FILTRO 1: Verificar se edital está EM ABERTO
+                    # Usar dataEncerramentoProposta (se existir) — é a data limite real.
+                    # Fallback para dataAberturaProposta.
                     edital_encerrado = False
-                    data_abertura_str = item.get('dataAberturaProposta')
-                    if data_abertura_str:
+                    data_enc_str = item.get('dataEncerramentoProposta') or item.get('dataAberturaProposta')
+                    if data_enc_str:
                         try:
-                            # Formato: "2025-11-03T08:00:00"
-                            data_abertura = datetime.fromisoformat(data_abertura_str.replace('Z', ''))
-                            if data_abertura < hoje:
+                            data_enc = datetime.fromisoformat(str(data_enc_str).replace('Z', '')[:19])
+                            if data_enc < hoje:
                                 edital_encerrado = True
                                 editais_encerrados += 1
                                 if not incluir_encerrados:
-                                    continue  # Pular editais já encerrados (se não incluir_encerrados)
+                                    continue
                         except (ValueError, TypeError):
-                            pass  # Se não conseguir parsear, inclui mesmo assim
+                            pass
 
                     objeto = (item.get('objetoCompra', '') or '').lower()
 
@@ -1717,7 +1742,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     elif esfera == 'F':
                         orgao_tipo = 'federal'
                     else:
-                        orgao_tipo = 'outro'
+                        orgao_tipo = 'municipal'
 
                     edital_data = {
                         "numero": item.get('numeroCompra', 'N/A'),
