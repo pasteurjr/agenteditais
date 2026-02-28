@@ -1525,13 +1525,15 @@ def tool_listar_fontes() -> Dict[str, Any]:
 def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                                uf: str = None, modalidade: str = None,
                                buscar_detalhes: bool = True,
-                               incluir_encerrados: bool = False) -> Dict[str, Any]:
+                               incluir_encerrados: bool = False,
+                               dias_busca: int = 90) -> Dict[str, Any]:
     """
     Busca editais em uma fonte específica (PNCP).
 
     Args:
         buscar_detalhes: Se True, busca itens e PDF para cada edital (mais lento, mais completo)
         incluir_encerrados: Se True, inclui editais já encerrados (data abertura no passado)
+        dias_busca: Janela de busca em dias (0 = sem limite, usa 730 dias como máximo técnico)
     """
     from datetime import timedelta
 
@@ -1557,68 +1559,80 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 data_final = datetime.now()
-                data_inicial = data_final - timedelta(days=30)
-
-                base_params = {
-                    "dataInicial": data_inicial.strftime("%Y%m%d"),
-                    "dataFinal": data_final.strftime("%Y%m%d"),
-                    "codigoModalidadeContratacao": 6,  # 6 = Pregão Eletrônico
-                    "tamanhoPagina": 50
-                }
-                if uf:
-                    base_params["uf"] = uf.upper()
-
+                janela = dias_busca if dias_busca > 0 else 730
                 hoje = datetime.now()
 
                 print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
-                print(f"[TOOLS] Termo de busca: '{termo}'")
+                print(f"[TOOLS] Termo de busca: '{termo}', janela: {janela} dias")
 
-                # Função para buscar uma página
-                def _buscar_pagina(pagina):
+                # Função para buscar uma página de uma sub-janela
+                def _buscar_pagina(sub_params, pagina):
                     try:
-                        params = {**base_params, "pagina": pagina}
+                        params = {**sub_params, "pagina": pagina}
                         resp = requests.get(
                             f"{PNCP_BASE_URL}/contratacoes/publicacao",
                             params=params, timeout=15,
                             headers={"Accept": "application/json"}
                         )
                         if resp.status_code == 200 and resp.text:
-                            return pagina, resp.json().get('data', [])
+                            resp_json = resp.json()
+                            return pagina, resp_json.get('data', []), int(resp_json.get('totalPaginas', 1))
                     except Exception as e:
                         print(f"[TOOLS] Erro página {pagina}: {e}")
-                    return pagina, []
+                    return pagina, [], 1
 
-                # Buscar páginas 1-5 em paralelo (250 editais)
-                all_items = []
-                max_paginas = 20  # Até 1000 editais
+                # Estratégia: dividir janela em sub-períodos de 15 dias
+                # e buscar as últimas 5 páginas de cada (editais mais recentes de cada período).
+                # Isso garante cobertura de toda a janela sem precisar varrer milhares de páginas.
+                SUB_JANELA_DIAS = 15
+                PAGINAS_POR_SUB = 5
                 lote_size = 5
 
-                for lote_inicio in range(1, max_paginas + 1, lote_size):
-                    paginas_lote = list(range(lote_inicio, min(lote_inicio + lote_size, max_paginas + 1)))
-                    with ThreadPoolExecutor(max_workers=lote_size) as executor:
-                        futures = {executor.submit(_buscar_pagina, p): p for p in paginas_lote}
-                        resultados_lote = []
-                        for future in as_completed(futures, timeout=20):
-                            try:
-                                pag, items = future.result(timeout=15)
-                                resultados_lote.append((pag, items))
-                            except Exception:
-                                pass
+                all_items = []
+                sub_inicio = data_final - timedelta(days=janela)
 
-                    # Ordenar por página e adicionar
-                    resultados_lote.sort(key=lambda x: x[0])
-                    lote_vazio = True
-                    for pag, items in resultados_lote:
-                        if items:
-                            lote_vazio = False
-                            all_items.extend(items)
+                while sub_inicio < data_final:
+                    sub_fim = min(sub_inicio + timedelta(days=SUB_JANELA_DIAS), data_final)
+                    sub_params = {
+                        "dataInicial": sub_inicio.strftime("%Y%m%d"),
+                        "dataFinal": sub_fim.strftime("%Y%m%d"),
+                        "codigoModalidadeContratacao": 6,
+                        "tamanhoPagina": 50
+                    }
+                    if uf:
+                        sub_params["uf"] = uf.upper()
 
-                    print(f"[TOOLS] Lote págs {paginas_lote[0]}-{paginas_lote[-1]}: total acumulado {len(all_items)}")
+                    # Descobrir totalPaginas desta sub-janela
+                    _, first_items, total_pags = _buscar_pagina(sub_params, 1)
 
-                    if lote_vazio:
-                        break  # Sem mais dados
+                    # Buscar últimas PAGINAS_POR_SUB páginas (mais recentes deste período)
+                    pag_ini = max(1, total_pags - PAGINAS_POR_SUB + 1)
+                    paginas = list(range(pag_ini, total_pags + 1))
 
-                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens (em paralelo)")
+                    # Já temos a página 1 se está no range
+                    sub_items = []
+                    if 1 in paginas:
+                        sub_items.extend(first_items)
+                        paginas = [p for p in paginas if p != 1]
+
+                    # Buscar as demais em paralelo
+                    if paginas:
+                        with ThreadPoolExecutor(max_workers=lote_size) as executor:
+                            futures = {executor.submit(_buscar_pagina, sub_params, p): p for p in paginas}
+                            for future in as_completed(futures, timeout=20):
+                                try:
+                                    _, page_items, _ = future.result(timeout=15)
+                                    sub_items.extend(page_items)
+                                except Exception:
+                                    pass
+
+                    all_items.extend(sub_items)
+                    periodo = f"{sub_inicio.strftime('%d/%m')}-{sub_fim.strftime('%d/%m')}"
+                    print(f"[TOOLS] Sub-janela {periodo}: {total_pags} págs, buscou {len(sub_items)} itens")
+
+                    sub_inicio = sub_fim + timedelta(days=1)
+
+                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens ({janela} dias em sub-janelas de {SUB_JANELA_DIAS}d)")
                 items = all_items
 
                 # Expandir termo para termos relacionados (mais específicos)

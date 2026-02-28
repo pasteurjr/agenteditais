@@ -288,6 +288,7 @@ export function CaptacaoPage(props?: PageProps) {
 
   // C3: NCM search field
   const [ncm, setNcm] = useState("");
+  const [diasBusca, setDiasBusca] = useState("90");
 
   // C3: Novo monitoramento inline form (mesmos parâmetros da busca)
   const [showNovoMonitoramento, setShowNovoMonitoramento] = useState(false);
@@ -393,6 +394,7 @@ export function CaptacaoPage(props?: PageProps) {
         calcularScore: String(calcularScore),
         incluirEncerrados: String(incluirEncerrados),
         limite: "30",
+        diasBusca: diasBusca,
       });
       if (uf !== "todas") params.append("uf", uf);
       if (fonte !== "todas") params.append("fontes", fonte);
@@ -934,6 +936,20 @@ export function CaptacaoPage(props?: PageProps) {
                 value={ncm}
                 onChange={setNcm}
                 placeholder="Ex: 9027.80.99"
+              />
+            </FormField>
+            <FormField label="Periodo de publicacao">
+              <SelectInput
+                value={diasBusca}
+                onChange={setDiasBusca}
+                options={[
+                  { value: "30", label: "Ultimos 30 dias" },
+                  { value: "60", label: "Ultimos 60 dias" },
+                  { value: "90", label: "Ultimos 90 dias" },
+                  { value: "180", label: "Ultimos 180 dias" },
+                  { value: "365", label: "Ultimo ano" },
+                  { value: "0", label: "Todos (sem limite)" },
+                ]}
               />
             </FormField>
           </div>

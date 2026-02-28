@@ -1533,7 +1533,8 @@ Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
 
 def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                                 incluir_encerrados: bool = False,
-                                buscar_detalhes: bool = True) -> dict:
+                                buscar_detalhes: bool = True,
+                                dias_busca: int = 90) -> dict:
     """
     Busca editais em múltiplas fontes (PNCP API + Serper scraper) EM PARALELO,
     deduplica e retorna resultado consolidado.
@@ -1552,7 +1553,8 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     try:
         resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf,
                                                     buscar_detalhes=buscar_detalhes,
-                                                    incluir_encerrados=incluir_encerrados)
+                                                    incluir_encerrados=incluir_encerrados,
+                                                    dias_busca=dias_busca)
         if resultado_pncp.get("success"):
             editais_pncp = resultado_pncp.get("editais", [])
             for ed in editais_pncp:
@@ -7308,6 +7310,7 @@ def buscar_editais_rest():
       - calcularScore (opcional, default true): calcular score aderência
       - incluirEncerrados (opcional, default false): incluir editais encerrados
       - limite / limit (opcional, default 20): máximo de resultados
+      - diasBusca (opcional, default 90): janela de publicação em dias (0 = sem limite)
     """
     user_id = get_current_user_id()
     termo = request.args.get("termo", "").strip()
@@ -7317,6 +7320,9 @@ def buscar_editais_rest():
     incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
     incluir_encerrados = incluir_encerrados_str.lower() == "true"
     limite = int(request.args.get("limite", request.args.get("limit", 20)))
+    dias_busca = int(request.args.get("diasBusca", request.args.get("dias_busca", 90)))
+    if dias_busca != 0:
+        dias_busca = max(7, min(730, dias_busca))
 
     if not termo:
         return jsonify({"success": False, "error": "Parâmetro 'termo' é obrigatório"}), 400
@@ -7329,6 +7335,7 @@ def buscar_editais_rest():
             uf=uf,
             incluir_encerrados=incluir_encerrados,
             buscar_detalhes=False,
+            dias_busca=dias_busca,
         )
 
         editais = resultado_busca.get("editais", [])
