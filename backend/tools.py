@@ -1589,13 +1589,21 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                 lote_size = 5
 
                 all_items = []
-                sub_inicio = data_final - timedelta(days=janela)
 
-                while sub_inicio < data_final:
-                    sub_fim = min(sub_inicio + timedelta(days=SUB_JANELA_DIAS), data_final)
+                # Montar sub-janelas DA MAIS RECENTE PARA A MAIS ANTIGA
+                # Assim editais mais novos (em aberto) aparecem primeiro
+                sub_janelas = []
+                sub_fim = data_final
+                data_limite = data_final - timedelta(days=janela)
+                while sub_fim > data_limite:
+                    sub_ini = max(sub_fim - timedelta(days=SUB_JANELA_DIAS), data_limite)
+                    sub_janelas.append((sub_ini, sub_fim))
+                    sub_fim = sub_ini - timedelta(days=1)
+
+                for sub_ini, sub_f in sub_janelas:
                     sub_params = {
-                        "dataInicial": sub_inicio.strftime("%Y%m%d"),
-                        "dataFinal": sub_fim.strftime("%Y%m%d"),
+                        "dataInicial": sub_ini.strftime("%Y%m%d"),
+                        "dataFinal": sub_f.strftime("%Y%m%d"),
                         "codigoModalidadeContratacao": 6,
                         "tamanhoPagina": 50
                     }
@@ -1627,10 +1635,8 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                                     pass
 
                     all_items.extend(sub_items)
-                    periodo = f"{sub_inicio.strftime('%d/%m')}-{sub_fim.strftime('%d/%m')}"
+                    periodo = f"{sub_ini.strftime('%d/%m')}-{sub_f.strftime('%d/%m')}"
                     print(f"[TOOLS] Sub-janela {periodo}: {total_pags} págs, buscou {len(sub_items)} itens")
-
-                    sub_inicio = sub_fim + timedelta(days=1)
 
                 print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens ({janela} dias em sub-janelas de {SUB_JANELA_DIAS}d)")
                 items = all_items

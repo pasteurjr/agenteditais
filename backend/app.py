@@ -1764,7 +1764,24 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
     # Detectar se deve incluir editais encerrados
     if incluir_encerrados is None:
         msg_lower = message.lower()
-        incluir_encerrados = any(p in msg_lower for p in ['todos', 'incluindo encerrados', 'encerrados', 'all'])
+        # "sem incluir encerrados" / "sem encerrados" → NÃO incluir
+        if 'sem incluir encerrados' in msg_lower or 'sem encerrados' in msg_lower:
+            incluir_encerrados = False
+        else:
+            incluir_encerrados = any(p in msg_lower for p in ['incluindo encerrados', 'incluir encerrados', 'encerrados', 'todos', 'all'])
+
+    # Detectar janela de busca (dias) da mensagem
+    dias_busca = 90  # default
+    msg_lower_dias = message.lower()
+    dias_match = re.search(r'janela\s+de\s+(\d+)\s*dias?', msg_lower_dias)
+    if not dias_match:
+        dias_match = re.search(r'(?:ultimos|últimos)\s+(\d+)\s*dias?', msg_lower_dias)
+    if dias_match:
+        dias_busca = int(dias_match.group(1))
+        if dias_busca != 0:
+            dias_busca = max(7, min(730, dias_busca))
+    elif 'sem limite' in msg_lower_dias or 'periodo indefinido' in msg_lower_dias:
+        dias_busca = 0
 
     # Usar termo da IA se disponível, senão extrair da mensagem
     if termo_ia:
@@ -1820,7 +1837,8 @@ JSON:"""
 
     # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
     resultado = _buscar_editais_multifonte(
-        termo=termo, user_id=user_id, uf=uf, incluir_encerrados=incluir_encerrados
+        termo=termo, user_id=user_id, uf=uf, incluir_encerrados=incluir_encerrados,
+        dias_busca=dias_busca,
     )
     editais = resultado.get("editais", [])
     fontes_consultadas = resultado.get("fontes_consultadas", [])
