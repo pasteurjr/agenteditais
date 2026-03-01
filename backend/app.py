@@ -1001,7 +1001,7 @@ def chat():
             response_text, resultado = processar_cadastrar_fonte(message, user_id, intencao_resultado)
 
         elif action_type == "buscar_editais":
-            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
 
         elif action_type == "buscar_editais_simples":
             response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
@@ -1738,7 +1738,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     }
 
 
-def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = False, incluir_encerrados: bool = None):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None):
     """
     Processa ação: Buscar editais
 
