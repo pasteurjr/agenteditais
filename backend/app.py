@@ -1001,7 +1001,7 @@ def chat():
             response_text, resultado = processar_cadastrar_fonte(message, user_id, intencao_resultado)
 
         elif action_type == "buscar_editais":
-            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
 
         elif action_type == "buscar_editais_simples":
             response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
@@ -1738,7 +1738,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     }
 
 
-def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = False, incluir_encerrados: bool = None):
     """
     Processa ação: Buscar editais
 
@@ -2321,12 +2321,12 @@ O edital **{numero_edital}** não está cadastrado no sistema.
                 return response, {"editais": resultados, "termo": numero_edital}
 
         # Se não encontrou na API principal, tentar busca genérica
-        return processar_buscar_editais(f"edital {numero_edital}", user_id)
+        return processar_buscar_editais(f"edital {numero_edital}", user_id, calcular_score=False)
 
     except Exception as e:
         print(f"[BUSCA-EDITAL] Erro na API PNCP: {e}")
         # Fallback para busca genérica
-        return processar_buscar_editais(f"edital {numero_edital}", user_id)
+        return processar_buscar_editais(f"edital {numero_edital}", user_id, calcular_score=False)
 
 
 def processar_listar_produtos(message: str, user_id: str):
@@ -2824,8 +2824,8 @@ def processar_listar_propostas(message: str, user_id: str):
 
 def processar_buscar_editais_score(message: str, user_id: str):
     """Processa ação: Buscar editais + calcular score"""
-    # Primeiro buscar editais
-    response_busca, resultado_busca = processar_buscar_editais(message, user_id)
+    # Primeiro buscar editais (sem score — score é calculado abaixo separadamente)
+    response_busca, resultado_busca = processar_buscar_editais(message, user_id, calcular_score=False)
 
     if not resultado_busca.get("success"):
         return response_busca, resultado_busca
@@ -3198,7 +3198,7 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
             print(f"[SALVAR] Re-executando busca (fallback): {ultima_busca_user.content[:50]}...")
             classificacao = detectar_intencao_ia(ultima_busca_user.content, tem_arquivo=False)
             termo_ia = classificacao.get("termo_busca")
-            _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id, termo_ia=termo_ia)
+            _, resultado_busca = processar_buscar_editais(ultima_busca_user.content, user_id, termo_ia=termo_ia, calcular_score=False)
 
             if resultado_busca.get("success"):
                 editais_com_score = resultado_busca.get("editais_com_score", [])
