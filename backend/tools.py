@@ -529,162 +529,112 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
     hoje = datetime.now()
 
     try:
-        # Buscar na API PNCP (fonte oficial) - mesmos parâmetros que tool_buscar_editais_fonte
-        data_final = datetime.now()
-        data_inicial = data_final - timedelta(days=180)
+        import unicodedata
 
-        params = {
-            "dataInicial": data_inicial.strftime("%Y%m%d"),
-            "dataFinal": data_final.strftime("%Y%m%d"),
-            "codigoModalidadeContratacao": 6,  # Pregão Eletrônico
-            "tamanhoPagina": 50,
-            "pagina": 1
-        }
+        def _sem_acento(txt):
+            return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
 
-        url = f"{PNCP_BASE_URL}/contratacoes/publicacao"
-        print(f"[LINKS] URL: {url}")
-        print(f"[LINKS] Params: {params}")
+        # Preparar palavras do termo para filtro ALL-words
+        termo_norm = _sem_acento(termo.lower())
+        palavras_termo = [p for p in termo_norm.split() if len(p) > 2]
 
-        response = requests.get(
-            url,
-            params=params,
-            headers={"Accept": "application/json"},
-            timeout=30
-        )
-
-        print(f"[LINKS] Response status: {response.status_code}")
-
-        # Expandir termos de busca
-        termo_lower = termo.lower()
-        termos_busca = [termo_lower]
-
-        # Expandir termos médicos/hospitalares — apenas termos COMPOSTOS para evitar falsos positivos
-        if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
-                                           'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
-                                           'laborat', 'diagnóstic', 'diagnostic', 'hematolog']):
-            termos_busca.extend([
-                'equipamento médico', 'equipamento medico',
-                'equipamento hospitalar', 'material hospitalar',
-                'material médico', 'material medico',
-                'insumo hospitalar', 'insumo médico', 'insumo medico',
-                'produto para saúde', 'produto para saude',
-                'reagente', 'reagentes', 'medicamento', 'medicamentos',
-                'hematologia', 'hematológico', 'analisador',
-                'diagnóstico', 'diagnostico',
-                'videocirurgia', 'videocirúrgico',
-            ])
-
-        # Expandir termos de TI
-        if any(t in termo_lower for t in ['tecnologia', 'ti', 'informática', 'informatica', 'computador']):
-            termos_busca.extend([
-                'tecnologia da informação', 'informática', 'informatica',
-                'computador', 'computadores', 'desktop', 'notebook',
-                'software', 'hardware', 'servidor', 'rede'
-            ])
-
-        # Buscar múltiplas páginas do PNCP
+        # Buscar via Search API do PNCP (busca textual no servidor)
+        SEARCH_URL = "https://pncp.gov.br/api/search/"
         all_items = []
-        if response.status_code == 200 and response.text:
-            data = response.json()
-            items = data.get("data", [])
+
+        for pagina in range(1, 5):  # Até 4 páginas (200 itens)
+            params = {
+                "q": termo,
+                "tipos_documento": "edital",
+                "tam_pagina": 50,
+                "pagina": pagina,
+                "ordenacao": "-data",
+            }
+            resp = requests.get(SEARCH_URL, params=params, timeout=20,
+                                headers={"Accept": "application/json"})
+            if resp.status_code != 200:
+                break
+            data = resp.json()
+            items = data.get("items", [])
+            if not items:
+                break
             all_items.extend(items)
-            print(f"[LINKS] Página 1: {len(items)} itens")
+            if len(all_items) >= data.get("total", 0):
+                break
 
-            # Buscar mais páginas se necessário
-            for pagina in range(2, 4):  # Páginas 2 e 3
-                params["pagina"] = pagina
-                resp = requests.get(url, params=params, headers={"Accept": "application/json"}, timeout=30)
-                if resp.status_code == 200 and resp.text:
-                    data = resp.json()
-                    items = data.get("data", [])
-                    if items:
-                        all_items.extend(items)
-                        print(f"[LINKS] Página {pagina}: +{len(items)} itens")
-                    else:
-                        break
-                else:
-                    break
+        print(f"[LINKS] Search API: {len(all_items)} itens coletados")
 
-            print(f"[LINKS] Total itens PNCP: {len(all_items)}")
+        for item in all_items:
+            descricao = (item.get('description', '') or '')
+            titulo = (item.get('title', '') or '')
+            texto_norm = _sem_acento(f"{titulo} {descricao}".lower())
 
-            for item in all_items:
-                # FILTRO 1: Verificar se edital está EM ABERTO
-                data_abertura_str = item.get('dataAberturaProposta')
-                if data_abertura_str:
-                    try:
-                        data_abertura = datetime.fromisoformat(data_abertura_str.replace('Z', ''))
-                        if data_abertura < hoje:
-                            continue  # Pular editais já encerrados
-                    except (ValueError, TypeError):
-                        pass
+            # FILTRO: ALL-words match
+            if palavras_termo and not all(p in texto_norm for p in palavras_termo):
+                continue
 
-                objeto = (item.get('objetoCompra', '') or '').lower()
+            # Filtrar encerrados
+            data_fim_vig = item.get('data_fim_vigencia', '')
+            if data_fim_vig:
+                try:
+                    dt_fim = datetime.fromisoformat(str(data_fim_vig).replace('Z', '')[:19])
+                    if dt_fim < hoje:
+                        continue
+                except (ValueError, TypeError):
+                    pass
 
-                # FILTRO 2: Verificar se algum termo está no objeto
-                match = any(t in objeto for t in termos_busca)
-                if termo and not match:
-                    continue
+            orgao = item.get('orgao_nome', 'Órgão não informado')
+            objeto_texto = descricao[:100]
+            modalidade_nome = item.get('modalidade_licitacao_nome', 'Pregão')
+            numero = item.get('numero', '')
+            ano = item.get('ano', '')
+            seq = item.get('numero_sequencial')
+            uf_item = item.get('uf', '')
+            cidade = item.get('municipio_nome', '')
+            valor = item.get('valor_global', 0)
+            cnpj = (item.get('orgao_cnpj', '') or '').replace('.', '').replace('/', '').replace('-', '')
+            item_url = item.get('item_url', '')
 
-                # Extrair dados
-                orgao_data = item.get('orgaoEntidade', {}) or {}
-                unidade_data = item.get('unidadeOrgao', {}) or {}
+            # Construir URL
+            if item_url:
+                url_edital = f"https://pncp.gov.br{item_url}"
+            elif cnpj and ano and seq:
+                url_edital = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
+            else:
+                numero_pncp = item.get('numero_controle_pncp', '')
+                url_edital = f"https://pncp.gov.br/app/editais/{numero_pncp}" if numero_pncp else 'URL não disponível'
 
-                orgao = orgao_data.get('razaoSocial', 'Órgão não informado')
-                objeto_texto = item.get('objetoCompra', '')[:100]
-                modalidade = item.get('modalidadeNome', 'Pregão')
-                numero = item.get('numeroCompra', '')
-                ano = item.get('anoCompra', '')
-                seq = item.get('sequencialCompra')
-                uf = unidade_data.get('ufSigla', '')
-                cidade = unidade_data.get('municipioNome', '')
-                valor = item.get('valorTotalEstimado', 0)
-                cnpj = (orgao_data.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+            # Formatar número
+            if numero and ano:
+                numero_formatado = f"{modalidade_nome} {numero}/{ano}"
+            else:
+                numero_formatado = item.get('numero_controle_pncp', 'S/N')
 
-                # Construir URL correta do PNCP
-                if cnpj and ano and seq:
-                    url_edital = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
-                else:
-                    numero_pncp = item.get('numeroControlePNCP', '')
-                    if numero_pncp:
-                        url_edital = f"https://pncp.gov.br/app/editais/{numero_pncp}"
-                    else:
-                        url_edital = item.get('linkSistemaOrigem', 'URL não disponível')
+            localizacao = f"{cidade}/{uf_item}" if cidade and uf_item else (uf_item or "Brasil")
+            valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if valor else "Não informado"
 
-                # Formatar número do edital
-                if numero and ano:
-                    numero_formatado = f"{modalidade} {numero}/{ano}"
-                else:
-                    numero_formatado = item.get('numeroControlePNCP', 'S/N')
+            data_pub = item.get('data_publicacao_pncp', '')
+            if data_pub:
+                try:
+                    dt = datetime.fromisoformat(str(data_pub).replace("Z", "")[:19])
+                    data_fmt = dt.strftime("%d/%m/%Y às %H:%M")
+                except:
+                    data_fmt = str(data_pub)[:10]
+            else:
+                data_fmt = "Não informada"
 
-                # Formatar localização
-                localizacao = f"{cidade}/{uf}" if cidade and uf else (uf or "Brasil")
+            edital_info = {
+                "numero": numero_formatado,
+                "orgao": orgao,
+                "objeto": objeto_texto,
+                "localizacao": localizacao,
+                "valor": valor_fmt,
+                "data_abertura": data_fmt,
+                "url": url_edital
+            }
+            editais_encontrados.append(edital_info)
 
-                # Formatar valor
-                valor_fmt = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if valor else "Não informado"
-
-                # Formatar data
-                if data_abertura_str:
-                    try:
-                        dt = datetime.fromisoformat(data_abertura_str.replace("Z", ""))
-                        data_fmt = dt.strftime("%d/%m/%Y às %H:%M")
-                    except:
-                        data_fmt = data_abertura_str[:10]
-                else:
-                    data_fmt = "Não informada"
-
-                edital_info = {
-                    "numero": numero_formatado,
-                    "orgao": orgao,
-                    "objeto": objeto_texto,
-                    "localizacao": localizacao,
-                    "valor": valor_fmt,
-                    "data_abertura": data_fmt,
-                    "url": url_edital
-                }
-                editais_encontrados.append(edital_info)
-
-                # Formatar texto do link
-                texto_link = f"""
+            texto_link = f"""
 📋 **{numero_formatado}**
    📍 {orgao} - {localizacao}
    📝 {objeto_texto}
@@ -692,11 +642,10 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
    📅 Abertura: {data_fmt}
    🔗 Link: {url_edital}
 """
-                links_texto.append(texto_link)
+            links_texto.append(texto_link)
 
-                # Limitar a 15 resultados
-                if len(editais_encontrados) >= 15:
-                    break
+            if len(editais_encontrados) >= 15:
+                break
 
         # Se não encontrou nada no PNCP, tentar Serper
         if not editais_encontrados:
@@ -1554,195 +1503,142 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         editais_encontrados = []
 
         if 'PNCP' in fonte_obj.nome.upper():
-            # API do PNCP - endpoint de busca com parâmetros obrigatórios
+            # API do PNCP - usar endpoint de BUSCA TEXTUAL /api/search/
+            # Muito mais eficiente que baixar tudo e filtrar localmente.
             try:
-                # A API PNCP NÃO filtra por texto (param q é ignorado).
-                # Estratégia: buscar publicações recentes em PARALELO (muitas páginas
-                # simultâneas) e filtrar localmente pelo objeto do edital.
-                # Usamos dataEncerramentoProposta para determinar se está aberto.
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-
-                data_final = datetime.now()
-                janela = dias_busca if dias_busca > 0 else 730
-                hoje = datetime.now()
-
-                print(f"[TOOLS] Buscando PNCP: {PNCP_BASE_URL}/contratacoes/publicacao")
-                print(f"[TOOLS] Termo de busca: '{termo}', janela: {janela} dias")
-
-                # Função para buscar uma página de uma sub-janela
-                def _buscar_pagina(sub_params, pagina):
-                    try:
-                        params = {**sub_params, "pagina": pagina}
-                        resp = requests.get(
-                            f"{PNCP_BASE_URL}/contratacoes/publicacao",
-                            params=params, timeout=15,
-                            headers={"Accept": "application/json"}
-                        )
-                        if resp.status_code == 200 and resp.text:
-                            resp_json = resp.json()
-                            return pagina, resp_json.get('data', []), int(resp_json.get('totalPaginas', 1))
-                    except Exception as e:
-                        print(f"[TOOLS] Erro página {pagina}: {e}")
-                    return pagina, [], 1
-
-                # Estratégia: dividir janela em sub-períodos de 3 dias
-                # e buscar TODAS as páginas de cada sub-janela (em paralelo).
-                # Sub-janelas de 3 dias têm ~90 páginas, viável em paralelo.
-                # Isso garante cobertura COMPLETA sem perder editais no meio.
-                SUB_JANELA_DIAS = 3
-                MAX_PAGS_POR_SUB = 60  # Limitar para evitar excesso
-                lote_size = 10
-
-                all_items = []
-
-                # Montar sub-janelas DA MAIS RECENTE PARA A MAIS ANTIGA
-                sub_janelas = []
-                sub_fim = data_final
-                data_limite = data_final - timedelta(days=janela)
-                while sub_fim > data_limite:
-                    sub_ini = max(sub_fim - timedelta(days=SUB_JANELA_DIAS), data_limite)
-                    sub_janelas.append((sub_ini, sub_fim))
-                    sub_fim = sub_ini - timedelta(days=1)
-
-                for sub_ini, sub_f in sub_janelas:
-                    sub_params = {
-                        "dataInicial": sub_ini.strftime("%Y%m%d"),
-                        "dataFinal": sub_f.strftime("%Y%m%d"),
-                        "codigoModalidadeContratacao": 6,
-                        "tamanhoPagina": 50
-                    }
-                    if uf:
-                        sub_params["uf"] = uf.upper()
-
-                    # Descobrir totalPaginas desta sub-janela
-                    _, first_items, total_pags = _buscar_pagina(sub_params, 1)
-
-                    # Buscar TODAS as páginas (até MAX_PAGS_POR_SUB)
-                    pags_a_buscar = min(total_pags, MAX_PAGS_POR_SUB)
-                    paginas = list(range(1, pags_a_buscar + 1))
-
-                    # Já temos a página 1
-                    sub_items = list(first_items)
-                    paginas = [p for p in paginas if p != 1]
-
-                    # Buscar as demais em paralelo
-                    if paginas:
-                        with ThreadPoolExecutor(max_workers=lote_size) as executor:
-                            futures = {executor.submit(_buscar_pagina, sub_params, p): p for p in paginas}
-                            for future in as_completed(futures, timeout=60):
-                                try:
-                                    _, page_items, _ = future.result(timeout=15)
-                                    sub_items.extend(page_items)
-                                except Exception:
-                                    pass
-
-                    all_items.extend(sub_items)
-                    periodo = f"{sub_ini.strftime('%d/%m')}-{sub_f.strftime('%d/%m')}"
-                    print(f"[TOOLS] Sub-janela {periodo}: {total_pags} págs, buscou {pags_a_buscar}/{total_pags} págs = {len(sub_items)} itens")
-
-                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens ({janela} dias, {len(sub_janelas)} sub-janelas de {SUB_JANELA_DIAS}d)")
-                items = all_items
-
-                # Normalizar acentos para comparação (medico == médico)
                 import unicodedata
+
                 def _sem_acento(txt):
                     return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
 
-                # Expandir termo para termos relacionados (mais específicos)
-                termo_lower = termo.lower()
-                termos_busca = [termo_lower, _sem_acento(termo_lower)]
+                hoje = datetime.now()
+                janela = dias_busca if dias_busca > 0 else 730
+                data_limite = hoje - timedelta(days=janela)
 
-                # Expandir termos de TI/tecnologia - termos ESPECÍFICOS para evitar falsos positivos
-                if any(t in termo_lower for t in ['tecnologia', 'ti', 'informática', 'informatica', 'computador', 'computação']):
-                    termos_busca.extend([
-                        'tecnologia da informação', 'informática', 'informatica',
-                        'computador', 'computadores', 'desktop', 'notebook', 'laptop',
-                        'software', 'sistema de informação', 'sistema de gestão',
-                        'hardware', 'servidor de rede', 'servidor de dados',
-                        'monitor de vídeo', 'monitor led', 'monitor lcd',
-                        'impressora', 'scanner', 'nobreak', 'switch', 'roteador',
-                        'rede de dados', 'rede lógica', 'cabeamento estruturado',
-                        'licença de software', 'suporte técnico de ti',
-                        'equipamentos de informática', 'equipamento de ti'
-                    ])
+                # Preparar palavras do termo para filtro ALL-words local
+                termo_norm = _sem_acento(termo.lower())
+                palavras_termo = [p for p in termo_norm.split() if len(p) > 2]
 
-                # Expandir termos médicos/hospitalares — apenas termos COMPOSTOS para evitar falsos positivos
-                # NÃO adicionar palavras soltas como "hospital", "medico", "saude" que pegam qualquer coisa
-                if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
-                                                   'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
-                                                   'laborat', 'diagnóstic', 'diagnostic']):
-                    termos_busca.extend([
-                        'equipamento médico', 'equipamento medico',
-                        'equipamento hospitalar', 'material hospitalar',
-                        'material médico', 'material medico',
-                        'insumo hospitalar', 'insumo médico', 'insumo medico',
-                        'produto para saúde', 'produto para saude',
-                        'equipamento de saúde', 'equipamento de saude',
-                        'equipamento cirúrgico', 'equipamento cirurgico',
-                        'equipamento odontológico', 'equipamento odontologico',
-                        'equipamento laboratorial', 'material laboratorial',
-                        'reagente', 'reagentes', 'medicamento', 'medicamentos',
-                        'desfibrilador', 'monitor multiparâmetro', 'autoclave', 'oxímetro',
-                        'eletrocardiógrafo', 'bomba de infusão', 'cama hospitalar', 'maca',
-                        'videocirurgia', 'videocirúrgico',
-                    ])
+                print(f"[TOOLS] Buscando PNCP Search API: q='{termo}'")
+                print(f"[TOOLS] Palavras para filtro ALL-words: {palavras_termo}")
 
-                print(f"[TOOLS] Termos de busca expandidos: {termos_busca[:8]}...")
+                # ===== MÉTODO PRIMÁRIO: /api/search/?q= =====
+                SEARCH_URL = "https://pncp.gov.br/api/search/"
+                MAX_PAGINAS = 20  # Máximo de páginas a buscar (50 itens/pág = 1000 itens)
+                all_items = []
+                search_ok = False
 
-                # Filtrar por termos de busca no objeto E por data de abertura futura
+                try:
+                    for pagina in range(1, MAX_PAGINAS + 1):
+                        params = {
+                            "q": termo,
+                            "tipos_documento": "edital",
+                            "tam_pagina": 50,
+                            "pagina": pagina,
+                            "ordenacao": "-data",
+                        }
+                        resp = requests.get(SEARCH_URL, params=params, timeout=20,
+                                            headers={"Accept": "application/json"})
+                        if resp.status_code != 200:
+                            print(f"[TOOLS] Search API erro HTTP {resp.status_code} na página {pagina}")
+                            break
+
+                        data = resp.json()
+                        items = data.get("items", [])
+                        total = data.get("total", 0)
+
+                        if pagina == 1:
+                            print(f"[TOOLS] Search API: {total} resultados totais para '{termo}'")
+
+                        if not items:
+                            break
+
+                        all_items.extend(items)
+                        print(f"[TOOLS] Search API página {pagina}: +{len(items)} itens (acumulado: {len(all_items)})")
+
+                        # Se já pegou todos, parar
+                        if len(all_items) >= total:
+                            break
+
+                    search_ok = len(all_items) > 0
+                    print(f"[TOOLS] Search API total coletado: {len(all_items)} itens")
+
+                except Exception as e:
+                    print(f"[TOOLS] Search API falhou: {e}")
+                    search_ok = False
+
+                # Processar itens do Search API
                 editais_em_aberto = 0
                 editais_encerrados = 0
 
-                for item in items:
-                    # FILTRO 1: Verificar se edital está EM ABERTO
-                    # Usar dataEncerramentoProposta (se existir) — é a data limite real.
-                    # Fallback para dataAberturaProposta.
-                    edital_encerrado = False
-                    data_enc_str = item.get('dataEncerramentoProposta') or item.get('dataAberturaProposta')
-                    if data_enc_str:
+                for item in all_items:
+                    # Mapear campos do Search API para formato interno
+                    descricao = (item.get('description', '') or '').lower()
+                    titulo = (item.get('title', '') or '').lower()
+                    texto_completo = f"{titulo} {descricao}"
+                    texto_norm = _sem_acento(texto_completo)
+
+                    # FILTRO 1: ALL-words match — TODAS as palavras do termo devem aparecer
+                    if palavras_termo and not all(p in texto_norm for p in palavras_termo):
+                        continue
+
+                    # FILTRO 2: Janela de datas (baseado em data_publicacao_pncp)
+                    data_pub_str = item.get('data_publicacao_pncp', '')
+                    if data_pub_str:
                         try:
-                            data_enc = datetime.fromisoformat(str(data_enc_str).replace('Z', '')[:19])
-                            if data_enc < hoje:
-                                edital_encerrado = True
-                                editais_encerrados += 1
-                                if not incluir_encerrados:
-                                    continue
+                            data_pub = datetime.fromisoformat(str(data_pub_str).replace('Z', '')[:19])
+                            if data_pub < data_limite:
+                                continue  # Fora da janela de busca
                         except (ValueError, TypeError):
                             pass
 
-                    objeto = (item.get('objetoCompra', '') or '').lower()
-                    objeto_norm = _sem_acento(objeto)
+                    # FILTRO 3: Encerrados
+                    edital_encerrado = False
+                    cancelado = item.get('cancelado', False)
+                    situacao = (item.get('situacao_nome', '') or '').lower()
 
-                    # FILTRO 2: Verificar se algum termo está no objeto
-                    # Compara tanto com acento quanto sem acento
-                    match = any(t in objeto or t in objeto_norm for t in termos_busca)
-                    if termo and not match:
-                        continue
+                    # Verificar por datas de vigência
+                    data_fim_vig = item.get('data_fim_vigencia', '')
+                    if data_fim_vig:
+                        try:
+                            dt_fim = datetime.fromisoformat(str(data_fim_vig).replace('Z', '')[:19])
+                            if dt_fim < hoje:
+                                edital_encerrado = True
+                        except (ValueError, TypeError):
+                            pass
+
+                    if cancelado:
+                        edital_encerrado = True
+
+                    if edital_encerrado:
+                        editais_encerrados += 1
+                        if not incluir_encerrados:
+                            continue
 
                     editais_em_aberto += 1
 
-                    # Extrair dados do item
-                    orgao_data = item.get('orgaoEntidade', {}) or {}
-                    unidade_data = item.get('unidadeOrgao', {}) or {}
-                    numero_pncp = item.get('numeroControlePNCP', '')
+                    # Extrair dados do Search API
+                    orgao_nome = item.get('orgao_nome', 'N/A')
+                    cnpj = (item.get('orgao_cnpj', '') or '').replace('.', '').replace('/', '').replace('-', '')
+                    uf_item = item.get('uf', '')
+                    cidade = item.get('municipio_nome', '')
+                    ano = item.get('ano')
+                    seq = item.get('numero_sequencial')
+                    numero_pncp = item.get('numero_controle_pncp', '')
+                    item_url = item.get('item_url', '')
 
-                    # Construir URL do PNCP usando CNPJ, ano e sequencial (mais confiável)
-                    # Formato: https://pncp.gov.br/app/editais/{cnpj}-{sequencial}-{ano}
-                    cnpj = (orgao_data.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
-                    ano = item.get('anoCompra')
-                    seq = item.get('sequencialCompra')
-
-                    if cnpj and ano and seq:
-                        # URL direta para página do edital no PNCP
+                    # Construir URL do PNCP
+                    if item_url:
+                        link = f"https://pncp.gov.br{item_url}"
+                    elif cnpj and ano and seq:
                         link = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
                     elif numero_pncp:
                         link = f"https://pncp.gov.br/app/editais/{numero_pncp}"
                     else:
-                        # Fallback para linkSistemaOrigem se não tiver dados do PNCP
-                        link = item.get('linkSistemaOrigem')
+                        link = None
 
-                    # Mapear modalidade da API para ENUM do banco
-                    modalidade_api = (item.get('modalidadeNome', '') or '').lower()
+                    # Mapear modalidade
+                    modalidade_api = (item.get('modalidade_licitacao_nome', '') or '').lower()
                     if 'eletrônico' in modalidade_api or 'eletronico' in modalidade_api:
                         modalidade_db = 'pregao_eletronico'
                     elif 'presencial' in modalidade_api:
@@ -1758,59 +1654,56 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     elif 'inexigibilidade' in modalidade_api:
                         modalidade_db = 'inexigibilidade'
                     else:
-                        modalidade_db = 'pregao_eletronico'  # default
+                        modalidade_db = 'pregao_eletronico'
 
-                    # NÃO salvar - apenas criar dict com dados para retornar
-                    # Extrair UF e cidade da unidadeOrgao (não do orgaoEntidade)
-                    uf = unidade_data.get('ufSigla') or orgao_data.get('uf')
-                    cidade = unidade_data.get('municipioNome')
-
-                    # Determinar tipo de órgão baseado na esfera
-                    esfera = orgao_data.get('esferaId', '')
-                    if esfera == 'M':
+                    # Determinar esfera
+                    esfera = (item.get('esfera_nome', '') or '').lower()
+                    if 'municipal' in esfera:
                         orgao_tipo = 'municipal'
-                    elif esfera == 'E':
+                    elif 'estadual' in esfera or 'distrital' in esfera:
                         orgao_tipo = 'estadual'
-                    elif esfera == 'F':
+                    elif 'federal' in esfera:
                         orgao_tipo = 'federal'
                     else:
                         orgao_tipo = 'municipal'
 
+                    # Extrair número do título (ex: "Edital nº 90050/2025" → "90050/2025")
+                    import re
+                    titulo_raw = item.get('title', '') or ''
+                    numero_match = re.search(r'n[ºo°]\s*(.+)', titulo_raw, re.IGNORECASE)
+                    numero_edital = numero_match.group(1).strip() if numero_match else (item.get('numero') or titulo_raw or 'N/A')
+
                     edital_data = {
-                        "numero": item.get('numeroCompra', 'N/A'),
-                        "orgao": orgao_data.get('razaoSocial', 'N/A'),
+                        "numero": numero_edital,
+                        "orgao": orgao_nome,
                         "orgao_tipo": orgao_tipo,
-                        "uf": uf,
+                        "uf": uf_item,
                         "cidade": cidade,
-                        "objeto": objeto[:500] if objeto else f"Contratação - {termo}",
+                        "objeto": descricao[:500] if descricao else f"Contratação - {termo}",
                         "modalidade": modalidade_db,
-                        "valor_referencia": item.get('valorTotalEstimado'),
-                        "data_publicacao": item.get('dataPublicacaoPncp'),
-                        "data_abertura": item.get('dataAberturaProposta'),
-                        "data_encerramento": item.get('dataEncerramentoProposta'),
-                        "fonte": 'PNCP',
+                        "valor_referencia": item.get('valor_global'),
+                        "data_publicacao": item.get('data_publicacao_pncp'),
+                        "data_abertura": item.get('data_inicio_vigencia'),
+                        "data_encerramento": item.get('data_fim_vigencia'),
                         "url": link,
-                        "numero_pncp": numero_pncp,  # Para deduplicação e busca de itens
+                        "numero_pncp": numero_pncp,
                         "cnpj_orgao": cnpj,
                         "ano_compra": ano,
                         "seq_compra": seq,
-                        "srp": item.get('srp', False),  # Sistema de Registro de Preços
-                        "situacao": item.get('situacaoCompraNome'),
-                        "fonte": "PNCP (API)",  # Deixar claro de onde veio
+                        "srp": False,
+                        "situacao": item.get('situacao_nome'),
+                        "fonte": "PNCP (API)",
                         "fonte_tipo": "api",
-                        "encerrado": edital_encerrado,  # Flag se já encerrou
+                        "encerrado": edital_encerrado,
                     }
 
-                    # Enriquecer com itens e PDF (apenas para primeiros 5 para não sobrecarregar)
+                    # Enriquecer com itens e PDF (apenas para primeiros 5)
                     if buscar_detalhes and len(editais_encontrados) < 5:
                         edital_data = _enriquecer_edital_pncp(edital_data)
 
                     editais_encontrados.append(edital_data)
                     status_edital = "ENCERRADO" if edital_encerrado else "ABERTO"
-                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]} ({status_edital}, itens: {edital_data.get('total_itens', 0)}, PDF: {'sim' if edital_data.get('pdf_url') else 'não'})")
-
-                    # Sem break aqui — coleta todos os que matcham.
-                    # O limite final é aplicado pelo endpoint/chat.
+                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {orgao_nome[:30]} ({status_edital})")
 
                 if incluir_encerrados:
                     print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais (incluindo {editais_encerrados} encerrados)")
