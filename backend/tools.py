@@ -558,16 +558,20 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
         termo_lower = termo.lower()
         termos_busca = [termo_lower]
 
-        # Expandir termos médicos/hospitalares
+        # Expandir termos médicos/hospitalares — apenas termos COMPOSTOS para evitar falsos positivos
         if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
                                            'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
                                            'laborat', 'diagnóstic', 'diagnostic', 'hematolog']):
             termos_busca.extend([
-                'médico', 'medico', 'médica', 'medica', 'hospitalar', 'hospital',
-                'clínica', 'clinica', 'saúde', 'saude', 'reagente', 'reagentes',
-                'laboratorio', 'laboratório', 'equipamento médico', 'equipamento hospitalar',
-                'material hospitalar', 'insumo hospitalar', 'hematologia', 'hematológico',
-                'analisador', 'diagnóstico', 'diagnostico'
+                'equipamento médico', 'equipamento medico',
+                'equipamento hospitalar', 'material hospitalar',
+                'material médico', 'material medico',
+                'insumo hospitalar', 'insumo médico', 'insumo medico',
+                'produto para saúde', 'produto para saude',
+                'reagente', 'reagentes', 'medicamento', 'medicamentos',
+                'hematologia', 'hematológico', 'analisador',
+                'diagnóstico', 'diagnostico',
+                'videocirurgia', 'videocirúrgico',
             ])
 
         # Expandir termos de TI
@@ -1662,22 +1666,25 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         'equipamentos de informática', 'equipamento de ti'
                     ])
 
-                # Expandir termos médicos/hospitalares
+                # Expandir termos médicos/hospitalares — apenas termos COMPOSTOS para evitar falsos positivos
+                # NÃO adicionar palavras soltas como "hospital", "medico", "saude" que pegam qualquer coisa
                 if any(t in termo_lower for t in ['médic', 'medic', 'hospital', 'saúde', 'saude', 'reagente',
                                                    'clínic', 'clinic', 'enferm', 'cirurg', 'odonto', 'farma',
                                                    'laborat', 'diagnóstic', 'diagnostic']):
                     termos_busca.extend([
-                        'médico', 'medico', 'médica', 'medica',
-                        'hospitalar', 'hospital', 'clínica', 'clinica',
-                        'saúde', 'saude', 'reagente', 'reagentes',
-                        'laboratorio', 'laboratório', 'medicamento', 'medicamentos',
-                        'equipamento médico', 'equipamento hospitalar',
-                        'material hospitalar', 'insumo hospitalar',
-                        'enfermagem', 'cirúrgico', 'cirurgico', 'odontológico', 'odontologico',
-                        'farmácia', 'farmacia', 'diagnóstico', 'diagnostico',
+                        'equipamento médico', 'equipamento medico',
+                        'equipamento hospitalar', 'material hospitalar',
+                        'material médico', 'material medico',
+                        'insumo hospitalar', 'insumo médico', 'insumo medico',
+                        'produto para saúde', 'produto para saude',
+                        'equipamento de saúde', 'equipamento de saude',
+                        'equipamento cirúrgico', 'equipamento cirurgico',
+                        'equipamento odontológico', 'equipamento odontologico',
+                        'equipamento laboratorial', 'material laboratorial',
+                        'reagente', 'reagentes', 'medicamento', 'medicamentos',
                         'desfibrilador', 'monitor multiparâmetro', 'autoclave', 'oxímetro',
                         'eletrocardiógrafo', 'bomba de infusão', 'cama hospitalar', 'maca',
-                        'upa', 'ubs', 'pronto socorro', 'uti'
+                        'videocirurgia', 'videocirúrgico',
                     ])
 
                 print(f"[TOOLS] Termos de busca expandidos: {termos_busca[:8]}...")

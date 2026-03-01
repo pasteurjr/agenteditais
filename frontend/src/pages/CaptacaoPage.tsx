@@ -393,7 +393,7 @@ export function CaptacaoPage(props?: PageProps) {
         termo: termoBusca,
         calcularScore: String(calcularScore),
         incluirEncerrados: String(incluirEncerrados),
-        limite: "30",
+        limite: "2000",
         diasBusca: diasBusca,
       });
       if (uf !== "todas") params.append("uf", uf);

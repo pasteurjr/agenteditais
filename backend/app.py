@@ -1142,7 +1142,7 @@ def chat():
         # Se foi busca de editais, salvar os editais no sources_json para recuperar depois
         sources_data = None
         if action_type in ["buscar_editais", "buscar_editais_simples"] and resultado:
-            # Salvar editais para uso posterior (salvar_editais)
+            # Salvar editais para uso posterior (salvar_editais) — banco é LONGTEXT, aguenta tudo
             sources_data = {
                 "editais": resultado.get("editais", []),
                 "editais_com_score": resultado.get("editais_com_score", []),
@@ -1765,11 +1765,20 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
     # Detectar se deve incluir editais encerrados
     if incluir_encerrados is None:
         msg_lower = message.lower()
-        # "sem incluir encerrados" / "sem encerrados" → NÃO incluir
-        if 'sem incluir encerrados' in msg_lower or 'sem encerrados' in msg_lower:
+        # Negações explícitas → NÃO incluir encerrados
+        negar = any(p in msg_lower for p in [
+            'sem incluir encerrados', 'sem encerrados', 'não incluir encerrados',
+            'nao incluir encerrados', 'excluir encerrados', 'apenas abertos',
+            'somente abertos', 'só abertos', 'so abertos',
+        ])
+        if negar:
             incluir_encerrados = False
         else:
-            incluir_encerrados = any(p in msg_lower for p in ['incluindo encerrados', 'incluir encerrados', 'encerrados', 'todos', 'all'])
+            # Afirmações explícitas → incluir encerrados
+            incluir_encerrados = any(p in msg_lower for p in [
+                'incluindo encerrados', 'incluir encerrados', 'com encerrados',
+                'mostrar encerrados', 'ver encerrados',
+            ])
 
     # Detectar janela de busca (dias) da mensagem
     dias_busca = 90  # default
@@ -1877,19 +1886,37 @@ JSON:"""
         editais_com_score = editais
 
     # ========== PASSO 3: Formatar resposta ==========
+    total_encontrados = len(editais_com_score)
+
     fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else fonte
     modo_busca = "com análise de aderência" if calcular_score else "listagem simples (sem score)"
     response = f"""**Busca realizada:** {termo}
 **Fontes consultadas:** {fontes_str}
 **Modo:** {modo_busca}
-**Resultados:** {len(editais_com_score)} edital(is) encontrado(s)
+**Resultados:** {total_encontrados} edital(is) encontrado(s)
 
 """
 
     if aviso_produtos:
         response += f"⚠️ {aviso_produtos}\n\n"
 
-    # Separar por recomendação
+    # Ordenar: abertos primeiro (por encerramento mais próximo), encerrados no final
+    from datetime import datetime as _dt_chat
+    def _sort_key_chat(e):
+        encerrado = e.get("encerrado", False)
+        d = e.get("data_encerramento") or e.get("data_abertura") or ""
+        dt = _dt_chat(2099, 12, 31)
+        for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = _dt_chat.strptime(d[:19], fmt)
+                break
+            except (ValueError, TypeError):
+                continue
+        # Encerrados vão para o final (1), abertos primeiro (0)
+        return (1 if encerrado else 0, dt)
+    editais_com_score.sort(key=_sort_key_chat)
+
+    # Separar por recomendação — todos os editais, sem limite
     participar = [e for e in editais_com_score if e.get('recomendacao') == 'PARTICIPAR']
     avaliar = [e for e in editais_com_score if e.get('recomendacao') == 'AVALIAR']
     nao_participar = [e for e in editais_com_score if e.get('recomendacao') == 'NÃO PARTICIPAR']
@@ -7365,7 +7392,22 @@ def buscar_editais_rest():
             if resultado_score.get("success"):
                 editais = resultado_score.get("editais_com_score", editais)
 
-        # Aplicar limite DEPOIS do score
+        # Ordenar: abertos primeiro (por encerramento mais próximo), encerrados no final
+        from datetime import datetime as _dt
+        def _sort_key_rest(e):
+            encerrado = e.get("encerrado", False)
+            d = e.get("data_encerramento") or e.get("data_abertura") or ""
+            dt = _dt(2099, 12, 31)
+            for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    dt = _dt.strptime(d[:19], fmt)
+                    break
+                except (ValueError, TypeError):
+                    continue
+            return (1 if encerrado else 0, dt)
+        editais.sort(key=_sort_key_rest)
+
+        # Aplicar limite DEPOIS da ordenação
         editais = editais[:limite]
 
         # Normalizar campos de retorno para o frontend
