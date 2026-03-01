@@ -1581,17 +1581,17 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         print(f"[TOOLS] Erro página {pagina}: {e}")
                     return pagina, [], 1
 
-                # Estratégia: dividir janela em sub-períodos de 15 dias
-                # e buscar as últimas 5 páginas de cada (editais mais recentes de cada período).
-                # Isso garante cobertura de toda a janela sem precisar varrer milhares de páginas.
-                SUB_JANELA_DIAS = 15
-                PAGINAS_POR_SUB = 5
-                lote_size = 5
+                # Estratégia: dividir janela em sub-períodos de 3 dias
+                # e buscar TODAS as páginas de cada sub-janela (em paralelo).
+                # Sub-janelas de 3 dias têm ~90 páginas, viável em paralelo.
+                # Isso garante cobertura COMPLETA sem perder editais no meio.
+                SUB_JANELA_DIAS = 3
+                MAX_PAGS_POR_SUB = 60  # Limitar para evitar excesso
+                lote_size = 10
 
                 all_items = []
 
                 # Montar sub-janelas DA MAIS RECENTE PARA A MAIS ANTIGA
-                # Assim editais mais novos (em aberto) aparecem primeiro
                 sub_janelas = []
                 sub_fim = data_final
                 data_limite = data_final - timedelta(days=janela)
@@ -1613,21 +1613,19 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     # Descobrir totalPaginas desta sub-janela
                     _, first_items, total_pags = _buscar_pagina(sub_params, 1)
 
-                    # Buscar últimas PAGINAS_POR_SUB páginas (mais recentes deste período)
-                    pag_ini = max(1, total_pags - PAGINAS_POR_SUB + 1)
-                    paginas = list(range(pag_ini, total_pags + 1))
+                    # Buscar TODAS as páginas (até MAX_PAGS_POR_SUB)
+                    pags_a_buscar = min(total_pags, MAX_PAGS_POR_SUB)
+                    paginas = list(range(1, pags_a_buscar + 1))
 
-                    # Já temos a página 1 se está no range
-                    sub_items = []
-                    if 1 in paginas:
-                        sub_items.extend(first_items)
-                        paginas = [p for p in paginas if p != 1]
+                    # Já temos a página 1
+                    sub_items = list(first_items)
+                    paginas = [p for p in paginas if p != 1]
 
                     # Buscar as demais em paralelo
                     if paginas:
                         with ThreadPoolExecutor(max_workers=lote_size) as executor:
                             futures = {executor.submit(_buscar_pagina, sub_params, p): p for p in paginas}
-                            for future in as_completed(futures, timeout=20):
+                            for future in as_completed(futures, timeout=60):
                                 try:
                                     _, page_items, _ = future.result(timeout=15)
                                     sub_items.extend(page_items)
@@ -1636,14 +1634,19 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
                     all_items.extend(sub_items)
                     periodo = f"{sub_ini.strftime('%d/%m')}-{sub_f.strftime('%d/%m')}"
-                    print(f"[TOOLS] Sub-janela {periodo}: {total_pags} págs, buscou {len(sub_items)} itens")
+                    print(f"[TOOLS] Sub-janela {periodo}: {total_pags} págs, buscou {pags_a_buscar}/{total_pags} págs = {len(sub_items)} itens")
 
-                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens ({janela} dias em sub-janelas de {SUB_JANELA_DIAS}d)")
+                print(f"[TOOLS] PNCP total coletado: {len(all_items)} itens ({janela} dias, {len(sub_janelas)} sub-janelas de {SUB_JANELA_DIAS}d)")
                 items = all_items
+
+                # Normalizar acentos para comparação (medico == médico)
+                import unicodedata
+                def _sem_acento(txt):
+                    return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
 
                 # Expandir termo para termos relacionados (mais específicos)
                 termo_lower = termo.lower()
-                termos_busca = [termo_lower]
+                termos_busca = [termo_lower, _sem_acento(termo_lower)]
 
                 # Expandir termos de TI/tecnologia - termos ESPECÍFICOS para evitar falsos positivos
                 if any(t in termo_lower for t in ['tecnologia', 'ti', 'informática', 'informatica', 'computador', 'computação']):
@@ -1701,9 +1704,11 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                             pass
 
                     objeto = (item.get('objetoCompra', '') or '').lower()
+                    objeto_norm = _sem_acento(objeto)
 
                     # FILTRO 2: Verificar se algum termo está no objeto
-                    match = any(t in objeto for t in termos_busca)
+                    # Compara tanto com acento quanto sem acento
+                    match = any(t in objeto or t in objeto_norm for t in termos_busca)
                     if termo and not match:
                         continue
 
@@ -1797,8 +1802,8 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     status_edital = "ENCERRADO" if edital_encerrado else "ABERTO"
                     print(f"[TOOLS] + Edital: {edital_data['numero']} - {edital_data['orgao'][:30]} ({status_edital}, itens: {edital_data.get('total_itens', 0)}, PDF: {'sim' if edital_data.get('pdf_url') else 'não'})")
 
-                    if len(editais_encontrados) >= 10:
-                        break
+                    # Sem break aqui — coleta todos os que matcham.
+                    # O limite final é aplicado pelo endpoint/chat.
 
                 if incluir_encerrados:
                     print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais (incluindo {editais_encerrados} encerrados)")
@@ -6656,3 +6661,4 @@ def tool_atualizar_status_proposta(proposta_id: str, user_id: str, novo_status: 
 # Registrar novas tools Onda 2 no TOOLS_MAP
 TOOLS_MAP["calcular_scores_validacao"] = tool_calcular_scores_validacao
 TOOLS_MAP["atualizar_status_proposta"] = tool_atualizar_status_proposta
+

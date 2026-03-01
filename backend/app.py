@@ -291,14 +291,15 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 - "nome_fonte": nome da fonte de editais (ex: "ComprasNet", "BEC-SP")
 - "tipo_fonte": tipo da fonte ("api" ou "scraper")
 
-## IMPORTANTE - OTIMIZAÇÃO DE TERMO DE BUSCA:
-Se a intenção for **buscar_editais**, converta termos genéricos para palavras-chave usadas em editais:
-- "área médica" → "hospitalar"
-- "área de tecnologia" → "informática"
-- "equipamentos hospitalares" → "hospitalar"
-- "área da saúde" → "hospitalar"
-- "computadores" → "informática"
-- "equipamentos de laboratório" → "laboratorial"
+## IMPORTANTE - TERMO DE BUSCA:
+Se a intenção for **buscar_editais** ou **buscar_editais_simples**, extraia o termo_busca da mensagem.
+REGRA CRÍTICA: Use o termo EXATO que o usuário digitou. NÃO substitua, NÃO "otimize", NÃO troque por sinônimos.
+Exemplos:
+- "busque editais de equipamento medico" → termo_busca: "equipamento medico"
+- "busque editais de hematologia" → termo_busca: "hematologia"
+- "busque editais de material hospitalar" → termo_busca: "material hospitalar"
+- "busque editais de informática" → termo_busca: "informática"
+Apenas REMOVA palavras de comando (busque, editais, no, pncp, etc). MANTENHA as palavras-chave do assunto.
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
@@ -9152,3 +9153,4 @@ if __name__ == "__main__":
     print("=" * 50)
 
     app.run(host="0.0.0.0", port=5007, debug=True)
+
