@@ -574,14 +574,24 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
                 continue
 
             # Filtrar encerrados
+            edital_enc = False
             data_fim_vig = item.get('data_fim_vigencia', '')
             if data_fim_vig:
                 try:
                     dt_fim = datetime.fromisoformat(str(data_fim_vig).replace('Z', '')[:19])
                     if dt_fim < hoje:
-                        continue
+                        edital_enc = True
                 except (ValueError, TypeError):
                     pass
+            if item.get('tem_resultado', False):
+                edital_enc = True
+            if item.get('cancelado', False):
+                edital_enc = True
+            sit = (item.get('situacao_nome', '') or '').lower()
+            if sit in ('suspensa', 'revogada', 'anulada', 'encerrada', 'homologada'):
+                edital_enc = True
+            if edital_enc:
+                continue
 
             orgao = item.get('orgao_nome', 'Órgão não informado')
             objeto_texto = descricao[:100]
@@ -1597,7 +1607,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     cancelado = item.get('cancelado', False)
                     situacao = (item.get('situacao_nome', '') or '').lower()
 
-                    # Verificar por datas de vigência
+                    # Verificar por datas de vigência (prazo de propostas)
                     data_fim_vig = item.get('data_fim_vigencia', '')
                     if data_fim_vig:
                         try:
@@ -1607,7 +1617,15 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         except (ValueError, TypeError):
                             pass
 
+                    # tem_resultado=True indica que o processo já foi homologado/concluído
+                    if item.get('tem_resultado', False):
+                        edital_encerrado = True
+
                     if cancelado:
+                        edital_encerrado = True
+
+                    # Situações que indicam encerrado
+                    if situacao in ('suspensa', 'revogada', 'anulada', 'encerrada', 'homologada'):
                         edital_encerrado = True
 
                     if edital_encerrado:
