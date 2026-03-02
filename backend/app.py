@@ -294,12 +294,16 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 ## IMPORTANTE - TERMO DE BUSCA:
 Se a intenção for **buscar_editais** ou **buscar_editais_simples**, extraia o termo_busca da mensagem.
 REGRA CRÍTICA: Use o termo EXATO que o usuário digitou. NÃO substitua, NÃO "otimize", NÃO troque por sinônimos.
+REMOVA do termo_busca: palavras de comando (busque, editais, no, pncp), modificadores de busca (incluindo encerrados, sem calcular score, últimos X dias, sem score, apenas listando), nomes de fontes (PNCP, ComprasNet, BEC-SP, Licitacoes-e).
+MANTENHA APENAS as palavras-chave do ASSUNTO/PRODUTO.
 Exemplos:
 - "busque editais de equipamento medico" → termo_busca: "equipamento medico"
 - "busque editais de hematologia" → termo_busca: "hematologia"
 - "busque editais de material hospitalar" → termo_busca: "material hospitalar"
 - "busque editais de informática" → termo_busca: "informática"
-Apenas REMOVA palavras de comando (busque, editais, no, pncp, etc). MANTENHA as palavras-chave do assunto.
+- "busque editais de medicamentos incluindo encerrados sem calcular score" → termo_busca: "medicamentos"
+- "busque editais de equipamento medico no PNCP últimos 60 dias" → termo_busca: "equipamento medico"
+- "busque editais de medicamentos incluindo encerrados últimos 30 dias sem calcular score" → termo_busca: "medicamentos"
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
@@ -1535,11 +1539,15 @@ Exemplo: `cadastre a fonte BEC-SP, tipo scraper, url https://bec.sp.gov.br`"""
 def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                                 incluir_encerrados: bool = False,
                                 buscar_detalhes: bool = True,
-                                dias_busca: int = 90) -> dict:
+                                dias_busca: int = 90,
+                                fonte: str = None) -> dict:
     """
     Busca editais em múltiplas fontes (PNCP API + Serper scraper) EM PARALELO,
     deduplica e retorna resultado consolidado.
     Reutilizada pelo chat (processar_buscar_editais) e pelo endpoint REST (/api/editais/buscar).
+
+    Args:
+        fonte: Se especificado, busca APENAS nessa fonte. Valores: 'PNCP', nome de fonte scraper, ou None (todas).
     """
     import re
     from datetime import datetime as _dt
@@ -1548,34 +1556,50 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     fontes_consultadas = []
     erros_fontes = []
 
-    print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Serper)...")
+    # Normalizar fonte para comparação
+    fonte_lower = (fonte or '').lower().strip() if fonte else None
+    buscar_pncp = fonte_lower is None or 'pncp' in fonte_lower
+    buscar_scraper = fonte_lower is None  # Scraper só quando não especifica fonte
+
+    # Se fonte é um scraper específico, não buscar PNCP
+    if fonte_lower and 'pncp' not in fonte_lower:
+        buscar_pncp = False
+        buscar_scraper = True  # Buscar no scraper com filtro de fonte
+
+    if fonte_lower:
+        print(f"[BUSCA-MULTI] Buscando '{termo}' na fonte '{fonte}'...")
+    else:
+        print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Serper)...")
 
     # 1. Buscar no PNCP (API oficial) — com tratamento de erro
-    try:
-        resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf,
-                                                    buscar_detalhes=buscar_detalhes,
-                                                    incluir_encerrados=incluir_encerrados,
-                                                    dias_busca=dias_busca)
-        if resultado_pncp.get("success"):
-            editais_pncp = resultado_pncp.get("editais", [])
-            for ed in editais_pncp:
-                ed['fonte'] = 'PNCP (API)'
-            editais.extend(editais_pncp)
-            fontes_consultadas.append("PNCP (API)")
-            print(f"[BUSCA-MULTI] PNCP: {len(editais_pncp)} editais encontrados")
-        else:
-            erros_fontes.append(f"PNCP: {resultado_pncp.get('error', 'sem resultados')}")
-    except Exception as e:
-        print(f"[BUSCA-MULTI] Erro PNCP: {e}")
-        erros_fontes.append(f"PNCP: {e}")
+    if buscar_pncp:
+        try:
+            resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf,
+                                                        buscar_detalhes=buscar_detalhes,
+                                                        incluir_encerrados=incluir_encerrados,
+                                                        dias_busca=dias_busca)
+            if resultado_pncp.get("success"):
+                editais_pncp = resultado_pncp.get("editais", [])
+                for ed in editais_pncp:
+                    ed['fonte'] = 'PNCP (API)'
+                editais.extend(editais_pncp)
+                fontes_consultadas.append("PNCP (API)")
+                print(f"[BUSCA-MULTI] PNCP: {len(editais_pncp)} editais encontrados")
+            else:
+                erros_fontes.append(f"PNCP: {resultado_pncp.get('error', 'sem resultados')}")
+        except Exception as e:
+            print(f"[BUSCA-MULTI] Erro PNCP: {e}")
+            erros_fontes.append(f"PNCP: {e}")
 
     # 2. Buscar em outras fontes via Serper (scraper) — com tratamento de erro
-    try:
-        resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
-    except Exception as e:
-        print(f"[BUSCA-MULTI] Erro Serper: {e}")
-        resultado_scraper = None
-        erros_fontes.append(f"Serper: {e}")
+    resultado_scraper = None
+    if buscar_scraper:
+        try:
+            resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
+        except Exception as e:
+            print(f"[BUSCA-MULTI] Erro Serper: {e}")
+            resultado_scraper = None
+            erros_fontes.append(f"Serper: {e}")
 
     if resultado_scraper and resultado_scraper.get("success"):
         editais_scraper = resultado_scraper.get("editais", [])
@@ -1593,6 +1617,14 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
 
         for ed in editais_scraper:
             if ed.get('link') not in links_pncp and ed.get('link'):
+                # Filtrar por fonte específica se solicitado
+                if fonte_lower and 'pncp' not in fonte_lower:
+                    ed_fonte = (ed.get('fonte', '') or '').lower()
+                    ed_link = (ed.get('link', '') or '').lower()
+                    # Verificar se a fonte do edital corresponde à fonte pedida
+                    if fonte_lower not in ed_fonte and fonte_lower not in ed_link:
+                        continue
+
                 texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
                 eh_servico_ou_prorrogacao = any(p in texto for p in palavras_excluir_objeto)
                 if eh_servico_ou_prorrogacao:
@@ -1759,8 +1791,26 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
     import json
     import re
 
-    fonte = "PNCP"
+    fonte = None  # None = todas as fontes
     uf = None
+
+    # Detectar fonte da mensagem
+    msg_lower_fonte = message.lower()
+    if 'no pncp' in msg_lower_fonte or 'do pncp' in msg_lower_fonte or 'pelo pncp' in msg_lower_fonte:
+        fonte = "PNCP"
+    elif 'comprasnet' in msg_lower_fonte:
+        fonte = "comprasnet"
+    elif 'licitacoes-e' in msg_lower_fonte or 'licitações-e' in msg_lower_fonte or 'licitanet' in msg_lower_fonte:
+        fonte = "licitacoes-e"
+    elif 'bec' in msg_lower_fonte and 'sp' in msg_lower_fonte:
+        fonte = "bec-sp"
+    elif 'compras.rs' in msg_lower_fonte or 'compras rs' in msg_lower_fonte:
+        fonte = "compras.rs"
+    elif 'portal de compras' in msg_lower_fonte and ('mg' in msg_lower_fonte or 'minas' in msg_lower_fonte):
+        fonte = "compras.mg"
+    elif 'gov.br' in msg_lower_fonte:
+        fonte = "gov.br"
+    # Se não especificou fonte → None (busca todas)
 
     # Detectar se deve incluir editais encerrados
     if incluir_encerrados is None:
@@ -1796,6 +1846,14 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
     # Usar termo da IA se disponível, senão extrair da mensagem
     if termo_ia:
         termo = termo_ia
+        # Limpar modificadores que a IA pode ter incluído no termo
+        import re as _re
+        for mod in ['incluindo encerrados', 'sem calcular score', 'sem score', 'sem calcular',
+                     'apenas listando', 'no pncp', 'no comprasnet', 'na web']:
+            termo = _re.sub(r'\b' + _re.escape(mod) + r'\b', '', termo, flags=_re.IGNORECASE)
+        # Limpar "últimos X dias"
+        termo = _re.sub(r'(?:ultimos|últimos)\s+\d+\s*dias?', '', termo, flags=_re.IGNORECASE)
+        termo = termo.strip()
         print(f"[BUSCA] Usando termo da IA: '{termo}'")
     else:
         termo = None
@@ -1812,7 +1870,11 @@ JSON:"""
             json_match = re.search(r'\{[\s\S]*?\}', resposta)
             if json_match:
                 dados = json.loads(json_match.group())
-                fonte = dados.get('fonte') or 'PNCP'
+                # Só usar fonte do DeepSeek se não foi detectada por palavras-chave
+                if fonte is None:
+                    fonte_ds = dados.get('fonte')
+                    if fonte_ds:
+                        fonte = fonte_ds
                 termo = dados.get('termo')
                 uf = dados.get('uf')
         except Exception as e:
@@ -1820,10 +1882,13 @@ JSON:"""
 
     # Fallback: extrair termos da própria mensagem
     if not termo:
-        # Remover palavras comuns de comando
+        # Remover palavras comuns de comando e modificadores de busca
         palavras_ignorar = ['busque', 'buscar', 'procure', 'procurar', 'editais', 'edital', 'de', 'do', 'da',
                            'no', 'na', 'em', 'para', 'pncp', 'comprasnet', 'bec', 'sp', 'são', 'paulo',
-                           'retorne', 'mostre', 'liste', 'quero', 'ver', 'todos', 'área', 'area']
+                           'retorne', 'mostre', 'liste', 'quero', 'ver', 'todos', 'área', 'area',
+                           'incluindo', 'encerrados', 'sem', 'calcular', 'score', 'aderência', 'aderencia',
+                           'apenas', 'listando', 'últimos', 'ultimos', 'dias', 'com', 'web',
+                           'licitacoes-e', 'licitacoes', 'portal', 'compras', 'fonte']
         palavras = message.lower().split()
         termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
         termo = ' '.join(termos) if termos else message
@@ -1848,7 +1913,7 @@ JSON:"""
     # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
     resultado = _buscar_editais_multifonte(
         termo=termo, user_id=user_id, uf=uf, incluir_encerrados=incluir_encerrados,
-        dias_busca=dias_busca,
+        dias_busca=dias_busca, fonte=fonte,
     )
     editais = resultado.get("editais", [])
     fontes_consultadas = resultado.get("fontes_consultadas", [])
@@ -7357,10 +7422,12 @@ def buscar_editais_rest():
       - incluirEncerrados (opcional, default false): incluir editais encerrados
       - limite / limit (opcional, default 20): máximo de resultados
       - diasBusca (opcional, default 90): janela de publicação em dias (0 = sem limite)
+      - fonte (opcional): fonte específica (PNCP, ComprasNet, etc). Se omitido, busca em todas.
     """
     user_id = get_current_user_id()
     termo = request.args.get("termo", "").strip()
     uf = request.args.get("uf", "").strip().upper() or None
+    fonte = request.args.get("fonte", "").strip() or None
     calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
     calcular_score = calcular_score_str.lower() == "true"
     incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
@@ -7382,6 +7449,7 @@ def buscar_editais_rest():
             incluir_encerrados=incluir_encerrados,
             buscar_detalhes=False,
             dias_busca=dias_busca,
+            fonte=fonte,
         )
 
         editais = resultado_busca.get("editais", [])
