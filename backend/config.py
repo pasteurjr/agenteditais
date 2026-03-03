@@ -57,6 +57,14 @@ GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX", "")
 # Brave Search API (search.brave.com/api) - 2000 queries/mes gratis
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
 
+# BEC-SP API (Bolsa Eletrônica de Compras de São Paulo)
+BEC_API_BASE_URL = "https://www.bec.sp.gov.br/BEC_API/API"
+BEC_CACHE_TTL_HOURS = int(os.getenv("BEC_CACHE_TTL_HOURS", "24"))
+
+# ComprasNet API (Portal de Compras do Governo Federal)
+COMPRASNET_API_URL = "https://compras.dados.gov.br/licitacoes/v1/licitacoes.json"
+COMPRASNET_TIMEOUT = int(os.getenv("COMPRASNET_TIMEOUT", "10"))
+
 # MindsDB (Consultas analíticas via linguagem natural)
 MINDSDB_HOST = os.getenv("MINDSDB_HOST", "192.168.1.100")
 MINDSDB_PORT = os.getenv("MINDSDB_PORT", "47334")

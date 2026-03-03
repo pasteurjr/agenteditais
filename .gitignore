@@ -30,4 +30,5 @@ uploads/
 
 # Arquivos de cache
 .cache/
+cache/
 *.faiss

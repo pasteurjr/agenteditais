@@ -1576,18 +1576,28 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
 
     # Normalizar fonte para comparação
     fonte_lower = fonte_nome.lower().strip() if fonte_nome else None
+    _fontes_com_api = ('pncp', 'bec', 'bec-sp', 'bec sp', 'comprasnet')
     buscar_pncp = fonte_lower is None or 'pncp' in fonte_lower
-    buscar_scraper = fonte_lower is None  # Scraper só quando não especifica fonte
+    buscar_bec = fonte_lower is None or fonte_lower in ('bec', 'bec-sp', 'bec sp')
+    buscar_comprasnet = fonte_lower is None or fonte_lower in ('comprasnet',)
 
-    # Se fonte é um scraper específico, não buscar PNCP
+    # Scraper: apenas quando busca geral ou fonte sem API própria
+    if fonte_lower is None:
+        buscar_scraper = True
+    elif fonte_lower in _fontes_com_api:
+        buscar_scraper = False
+    else:
+        buscar_scraper = True
+        buscar_pncp = False
+
+    # Se fonte é BEC ou ComprasNet, não buscar PNCP
     if fonte_lower and 'pncp' not in fonte_lower:
         buscar_pncp = False
-        buscar_scraper = True  # Buscar no scraper com filtro de fonte
 
     if fonte_lower:
         print(f"[BUSCA-MULTI] Buscando '{termo}' na fonte '{fonte_nome}'...")
     else:
-        print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Scraper)...")
+        print(f"[BUSCA-MULTI] Buscando '{termo}' em todas as fontes (PNCP + BEC + ComprasNet + Scraper)...")
 
     # 1. Buscar no PNCP (API oficial) — com tratamento de erro
     if buscar_pncp:
@@ -1609,6 +1619,51 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
             print(f"[BUSCA-MULTI] Erro PNCP: {e}")
             erros_fontes.append(f"PNCP: {e}")
 
+    # 2. Buscar na BEC-SP (API direta)
+    if buscar_bec:
+        try:
+            from tools import tool_buscar_editais_bec
+            resultado_bec = tool_buscar_editais_bec(
+                termo, user_id,
+                incluir_encerrados=incluir_encerrados,
+                dias_busca=dias_busca
+            )
+            if resultado_bec.get("success"):
+                editais_bec = resultado_bec.get("editais", [])
+                editais.extend(editais_bec)
+                fontes_consultadas.append("BEC-SP (API)")
+                print(f"[BUSCA-MULTI] BEC-SP: {len(editais_bec)} editais encontrados")
+            else:
+                erros_fontes.append(f"BEC-SP: {resultado_bec.get('error', 'sem resultados')}")
+        except Exception as e:
+            print(f"[BUSCA-MULTI] Erro BEC-SP: {e}")
+            erros_fontes.append(f"BEC-SP: {e}")
+
+    # 3. Buscar no ComprasNet (API direta com fallback para scraper)
+    _comprasnet_precisa_scraper = False
+    if buscar_comprasnet:
+        try:
+            from tools import tool_buscar_editais_comprasnet
+            resultado_cn = tool_buscar_editais_comprasnet(
+                termo, user_id,
+                incluir_encerrados=incluir_encerrados,
+                dias_busca=dias_busca
+            )
+            if resultado_cn.get("success"):
+                editais_cn = resultado_cn.get("editais", [])
+                if editais_cn:
+                    editais.extend(editais_cn)
+                    fontes_consultadas.append("ComprasNet (API)")
+                    print(f"[BUSCA-MULTI] ComprasNet API: {len(editais_cn)} editais")
+                elif not resultado_cn.get("api_disponivel", True):
+                    _comprasnet_precisa_scraper = True
+                    print(f"[BUSCA-MULTI] ComprasNet API indisponível, ativando scraper fallback")
+                    erros_fontes.append(f"ComprasNet API: {resultado_cn.get('mensagem', 'indisponível')}")
+        except Exception as e:
+            print(f"[BUSCA-MULTI] Erro ComprasNet: {e}")
+            _comprasnet_precisa_scraper = True
+            erros_fontes.append(f"ComprasNet: {e}")
+
     # Mapear nomes amigáveis de fonte para domínios de URL
     _fonte_to_dominios = {
         'bec-sp': ['bec.sp.gov.br'],
@@ -1623,13 +1678,18 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         'portal de compras': ['portaldecompraspublicas.com.br'],
     }
 
-    # 2. Buscar em outras fontes via scraper web (Brave/Serper/SerpAPI) — com tratamento de erro
+    # 4. Buscar em outras fontes via scraper web (Brave/Serper/SerpAPI) — com tratamento de erro
     resultado_scraper = None
-    if buscar_scraper:
+    if buscar_scraper or _comprasnet_precisa_scraper:
         try:
-            # Se fonte específica (não PNCP), buscar SÓ naquela fonte para economizar chamadas Brave
+            # Determinar domínios para o scraper
             fontes_scraper = None  # None = todas
-            if fonte_lower and 'pncp' not in fonte_lower:
+            if _comprasnet_precisa_scraper and not buscar_scraper:
+                # Scraper APENAS para ComprasNet (fallback da API indisponível)
+                fontes_scraper = ['comprasnet.gov.br', 'gov.br/compras']
+                print(f"[BUSCA-MULTI] Scraper fallback restrito a ComprasNet: {fontes_scraper}")
+            elif fonte_lower and 'pncp' not in fonte_lower:
+                # Se fonte específica (não PNCP/BEC/ComprasNet), buscar SÓ naquela fonte
                 dominios = _fonte_to_dominios.get(fonte_lower, [])
                 if not dominios:
                     # Tentar buscar domínio da fonte no banco

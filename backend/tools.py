@@ -20,7 +20,7 @@ from models import (
     ParametroScore, Empresa
 )
 from llm import call_deepseek
-from config import UPLOAD_FOLDER, PNCP_BASE_URL
+from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
 
 
 # ==================== BUSCA WEB GENÉRICA ====================
@@ -1927,6 +1927,453 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         return {"success": False, "error": str(e)}
     finally:
         db.close()
+
+
+# ==================== BEC-SP API (Bolsa Eletrônica de Compras - SP) ====================
+
+BEC_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "bec")
+
+
+def _bec_cache_path(endpoint_key: str) -> str:
+    os.makedirs(BEC_CACHE_DIR, exist_ok=True)
+    return os.path.join(BEC_CACHE_DIR, f"bec_{endpoint_key}.json")
+
+
+def _bec_cache_valid(endpoint_key: str) -> bool:
+    path = _bec_cache_path(endpoint_key)
+    if not os.path.exists(path):
+        return False
+    mtime = os.path.getmtime(path)
+    age_hours = (datetime.now().timestamp() - mtime) / 3600
+    return age_hours < BEC_CACHE_TTL_HOURS
+
+
+def _bec_cache_read(endpoint_key: str) -> list:
+    if not _bec_cache_valid(endpoint_key):
+        return None
+    try:
+        with open(_bec_cache_path(endpoint_key), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _bec_cache_write(endpoint_key: str, data: list):
+    try:
+        os.makedirs(BEC_CACHE_DIR, exist_ok=True)
+        with open(_bec_cache_path(endpoint_key), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        print(f"[BEC-CACHE] Gravado {len(data)} itens em {endpoint_key}")
+    except Exception as e:
+        print(f"[BEC-CACHE] Erro ao gravar: {e}")
+
+
+def _bec_buscar_lista_itens(tipo_pregao: str) -> list:
+    """Baixa lista completa de itens BEC de um tipo de pregão. Usa cache 24h."""
+    cached = _bec_cache_read(tipo_pregao)
+    if cached is not None:
+        print(f"[BEC] Cache hit para {tipo_pregao}: {len(cached)} itens")
+        return cached
+
+    url = f"{BEC_API_BASE_URL}/{tipo_pregao}/NegociacaoItemOC/"
+    print(f"[BEC] Baixando lista completa: {url}")
+    try:
+        resp = requests.get(url, timeout=60, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            print(f"[BEC] Erro HTTP {resp.status_code} em {tipo_pregao}")
+            return []
+        itens = resp.json()
+        if isinstance(itens, list):
+            _bec_cache_write(tipo_pregao, itens)
+            print(f"[BEC] Baixado {len(itens)} itens de {tipo_pregao}")
+            return itens
+        return []
+    except requests.exceptions.Timeout:
+        print(f"[BEC] Timeout ao baixar {tipo_pregao} (60s)")
+        # Tentar cache stale
+        stale = None
+        try:
+            with open(_bec_cache_path(tipo_pregao), 'r', encoding='utf-8') as f:
+                stale = json.load(f)
+        except Exception:
+            pass
+        if stale:
+            print(f"[BEC] Usando cache stale ({len(stale)} itens)")
+            return stale
+        return []
+    except Exception as e:
+        print(f"[BEC] Erro ao baixar {tipo_pregao}: {e}")
+        return []
+
+
+def _bec_filtrar_itens(itens: list, termo: str, max_resultados: int = 30) -> list:
+    """Filtra itens BEC por all-words match no DescItem."""
+    import unicodedata
+
+    def _sem_acento(txt):
+        return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+
+    termo_norm = _sem_acento(termo.lower())
+    palavras = [p for p in termo_norm.split() if len(p) > 2]
+    if not palavras:
+        return []
+
+    resultados = []
+    for item in itens:
+        desc = _sem_acento((item.get('DescItem', '') or '').lower())
+        if all(p in desc for p in palavras):
+            resultados.append(item)
+            if len(resultados) >= max_resultados:
+                break
+
+    print(f"[BEC] Filtro '{termo}': {len(resultados)}/{len(itens)} itens casaram")
+    return resultados
+
+
+def _bec_buscar_detalhe_item(codigo: int, tipo_origem: str = None) -> list:
+    """Busca detalhes (OCs) de um item BEC. Retorna lista de OCs."""
+    tipos = [tipo_origem] if tipo_origem else ['pregaoM', 'pregaoS', 'pregaoRP']
+    for tipo in tipos:
+        url = f"{BEC_API_BASE_URL}/{tipo}/NegociacaoItemOC/{codigo}"
+        try:
+            resp = requests.get(url, timeout=15, headers={"Accept": "application/json"})
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    for d in data:
+                        d['_tipo_pregao'] = tipo
+                    return data
+                elif data and isinstance(data, dict) and data.get('OC'):
+                    data['_tipo_pregao'] = tipo
+                    return [data]
+        except Exception:
+            continue
+    return []
+
+
+def tool_buscar_editais_bec(termo: str, user_id: str,
+                            incluir_encerrados: bool = False,
+                            dias_busca: int = 90) -> Dict[str, Any]:
+    """
+    Busca editais na BEC-SP via API direta.
+    1. Baixa listas de itens (cache 24h) dos 3 tipos de pregão
+    2. Filtra por all-words match
+    3. Busca detalhe (OC/edital) em paralelo
+    4. Agrupa por OC para não duplicar
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from datetime import timedelta
+
+    print(f"[BEC-API] Buscando '{termo}' na BEC-SP API...")
+    editais_encontrados = []
+    ocs_vistas = set()
+
+    # PASSO 1: Carregar itens das 3 listas (com cache)
+    todos_itens = []
+    for tipo in ['pregaoM', 'pregaoS', 'pregaoRP']:
+        itens = _bec_buscar_lista_itens(tipo)
+        for item in itens:
+            item['_tipo_pregao'] = tipo
+        todos_itens.extend(itens)
+
+    print(f"[BEC-API] Total de itens carregados (3 listas): {len(todos_itens)}")
+
+    # PASSO 2: Filtrar por termo
+    itens_casados = _bec_filtrar_itens(todos_itens, termo, max_resultados=30)
+
+    if not itens_casados:
+        print(f"[BEC-API] Nenhum item casou com '{termo}'")
+        return {
+            "success": True,
+            "fonte": "BEC-SP (API)",
+            "termo": termo,
+            "editais": [],
+            "total": 0,
+            "mensagem": f"Nenhum item encontrado na BEC-SP para '{termo}'"
+        }
+
+    # PASSO 3: Buscar detalhes em paralelo
+    def _buscar_detalhe(item):
+        codigo = item.get('Codigo')
+        tipo = item.get('_tipo_pregao')
+        if not codigo:
+            return []
+        return _bec_buscar_detalhe_item(codigo, tipo_origem=tipo)
+
+    todos_detalhes = []
+    max_w = min(len(itens_casados), 10)
+    print(f"[BEC-API] Buscando detalhes de {len(itens_casados)} itens ({max_w} workers)...")
+
+    with ThreadPoolExecutor(max_workers=max_w) as executor:
+        futures = {executor.submit(_buscar_detalhe, item): item for item in itens_casados}
+        for future in as_completed(futures, timeout=60):
+            try:
+                detalhes = future.result(timeout=15)
+                item_orig = futures[future]
+                for det in detalhes:
+                    det['_item_original'] = item_orig
+                todos_detalhes.extend(detalhes)
+            except Exception:
+                pass
+
+    print(f"[BEC-API] Obtidos {len(todos_detalhes)} detalhes de OC")
+
+    # PASSO 4: Agrupar por OC e normalizar
+    hoje = datetime.now()
+    for det in todos_detalhes:
+        oc = det.get('OC', '')
+        if not oc or oc in ocs_vistas:
+            continue
+        ocs_vistas.add(oc)
+
+        # Verificar encerramento
+        dt_enc_str = det.get('DT_ENCERRAMENTO')
+        encerrado = False
+        data_encerramento = None
+        if dt_enc_str:
+            for fmt in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y'):
+                try:
+                    dt_enc = datetime.strptime(str(dt_enc_str)[:19], fmt)
+                    data_encerramento = dt_enc.isoformat()
+                    if dt_enc < hoje:
+                        encerrado = True
+                    break
+                except ValueError:
+                    continue
+
+        situacao = (det.get('SITUACAO', '') or '').upper()
+        if any(s in situacao for s in ('ENCERRAD', 'HOMOLOGAD', 'REVOGAD', 'ANULAD', 'FRACASSAD', 'DESERT')):
+            encerrado = True
+
+        if encerrado and not incluir_encerrados:
+            continue
+
+        # Mapear modalidade
+        procedimento = (det.get('PROCEDIMENTO', '') or '').lower()
+        if 'eletrônico' in procedimento or 'eletronico' in procedimento:
+            modalidade = 'pregao_eletronico'
+        elif 'presencial' in procedimento:
+            modalidade = 'pregao_presencial'
+        elif 'dispensa' in procedimento:
+            modalidade = 'dispensa'
+        else:
+            modalidade = 'pregao_eletronico'
+
+        item_orig = det.get('_item_original', {})
+        link_edital = det.get('LINK_EDITAL') or ''
+        if not link_edital:
+            link_edital = f"https://www.bec.sp.gov.br/bec_pregao_ui/Edital/{oc}"
+
+        edital_data = {
+            "numero": oc,
+            "orgao": det.get('UNIDADE_COMPRADORA', 'BEC-SP'),
+            "orgao_tipo": "estadual",
+            "uf": "SP",
+            "cidade": "",
+            "objeto": item_orig.get('DescItem', f"Pregão BEC - {termo}"),
+            "modalidade": modalidade,
+            "valor_referencia": None,
+            "data_publicacao": None,
+            "data_abertura": None,
+            "data_encerramento": data_encerramento,
+            "url": link_edital,
+            "situacao": det.get('SITUACAO'),
+            "fonte": "BEC-SP (API)",
+            "fonte_tipo": "api",
+            "encerrado": encerrado,
+        }
+        editais_encontrados.append(edital_data)
+
+    # PASSO 5: Encerrados por período (se incluir_encerrados)
+    if incluir_encerrados and dias_busca > 0:
+        try:
+            data_fim = datetime.now()
+            data_ini = data_fim - timedelta(days=dias_busca)
+            url_enc = (f"{BEC_API_BASE_URL}/pregao_encerrado/OC_encerrada/"
+                       f"{data_ini.strftime('%d%m%Y')}/{data_fim.strftime('%d%m%Y')}")
+            print(f"[BEC-API] Buscando encerrados: {url_enc}")
+            resp_enc = requests.get(url_enc, timeout=30, headers={"Accept": "application/json"})
+            if resp_enc.status_code == 200:
+                encerrados = resp_enc.json()
+                if isinstance(encerrados, list):
+                    import unicodedata
+                    def _sem_acento(txt):
+                        return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+                    termo_norm = _sem_acento(termo.lower())
+                    palavras = [p for p in termo_norm.split() if len(p) > 2]
+                    for enc in encerrados:
+                        oc = enc.get('OC', '')
+                        if not oc or oc in ocs_vistas:
+                            continue
+                        # Encerrados não têm DescItem, então verificar unidade compradora
+                        uc = _sem_acento((enc.get('UNIDADE_COMPRADORA', '') or '').lower())
+                        if palavras and not any(p in uc for p in palavras):
+                            continue
+                        ocs_vistas.add(oc)
+                        dt_enc_str = enc.get('DT_ENCERRAMENTO', '')
+                        editais_encontrados.append({
+                            "numero": oc,
+                            "orgao": enc.get('UNIDADE_COMPRADORA', 'BEC-SP'),
+                            "orgao_tipo": "estadual",
+                            "uf": "SP",
+                            "objeto": f"Pregão BEC encerrado - {termo}",
+                            "modalidade": "pregao_eletronico",
+                            "valor_referencia": None,
+                            "data_encerramento": dt_enc_str,
+                            "url": enc.get('LINK_EDITAL') or '',
+                            "situacao": enc.get('SITUACAO', 'ENCERRADO'),
+                            "fonte": "BEC-SP (API)",
+                            "fonte_tipo": "api",
+                            "encerrado": True,
+                        })
+                    print(f"[BEC-API] Encerrados adicionados: {len([e for e in editais_encontrados if e.get('encerrado')])} no total")
+        except Exception as e:
+            print(f"[BEC-API] Erro ao buscar encerrados: {e}")
+
+    print(f"[BEC-API] Total editais BEC: {len(editais_encontrados)}")
+    return {
+        "success": True,
+        "fonte": "BEC-SP (API)",
+        "termo": termo,
+        "editais": editais_encontrados,
+        "total": len(editais_encontrados)
+    }
+
+
+# ==================== COMPRASNET API (Portal de Compras Gov Federal) ====================
+
+def tool_buscar_editais_comprasnet(termo: str, user_id: str,
+                                   incluir_encerrados: bool = False,
+                                   dias_busca: int = 90) -> Dict[str, Any]:
+    """
+    Busca editais no ComprasNet (dados.gov.br). DEFENSIVO: API frequentemente indisponível (503).
+    Se API falhar, retorna api_disponivel=False para fallback no scraper.
+    """
+    from datetime import timedelta
+
+    print(f"[COMPRASNET-API] Buscando '{termo}' no ComprasNet API...")
+
+    hoje = datetime.now()
+    data_ate = hoje.strftime('%d/%m/%Y')
+    data_de = (hoje - timedelta(days=dias_busca)).strftime('%d/%m/%Y')
+
+    try:
+        params = {
+            "data_abertura_de": data_de,
+            "data_abertura_ate": data_ate,
+            "tam_pagina": 50,
+        }
+        resp = requests.get(COMPRASNET_API_URL, params=params, timeout=COMPRASNET_TIMEOUT,
+                            headers={"Accept": "application/json"})
+
+        if resp.status_code == 503:
+            print(f"[COMPRASNET-API] Serviço indisponível (503)")
+            return {
+                "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+                "editais": [], "total": 0, "api_disponivel": False,
+                "mensagem": "API do ComprasNet indisponível (503). Usando scraper como fallback."
+            }
+
+        if resp.status_code != 200:
+            print(f"[COMPRASNET-API] Erro HTTP {resp.status_code}")
+            return {
+                "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+                "editais": [], "total": 0, "api_disponivel": False,
+                "mensagem": f"API do ComprasNet retornou erro {resp.status_code}"
+            }
+
+        data = resp.json()
+        licitacoes = data.get('_embedded', {}).get('licitacoes', [])
+
+        # Filtrar por termo
+        import unicodedata
+        def _sem_acento(txt):
+            return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+
+        termo_norm = _sem_acento(termo.lower())
+        palavras = [p for p in termo_norm.split() if len(p) > 2]
+
+        editais = []
+        for lic in licitacoes:
+            objeto = (lic.get('objeto', '') or '')
+            texto = _sem_acento(objeto.lower())
+            if palavras and not all(p in texto for p in palavras):
+                continue
+
+            encerrado = False
+            data_ab_str = lic.get('data_abertura_proposta', '')
+            if data_ab_str:
+                try:
+                    dt_ab = datetime.fromisoformat(str(data_ab_str).replace('Z', '')[:19])
+                    if dt_ab < hoje:
+                        encerrado = True
+                except (ValueError, TypeError):
+                    pass
+
+            if encerrado and not incluir_encerrados:
+                continue
+
+            modalidade_raw = (lic.get('modalidade_licitacao', '') or '').lower()
+            if 'pregão' in modalidade_raw or 'pregao' in modalidade_raw:
+                modalidade = 'pregao_eletronico'
+            elif 'concorrência' in modalidade_raw or 'concorrencia' in modalidade_raw:
+                modalidade = 'concorrencia'
+            elif 'dispensa' in modalidade_raw:
+                modalidade = 'dispensa'
+            else:
+                modalidade = 'pregao_eletronico'
+
+            numero = lic.get('numero_aviso', lic.get('numero', ''))
+            uasg = lic.get('uasg', {})
+            if isinstance(uasg, str):
+                uasg = {}
+
+            edital_data = {
+                "numero": str(numero),
+                "orgao": uasg.get('nome', 'ComprasNet'),
+                "orgao_tipo": "federal",
+                "uf": uasg.get('uf', ''),
+                "cidade": uasg.get('municipio', ''),
+                "objeto": objeto[:500],
+                "modalidade": modalidade,
+                "valor_referencia": lic.get('valor_estimado'),
+                "data_publicacao": lic.get('data_publicacao'),
+                "data_abertura": lic.get('data_abertura_proposta'),
+                "data_encerramento": lic.get('data_entrega_proposta'),
+                "url": lic.get('_links', {}).get('self', {}).get('href', ''),
+                "fonte": "ComprasNet (API)",
+                "fonte_tipo": "api",
+                "encerrado": encerrado,
+            }
+            editais.append(edital_data)
+
+        print(f"[COMPRASNET-API] Encontrados {len(editais)} editais")
+        return {
+            "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+            "editais": editais, "total": len(editais), "api_disponivel": True,
+        }
+
+    except requests.exceptions.Timeout:
+        print(f"[COMPRASNET-API] Timeout ({COMPRASNET_TIMEOUT}s)")
+        return {
+            "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+            "editais": [], "total": 0, "api_disponivel": False,
+            "mensagem": f"API do ComprasNet não respondeu (timeout {COMPRASNET_TIMEOUT}s)"
+        }
+    except requests.exceptions.ConnectionError:
+        print(f"[COMPRASNET-API] Erro de conexão")
+        return {
+            "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+            "editais": [], "total": 0, "api_disponivel": False,
+            "mensagem": "API do ComprasNet inacessível"
+        }
+    except Exception as e:
+        print(f"[COMPRASNET-API] Erro inesperado: {e}")
+        return {
+            "success": True, "fonte": "ComprasNet (API)", "termo": termo,
+            "editais": [], "total": 0, "api_disponivel": False,
+            "mensagem": f"Erro: {e}"
+        }
 
 
 def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str) -> Dict[str, Any]:
