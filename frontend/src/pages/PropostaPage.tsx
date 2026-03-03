@@ -16,7 +16,7 @@ interface Proposta {
   quantidade: number;
   valorTotal: number;
   dataCriacao: string;
-  status: "rascunho" | "pronta" | "enviada";
+  status: "rascunho" | "revisao" | "aprovada" | "enviada";
   conteudo?: string;
 }
 
@@ -32,7 +32,7 @@ function mapCrudToProposta(item: Record<string, unknown>): Proposta {
     quantidade,
     valorTotal: Number(item.preco_total ?? item.valorTotal ?? precoUnitario * quantidade),
     dataCriacao: String(item.created_at ?? item.dataCriacao ?? "").split("T")[0],
-    status: (["rascunho", "pronta", "enviada"].includes(String(item.status))
+    status: (["rascunho", "revisao", "aprovada", "enviada"].includes(String(item.status))
       ? item.status
       : "rascunho") as Proposta["status"],
     conteudo: item.texto_tecnico ? String(item.texto_tecnico) : undefined,
@@ -227,8 +227,10 @@ export function PropostaPage(props?: PageProps) {
     switch (status) {
       case "rascunho":
         return <span className="status-badge status-badge-neutral">Rascunho</span>;
-      case "pronta":
-        return <span className="status-badge status-badge-success">Pronta</span>;
+      case "revisao":
+        return <span className="status-badge status-badge-warning">Em Revisao</span>;
+      case "aprovada":
+        return <span className="status-badge status-badge-success">Aprovada</span>;
       case "enviada":
         return <span className="status-badge status-badge-info">Enviada</span>;
     }
@@ -352,7 +354,8 @@ export function PropostaPage(props?: PageProps) {
                 options: [
                   { value: "todas", label: "Todas" },
                   { value: "rascunho", label: "Rascunho" },
-                  { value: "pronta", label: "Pronta" },
+                  { value: "revisao", label: "Em Revisao" },
+                  { value: "aprovada", label: "Aprovada" },
                   { value: "enviada", label: "Enviada" },
                 ],
               },
@@ -387,7 +390,18 @@ export function PropostaPage(props?: PageProps) {
                 <ActionButton
                   icon={<Send size={14} />}
                   label="Enviar por Email"
-                  onClick={() => {}}
+                  onClick={() => {
+                    if (onSendToChat && selectedProposta) {
+                      onSendToChat(
+                        `Prepare um email para envio da proposta:\n` +
+                        `- Edital: ${selectedProposta.edital}\n` +
+                        `- Orgao: ${selectedProposta.orgao}\n` +
+                        `- Produto: ${selectedProposta.produto}\n` +
+                        `- Valor: R$ ${selectedProposta.valorTotal.toFixed(2)}\n` +
+                        `Gere o corpo do email profissional para envio da proposta ao orgao licitante.`
+                      );
+                    }
+                  }}
                 />
               </div>
             }

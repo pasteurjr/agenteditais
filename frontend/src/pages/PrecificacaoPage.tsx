@@ -277,6 +277,70 @@ export function PrecificacaoPage(props?: PageProps) {
           </Card>
         )}
 
+        {precosMercado.length > 0 && (() => {
+          // Generate SVG chart points from real data
+          const sortedData = [...precosMercado].sort((a, b) => a.data.localeCompare(b.data));
+          const valores = sortedData.map((p) => p.valor).filter((v) => v > 0);
+          if (valores.length < 2) return null;
+          const minVal = Math.min(...valores);
+          const maxVal = Math.max(...valores);
+          const range = maxVal - minVal || 1;
+          const width = 600;
+          const height = 200;
+          const padding = 20;
+          const points = valores.map((v, i) => {
+            const x = (i / (valores.length - 1)) * (width - padding * 2) + padding;
+            const y = height - padding - ((v - minVal) / range) * (height - padding * 2);
+            return `${x},${y}`;
+          }).join(" ");
+          const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
+          const labels = sortedData.map((p) => {
+            const parts = p.data.split("-");
+            return parts.length >= 2 ? `${parts[1]}/${parts[0]?.slice(2)}` : p.data.slice(0, 7);
+          });
+          // Show max 6 labels evenly spaced
+          const labelStep = Math.max(1, Math.floor(labels.length / 6));
+          const displayLabels = labels.filter((_, i) => i % labelStep === 0 || i === labels.length - 1);
+          const media = valores.reduce((a, b) => a + b, 0) / valores.length;
+          const variacao = ((valores[valores.length - 1] - valores[0]) / valores[0] * 100).toFixed(1);
+
+          return (
+            <Card title="Evolucao de Precos" icon={<TrendingUp size={18} />}>
+              <div className="chart-container">
+                <div className="chart-placeholder">
+                  <p className="chart-title">Evolucao de Preco: {termoBusca}</p>
+                  <div className="line-chart">
+                    <div className="line-chart-area">
+                      <svg viewBox={`0 0 ${width} ${height}`} className="line-svg">
+                        <polyline
+                          fill="none"
+                          stroke="#0ea5e9"
+                          strokeWidth="2"
+                          points={points}
+                        />
+                        <polyline
+                          fill="rgba(14, 165, 233, 0.1)"
+                          stroke="none"
+                          points={areaPoints}
+                        />
+                      </svg>
+                    </div>
+                    <div className="line-chart-labels">
+                      {displayLabels.map((label, i) => (
+                        <span key={i}>{label}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="chart-legend">
+                    <span>Preco Medio: <strong>{formatCurrency(media)}</strong></span>
+                    <span>Variacao: <strong className={Number(variacao) >= 0 ? "text-success" : "text-danger"}>{Number(variacao) >= 0 ? "+" : ""}{variacao}%</strong></span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })()}
+
         <Card title="Recomendacao de Preco" icon={<Lightbulb size={18} />}>
           <div className="form-grid form-grid-3">
             <FormField label="Edital">
@@ -340,8 +404,38 @@ export function PrecificacaoPage(props?: PageProps) {
           icon={<History size={18} />}
           actions={
             <div className="card-actions">
-              <ActionButton label="Ver Todos" onClick={() => {}} />
-              <ActionButton label="Exportar" onClick={() => {}} />
+              <ActionButton label="Ver Todos" onClick={async () => {
+                setLoadingHistorico(true);
+                try {
+                  const res = await crudList("preco-historico", { limit: 1000 });
+                  const items = res.items as Record<string, unknown>[];
+                  setHistorico(items.map((item) => ({
+                    id: String(item.id ?? ""),
+                    produto: String(item.produto ?? item.nome_produto ?? ""),
+                    preco: Number(item.preco ?? item.preco_ofertado ?? 0),
+                    data: String(item.data ?? item.data_licitacao ?? ""),
+                    edital: String(item.edital ?? item.numero_edital ?? ""),
+                    resultado: (item.resultado === "ganho" ? "ganho" : "perdido") as "ganho" | "perdido",
+                  })));
+                } catch {
+                  // keep existing data
+                } finally {
+                  setLoadingHistorico(false);
+                }
+              }} />
+              <ActionButton label="Exportar CSV" onClick={() => {
+                if (historico.length === 0) return;
+                const header = "Produto;Preco;Data;Edital;Resultado\n";
+                const rows = historico.map((h) =>
+                  `${h.produto};${h.preco};${h.data};${h.edital};${h.resultado}`
+                ).join("\n");
+                const csv = header + rows;
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "historico-precos.csv";
+                link.click();
+              }} />
             </div>
           }
         >

@@ -39,9 +39,23 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'txt'}
 # PNCP API (Portal Nacional de Contratações Públicas)
 PNCP_BASE_URL = "https://pncp.gov.br/api/consulta/v1"
 
-# Serper API (Google Search)
+# API de scraping web (busca de editais em fontes alternativas)
+# Opcoes: duckduckgo, serper, serpapi, google_cse, brave
+SCRAPE_API = os.getenv("SCRAPE_API", "duckduckgo").lower().strip()
+
+# Serper API (Google Search) - serper.dev
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 SERPER_API_URL = "https://google.serper.dev/search"
+
+# SerpAPI (serpapi.com)
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "")
+
+# Google Custom Search Engine (Programmable Search)
+GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
+GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX", "")
+
+# Brave Search API (search.brave.com/api) - 2000 queries/mes gratis
+BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
 
 # MindsDB (Consultas analíticas via linguagem natural)
 MINDSDB_HOST = os.getenv("MINDSDB_HOST", "192.168.1.100")

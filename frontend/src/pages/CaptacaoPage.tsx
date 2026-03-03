@@ -397,7 +397,7 @@ export function CaptacaoPage(props?: PageProps) {
         diasBusca: diasBusca,
       });
       if (uf !== "todas") params.append("uf", uf);
-      if (fonte !== "todas") params.append("fontes", fonte);
+      if (fonte !== "todas") params.append("fonte", fonte);
 
       const res = await fetch(`/api/editais/buscar?${params}`, {
         headers: { Authorization: token ? `Bearer ${token}` : "" },
@@ -699,6 +699,25 @@ export function CaptacaoPage(props?: PageProps) {
           onChange={() => handleToggleSelect(e.id)}
         />
       ),
+    },
+    {
+      key: "fonte",
+      header: "Fonte",
+      width: "100px",
+      render: (e) => {
+        const f = e.fonte || "—";
+        let label = f;
+        let color = "#888";
+        if (f.includes("PNCP")) { label = "PNCP"; color = "#2e7d32"; }
+        else if (f.includes("comprasnet") || f.includes("ComprasNet")) { label = "ComprasNet"; color = "#1565c0"; }
+        else if (f.includes("bec") || f.includes("BEC")) { label = "BEC-SP"; color = "#f9a825"; }
+        else if (f.includes("licitacoes") || f.includes("Licitacoes")) { label = "Licitações-e"; color = "#e65100"; }
+        else if (f.includes("compras.rs")) { label = "Compras RS"; color = "#6a1b9a"; }
+        else if (f.includes("compras.mg")) { label = "Compras MG"; color = "#ad1457"; }
+        else if (f.includes("Scraper")) { label = f.split(" (")[0]; color = "#e65100"; }
+        return <span style={{ color, fontWeight: 600, fontSize: "0.8em" }}>{label}</span>;
+      },
+      sortable: true,
     },
     { key: "numero", header: "Numero", sortable: true },
     { key: "orgao", header: "Orgao", sortable: true },

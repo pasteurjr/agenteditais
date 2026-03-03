@@ -7,3 +7,4 @@ faiss-cpu
 sentence-transformers
 beautifulsoup4
 lxml
+duckduckgo-search

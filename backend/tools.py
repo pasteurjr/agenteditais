@@ -23,6 +23,184 @@ from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL
 
 
+# ==================== BUSCA WEB GENÉRICA ====================
+
+def _web_search(query: str, num_results: int = 10) -> list:
+    """
+    Busca web genérica que abstrai DuckDuckGo, Serper, SerpAPI, Google CSE ou Brave.
+    Retorna lista de dicts com {title, link, snippet}.
+    A API usada é definida pela variável SCRAPE_API no .env.
+    """
+    from config import SCRAPE_API
+
+    api = SCRAPE_API  # duckduckgo | serper | serpapi | google_cse | brave
+
+    if api == "serper":
+        return _web_search_serper(query, num_results)
+    elif api == "serpapi":
+        return _web_search_serpapi(query, num_results)
+    elif api == "google_cse":
+        return _web_search_google_cse(query, num_results)
+    elif api == "brave":
+        return _web_search_brave(query, num_results)
+    else:
+        return _web_search_duckduckgo(query, num_results)
+
+
+def _web_search_duckduckgo(query: str, num_results: int = 10) -> list:
+    """Busca via DuckDuckGo (gratuito, sem API key)."""
+    try:
+        from duckduckgo_search import DDGS
+        resultados = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, region="br-pt", max_results=num_results):
+                resultados.append({
+                    "title": r.get("title", ""),
+                    "link": r.get("href", ""),
+                    "snippet": r.get("body", ""),
+                })
+        print(f"[SCRAPE-DDG] '{query[:50]}' → {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"[SCRAPE-DDG] Erro: {e}")
+        return []
+
+
+def _web_search_serper(query: str, num_results: int = 10) -> list:
+    """Busca via Serper API (serper.dev, pago)."""
+    from config import SERPER_API_KEY, SERPER_API_URL
+    try:
+        response = requests.post(
+            SERPER_API_URL,
+            headers={
+                'X-API-KEY': SERPER_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            json={
+                'q': query,
+                'num': num_results,
+                'gl': 'br',
+                'hl': 'pt'
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        resultados = []
+        for item in data.get('organic', []):
+            resultados.append({
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        print(f"[SCRAPE-SERPER] '{query[:50]}' → {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"[SCRAPE-SERPER] Erro: {e}")
+        return []
+
+
+def _web_search_serpapi(query: str, num_results: int = 10) -> list:
+    """Busca via SerpAPI (serpapi.com, pago)."""
+    from config import SERPAPI_API_KEY
+    try:
+        params = {
+            "engine": "google",
+            "q": query,
+            "num": num_results,
+            "gl": "br",
+            "hl": "pt",
+            "api_key": SERPAPI_API_KEY,
+        }
+        response = requests.get("https://serpapi.com/search", params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        resultados = []
+        for item in data.get("organic_results", []):
+            resultados.append({
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        print(f"[SCRAPE-SERPAPI] '{query[:50]}' → {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"[SCRAPE-SERPAPI] Erro: {e}")
+        return []
+
+
+def _web_search_google_cse(query: str, num_results: int = 10) -> list:
+    """Busca via Google Custom Search Engine (100 queries/dia gratis)."""
+    from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_CX
+    try:
+        # Google CSE retorna no máximo 10 por request
+        params = {
+            "key": GOOGLE_CSE_API_KEY,
+            "cx": GOOGLE_CSE_CX,
+            "q": query,
+            "num": min(num_results, 10),
+            "gl": "br",
+            "hl": "pt",
+        }
+        response = requests.get(
+            "https://www.googleapis.com/customsearch/v1",
+            params=params,
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        resultados = []
+        for item in data.get("items", []):
+            resultados.append({
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+            })
+        print(f"[SCRAPE-GCSE] '{query[:50]}' → {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"[SCRAPE-GCSE] Erro: {e}")
+        return []
+
+
+def _web_search_brave(query: str, num_results: int = 10) -> list:
+    """Busca via Brave Search API (2000 queries/mes gratis)."""
+    from config import BRAVE_API_KEY
+    try:
+        headers = {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "X-Subscription-Token": BRAVE_API_KEY,
+        }
+        params = {
+            "q": query,
+            "count": min(num_results, 20),
+            "country": "BR",
+            "search_lang": "pt-br",
+            "text_decorations": False,
+        }
+        response = requests.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            headers=headers,
+            params=params,
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        resultados = []
+        for item in data.get("web", {}).get("results", []):
+            resultados.append({
+                "title": item.get("title", ""),
+                "link": item.get("url", ""),
+                "snippet": item.get("description", ""),
+            })
+        print(f"[SCRAPE-BRAVE] '{query[:50]}' → {len(resultados)} resultados")
+        return resultados
+    except Exception as e:
+        print(f"[SCRAPE-BRAVE] Erro: {e}")
+        return []
+
+
 # ==================== PROMPTS PARA EXTRAÇÃO ====================
 
 PROMPT_EXTRAIR_SPECS = """Extraia TODAS as especificações técnicas do texto abaixo.
@@ -245,40 +423,24 @@ JSON:"""
 
 def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str, Any]:
     """
-    Busca informações na web usando Serper API (Google Search).
+    Busca informações na web (Google/DuckDuckGo).
     Retorna resultados de busca que podem conter links para PDFs/manuais.
+    Usa a API configurada em SCRAPE_API (.env): duckduckgo, serper ou serpapi.
     """
-    from config import SERPER_API_KEY, SERPER_API_URL
-
     try:
         # Adicionar filetype:pdf para priorizar PDFs
         search_query = f"{query} filetype:pdf"
 
-        response = requests.post(
-            SERPER_API_URL,
-            headers={
-                'X-API-KEY': SERPER_API_KEY,
-                'Content-Type': 'application/json'
-            },
-            json={
-                'q': search_query,
-                'num': num_results,
-                'gl': 'br',  # Resultados do Brasil
-                'hl': 'pt'   # Interface em português
-            },
-            timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
+        raw_results = _web_search(search_query, num_results)
 
-        # Extrair resultados orgânicos
+        # Mapear para formato esperado
         resultados = []
-        for item in data.get('organic', []):
+        for i, item in enumerate(raw_results):
             resultados.append({
                 'titulo': item.get('title', ''),
                 'link': item.get('link', ''),
                 'descricao': item.get('snippet', ''),
-                'posicao': item.get('position', 0)
+                'posicao': i + 1
             })
 
         # Filtrar apenas PDFs
@@ -292,15 +454,8 @@ def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str
             "pdfs_encontrados": len(pdfs),
             "resultados_pdf": pdfs[:5],  # Top 5 PDFs
             "outros_resultados": outros[:3],  # Top 3 outros
-            "buscas_relacionadas": [s.get('query') for s in data.get('relatedSearches', [])][:5]
         }
 
-    except requests.exceptions.RequestException as e:
-        return {
-            "success": False,
-            "error": f"Erro na busca: {str(e)}",
-            "query": query
-        }
     except Exception as e:
         return {
             "success": False,
@@ -311,8 +466,9 @@ def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str
 
 def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: str = None) -> Dict[str, Any]:
     """
-    Busca editais em múltiplas fontes usando Serper API (Google Search com site:).
+    Busca editais em múltiplas fontes usando busca web (DuckDuckGo/Serper/SerpAPI com site:).
     Não depende de APIs específicas de cada portal.
+    A API usada é definida pela variável SCRAPE_API no .env.
 
     Args:
         termo: Termo de busca (ex: "equipamento laboratorial")
@@ -322,8 +478,6 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
     Returns:
         Dict com editais encontrados de todas as fontes
     """
-    from config import SERPER_API_KEY, SERPER_API_URL
-
     # Se não especificar fontes, buscar nas principais cadastradas
     if not fontes:
         db = get_db()
@@ -395,26 +549,11 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
 
             print(f"[SCRAPER] Buscando: {search_query}")
 
-            response = requests.post(
-                SERPER_API_URL,
-                headers={
-                    'X-API-KEY': SERPER_API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'q': search_query,
-                    'num': 10,
-                    'gl': 'br',
-                    'hl': 'pt'
-                },
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
+            raw_results = _web_search(search_query, 10)
 
             # Processar resultados
             resultados_fonte = 0
-            for item in data.get('organic', []):
+            for item in raw_results:
                 link = item.get('link', '')
                 titulo = item.get('title', '')
                 descricao = item.get('snippet', '')
@@ -482,7 +621,7 @@ def tool_buscar_editais_scraper(termo: str, fontes: List[str] = None, user_id: s
                 todos_resultados.append(edital_info)
                 resultados_fonte += 1
 
-            print(f"[SCRAPER] {fonte}: {resultados_fonte} editais válidos (de {len(data.get('organic', []))} resultados)")
+            print(f"[SCRAPER] {fonte}: {resultados_fonte} editais válidos (de {len(raw_results)} resultados)")
 
         except Exception as e:
             print(f"[SCRAPER] Erro em {fonte}: {e}")
@@ -659,7 +798,7 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
 
         # Se não encontrou nada no PNCP, tentar Serper
         if not editais_encontrados:
-            print("[LINKS] PNCP não retornou resultados, tentando Serper...")
+            print("[LINKS] PNCP não retornou resultados, tentando scraper web...")
             resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
 
             if resultado_scraper.get("success") and resultado_scraper.get("editais"):
@@ -1513,33 +1652,34 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         editais_encontrados = []
 
         if 'PNCP' in fonte_obj.nome.upper():
-            # API do PNCP - usar endpoint de BUSCA TEXTUAL /api/search/
-            # Muito mais eficiente que baixar tudo e filtrar localmente.
+            # Estratégia HÍBRIDA para PNCP:
+            # 1. Search API (rápido, filtra por texto) para obter editais relevantes
+            # 2. Endpoint de detalhes para buscar valorTotalEstimado em paralelo
+            # Isso é MUITO mais rápido que baixar tudo via /contratacoes/publicacao
             try:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
                 import unicodedata
-
-                def _sem_acento(txt):
-                    return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
 
                 hoje = datetime.now()
                 janela = dias_busca if dias_busca > 0 else 730
                 data_limite = hoje - timedelta(days=janela)
 
+                def _sem_acento(txt):
+                    return unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+
                 # Preparar palavras do termo para filtro ALL-words local
                 termo_norm = _sem_acento(termo.lower())
                 palavras_termo = [p for p in termo_norm.split() if len(p) > 2]
 
-                print(f"[TOOLS] Buscando PNCP Search API: q='{termo}'")
-                print(f"[TOOLS] Palavras para filtro ALL-words: {palavras_termo}")
+                print(f"[TOOLS] Buscando PNCP Search API + detalhes: q='{termo}', janela={janela}d")
 
-                # ===== MÉTODO PRIMÁRIO: /api/search/?q= =====
+                # ===== PASSO 1: Search API (rápido, ~5s) =====
                 SEARCH_URL = "https://pncp.gov.br/api/search/"
-                MAX_PAGINAS = 20  # Máximo de páginas a buscar (50 itens/pág = 1000 itens)
+                MAX_PAGINAS = 10
                 all_items = []
-                search_ok = False
 
-                try:
-                    for pagina in range(1, MAX_PAGINAS + 1):
+                for pagina in range(1, MAX_PAGINAS + 1):
+                    try:
                         params = {
                             "q": termo,
                             "tipos_documento": "edital",
@@ -1558,47 +1698,43 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         total = data.get("total", 0)
 
                         if pagina == 1:
-                            print(f"[TOOLS] Search API: {total} resultados totais para '{termo}'")
+                            print(f"[TOOLS] Search API: {total} resultados totais")
 
                         if not items:
                             break
 
                         all_items.extend(items)
-                        print(f"[TOOLS] Search API página {pagina}: +{len(items)} itens (acumulado: {len(all_items)})")
 
-                        # Se já pegou todos, parar
                         if len(all_items) >= total:
                             break
+                    except Exception as e:
+                        print(f"[TOOLS] Search API página {pagina} erro: {e}")
+                        break
 
-                    search_ok = len(all_items) > 0
-                    print(f"[TOOLS] Search API total coletado: {len(all_items)} itens")
+                print(f"[TOOLS] Search API coletou: {len(all_items)} itens")
 
-                except Exception as e:
-                    print(f"[TOOLS] Search API falhou: {e}")
-                    search_ok = False
-
-                # Processar itens do Search API
+                # ===== PASSO 2: Filtrar e mapear =====
                 editais_em_aberto = 0
                 editais_encerrados = 0
+                editais_sem_valor = []  # (indice, edital_data) para buscar valor depois
 
                 for item in all_items:
-                    # Mapear campos do Search API para formato interno
                     descricao = (item.get('description', '') or '').lower()
                     titulo = (item.get('title', '') or '').lower()
                     texto_completo = f"{titulo} {descricao}"
                     texto_norm = _sem_acento(texto_completo)
 
-                    # FILTRO 1: ALL-words match — TODAS as palavras do termo devem aparecer
+                    # FILTRO 1: ALL-words match
                     if palavras_termo and not all(p in texto_norm for p in palavras_termo):
                         continue
 
-                    # FILTRO 2: Janela de datas (baseado em data_publicacao_pncp)
+                    # FILTRO 2: Janela de datas
                     data_pub_str = item.get('data_publicacao_pncp', '')
                     if data_pub_str:
                         try:
                             data_pub = datetime.fromisoformat(str(data_pub_str).replace('Z', '')[:19])
                             if data_pub < data_limite:
-                                continue  # Fora da janela de busca
+                                continue
                         except (ValueError, TypeError):
                             pass
 
@@ -1607,7 +1743,6 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     cancelado = item.get('cancelado', False)
                     situacao = (item.get('situacao_nome', '') or '').lower()
 
-                    # Verificar por datas de vigência (prazo de propostas)
                     data_fim_vig = item.get('data_fim_vigencia', '')
                     if data_fim_vig:
                         try:
@@ -1617,14 +1752,10 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         except (ValueError, TypeError):
                             pass
 
-                    # tem_resultado=True indica que o processo já foi homologado/concluído
                     if item.get('tem_resultado', False):
                         edital_encerrado = True
-
                     if cancelado:
                         edital_encerrado = True
-
-                    # Situações que indicam encerrado
                     if situacao in ('suspensa', 'revogada', 'anulada', 'encerrada', 'homologada'):
                         edital_encerrado = True
 
@@ -1635,7 +1766,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
 
                     editais_em_aberto += 1
 
-                    # Extrair dados do Search API
+                    # Extrair dados
                     orgao_nome = item.get('orgao_nome', 'N/A')
                     cnpj = (item.get('orgao_cnpj', '') or '').replace('.', '').replace('/', '').replace('-', '')
                     uf_item = item.get('uf', '')
@@ -1645,7 +1776,6 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     numero_pncp = item.get('numero_controle_pncp', '')
                     item_url = item.get('item_url', '')
 
-                    # Construir URL do PNCP
                     if item_url:
                         link = f"https://pncp.gov.br{item_url}"
                     elif cnpj and ano and seq:
@@ -1655,7 +1785,6 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     else:
                         link = None
 
-                    # Mapear modalidade
                     modalidade_api = (item.get('modalidade_licitacao_nome', '') or '').lower()
                     if 'eletrônico' in modalidade_api or 'eletronico' in modalidade_api:
                         modalidade_db = 'pregao_eletronico'
@@ -1674,7 +1803,6 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     else:
                         modalidade_db = 'pregao_eletronico'
 
-                    # Determinar esfera
                     esfera = (item.get('esfera_nome', '') or '').lower()
                     if 'municipal' in esfera:
                         orgao_tipo = 'municipal'
@@ -1685,8 +1813,6 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     else:
                         orgao_tipo = 'municipal'
 
-                    # Extrair número do título (ex: "Edital nº 90050/2025" → "90050/2025")
-                    import re
                     titulo_raw = item.get('title', '') or ''
                     numero_match = re.search(r'n[ºo°]\s*(.+)', titulo_raw, re.IGNORECASE)
                     numero_edital = numero_match.group(1).strip() if numero_match else (item.get('numero') or titulo_raw or 'N/A')
@@ -1720,8 +1846,41 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         edital_data = _enriquecer_edital_pncp(edital_data)
 
                     editais_encontrados.append(edital_data)
-                    status_edital = "ENCERRADO" if edital_encerrado else "ABERTO"
-                    print(f"[TOOLS] + Edital: {edital_data['numero']} - {orgao_nome[:30]} ({status_edital})")
+
+                    # Marcar para busca de valor se não tem
+                    if not edital_data.get('valor_referencia') and cnpj and ano and seq:
+                        editais_sem_valor.append((len(editais_encontrados) - 1, edital_data))
+
+                # ===== PASSO 3: Buscar valores em paralelo (rápido, ~3-5s) =====
+                if editais_sem_valor:
+                    def _buscar_valor(args):
+                        idx, ed = args
+                        try:
+                            url = f"{PNCP_BASE_URL}/orgaos/{ed['cnpj_orgao']}/compras/{ed['ano_compra']}/{ed['seq_compra']}"
+                            resp = requests.get(url, headers={"Accept": "application/json"}, timeout=10)
+                            if resp.status_code == 200:
+                                dados = resp.json()
+                                return idx, dados.get('valorTotalEstimado'), dados.get('valorTotalHomologado')
+                            return idx, None, None
+                        except Exception:
+                            return idx, None, None
+
+                    n_buscar = len(editais_sem_valor)
+                    max_w = min(n_buscar, 10)
+                    print(f"[TOOLS] Buscando valores de {n_buscar} editais em paralelo ({max_w} workers)...")
+                    valores_encontrados = 0
+                    with ThreadPoolExecutor(max_workers=max_w) as executor:
+                        futures = {executor.submit(_buscar_valor, args): args for args in editais_sem_valor}
+                        for future in as_completed(futures, timeout=max(30, n_buscar * 2)):
+                            try:
+                                idx, valor_est, valor_hom = future.result(timeout=10)
+                                valor_final = valor_est or valor_hom
+                                if valor_final:
+                                    editais_encontrados[idx]['valor_referencia'] = valor_final
+                                    valores_encontrados += 1
+                            except Exception:
+                                pass
+                    print(f"[TOOLS] Valores obtidos: {valores_encontrados}/{n_buscar}")
 
                 if incluir_encerrados:
                     print(f"[TOOLS] Encontrados {len(editais_encontrados)} editais (incluindo {editais_encerrados} encerrados)")
@@ -2623,6 +2782,8 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
                     'objeto': item.get('objetoCompra'),
                     'valor_referencia': item.get('valorTotalEstimado'),
                     'data_abertura': item.get('dataAberturaProposta'),
+                    'data_encerramento': item.get('dataEncerramentoProposta'),
+                    'data_fim_vigencia': item.get('dataFimVigencia'),
                     'data_publicacao': item.get('dataPublicacaoPncp'),
                     'uf': unidade_data.get('ufSigla'),
                     'cidade': unidade_data.get('municipioNome'),
@@ -4153,8 +4314,6 @@ def tool_buscar_atas_pncp(termo: str, user_id: str = None) -> Dict[str, Any]:
     Returns:
         Dict com atas encontradas e URLs para download
     """
-    from config import SERPER_API_KEY, SERPER_API_URL
-
     print(f"[PNCP-ATAS] Buscando atas de '{termo}'...")
 
     # Método 1: Usar API de busca do PNCP
@@ -4198,30 +4357,15 @@ def tool_buscar_atas_pncp(termo: str, user_id: str = None) -> Dict[str, Any]:
     except Exception as e:
         print(f"[PNCP-ATAS] Erro na API do PNCP: {e}")
 
-    # Método 2: Fallback para busca via Serper (Google)
+    # Método 2: Fallback para busca web (DuckDuckGo/Serper/SerpAPI)
     try:
         search_query = f"site:pncp.gov.br ata registro preço {termo} filetype:pdf"
-        print(f"[PNCP-ATAS] Buscando via Serper: {search_query}")
+        print(f"[PNCP-ATAS] Buscando via scraper web: {search_query}")
 
-        response = requests.post(
-            SERPER_API_URL,
-            headers={
-                'X-API-KEY': SERPER_API_KEY,
-                'Content-Type': 'application/json'
-            },
-            json={
-                'q': search_query,
-                'num': 10,
-                'gl': 'br',
-                'hl': 'pt'
-            },
-            timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
+        raw_results = _web_search(search_query, 10)
 
         atas = []
-        for result in data.get('organic', []):
+        for result in raw_results:
             titulo = result.get('title', '')
             link = result.get('link', '')
             snippet = result.get('snippet', '')
@@ -4233,14 +4377,14 @@ def tool_buscar_atas_pncp(termo: str, user_id: str = None) -> Dict[str, Any]:
                     "descricao": snippet,
                     "url": link,
                     "url_pncp": link,
-                    "fonte": "serper"
+                    "fonte": "scraper_web"
                 }
                 atas.append(ata)
 
         if atas:
             return {
                 "success": True,
-                "fonte": "serper",
+                "fonte": "scraper_web",
                 "termo": termo,
                 "total": len(atas),
                 "atas": atas
@@ -4665,7 +4809,6 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
         Dict com contratos encontrados, preços e estatísticas
     """
     from datetime import datetime, timedelta
-    from config import SERPER_API_KEY, SERPER_API_URL
 
     print(f"[PNCP-PRECOS] Buscando preços de '{termo}' nos últimos {meses} meses...")
 
@@ -4720,31 +4863,16 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
     except Exception as e:
         print(f"[PNCP-PRECOS] Erro na API do PNCP: {e}")
 
-    # Método 2: Buscar via Serper (Google) se API não retornou resultados
+    # Método 2: Buscar via scraper web se API não retornou resultados
     if not contratos:
         try:
             search_query = f"site:pncp.gov.br contrato {termo} preço valor"
-            print(f"[PNCP-PRECOS] Buscando via Serper: {search_query}")
+            print(f"[PNCP-PRECOS] Buscando via scraper web: {search_query}")
 
-            response = requests.post(
-                SERPER_API_URL,
-                headers={
-                    'X-API-KEY': SERPER_API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'q': search_query,
-                    'num': 20,
-                    'gl': 'br',
-                    'hl': 'pt'
-                },
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
+            raw_results = _web_search(search_query, 20)
 
             import re
-            for result in data.get('organic', []):
+            for result in raw_results:
                 titulo = result.get('title', '')
                 link = result.get('link', '')
                 snippet = result.get('snippet', '')
@@ -4761,7 +4889,7 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
                                 "objeto": snippet[:200],
                                 "valor": valor,
                                 "url_pncp": link,
-                                "fonte": "serper"
+                                "fonte": "scraper_web"
                             }
                             contratos.append(contrato)
                             precos.append(valor)
@@ -4769,10 +4897,10 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
                         pass
 
             if contratos:
-                print(f"[PNCP-PRECOS] Serper retornou {len(contratos)} resultados com preços")
+                print(f"[PNCP-PRECOS] Scraper web retornou {len(contratos)} resultados com preços")
 
         except Exception as e:
-            print(f"[PNCP-PRECOS] Erro no Serper: {e}")
+            print(f"[PNCP-PRECOS] Erro no scraper web: {e}")
 
     # Calcular estatísticas
     if not contratos:

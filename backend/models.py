@@ -545,6 +545,8 @@ class Proposta(Base):
 
     status = Column(Enum('rascunho', 'revisao', 'aprovada', 'enviada'), default='rascunho')
     arquivo_path = Column(String(500), nullable=True)
+    documentos_anexados = Column(Integer, default=0)
+    documentos_total = Column(Integer, default=3)
 
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -555,7 +557,7 @@ class Proposta(Base):
     user = relationship("User", back_populates="propostas")
 
     def to_dict(self):
-        return {
+        result = {
             "id": self.id,
             "edital_id": self.edital_id,
             "produto_id": self.produto_id,
@@ -566,8 +568,19 @@ class Proposta(Base):
             "quantidade": self.quantidade,
             "status": self.status,
             "arquivo_path": self.arquivo_path,
+            "documentos_anexados": self.documentos_anexados or 0,
+            "documentos_total": self.documentos_total or 3,
+            "numero_edital": None,
+            "nome_produto": None,
+            "orgao": None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+        if self.edital:
+            result["numero_edital"] = getattr(self.edital, 'numero', None) or getattr(self.edital, 'numero_edital', None)
+            result["orgao"] = getattr(self.edital, 'orgao', None)
+        if self.produto:
+            result["nome_produto"] = getattr(self.produto, 'nome', None)
+        return result
 
 
 # ==================== CONCORRENTES E PREÇOS HISTÓRICOS ====================

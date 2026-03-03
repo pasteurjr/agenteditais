@@ -1207,7 +1207,7 @@ def chat():
 
 def processar_buscar_web(message: str, user_id: str, intencao_resultado: dict):
     """
-    Processa ação: Buscar material/manuais/datasheets na web usando Serper API.
+    Processa ação: Buscar material/manuais/datasheets na web (DuckDuckGo/Serper/SerpAPI).
 
     Diferente de buscar_editais - aqui buscamos MANUAIS e ESPECIFICAÇÕES de produtos,
     não licitações/editais.
@@ -1542,7 +1542,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                                 dias_busca: int = 90,
                                 fonte: str = None) -> dict:
     """
-    Busca editais em múltiplas fontes (PNCP API + Serper scraper) EM PARALELO,
+    Busca editais em múltiplas fontes (PNCP API + scraper web) EM PARALELO,
     deduplica e retorna resultado consolidado.
     Reutilizada pelo chat (processar_buscar_editais) e pelo endpoint REST (/api/editais/buscar).
 
@@ -1556,8 +1556,26 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     fontes_consultadas = []
     erros_fontes = []
 
+    # Resolver fonte: pode vir como UUID, nome ou URL
+    fonte_nome = None
+    if fonte:
+        fonte_str = fonte.strip()
+        # Se parece UUID, buscar nome no banco
+        if len(fonte_str) >= 32 and '-' in fonte_str:
+            try:
+                _db = get_db()
+                fonte_obj = _db.query(FonteEdital).filter(FonteEdital.id == fonte_str).first()
+                if fonte_obj:
+                    fonte_nome = fonte_obj.nome
+                    print(f"[BUSCA-MULTI] Fonte UUID '{fonte_str}' → '{fonte_nome}'")
+                _db.close()
+            except Exception:
+                pass
+        if not fonte_nome:
+            fonte_nome = fonte_str
+
     # Normalizar fonte para comparação
-    fonte_lower = (fonte or '').lower().strip() if fonte else None
+    fonte_lower = fonte_nome.lower().strip() if fonte_nome else None
     buscar_pncp = fonte_lower is None or 'pncp' in fonte_lower
     buscar_scraper = fonte_lower is None  # Scraper só quando não especifica fonte
 
@@ -1567,9 +1585,9 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         buscar_scraper = True  # Buscar no scraper com filtro de fonte
 
     if fonte_lower:
-        print(f"[BUSCA-MULTI] Buscando '{termo}' na fonte '{fonte}'...")
+        print(f"[BUSCA-MULTI] Buscando '{termo}' na fonte '{fonte_nome}'...")
     else:
-        print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Serper)...")
+        print(f"[BUSCA-MULTI] Buscando '{termo}' (PNCP + Scraper)...")
 
     # 1. Buscar no PNCP (API oficial) — com tratamento de erro
     if buscar_pncp:
@@ -1591,15 +1609,49 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
             print(f"[BUSCA-MULTI] Erro PNCP: {e}")
             erros_fontes.append(f"PNCP: {e}")
 
-    # 2. Buscar em outras fontes via Serper (scraper) — com tratamento de erro
+    # Mapear nomes amigáveis de fonte para domínios de URL
+    _fonte_to_dominios = {
+        'bec-sp': ['bec.sp.gov.br'],
+        'bec sp': ['bec.sp.gov.br'],
+        'bec': ['bec.sp.gov.br'],
+        'comprasnet': ['comprasnet.gov.br'],
+        'licitacoes-e': ['licitacoes-e.com.br'],
+        'compras.rs': ['compras.rs.gov.br'],
+        'compras.mg': ['compras.mg.gov.br'],
+        'gov.br': ['gov.br'],
+        'licitanet': ['licitanet.com.br'],
+        'portal de compras': ['portaldecompraspublicas.com.br'],
+    }
+
+    # 2. Buscar em outras fontes via scraper web (Brave/Serper/SerpAPI) — com tratamento de erro
     resultado_scraper = None
     if buscar_scraper:
         try:
-            resultado_scraper = tool_buscar_editais_scraper(termo, user_id=user_id)
+            # Se fonte específica (não PNCP), buscar SÓ naquela fonte para economizar chamadas Brave
+            fontes_scraper = None  # None = todas
+            if fonte_lower and 'pncp' not in fonte_lower:
+                dominios = _fonte_to_dominios.get(fonte_lower, [])
+                if not dominios:
+                    # Tentar buscar domínio da fonte no banco
+                    try:
+                        _db = get_db()
+                        _fobj = _db.query(FonteEdital).filter(
+                            FonteEdital.nome.ilike(f"%{fonte_nome}%")
+                        ).first()
+                        if _fobj and _fobj.url_base:
+                            dom = _fobj.url_base.replace("https://", "").replace("http://", "").split("/")[0]
+                            dominios = [dom]
+                        _db.close()
+                    except Exception:
+                        pass
+                if dominios:
+                    fontes_scraper = dominios
+                    print(f"[BUSCA-MULTI] Scraper restrito a: {fontes_scraper}")
+            resultado_scraper = tool_buscar_editais_scraper(termo, fontes=fontes_scraper, user_id=user_id)
         except Exception as e:
-            print(f"[BUSCA-MULTI] Erro Serper: {e}")
+            print(f"[BUSCA-MULTI] Erro scraper: {e}")
             resultado_scraper = None
-            erros_fontes.append(f"Serper: {e}")
+            erros_fontes.append(f"Scraper: {e}")
 
     if resultado_scraper and resultado_scraper.get("success"):
         editais_scraper = resultado_scraper.get("editais", [])
@@ -1622,7 +1674,10 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     ed_fonte = (ed.get('fonte', '') or '').lower()
                     ed_link = (ed.get('link', '') or '').lower()
                     # Verificar se a fonte do edital corresponde à fonte pedida
-                    if fonte_lower not in ed_fonte and fonte_lower not in ed_link:
+                    # Tentar match direto e por domínio
+                    dominios_alvo = _fonte_to_dominios.get(fonte_lower, [fonte_lower])
+                    fonte_match = any(d in ed_fonte or d in ed_link for d in dominios_alvo)
+                    if not fonte_match and fonte_lower not in ed_fonte and fonte_lower not in ed_link:
                         continue
 
                 texto = (ed.get('descricao', '') + ' ' + ed.get('titulo', '')).lower()
@@ -1691,14 +1746,15 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                     try:
                         idx, numero, fonte, dados_pncp = future.result(timeout=10)
                         if dados_pncp:
-                            # Filtrar encerrado direto aqui, antes de adicionar
+                            # Filtrar encerrado por data de encerramento/fim de vigência
+                            data_enc = dados_pncp.get('data_encerramento') or dados_pncp.get('data_fim_vigencia') or ''
                             data_ab = dados_pncp.get('data_abertura', '')
-                            if not incluir_encerrados and data_ab:
+                            if not incluir_encerrados and data_enc:
                                 try:
-                                    dt_ab = datetime.fromisoformat(str(data_ab).replace('Z', '')[:19])
-                                    if dt_ab < hoje:
+                                    dt_enc = datetime.fromisoformat(str(data_enc).replace('Z', '')[:19])
+                                    if dt_enc < hoje:
                                         editais_novos[idx]['_remover'] = True
-                                        print(f"[BUSCA-MULTI] Edital {numero} encerrado, removendo")
+                                        print(f"[BUSCA-MULTI] Edital {numero} encerrado (fim: {data_enc[:10]}), removendo")
                                         continue
                                 except (ValueError, TypeError):
                                     pass
@@ -2028,13 +2084,11 @@ JSON:"""
         status_badge = "🔴 ENCERRADO" if encerrado else ""
 
         texto = f"---\n"
-        texto += f"### {i}. {numero}"
+        texto += f"### {i}. [{fonte_badge}] {numero}"
         if score is not None:
             texto += f" | Score: **{score:.0f}%**"
         if status_badge:
             texto += f" | {status_badge}"
-        if fonte_badge:
-            texto += f" | {fonte_badge}"
         texto += "\n"
         texto += f"**Órgão:** {orgao} ({local})\n"
         texto += f"**Modalidade:** {modalidade}\n"
@@ -7414,7 +7468,7 @@ def get_dashboard_stats():
 def buscar_editais_rest():
     """
     Endpoint REST para busca de editais — mesma lógica do chat.
-    Usa _buscar_editais_multifonte() (PNCP API + Serper + deduplicação).
+    Usa _buscar_editais_multifonte() (PNCP API + scraper web + deduplicação).
     Query params:
       - termo (obrigatório): termo de busca
       - uf (opcional): filtrar por UF (ex: SP, RJ)
@@ -7427,7 +7481,7 @@ def buscar_editais_rest():
     user_id = get_current_user_id()
     termo = request.args.get("termo", "").strip()
     uf = request.args.get("uf", "").strip().upper() or None
-    fonte = request.args.get("fonte", "").strip() or None
+    fonte = request.args.get("fonte", request.args.get("fontes", "")).strip() or None
     calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
     calcular_score = calcular_score_str.lower() == "true"
     incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
@@ -7441,7 +7495,7 @@ def buscar_editais_rest():
         return jsonify({"success": False, "error": "Parâmetro 'termo' é obrigatório"}), 400
 
     try:
-        # Busca multi-fonte: mesma lógica do chat (PNCP + Serper + deduplicação)
+        # Busca multi-fonte: mesma lógica do chat (PNCP + scraper web + deduplicação)
         resultado_busca = _buscar_editais_multifonte(
             termo=termo,
             user_id=user_id,
@@ -8526,7 +8580,7 @@ def extrair_requisitos_edital(edital_id):
 
 # =============================================================================
 # B7: SICONV como fonte de busca de editais
-# (Implementado em tools.py — parser + integração via Serper)
+# (Implementado em tools.py — parser + integração via scraper web)
 # =============================================================================
 
 

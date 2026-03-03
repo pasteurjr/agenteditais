@@ -13,7 +13,7 @@ interface PropostaPronta {
   valor: number;
   dataAbertura: string;
   horaAbertura: string;
-  status: "aguardando" | "enviada" | "confirmada";
+  status: "aguardando" | "enviada" | "aprovada";
   checklist: {
     propostaTecnica: boolean;
     precoDefinido: boolean;
@@ -27,8 +27,8 @@ function mapCrudToPropostaPronta(item: Record<string, unknown>): PropostaPronta 
   const statusRaw = String(item.status ?? "rascunho");
   let status: PropostaPronta["status"] = "aguardando";
   if (statusRaw === "enviada") status = "enviada";
-  else if (statusRaw === "confirmada") status = "confirmada";
-  else if (statusRaw === "pronta" || statusRaw === "rascunho") status = "aguardando";
+  else if (statusRaw === "aprovada") status = "aprovada";
+  else if (statusRaw === "rascunho" || statusRaw === "revisao") status = "aguardando";
 
   const dataAbertura = String(item.data_abertura ?? item.dataAbertura ?? "");
   let dataPart = "";
@@ -100,7 +100,16 @@ export function SubmissaoPage(_props?: PageProps) {
   const handleMarcarEnviada = async (id: string) => {
     setLoadingStatus(true);
     try {
-      await crudUpdate("propostas", id, { status: "enviada" });
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/propostas/${id}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "enviada" }),
+      });
+      if (!res.ok) throw new Error("Erro ao atualizar status");
       const updated = propostas.map((p) =>
         p.id === id ? { ...p, status: "enviada" as const, checklist: { ...p.checklist, revisaoFinal: true } } : p
       );
@@ -115,19 +124,28 @@ export function SubmissaoPage(_props?: PageProps) {
     }
   };
 
-  const handleConfirmar = async (id: string) => {
+  const handleAprovar = async (id: string) => {
     setLoadingStatus(true);
     try {
-      await crudUpdate("propostas", id, { status: "confirmada" });
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/propostas/${id}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "aprovada" }),
+      });
+      if (!res.ok) throw new Error("Erro ao aprovar proposta");
       const updated = propostas.map((p) =>
-        p.id === id ? { ...p, status: "confirmada" as const } : p
+        p.id === id ? { ...p, status: "aprovada" as const } : p
       );
       setPropostas(updated);
       if (selectedProposta?.id === id) {
         setSelectedProposta(updated.find((p) => p.id === id) ?? null);
       }
     } catch (err) {
-      console.error("Erro ao confirmar proposta:", err);
+      console.error("Erro ao aprovar proposta:", err);
     } finally {
       setLoadingStatus(false);
     }
@@ -176,8 +194,8 @@ export function SubmissaoPage(_props?: PageProps) {
         return <span className="status-badge status-badge-warning"><Clock size={12} /> Aguardando</span>;
       case "enviada":
         return <span className="status-badge status-badge-info"><Send size={12} /> Enviada</span>;
-      case "confirmada":
-        return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Confirmada</span>;
+      case "aprovada":
+        return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Aprovada</span>;
     }
   };
 
@@ -292,8 +310,8 @@ export function SubmissaoPage(_props?: PageProps) {
                 />
                 <ActionButton
                   icon={<CheckCircle size={14} />}
-                  label="Confirmar Envio"
-                  onClick={() => handleConfirmar(selectedProposta.id)}
+                  label="Aprovar"
+                  onClick={() => handleAprovar(selectedProposta.id)}
                   disabled={selectedProposta.status !== "enviada" || loadingStatus}
                   loading={loadingStatus && selectedProposta.status === "enviada"}
                 />
