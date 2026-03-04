@@ -2142,7 +2142,10 @@ def tool_buscar_editais_bec(termo: str, user_id: str,
                     continue
 
         situacao = (det.get('SITUACAO', '') or '').upper()
-        if any(s in situacao for s in ('ENCERRAD', 'HOMOLOGAD', 'REVOGAD', 'ANULAD', 'FRACASSAD', 'DESERT')):
+        # Normalizar acentos para comparação (ex: HOMOLOGAÇÃO → HOMOLOGACAO)
+        import unicodedata as _ud
+        situacao_norm = ''.join(c for c in _ud.normalize('NFD', situacao) if _ud.category(c) != 'Mn')
+        if any(s in situacao_norm for s in ('ENCERRAD', 'HOMOLOGA', 'REVOGAD', 'ANULAD', 'FRACASSAD', 'DESERT')):
             encerrado = True
 
         if encerrado and not incluir_encerrados:

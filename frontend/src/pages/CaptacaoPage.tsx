@@ -36,6 +36,8 @@ interface EditalBusca {
   produtoCorrespondente: string | null;
   classificacaoTipo: string;
   classificacaoOrigem: string;
+  tipoProdutoInferido: string;
+  origemInferida: string;
   potencialGanho: "elevado" | "medio" | "baixo";
   intencaoEstrategica: "estrategico" | "defensivo" | "acompanhamento" | "aprendizado";
   margemExpectativa: number;
@@ -232,10 +234,12 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
       comercial: scoreComercial,
       recomendacao: Number(e.recomendacao ?? scoreGeral),
     },
-    status: Boolean(e.encerrado) ? "encerrado" : (diasRestantes > 0 ? "aberto" : "encerrado"),
+    status: Boolean(e.encerrado) ? "encerrado" : "aberto",
     produtoCorrespondente,
-    classificacaoTipo: String(e.modalidade ?? "—"),
-    classificacaoOrigem: String(e.fonte ?? "—"),
+    classificacaoTipo: String(e.tipo_produto_inferido || e.modalidade || "—"),
+    classificacaoOrigem: String(e.origem_inferida || e.orgao_tipo || "—"),
+    tipoProdutoInferido: String(e.tipo_produto_inferido ?? ""),
+    origemInferida: String(e.origem_inferida ?? ""),
     potencialGanho: inferirPotencialGanho(scoreGeral),
     intencaoEstrategica: "acompanhamento",
     margemExpectativa: 15,
@@ -262,10 +266,12 @@ function contarPrazos(editais: EditalBusca[]) {
 export function CaptacaoPage(props?: PageProps) {
   const onSendToChat = props?.onSendToChat;
   const [termo, setTermo] = useState("");
+  const [termoDropdownAberto, setTermoDropdownAberto] = useState(false);
   const [uf, setUf] = useState("todas");
   const [fonte, setFonte] = useState("todas");
   const [classificacaoTipo, setClassificacaoTipo] = useState("todos");
   const [classificacaoOrigem, setClassificacaoOrigem] = useState("todos");
+  const [modalidadeFiltro, setModalidadeFiltro] = useState("todos");
   const [calcularScore, setCalcularScore] = useState(false);
   const [incluirEncerrados, setIncluirEncerrados] = useState(false);
 
@@ -306,6 +312,12 @@ export function CaptacaoPage(props?: PageProps) {
 
   // Fontes de editais carregadas do banco
   const [fontesDisponiveis, setFontesDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  // Modalidades, origens e tipos de produto carregados do banco
+  const [modalidadesDisponiveis, setModalidadesDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  const [origensDisponiveis, setOrigensDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  const [tiposProdutoDisponiveis, setTiposProdutoDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  // Produtos do portfólio para select no campo Termo
+  const [produtosPortfolio, setProdutosPortfolio] = useState<{ value: string; label: string }[]>([]);
 
   // Carrega monitoramentos, fontes e parametros ao montar
   useEffect(() => {
@@ -332,6 +344,77 @@ export function CaptacaoPage(props?: PageProps) {
       } catch {
         // Fallback vazio
       }
+    })();
+    // Carregar produtos do portfólio para o select de Termo
+    (async () => {
+      try {
+        const res = await crudList("produtos", { limit: 100 });
+        const items = res.items as Record<string, unknown>[];
+        setProdutosPortfolio(items.map(p => ({
+          value: String(p.nome ?? ""),
+          label: String(p.nome ?? ""),
+        })));
+      } catch { /* silencioso */ }
+    })();
+    // Carregar modalidades do banco
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/modalidades", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items)) {
+            setModalidadesDisponiveis(data.items.map((m: Record<string, unknown>) => ({
+              value: String(m.nome ?? ""),
+              label: String(m.nome ?? ""),
+            })));
+          }
+        }
+      } catch { /* silencioso */ }
+    })();
+    // Carregar origens do banco
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/origens", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items)) {
+            setOrigensDisponiveis(data.items.map((o: Record<string, unknown>) => ({
+              value: String(o.nome ?? ""),
+              label: String(o.nome ?? ""),
+            })));
+          }
+        }
+      } catch { /* silencioso */ }
+    })();
+    // Carregar tipos de produto (classes) do banco
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/areas-produto", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items)) {
+            const tipos: { value: string; label: string }[] = [];
+            for (const area of data.items) {
+              const classes = (area as Record<string, unknown>).classes as Record<string, unknown>[] | undefined;
+              if (classes) {
+                for (const cls of classes) {
+                  tipos.push({ value: String(cls.nome ?? ""), label: String(cls.nome ?? "") });
+                }
+              }
+            }
+            setTiposProdutoDisponiveis(tipos);
+          }
+        }
+      } catch { /* silencioso */ }
     })();
     // C1: Carregar estados de atuacao para calculo de score comercial
     (async () => {
@@ -376,16 +459,22 @@ export function CaptacaoPage(props?: PageProps) {
 
   // T13: Busca real via REST
   const handleBuscar = async () => {
-    if (!termo.trim()) {
-      setErro("Informe um termo de busca");
+    // Prioridade: Tipo Produto > Termo digitado/selecionado
+    let termoBusca = "";
+    if (classificacaoTipo !== "todos") {
+      // Tipo Produto selecionado → busca abrangente pelo tipo
+      termoBusca = classificacaoTipo.toLowerCase();
+    } else {
+      termoBusca = termo.trim();
+    }
+    if (!termoBusca) {
+      setErro("Informe um termo de busca ou selecione um Tipo Produto");
       return;
     }
     setLoading(true);
     setErro(null);
     try {
       const token = localStorage.getItem("editais_ia_access_token");
-      // C3: Incluir NCM no termo de busca se preenchido
-      let termoBusca = termo.trim();
       if (ncm.trim()) {
         termoBusca += " NCM " + ncm.trim();
       }
@@ -398,6 +487,9 @@ export function CaptacaoPage(props?: PageProps) {
       });
       if (uf !== "todas") params.append("uf", uf);
       if (fonte !== "todas") params.append("fonte", fonte);
+      if (modalidadeFiltro !== "todos") params.append("modalidade", modalidadeFiltro);
+      if (classificacaoTipo !== "todos") params.append("tipoProduto", classificacaoTipo);
+      if (classificacaoOrigem !== "todos") params.append("origem", classificacaoOrigem);
 
       const res = await fetch(`/api/editais/buscar?${params}`, {
         headers: { Authorization: token ? `Bearer ${token}` : "" },
@@ -414,15 +506,9 @@ export function CaptacaoPage(props?: PageProps) {
         throw new Error(data.error || "Busca sem resultados");
       }
 
-      let editais = (data.editais ?? []).map(e => normalizarEditalDaBusca(e, estadosAtuacao));
+      const editais = (data.editais ?? []).map(e => normalizarEditalDaBusca(e, estadosAtuacao));
 
-      // Filtros client-side por tipo e origem (mapeados dos campos retornados)
-      if (classificacaoTipo !== "todos") {
-        editais = editais.filter(e => e.classificacaoTipo.toLowerCase() === classificacaoTipo.toLowerCase());
-      }
-      if (classificacaoOrigem !== "todos") {
-        editais = editais.filter(e => e.classificacaoOrigem.toLowerCase() === classificacaoOrigem.toLowerCase());
-      }
+      // Filtros aplicados server-side via query params (modalidade, tipoProduto, origem)
 
       setResultados(editais);
     } catch (e) {
@@ -883,12 +969,49 @@ export function CaptacaoPage(props?: PageProps) {
         {/* Card de busca */}
         <Card title="Buscar Editais" icon={<Search size={18} />}>
           <div className="form-grid form-grid-4">
-            <FormField label="Termo / Palavra-chave">
-              <TextInput
-                value={termo}
-                onChange={setTermo}
-                placeholder="Ex: microscopio, reagente..."
-              />
+            <FormField label="Termo / Produto">
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={termo}
+                  onChange={(e) => { setTermo(e.target.value); setTermoDropdownAberto(true); }}
+                  onFocus={() => setTermoDropdownAberto(true)}
+                  onBlur={() => setTimeout(() => setTermoDropdownAberto(false), 150)}
+                  placeholder={classificacaoTipo !== "todos" ? `Tipo Produto: ${classificacaoTipo}` : "Digite ou selecione um produto..."}
+                  className="form-input"
+                  style={{ width: "100%" }}
+                  disabled={classificacaoTipo !== "todos"}
+                />
+                {termoDropdownAberto && classificacaoTipo === "todos" && produtosPortfolio.length > 0 && (
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
+                    background: "#1e293b", border: "1px solid #334155", borderRadius: "6px",
+                    maxHeight: "200px", overflowY: "auto", marginTop: "2px",
+                  }}>
+                    {produtosPortfolio
+                      .filter(p => !termo || p.label.toLowerCase().includes(termo.toLowerCase()))
+                      .map((p) => (
+                        <div
+                          key={p.value}
+                          onMouseDown={() => { setTermo(p.value); setTermoDropdownAberto(false); }}
+                          style={{
+                            padding: "6px 10px", cursor: "pointer", fontSize: "13px",
+                            color: "#e2e8f0", borderBottom: "1px solid #1e293b",
+                          }}
+                          onMouseEnter={(ev) => (ev.currentTarget.style.background = "#334155")}
+                          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                        >
+                          {p.label}
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {classificacaoTipo !== "todos" && (
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                    Usando Tipo Produto: {classificacaoTipo}
+                  </div>
+                )}
+              </div>
             </FormField>
             <FormField label="UF">
               <SelectInput value={uf} onChange={setUf} options={UFS} />
@@ -915,38 +1038,33 @@ export function CaptacaoPage(props?: PageProps) {
           </div>
 
           <div className="form-grid form-grid-4" style={{ marginTop: "12px" }}>
-            <FormField label="Classificacao Tipo">
+            <FormField label="Modalidade">
+              <SelectInput
+                value={modalidadeFiltro}
+                onChange={setModalidadeFiltro}
+                options={[
+                  { value: "todos", label: "Todas" },
+                  ...modalidadesDisponiveis,
+                ]}
+              />
+            </FormField>
+            <FormField label="Tipo Produto">
               <SelectInput
                 value={classificacaoTipo}
                 onChange={setClassificacaoTipo}
                 options={[
                   { value: "todos", label: "Todos" },
-                  { value: "Reagentes", label: "Reagentes" },
-                  { value: "Equipamentos", label: "Equipamentos" },
-                  { value: "Comodato", label: "Comodato" },
-                  { value: "Aluguel", label: "Aluguel" },
-                  { value: "Oferta Preco", label: "Oferta de Preco" },
+                  ...tiposProdutoDisponiveis,
                 ]}
               />
             </FormField>
-            <FormField label="Classificacao Origem">
+            <FormField label="Origem">
               <SelectInput
                 value={classificacaoOrigem}
                 onChange={setClassificacaoOrigem}
                 options={[
-                  { value: "todos", label: "Todos" },
-                  { value: "Municipal", label: "Municipal" },
-                  { value: "Estadual", label: "Estadual" },
-                  { value: "Federal", label: "Federal" },
-                  { value: "Universidade", label: "Universidade" },
-                  { value: "Hospital", label: "Hospital" },
-                  { value: "LACEN", label: "LACEN" },
-                  { value: "Forca Armada", label: "Forca Armada" },
-                  { value: "Autarquia", label: "Autarquia" },
-                  { value: "Centros de Pesquisas", label: "Centros de Pesquisas" },
-                  { value: "Campanhas Governamentais", label: "Campanhas Governamentais" },
-                  { value: "Fundacoes de Pesquisa", label: "Fundacoes de Pesquisa" },
-                  { value: "Fundacoes Diversas", label: "Fundacoes Diversas" },
+                  { value: "todos", label: "Todas" },
+                  ...origensDisponiveis,
                 ]}
               />
             </FormField>
@@ -957,6 +1075,9 @@ export function CaptacaoPage(props?: PageProps) {
                 placeholder="Ex: 9027.80.99"
               />
             </FormField>
+          </div>
+
+          <div className="form-grid form-grid-4" style={{ marginTop: "12px" }}>
             <FormField label="Periodo de publicacao">
               <SelectInput
                 value={diasBusca}

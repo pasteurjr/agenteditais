@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto
 from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -67,6 +67,11 @@ PROMPTS_PRONTOS = [
     {"id": "registrar_vitoria", "nome": "🏆 Registrar vitória", "prompt": "Ganhamos o edital [NUMERO] com R$ [VALOR]"},
     {"id": "registrar_cancelado", "nome": "⛔ Edital cancelado", "prompt": "O edital [NUMERO] foi cancelado"},
     {"id": "consultar_resultado", "nome": "🔎 Consultar resultado", "prompt": "Qual o resultado do edital [NUMERO]?"},
+    # === BUSCA COM FILTROS ===
+    {"id": "buscar_modalidade", "nome": "🔍 Buscar por modalidade", "prompt": "Busque editais de [TERMO] com modalidade [MODALIDADE]"},
+    {"id": "buscar_tipo_produto", "nome": "🔍 Buscar por tipo produto", "prompt": "Busque editais de [TERMO] do tipo [TIPO_PRODUTO]"},
+    {"id": "buscar_origem", "nome": "🔍 Buscar por origem", "prompt": "Busque editais de [TERMO] de origem [ORIGEM]"},
+    {"id": "buscar_filtros", "nome": "🔍 Buscar com filtros", "prompt": "Busque editais de [TERMO] em [UF], modalidade [MODALIDADE], origem [ORIGEM]"},
 ]
 
 
@@ -1540,7 +1545,10 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                                 incluir_encerrados: bool = False,
                                 buscar_detalhes: bool = True,
                                 dias_busca: int = 90,
-                                fonte: str = None) -> dict:
+                                fonte: str = None,
+                                modalidade: str = None,
+                                tipo_produto: str = None,
+                                origem: str = None) -> dict:
     """
     Busca editais em múltiplas fontes (PNCP API + scraper web) EM PARALELO,
     deduplica e retorna resultado consolidado.
@@ -1548,6 +1556,9 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
 
     Args:
         fonte: Se especificado, busca APENAS nessa fonte. Valores: 'PNCP', nome de fonte scraper, ou None (todas).
+        modalidade: Filtro pós-busca por modalidade (ex: "Pregão Eletrônico").
+        tipo_produto: Filtro pós-busca por tipo de produto inferido do objeto (ex: "Reagentes").
+        origem: Filtro pós-busca por origem do órgão inferida (ex: "Hospital").
     """
     import re
     from datetime import datetime as _dt
@@ -1610,6 +1621,12 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                 editais_pncp = resultado_pncp.get("editais", [])
                 for ed in editais_pncp:
                     ed['fonte'] = 'PNCP (API)'
+                if not incluir_encerrados:
+                    antes = len(editais_pncp)
+                    editais_pncp = [e for e in editais_pncp if not e.get('encerrado')]
+                    filtrados = antes - len(editais_pncp)
+                    if filtrados:
+                        print(f"[BUSCA-MULTI] PNCP: {filtrados} encerrados removidos")
                 editais.extend(editais_pncp)
                 fontes_consultadas.append("PNCP (API)")
                 print(f"[BUSCA-MULTI] PNCP: {len(editais_pncp)} editais encontrados")
@@ -1630,6 +1647,12 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
             )
             if resultado_bec.get("success"):
                 editais_bec = resultado_bec.get("editais", [])
+                if not incluir_encerrados:
+                    antes = len(editais_bec)
+                    editais_bec = [e for e in editais_bec if not e.get('encerrado')]
+                    filtrados = antes - len(editais_bec)
+                    if filtrados:
+                        print(f"[BUSCA-MULTI] BEC-SP: {filtrados} encerrados removidos")
                 editais.extend(editais_bec)
                 fontes_consultadas.append("BEC-SP (API)")
                 print(f"[BUSCA-MULTI] BEC-SP: {len(editais_bec)} editais encontrados")
@@ -1652,6 +1675,12 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
             if resultado_cn.get("success"):
                 editais_cn = resultado_cn.get("editais", [])
                 if editais_cn:
+                    if not incluir_encerrados:
+                        antes = len(editais_cn)
+                        editais_cn = [e for e in editais_cn if not e.get('encerrado')]
+                        filtrados = antes - len(editais_cn)
+                        if filtrados:
+                            print(f"[BUSCA-MULTI] ComprasNet: {filtrados} encerrados removidos")
                     editais.extend(editais_cn)
                     fontes_consultadas.append("ComprasNet (API)")
                     print(f"[BUSCA-MULTI] ComprasNet API: {len(editais_cn)} editais")
@@ -1876,6 +1905,31 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         print(f"[BUSCA-MULTI] Removidas {len(editais) - len(editais_unicos)} duplicatas")
     editais = editais_unicos
 
+    # 4. Filtros pós-busca: modalidade, tipo_produto, origem
+    if modalidade:
+        # Normalizar: "Pregão Eletrônico" → "pregao eletronico", "pregao_eletronico" → "pregao eletronico"
+        import unicodedata
+        def _norm_mod(s):
+            s = (s or '').lower().replace("_", " ")
+            # Remover acentos
+            return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+        mod_norm = _norm_mod(modalidade)
+        editais_pre = len(editais)
+        editais = [e for e in editais if mod_norm in _norm_mod(e.get('modalidade') or '')]
+        print(f"[BUSCA-MULTI] Filtro modalidade='{modalidade}': {editais_pre} → {len(editais)}")
+
+    if tipo_produto:
+        tp_lower = tipo_produto.lower()
+        editais_pre = len(editais)
+        editais = [e for e in editais if tp_lower in inferir_tipo_produto(e.get('objeto', '')).lower()]
+        print(f"[BUSCA-MULTI] Filtro tipo_produto='{tipo_produto}': {editais_pre} → {len(editais)}")
+
+    if origem:
+        orig_lower = origem.lower()
+        editais_pre = len(editais)
+        editais = [e for e in editais if orig_lower in inferir_origem_orgao(e.get('orgao', ''), e.get('orgao_tipo', '')).lower()]
+        print(f"[BUSCA-MULTI] Filtro origem='{origem}': {editais_pre} → {len(editais)}")
+
     return {
         "success": len(editais) > 0,
         "termo": termo,
@@ -1965,11 +2019,20 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
         # Limpar modificadores que a IA pode ter incluído no termo
         import re as _re
         for mod in ['incluindo encerrados', 'sem calcular score', 'sem score', 'sem calcular',
-                     'apenas listando', 'no pncp', 'no comprasnet', 'na web']:
+                     'apenas listando', 'no pncp', 'no comprasnet', 'na web',
+                     'com modalidade', 'modalidade', 'do tipo', 'de origem',
+                     'pregão eletrônico', 'pregao eletronico', 'pregão presencial', 'pregao presencial',
+                     'concorrência', 'concorrencia', 'tomada de preços', 'tomada de precos',
+                     'convite', 'dispensa', 'inexigibilidade',
+                     'origem hospital', 'origem municipal', 'origem estadual', 'origem federal',
+                     'origem universidade', 'origem autarquia', 'origem lacen',
+                     'tipo reagente', 'tipo equipamento', 'tipo comodato', 'tipo aluguel',
+                     'tipo informática', 'tipo informatica', 'tipo insumo']:
             termo = _re.sub(r'\b' + _re.escape(mod) + r'\b', '', termo, flags=_re.IGNORECASE)
         # Limpar "últimos X dias"
         termo = _re.sub(r'(?:ultimos|últimos)\s+\d+\s*dias?', '', termo, flags=_re.IGNORECASE)
-        termo = termo.strip()
+        # Limpar espaços duplicados
+        termo = _re.sub(r'\s+', ' ', termo).strip()
         print(f"[BUSCA] Usando termo da IA: '{termo}'")
     else:
         termo = None
@@ -2009,6 +2072,16 @@ JSON:"""
         termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
         termo = ' '.join(termos) if termos else message
 
+    # Limpar frases de filtro do termo (modalidade, tipo, origem)
+    _filtros_limpar = [
+        r'com\s+modalidade\s+\S+(?:\s+\S+)?', r'modalidade\s+\S+(?:\s+\S+)?',
+        r'do\s+tipo\s+\S+', r'tipo\s+\S+',
+        r'de\s+origem\s+\S+', r'origem\s+\S+',
+    ]
+    for padrao in _filtros_limpar:
+        termo = re.sub(padrao, '', termo, flags=re.IGNORECASE)
+    termo = re.sub(r'\s+', ' ', termo).strip()
+
     # Detectar UF na mensagem
     ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
     msg_upper = message.upper()
@@ -2024,12 +2097,55 @@ JSON:"""
     elif "MINAS GERAIS" in msg_upper:
         uf = "MG"
 
-    print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}'")
+    # Detectar modalidade da mensagem
+    modalidade = None
+    _modalidades_map = {
+        'pregão eletrônico': 'Pregão Eletrônico', 'pregao eletronico': 'Pregão Eletrônico',
+        'pregão presencial': 'Pregão Presencial', 'pregao presencial': 'Pregão Presencial',
+        'concorrência': 'Concorrência', 'concorrencia': 'Concorrência',
+        'tomada de preços': 'Tomada de Preços', 'tomada de precos': 'Tomada de Preços',
+        'convite': 'Convite', 'dispensa': 'Dispensa', 'inexigibilidade': 'Inexigibilidade',
+    }
+    msg_lower_mod = message.lower()
+    for chave, valor in _modalidades_map.items():
+        if chave in msg_lower_mod:
+            modalidade = valor
+            break
+
+    # Detectar tipo de produto da mensagem
+    tipo_produto = None
+    _tipos_map = {
+        'reagente': 'Reagentes', 'equipamento': 'Equipamentos', 'comodato': 'Comodato',
+        'aluguel': 'Aluguel', 'locação': 'Aluguel', 'locacao': 'Aluguel',
+        'insumo': 'Insumos Hospitalares', 'informática': 'Informática', 'informatica': 'Informática',
+        'rede': 'Redes', 'mobiliário': 'Mobiliário', 'mobiliario': 'Mobiliário',
+    }
+    for chave, valor in _tipos_map.items():
+        if f'tipo {chave}' in msg_lower_mod or f'do tipo {chave}' in msg_lower_mod:
+            tipo_produto = valor
+            break
+
+    # Detectar origem da mensagem
+    origem = None
+    _origens_map = {
+        'hospital': 'Hospital', 'universidade': 'Universidade', 'lacen': 'LACEN',
+        'força armada': 'Força Armada', 'forca armada': 'Força Armada',
+        'autarquia': 'Autarquia', 'municipal': 'Municipal', 'estadual': 'Estadual',
+        'federal': 'Federal', 'centro de pesquisa': 'Centros de Pesquisas',
+        'fundação de pesquisa': 'Fundações de Pesquisa', 'fundacao de pesquisa': 'Fundações de Pesquisa',
+    }
+    for chave, valor in _origens_map.items():
+        if f'origem {chave}' in msg_lower_mod or f'de origem {chave}' in msg_lower_mod:
+            origem = valor
+            break
+
+    print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}', Modalidade: '{modalidade}', Tipo: '{tipo_produto}', Origem: '{origem}'")
 
     # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
     resultado = _buscar_editais_multifonte(
         termo=termo, user_id=user_id, uf=uf, incluir_encerrados=incluir_encerrados,
         dias_busca=dias_busca, fonte=fonte,
+        modalidade=modalidade, tipo_produto=tipo_produto, origem=origem,
     )
     editais = resultado.get("editais", [])
     fontes_consultadas = resultado.get("fontes_consultadas", [])
@@ -7520,6 +7636,127 @@ def get_dashboard_stats():
 
 
 # =============================================================================
+# Endpoints: Modalidades, Origens, Áreas de Produto (filtros parametrizáveis)
+# =============================================================================
+
+def inferir_tipo_produto(objeto: str) -> str:
+    """Infere o tipo de produto a partir do texto do objeto do edital."""
+    if not objeto:
+        return ""
+    obj = objeto.lower()
+    # Reagentes
+    if any(w in obj for w in ['reagente', 'kit diagnóstico', 'kit diagnostico', 'teste rápido', 'teste rapido',
+                                'hematologi', 'bioquímic', 'bioquimic', 'imunologi', 'microbiologi', 'sorologi']):
+        return "Reagentes"
+    # Equipamentos
+    if any(w in obj for w in ['equipamento', 'analisador', 'microscópio', 'microscopio', 'centrífuga', 'centrifuga',
+                                'autoclave', 'espectrofotômetro', 'espectrofotometro', 'aparelho', 'máquina', 'maquina']):
+        return "Equipamentos"
+    # Comodato
+    if any(w in obj for w in ['comodato', 'cessão de uso', 'cessao de uso']):
+        return "Comodato"
+    # Aluguel
+    if any(w in obj for w in ['aluguel', 'locação', 'locacao', 'locaçao']):
+        return "Aluguel"
+    # Insumos Hospitalares
+    if any(w in obj for w in ['insumo', 'material hospitalar', 'luva', 'seringa', 'agulha', 'gaze',
+                                'cateter', 'sonda', 'material médico', 'material medico']):
+        return "Insumos Hospitalares"
+    # Informática
+    if any(w in obj for w in ['computador', 'servidor', 'notebook', 'software', 'licença software',
+                                'impressora', 'monitor', 'informática', 'informatica', 'desktop']):
+        return "Informática"
+    # Redes
+    if any(w in obj for w in ['switch', 'roteador', 'firewall', 'cabeamento', 'fibra óptica', 'fibra optica', 'rede']):
+        return "Redes"
+    # Mobiliário
+    if any(w in obj for w in ['mobiliário', 'mobiliario', 'mesa', 'cadeira', 'armário', 'armario', 'estante']):
+        return "Mobiliário"
+    return ""
+
+
+def inferir_origem_orgao(orgao: str, orgao_tipo: str = "") -> str:
+    """Infere a origem/tipo do órgão licitante."""
+    if not orgao:
+        return ""
+    org = orgao.lower()
+    tipo = (orgao_tipo or "").lower()
+
+    if any(w in org for w in ['hospital', 'hc ', 'hcpa', 'hu ', 'santa casa']):
+        return "Hospital"
+    if any(w in org for w in ['universidade', 'ufrj', 'usp', 'unicamp', 'ufmg', 'ufrgs', 'ufsc', 'ufba',
+                                'ufscar', 'ufpe', 'unb', 'ufpr', 'unifesp', 'unesp', 'uerj']):
+        return "Universidade"
+    if any(w in org for w in ['lacen', 'laboratório central', 'laboratorio central']):
+        return "LACEN"
+    if any(w in org for w in ['exército', 'exercito', 'marinha', 'aeronáutica', 'aeronautica', 'força aérea',
+                                'forca aerea', 'comando militar', 'arsenal']):
+        return "Força Armada"
+    if any(w in org for w in ['fapesp', 'faperj', 'fapemig', 'cnpq', 'capes', 'fundação de amparo',
+                                'fundacao de amparo']):
+        return "Fundações de Pesquisa"
+    if any(w in org for w in ['fiocruz', 'embrapa', 'inpe', 'inpa', 'impa', 'lncc', 'cbpf',
+                                'centro de pesquisa', 'instituto de pesquisa']):
+        return "Centros de Pesquisas"
+    if any(w in org for w in ['fundação', 'fundacao']) and 'pesquisa' not in org:
+        return "Fundações Diversas"
+    if any(w in org for w in ['autarquia', 'agência', 'agencia', 'anatel', 'anvisa', 'anp', 'ans', 'ana',
+                                'ibama', 'inmetro']):
+        return "Autarquia"
+    if tipo == 'federal' or any(w in org for w in ['ministério', 'ministerio', 'governo federal', 'união', 'uniao']):
+        return "Federal"
+    if tipo == 'estadual' or any(w in org for w in ['governo do estado', 'secretaria de estado', 'estado de',
+                                                      'governo estadual']):
+        return "Estadual"
+    if tipo == 'municipal' or any(w in org for w in ['prefeitura', 'município', 'municipio', 'câmara municipal',
+                                                       'camara municipal']):
+        return "Municipal"
+    return ""
+
+
+@app.route("/api/modalidades", methods=["GET"])
+@require_auth
+def listar_modalidades():
+    """Lista todas as modalidades de licitação ativas."""
+    db = get_db()
+    try:
+        items = db.query(ModalidadeLicitacao).filter(ModalidadeLicitacao.ativo == True).order_by(ModalidadeLicitacao.ordem).all()
+        return jsonify({"success": True, "items": [m.to_dict() for m in items]})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/origens", methods=["GET"])
+@require_auth
+def listar_origens():
+    """Lista todas as origens de órgão ativas."""
+    db = get_db()
+    try:
+        items = db.query(OrigemOrgao).filter(OrigemOrgao.ativo == True).order_by(OrigemOrgao.ordem).all()
+        return jsonify({"success": True, "items": [o.to_dict() for o in items]})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/areas-produto", methods=["GET"])
+@require_auth
+def listar_areas_produto():
+    """Lista todas as áreas com classes e subclasses aninhadas."""
+    db = get_db()
+    try:
+        items = db.query(AreaProduto).filter(AreaProduto.ativo == True).order_by(AreaProduto.ordem).all()
+        return jsonify({"success": True, "items": [a.to_dict() for a in items]})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
 # Onda 2 - T8: Endpoint REST GET /api/editais/buscar
 # =============================================================================
 
@@ -7537,11 +7774,17 @@ def buscar_editais_rest():
       - limite / limit (opcional, default 20): máximo de resultados
       - diasBusca (opcional, default 90): janela de publicação em dias (0 = sem limite)
       - fonte (opcional): fonte específica (PNCP, ComprasNet, etc). Se omitido, busca em todas.
+      - modalidade (opcional): filtrar por modalidade (ex: Pregão Eletrônico)
+      - tipoProduto / tipo_produto (opcional): filtrar por tipo de produto inferido do objeto
+      - origem (opcional): filtrar por origem do órgão inferida
     """
     user_id = get_current_user_id()
     termo = request.args.get("termo", "").strip()
     uf = request.args.get("uf", "").strip().upper() or None
     fonte = request.args.get("fonte", request.args.get("fontes", "")).strip() or None
+    modalidade = request.args.get("modalidade", "").strip() or None
+    tipo_produto = request.args.get("tipoProduto", request.args.get("tipo_produto", "")).strip() or None
+    origem = request.args.get("origem", "").strip() or None
     calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
     calcular_score = calcular_score_str.lower() == "true"
     incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
@@ -7564,6 +7807,9 @@ def buscar_editais_rest():
             buscar_detalhes=False,
             dias_busca=dias_busca,
             fonte=fonte,
+            modalidade=modalidade,
+            tipo_produto=tipo_produto,
+            origem=origem,
         )
 
         editais = resultado_busca.get("editais", [])
@@ -7601,12 +7847,15 @@ def buscar_editais_rest():
                 import hashlib
                 chave = f"{e.get('numero', '')}-{e.get('orgao', '')}-{i}"
                 edital_id = hashlib.md5(chave.encode()).hexdigest()
+            _objeto = e.get("objeto") or e.get("descricao") or ""
+            _orgao = e.get("orgao") or ""
+            _orgao_tipo = e.get("orgao_tipo") or "municipal"
             editais_normalizados.append({
                 "id": edital_id,
                 "numero": e.get("numero"),
-                "orgao": e.get("orgao"),
-                "orgao_tipo": e.get("orgao_tipo", "municipal"),
-                "objeto": e.get("objeto") or e.get("descricao"),
+                "orgao": _orgao,
+                "orgao_tipo": _orgao_tipo,
+                "objeto": _objeto,
                 "modalidade": e.get("modalidade"),
                 "valor_estimado": e.get("valor_referencia") or e.get("valor_estimado"),
                 "data_publicacao": e.get("data_publicacao"),
@@ -7628,6 +7877,8 @@ def buscar_editais_rest():
                 "dados_completos": e.get("dados_completos", False),
                 "encerrado": e.get("encerrado", False),
                 "pdf_url": e.get("pdf_url"),
+                "tipo_produto_inferido": inferir_tipo_produto(_objeto),
+                "origem_inferida": inferir_origem_orgao(_orgao, _orgao_tipo),
             })
 
         return jsonify({

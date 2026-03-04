@@ -137,6 +137,7 @@ class Produto(Base):
     codigo_interno = Column(String(50), nullable=True)
     ncm = Column(String(20), nullable=True)
     categoria = Column(Enum('equipamento', 'reagente', 'insumo_hospitalar', 'insumo_laboratorial', 'informatica', 'redes', 'mobiliario', 'eletronico', 'outro'), nullable=False)
+    subclasse_id = Column(String(36), ForeignKey('subclasses_produto.id', ondelete='SET NULL'), nullable=True)
     fabricante = Column(String(255), nullable=True)
     modelo = Column(String(255), nullable=True)
     descricao = Column(Text, nullable=True)
@@ -225,6 +226,130 @@ class ProdutoDocumento(Base):
         }
 
 
+# ==================== CLASSIFICAÇÃO DE PRODUTOS (Área > Classe > Subclasse) ====================
+
+class AreaProduto(Base):
+    """Áreas de produto — nível mais alto (Médica, Tecnologia, Construção Civil)"""
+    __tablename__ = 'areas_produto'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    classes = relationship("ClasseProdutoV2", back_populates="area", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+            "classes": [c.to_dict() for c in self.classes] if self.classes else [],
+        }
+
+
+class ClasseProdutoV2(Base):
+    """Classes de produto — nível intermediário (Reagentes, Equipamentos, etc)"""
+    __tablename__ = 'classes_produto_v2'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    area_id = Column(String(36), ForeignKey('areas_produto.id', ondelete='CASCADE'), nullable=False)
+    descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    area = relationship("AreaProduto", back_populates="classes")
+    subclasses = relationship("SubclasseProduto", back_populates="classe", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "area_id": self.area_id,
+            "descricao": self.descricao,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+            "subclasses": [s.to_dict() for s in self.subclasses] if self.subclasses else [],
+        }
+
+
+class SubclasseProduto(Base):
+    """Subclasses de produto — nível mais granular, com NCMs"""
+    __tablename__ = 'subclasses_produto'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    classe_id = Column(String(36), ForeignKey('classes_produto_v2.id', ondelete='CASCADE'), nullable=False)
+    ncms = Column(JSON, nullable=True)
+    campos_mascara = Column(JSON, nullable=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    classe = relationship("ClasseProdutoV2", back_populates="subclasses")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "classe_id": self.classe_id,
+            "ncms": self.ncms,
+            "campos_mascara": self.campos_mascara,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+        }
+
+
+# ==================== MODALIDADES E ORIGENS ====================
+
+class ModalidadeLicitacao(Base):
+    """Modalidades de licitação (Pregão Eletrônico, Concorrência, etc)"""
+    __tablename__ = 'modalidades_licitacao'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+        }
+
+
+class OrigemOrgao(Base):
+    """Origens/tipos de órgão licitante (Municipal, Hospital, Universidade, etc)"""
+    __tablename__ = 'origens_orgao'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+        }
+
+
 # ==================== FONTES DE EDITAIS ====================
 
 class FonteEdital(Base):
@@ -267,6 +392,9 @@ class Edital(Base):
     objeto = Column(Text, nullable=False)
     modalidade = Column(Enum('pregao_eletronico', 'pregao_presencial', 'concorrencia', 'tomada_precos', 'convite', 'dispensa', 'inexigibilidade'), default='pregao_eletronico')
     categoria = Column(Enum('comodato', 'venda_equipamento', 'aluguel_com_consumo', 'aluguel_sem_consumo', 'consumo_reagentes', 'consumo_insumos', 'servicos', 'informatica', 'redes', 'mobiliario', 'outro'), nullable=True)
+    modalidade_id = Column(String(36), ForeignKey('modalidades_licitacao.id', ondelete='SET NULL'), nullable=True)
+    categoria_id = Column(String(36), ForeignKey('classes_produto_v2.id', ondelete='SET NULL'), nullable=True)
+    origem_id = Column(String(36), ForeignKey('origens_orgao.id', ondelete='SET NULL'), nullable=True)
     valor_referencia = Column(DECIMAL(15, 2), nullable=True)
     data_publicacao = Column(Date, nullable=True)
     data_abertura = Column(DateTime, nullable=True)
@@ -1707,6 +1835,109 @@ def init_db():
             print("[DB] Fontes de editais iniciais inseridas")
     except Exception as e:
         print(f"[DB] Erro ao inserir fontes iniciais: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    # Seed: Modalidades de licitação
+    db = SessionLocal()
+    try:
+        if db.query(ModalidadeLicitacao).count() == 0:
+            modalidades = [
+                ModalidadeLicitacao(nome="Pregão Eletrônico", descricao="Licitação eletrônica para bens e serviços comuns", ordem=1),
+                ModalidadeLicitacao(nome="Pregão Presencial", descricao="Licitação presencial para bens e serviços comuns", ordem=2),
+                ModalidadeLicitacao(nome="Concorrência", descricao="Para contratos de grande valor", ordem=3),
+                ModalidadeLicitacao(nome="Tomada de Preços", descricao="Para contratos de valor intermediário", ordem=4),
+                ModalidadeLicitacao(nome="Convite", descricao="Para contratos de menor valor", ordem=5),
+                ModalidadeLicitacao(nome="Dispensa", descricao="Dispensa de licitação", ordem=6),
+                ModalidadeLicitacao(nome="Inexigibilidade", descricao="Inviabilidade de competição", ordem=7),
+            ]
+            for m in modalidades:
+                db.add(m)
+            db.commit()
+            print("[DB] Modalidades de licitação inseridas")
+    except Exception as e:
+        print(f"[DB] Erro ao inserir modalidades: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    # Seed: Origens de órgão
+    db = SessionLocal()
+    try:
+        if db.query(OrigemOrgao).count() == 0:
+            origens = [
+                OrigemOrgao(nome="Municipal", descricao="Prefeituras e órgãos municipais", ordem=1),
+                OrigemOrgao(nome="Estadual", descricao="Governos estaduais e órgãos estaduais", ordem=2),
+                OrigemOrgao(nome="Federal", descricao="Órgãos federais e ministérios", ordem=3),
+                OrigemOrgao(nome="Universidade", descricao="Universidades públicas", ordem=4),
+                OrigemOrgao(nome="Hospital", descricao="Hospitais públicos", ordem=5),
+                OrigemOrgao(nome="LACEN", descricao="Laboratórios centrais de saúde pública", ordem=6),
+                OrigemOrgao(nome="Força Armada", descricao="Exército, Marinha e Aeronáutica", ordem=7),
+                OrigemOrgao(nome="Autarquia", descricao="Autarquias e agências reguladoras", ordem=8),
+                OrigemOrgao(nome="Centros de Pesquisas", descricao="Institutos e centros de pesquisa", ordem=9),
+                OrigemOrgao(nome="Fundações de Pesquisa", descricao="FAPESP, FAPERJ, CNPq, etc", ordem=10),
+                OrigemOrgao(nome="Fundações Diversas", descricao="Fundações públicas diversas", ordem=11),
+                OrigemOrgao(nome="Campanhas Governamentais", descricao="Programas e campanhas do governo", ordem=12),
+            ]
+            for o in origens:
+                db.add(o)
+            db.commit()
+            print("[DB] Origens de órgão inseridas")
+    except Exception as e:
+        print(f"[DB] Erro ao inserir origens: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    # Seed: Áreas, Classes e Subclasses de produto
+    db = SessionLocal()
+    try:
+        if db.query(AreaProduto).count() == 0:
+            # Área Médica
+            area_medica = AreaProduto(nome="Médica", descricao="Equipamentos e insumos médico-hospitalares", ordem=1)
+            db.add(area_medica)
+            db.flush()
+            cls_reagentes = ClasseProdutoV2(nome="Reagentes", area_id=area_medica.id, descricao="Reagentes laboratoriais e diagnósticos", ordem=1)
+            cls_equipamentos = ClasseProdutoV2(nome="Equipamentos", area_id=area_medica.id, descricao="Equipamentos médico-hospitalares", ordem=2)
+            cls_insumos = ClasseProdutoV2(nome="Insumos Hospitalares", area_id=area_medica.id, descricao="Materiais e insumos hospitalares", ordem=3)
+            cls_comodato = ClasseProdutoV2(nome="Comodato", area_id=area_medica.id, descricao="Equipamentos em regime de comodato", ordem=4)
+            cls_aluguel = ClasseProdutoV2(nome="Aluguel", area_id=area_medica.id, descricao="Locação de equipamentos", ordem=5)
+            db.add_all([cls_reagentes, cls_equipamentos, cls_insumos, cls_comodato, cls_aluguel])
+            db.flush()
+            # Subclasses para Reagentes
+            db.add_all([
+                SubclasseProduto(nome="Hematologia", classe_id=cls_reagentes.id, ncms=["3822.00.90"], ordem=1),
+                SubclasseProduto(nome="Bioquímica", classe_id=cls_reagentes.id, ncms=["3822.00.90"], ordem=2),
+                SubclasseProduto(nome="Imunologia", classe_id=cls_reagentes.id, ncms=["3002.15.90"], ordem=3),
+                SubclasseProduto(nome="Microbiologia", classe_id=cls_reagentes.id, ncms=["3821.00.00"], ordem=4),
+            ])
+            # Subclasses para Equipamentos
+            db.add_all([
+                SubclasseProduto(nome="Analisadores", classe_id=cls_equipamentos.id, ncms=["9027.80.99"], ordem=1),
+                SubclasseProduto(nome="Microscópios", classe_id=cls_equipamentos.id, ncms=["9011.80.90"], ordem=2),
+                SubclasseProduto(nome="Centrífugas", classe_id=cls_equipamentos.id, ncms=["8421.19.10"], ordem=3),
+            ])
+
+            # Área Tecnologia
+            area_tech = AreaProduto(nome="Tecnologia", descricao="Equipamentos e serviços de TI", ordem=2)
+            db.add(area_tech)
+            db.flush()
+            cls_info = ClasseProdutoV2(nome="Informática", area_id=area_tech.id, descricao="Computadores, servidores, software", ordem=1)
+            cls_redes = ClasseProdutoV2(nome="Redes", area_id=area_tech.id, descricao="Equipamentos de rede e telecom", ordem=2)
+            db.add_all([cls_info, cls_redes])
+
+            # Área Construção Civil
+            area_civil = AreaProduto(nome="Construção Civil", descricao="Materiais e serviços de construção", ordem=3)
+            db.add(area_civil)
+            db.flush()
+            cls_mob = ClasseProdutoV2(nome="Mobiliário", area_id=area_civil.id, descricao="Móveis e mobiliário", ordem=1)
+            db.add(cls_mob)
+
+            db.commit()
+            print("[DB] Áreas, classes e subclasses de produto inseridas")
+    except Exception as e:
+        print(f"[DB] Erro ao inserir áreas/classes: {e}")
         db.rollback()
     finally:
         db.close()
