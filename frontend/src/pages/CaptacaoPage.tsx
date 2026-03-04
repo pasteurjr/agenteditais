@@ -42,6 +42,7 @@ interface EditalBusca {
   intencaoEstrategica: "estrategico" | "defensivo" | "acompanhamento" | "aprendizado";
   margemExpectativa: number;
   gaps: GapItem[];
+  modalidade?: string;
   selected?: boolean;
   url?: string;
   fonte?: string;
@@ -246,6 +247,7 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     gaps,
     url: String(e.url ?? ""),
     fonte: String(e.fonte ?? ""),
+    modalidade: String(e.modalidade ?? "—"),
     orgaoTipo: String(e.orgao_tipo ?? "outro"),
   };
 }
@@ -808,6 +810,24 @@ export function CaptacaoPage(props?: PageProps) {
     { key: "numero", header: "Numero", sortable: true },
     { key: "orgao", header: "Orgao", sortable: true },
     { key: "uf", header: "UF", width: "50px" },
+    {
+      key: "modalidade",
+      header: "Modalidade",
+      width: "120px",
+      sortable: true,
+      render: (e) => {
+        const MOD: Record<string, string> = {
+          pregao_eletronico: "Pregão Eletrônico",
+          pregao_presencial: "Pregão Presencial",
+          concorrencia: "Concorrência",
+          tomada_precos: "Tomada de Preços",
+          convite: "Convite",
+          dispensa: "Dispensa",
+          inexigibilidade: "Inexigibilidade",
+        };
+        return <span style={{ fontSize: "0.8em" }}>{MOD[e.modalidade ?? ""] || e.modalidade || "—"}</span>;
+      },
+    },
     {
       key: "objeto",
       header: "Objeto",
