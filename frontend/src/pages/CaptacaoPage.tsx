@@ -191,8 +191,12 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
   const scoreGeral = Math.round((scoreTecnico + scoreComercial) / 2);
 
   // Extrair produto correspondente da lista de produtos aderentes
-  const produtos = e.produtos_aderentes as string[] | undefined;
-  const produtoCorrespondente = produtos && produtos.length > 0 ? produtos[0] : null;
+  const produtos = e.produtos_aderentes as (string | { produto_nome?: string; aderencia?: number })[] | undefined;
+  let produtoCorrespondente: string | null = null;
+  if (produtos && produtos.length > 0) {
+    const first = produtos[0];
+    produtoCorrespondente = typeof first === "string" ? first : (first?.produto_nome ?? null);
+  }
 
   // C2: Gaps reais do backend (RF-024)
   let gaps: GapItem[] = [];

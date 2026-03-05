@@ -2954,6 +2954,238 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
 # NOVAS FUNÇÕES: Score de Aderência e Salvamento
 # =============================================================================
 
+# ── Pré-filtro por keywords (sem LLM) ────────────────────────────────────────
+
+STOPWORDS_PT = {
+    "de", "da", "do", "das", "dos", "em", "no", "na", "para", "por", "com",
+    "sem", "como", "que", "uma", "um", "os", "as", "ou", "ao", "aos",
+    "e", "a", "o", "se", "es", "le", "la", "lo", "el",
+    "aquisicao", "contratacao", "servico", "servicos", "fornecimento",
+    "pregao", "eletronico", "presencial", "licitacao", "registro", "precos",
+    "empresa", "objeto", "lote", "item", "itens", "unidade", "valor",
+}
+
+CATEGORY_SYNONYMS = {
+    "equipamento": {"equipamento", "equipamentos", "aparelho", "instrumento", "sistema", "maquina"},
+    "reagente": {"reagente", "reagentes", "kit", "kits", "teste", "ensaio", "diagnostico"},
+    "insumo_hospitalar": {"insumo", "insumos", "descartavel", "hospitalar", "material", "medico"},
+    "insumo_laboratorial": {"laboratorial", "laboratorio", "vidraria", "pipeta", "tubo", "lamina"},
+    "informatica": {"informatica", "computador", "notebook", "servidor", "software", "desktop", "computadores"},
+    "redes": {"rede", "redes", "switch", "roteador", "cabeamento", "fibra"},
+    "mobiliario": {"movel", "moveis", "mobiliario", "mesa", "cadeira", "armario"},
+    "eletronico": {"eletronico", "monitor", "impressora", "projetor", "tela"},
+    "medicamento": {"medicamento", "medicamentos", "farmaco", "remedio", "farmaceutico"},
+    "alimento": {"alimento", "alimentos", "alimentacao", "refeicao", "genero", "generos"},
+}
+
+
+def _build_product_keyword_index(produtos_data, db):
+    """Constrói índice de keywords dos produtos para pré-filtro rápido."""
+    import unicodedata
+
+    def _norm(txt):
+        if not txt:
+            return ""
+        txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+        return txt.lower().strip()
+
+    categorias_expandidas = set()
+    keywords = set()
+    fabricantes = set()
+    modelos = set()
+    specs_keywords = set()
+
+    for p in produtos_data:
+        # Categoria → expandir com sinônimos
+        cat = _norm(p.get("categoria", ""))
+        if cat:
+            categorias_expandidas.add(cat)
+            for cat_key, synonyms in CATEGORY_SYNONYMS.items():
+                if cat in synonyms or cat_key == cat or cat.startswith(cat_key):
+                    categorias_expandidas.update(synonyms)
+                    break
+
+        # Nome → tokenizar
+        nome = _norm(p.get("nome", ""))
+        for word in nome.split():
+            if len(word) > 2 and word not in STOPWORDS_PT:
+                keywords.add(word)
+
+        # Fabricante
+        fab = _norm(p.get("fabricante", ""))
+        if fab and len(fab) > 2:
+            fabricantes.add(fab)
+
+        # Modelo
+        mod = _norm(p.get("modelo", ""))
+        if mod and len(mod) > 2:
+            modelos.add(mod)
+
+        # Specs (já carregadas em produtos_data)
+        for spec_name in p.get("specs", []):
+            spec_norm = _norm(spec_name)
+            for word in spec_norm.split():
+                if len(word) > 2 and word not in STOPWORDS_PT:
+                    specs_keywords.add(word)
+
+    print(f"[TOOLS] Keyword index: {len(keywords)} keywords, {len(categorias_expandidas)} cat-synonyms, "
+          f"{len(fabricantes)} fabricantes, {len(modelos)} modelos, {len(specs_keywords)} spec-words")
+
+    return {
+        "categorias_expandidas": categorias_expandidas,
+        "keywords": keywords,
+        "fabricantes": fabricantes,
+        "modelos": modelos,
+        "specs_keywords": specs_keywords,
+    }
+
+
+def _pre_filter_editais(editais, keyword_index):
+    """Pré-filtra editais por keywords, sem usar LLM. Conservador: na dúvida, mantém."""
+    import unicodedata
+
+    def _norm(txt):
+        if not txt:
+            return ""
+        txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+        return txt.lower().strip()
+
+    relevant = []
+    filtered = []
+
+    cats = keyword_index["categorias_expandidas"]
+    kws = keyword_index["keywords"]
+    fabs = keyword_index["fabricantes"]
+    mods = keyword_index["modelos"]
+    specs = keyword_index["specs_keywords"]
+
+    for edital in editais:
+        objeto = _norm(edital.get("objeto", ""))
+        if not objeto:
+            # Sem objeto → manter (conservador)
+            relevant.append(edital)
+            continue
+
+        # Check fabricante
+        fab_match = any(f in objeto for f in fabs if len(f) > 3)
+
+        # Check modelo
+        mod_match = any(m in objeto for m in mods if len(m) > 3)
+
+        # Check categoria (contar quantas casam)
+        cat_matches = sum(1 for c in cats if c in objeto and len(c) > 3)
+        cat_match = cat_matches > 0
+
+        # Check keywords (contar quantas casam)
+        kw_matches = sum(1 for k in kws if k in objeto and len(k) > 3)
+
+        # Check specs
+        spec_match = any(s in objeto for s in specs if len(s) > 3)
+
+        # Regras de relevância (conservador — na dúvida, manter)
+        is_relevant = (
+            fab_match or                                    # Fabricante encontrado
+            mod_match or                                    # Modelo encontrado
+            cat_match or                                    # Sinônimo de categoria encontrado
+            kw_matches >= 1 or                              # 1+ keyword de produto
+            spec_match                                      # Spec de produto encontrada
+        )
+
+        if is_relevant:
+            relevant.append(edital)
+        else:
+            # Marcar como filtrado com score 0
+            edital['score_tecnico'] = 0
+            edital['recomendacao'] = 'NAO PARTICIPAR'
+            edital['justificativa'] = 'Pre-filtro: objeto sem relacao com portfolio de produtos.'
+            edital['produtos_aderentes'] = []
+            filtered.append(edital)
+
+    print(f"[TOOLS] Pre-filter: {len(relevant)} relevant, {len(filtered)} filtered out of {len(editais)} total")
+    return relevant, filtered
+
+
+# ── Prompt e Batch para score rápido ──────────────────────────────────────────
+
+PROMPT_CALCULAR_SCORE_BATCH = """Analise a aderencia entre os PRODUTOS da empresa e os EDITAIS abaixo.
+
+## PRODUTOS:
+{produtos_json}
+
+## EDITAIS:
+{editais_json}
+
+## REGRAS:
+- 80-100: PARTICIPAR (produtos atendem diretamente ao objeto)
+- 50-79: AVALIAR (podem atender com adaptacoes)
+- 0-49: NAO PARTICIPAR (produtos nao correspondem ao objeto)
+
+Responda APENAS com um JSON array, um item por edital, NA MESMA ORDEM:
+[{{"idx":0,"score_tecnico":85,"recomendacao":"PARTICIPAR","produto_principal":"Nome do produto","justificativa":"Frase curta explicando"}}]
+
+IMPORTANTE: Responda SOMENTE o JSON array, sem texto adicional."""
+
+
+def _score_batch(batch_editais, produtos_json, batch_num, total_batches):
+    """Calcula score para um lote de editais via deepseek-chat (rápido)."""
+    import time
+
+    t0 = time.time()
+    # Preparar editais para o prompt (objeto limitado a 300 chars)
+    editais_for_prompt = []
+    for i, ed in enumerate(batch_editais):
+        editais_for_prompt.append({
+            "idx": i,
+            "numero": ed.get("numero", "N/A"),
+            "orgao": ed.get("orgao", "N/A"),
+            "objeto": (ed.get("objeto", "") or "")[:300],
+        })
+
+    editais_json = json.dumps(editais_for_prompt, ensure_ascii=False)
+
+    prompt = PROMPT_CALCULAR_SCORE_BATCH.format(
+        produtos_json=produtos_json,
+        editais_json=editais_json,
+    )
+
+    print(f"[TOOLS] Batch {batch_num}/{total_batches}: scoring {len(batch_editais)} editais...")
+
+    try:
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            model_override="deepseek-chat"
+        )
+
+        if not resposta or len(resposta.strip()) < 5:
+            print(f"[TOOLS] Batch {batch_num}: resposta vazia, zerando scores")
+            return [{"score_tecnico": 0, "recomendacao": "AVALIAR", "produto_principal": "", "justificativa": "Erro: resposta vazia da IA"} for _ in batch_editais]
+
+        # Extrair JSON array da resposta
+        json_match = re.search(r'\[[\s\S]*\]', resposta)
+        if json_match:
+            raw_json = json_match.group()
+            # Limpar chars que quebram parser
+            raw_json = raw_json.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+            raw_json = re.sub(r'  +', ' ', raw_json)
+
+            scores = json.loads(raw_json)
+            elapsed = time.time() - t0
+            print(f"[TOOLS] Batch {batch_num}/{total_batches}: {len(scores)} scores em {elapsed:.1f}s")
+            return scores
+        else:
+            print(f"[TOOLS] Batch {batch_num}: nenhum JSON array encontrado")
+            print(f"[TOOLS] Resposta bruta: {resposta[:200]}...")
+            return [{"score_tecnico": 0, "recomendacao": "AVALIAR", "produto_principal": "", "justificativa": "Erro ao processar resposta da IA"} for _ in batch_editais]
+
+    except Exception as e:
+        elapsed = time.time() - t0
+        print(f"[TOOLS] Batch {batch_num}: ERRO em {elapsed:.1f}s: {e}")
+        return [{"score_tecnico": 0, "recomendacao": "AVALIAR", "produto_principal": "", "justificativa": f"Erro: {str(e)[:80]}"} for _ in batch_editais]
+
+
+# ── Prompt original (mantido para compatibilidade) ───────────────────────────
+
 PROMPT_CALCULAR_SCORE = """Você é um especialista em análise de licitações públicas brasileiras.
 
 Analise a aderência entre os PRODUTOS do portfólio da empresa e o EDITAL de licitação.
@@ -3000,13 +3232,15 @@ Forneça sua análise em formato JSON:
 def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Calcula o score de aderência para uma lista de editais vs produtos do usuário/empresa.
-    Usa DeepSeek Reasoner para análise detalhada com justificativa.
+    Pipeline de 3 camadas: pré-filtro por keywords → score batch → paralelo com deepseek-chat.
     """
     import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    t_total = time.time()
     db = get_db()
     try:
-        # Buscar produtos da empresa (ou do user como fallback)
+        # 1. Buscar produtos da empresa (ou do user como fallback)
         if empresa_id:
             produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
         else:
@@ -3019,16 +3253,12 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
                 "aviso": "Você não tem produtos cadastrados. Cadastre produtos para calcular aderência."
             }
 
-        # Preparar dados dos produtos para o prompt
-        # Usar formato RESUMIDO para incluir TODOS os produtos sem exceder limite
-        # (nome, categoria, fabricante + nomes das 3 specs principais)
+        # 2. Preparar dados dos produtos (resumidos)
         produtos_data = []
         for p in produtos:
             specs = db.query(ProdutoEspecificacao).filter(
                 ProdutoEspecificacao.produto_id == p.id
             ).limit(3).all()
-
-            # Formato resumido: só nomes das specs, não valores completos
             specs_resumo = [s.nome_especificacao for s in specs]
 
             produtos_data.append({
@@ -3037,92 +3267,89 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
                 "categoria": p.categoria,
                 "fabricante": p.fabricante,
                 "modelo": p.modelo,
-                "specs": specs_resumo  # Só os nomes das specs principais
+                "specs": specs_resumo,
             })
 
-        # Usar formato compacto (sem indent) para reduzir tamanho
-        produtos_json = json.dumps(produtos_data, ensure_ascii=False)
-        print(f"[TOOLS] Portfólio: {len(produtos)} produtos, JSON: {len(produtos_json)} chars")
+        # JSON compacto para o prompt batch (sem IDs, sem specs detalhadas)
+        produtos_for_prompt = []
+        for p in produtos_data:
+            produtos_for_prompt.append({
+                "nome": p["nome"],
+                "categoria": p.get("categoria", ""),
+                "fabricante": p.get("fabricante", ""),
+            })
+        produtos_json = json.dumps(produtos_for_prompt, ensure_ascii=False)
+        print(f"[TOOLS] Portfolio: {len(produtos)} produtos, JSON prompt: {len(produtos_json)} chars")
 
-        # Calcular score para cada edital
-        editais_com_score = []
-        for edital in editais:
-            try:
-                prompt = PROMPT_CALCULAR_SCORE.format(
-                    produtos_json=produtos_json,
-                    numero=edital.get('numero', 'N/A'),
-                    orgao=edital.get('orgao', 'N/A'),
-                    objeto=edital.get('objeto', 'N/A')[:500],
-                    valor=f"R$ {edital.get('valor_referencia'):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') if edital.get('valor_referencia') else 'Não informado'
-                )
+        # 3. CAMADA 1: Pré-filtro por keywords (sem LLM, <100ms)
+        t_prefilter = time.time()
+        keyword_index = _build_product_keyword_index(produtos_data, db)
+        relevant, filtered = _pre_filter_editais(editais, keyword_index)
+        t_prefilter = time.time() - t_prefilter
+        print(f"[TOOLS] Pre-filtro em {t_prefilter*1000:.0f}ms")
 
-                # Tentar até 2 vezes (retry em caso de resposta vazia)
-                resposta = None
-                for tentativa in range(2):
-                    print(f"[TOOLS] Calculando score para {edital.get('numero')} (tentativa {tentativa + 1})...")
+        # 4. CAMADA 2+3: Score batch + paralelo
+        if relevant:
+            BATCH_SIZE = 5 if len(produtos_data) <= 50 else 3
+            batches = [relevant[i:i+BATCH_SIZE] for i in range(0, len(relevant), BATCH_SIZE)]
+            total_batches = len(batches)
+            MAX_WORKERS = min(total_batches, 4)
 
-                    # Usar DeepSeek Reasoner para análise detalhada
-                    resposta = call_deepseek(
-                        [{"role": "user", "content": prompt}],
-                        max_tokens=2000
+            print(f"[TOOLS] Scoring {len(relevant)} editais em {total_batches} batches ({BATCH_SIZE}/batch, {MAX_WORKERS} workers)")
+
+            t_score = time.time()
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_batch = {}
+                for batch_idx, batch in enumerate(batches):
+                    future = executor.submit(
+                        _score_batch, batch, produtos_json, batch_idx + 1, total_batches
                     )
+                    future_to_batch[future] = (batch_idx, batch)
 
-                    if resposta and len(resposta.strip()) > 10:
-                        break
-
-                    print(f"[TOOLS] Resposta vazia, tentando novamente...")
-                    time.sleep(1)  # Pequena pausa antes de retry
-
-                # Se ainda vazio após retries, tentar com deepseek-chat como fallback
-                if not resposta or len(resposta.strip()) < 10:
-                    print(f"[TOOLS] Usando deepseek-chat como fallback para {edital.get('numero')}...")
-                    resposta = call_deepseek(
-                        [{"role": "user", "content": prompt}],
-                        max_tokens=2000,
-                        model_override="deepseek-chat"
-                    )
-
-                # Extrair JSON da resposta
-                json_match = re.search(r'\{[\s\S]*\}', resposta or "")
-                if json_match:
+                for future in as_completed(future_to_batch, timeout=120):
+                    batch_idx, batch = future_to_batch[future]
                     try:
-                        raw_json = json_match.group()
-                        # Limpar quebras de linha e tabs reais (chars 0x0A, 0x0D, 0x09)
-                        # que podem aparecer dentro de strings JSON e quebram o parser
-                        raw_json = raw_json.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-                        # Limpar múltiplos espaços
-                        raw_json = re.sub(r'  +', ' ', raw_json)
+                        scores = future.result()
+                        # Atribuir scores aos editais do batch
+                        for i, edital in enumerate(batch):
+                            if i < len(scores):
+                                s = scores[i]
+                                edital['score_tecnico'] = s.get('score_tecnico', 0)
+                                edital['recomendacao'] = s.get('recomendacao', 'AVALIAR')
+                                edital['justificativa'] = s.get('justificativa', '')
+                                # Converter produto_principal para formato esperado pelo frontend
+                                prod_nome = s.get('produto_principal', '')
+                                if prod_nome:
+                                    edital['produtos_aderentes'] = [{
+                                        "produto_nome": prod_nome,
+                                        "aderencia": s.get('score_tecnico', 0)
+                                    }]
+                                else:
+                                    edital['produtos_aderentes'] = []
+                                print(f"[TOOLS] Score {edital.get('numero')}: {edital['score_tecnico']}% - {edital['recomendacao']}")
+                            else:
+                                edital['score_tecnico'] = 0
+                                edital['recomendacao'] = 'AVALIAR'
+                                edital['justificativa'] = 'Score nao retornado pelo batch.'
+                                edital['produtos_aderentes'] = []
+                    except Exception as e:
+                        print(f"[TOOLS] Erro no batch {batch_idx + 1}: {e}")
+                        for edital in batch:
+                            edital['score_tecnico'] = 0
+                            edital['recomendacao'] = 'AVALIAR'
+                            edital['justificativa'] = f'Erro no batch: {str(e)[:80]}'
+                            edital['produtos_aderentes'] = []
 
-                        score_data = json.loads(raw_json)
-                        edital['score_tecnico'] = score_data.get('score_tecnico', score_data.get('score', 0))
-                        edital['recomendacao'] = score_data.get('recomendacao', 'AVALIAR')
-                        edital['produtos_aderentes'] = score_data.get('produtos_aderentes', [])
-                        edital['justificativa'] = score_data.get('justificativa', '')
-                        print(f"[TOOLS] Score {edital.get('numero')}: {edital['score_tecnico']}% - {edital['recomendacao']}")
-                    except json.JSONDecodeError as je:
-                        print(f"[TOOLS] Erro ao parsear JSON para {edital.get('numero')}: {je}")
-                        print(f"[TOOLS] JSON bruto: {raw_json[:300]}...")
-                        edital['score_tecnico'] = 0
-                        edital['recomendacao'] = 'AVALIAR'
-                        edital['justificativa'] = 'Erro ao processar resposta da IA.'
-                else:
-                    print(f"[TOOLS] Nenhum JSON encontrado para {edital.get('numero')}")
-                    edital['score_tecnico'] = 0
-                    edital['recomendacao'] = 'AVALIAR'
-                    edital['justificativa'] = 'Não foi possível calcular score automaticamente.'
+            t_score = time.time() - t_score
+            print(f"[TOOLS] Scoring total em {t_score:.1f}s")
 
-            except Exception as e:
-                print(f"[TOOLS] Erro ao calcular score para {edital.get('numero')}: {e}")
-                import traceback
-                traceback.print_exc()
-                edital['score_tecnico'] = 0
-                edital['recomendacao'] = 'AVALIAR'
-                edital['justificativa'] = f'Erro no cálculo: {str(e)[:100]}'
-
-            editais_com_score.append(edital)
-
-        # Ordenar por score decrescente
+        # 5. Combinar relevant + filtered, ordenar por score desc
+        editais_com_score = relevant + filtered
         editais_com_score.sort(key=lambda x: x.get('score_tecnico', 0), reverse=True)
+
+        t_total = time.time() - t_total
+        print(f"[TOOLS] === SCORE TOTAL: {len(editais_com_score)} editais em {t_total:.1f}s "
+              f"({len(relevant)} scored, {len(filtered)} pre-filtered) ===")
 
         return {
             "success": True,
@@ -3131,6 +3358,8 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
     finally:
         db.close()
