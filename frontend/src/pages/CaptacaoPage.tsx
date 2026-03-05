@@ -48,6 +48,8 @@ interface EditalBusca {
   url?: string;
   fonte?: string;
   orgaoTipo?: string;
+  justificativa?: string;
+  recomendacaoTexto?: string;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -254,6 +256,8 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     fonte: String(e.fonte ?? ""),
     modalidade: String(e.modalidade ?? "—"),
     orgaoTipo: String(e.orgao_tipo ?? "outro"),
+    justificativa: String(e.justificativa ?? ""),
+    recomendacaoTexto: String(e.recomendacao ?? ""),
   };
 }
 
@@ -1284,6 +1288,69 @@ export function CaptacaoPage(props?: PageProps) {
                     </button>
                   }
                 >
+                  {/* Dados completos do edital */}
+                  <div className="panel-section">
+                    <h4>Dados do Edital</h4>
+                    <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Numero:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.numero}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Orgao:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.orgao}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>UF:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.uf}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Modalidade:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.modalidade}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Fonte:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.fonte}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Valor:</span>
+                        <span style={{ color: "#e2e8f0" }}>{formatCurrency(painelEdital.valor)}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Abertura:</span>
+                        <span style={{ color: "#e2e8f0" }}>{painelEdital.dataAbertura || "—"}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Status:</span>
+                        <StatusBadge status={painelEdital.status === "aberto" ? "success" : "neutral"} label={painelEdital.status === "aberto" ? `Aberto (${painelEdital.diasRestantes}d)` : "Encerrado"} size="small" />
+                      </div>
+                      <div style={{ marginTop: "8px" }}>
+                        <span style={{ color: "#64748b", display: "block", marginBottom: "4px" }}>Objeto:</span>
+                        <div style={{ color: "#cbd5e1", backgroundColor: "#0f172a", padding: "8px", borderRadius: "6px", fontSize: "12px", lineHeight: "1.5", maxHeight: "150px", overflowY: "auto" }}>
+                          {painelEdital.objeto}
+                        </div>
+                      </div>
+                      {painelEdital.justificativa && (
+                        <div style={{ marginTop: "8px" }}>
+                          <span style={{ color: "#64748b", display: "block", marginBottom: "4px" }}>Justificativa IA:</span>
+                          <div style={{ color: "#94a3b8", backgroundColor: "#0f172a", padding: "8px", borderRadius: "6px", fontSize: "12px", lineHeight: "1.5", fontStyle: "italic" }}>
+                            {painelEdital.justificativa}
+                          </div>
+                        </div>
+                      )}
+                      {painelEdital.recomendacaoTexto && painelEdital.recomendacaoTexto !== "0" && painelEdital.recomendacaoTexto !== "NaN" && (
+                        <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
+                          <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Recomendacao:</span>
+                          <StatusBadge
+                            status={painelEdital.recomendacaoTexto === "PARTICIPAR" ? "success" : painelEdital.recomendacaoTexto === "AVALIAR" ? "warning" : "error"}
+                            label={painelEdital.recomendacaoTexto}
+                            size="small"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Score principal */}
                   <div className="panel-score-section">
                     <ScoreCircle score={painelEdital.score} size={100} label="Score Geral" />
