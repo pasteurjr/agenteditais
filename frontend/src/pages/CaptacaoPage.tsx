@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { PageProps } from "../types";
 import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle, Plus, Pause, Trash2, Brain, DollarSign, History } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Card, StatCard, DataTable, ActionButton, FormField, TextInput, Checkbox,
   SelectInput, ScoreCircle, StarRating, RadioGroup, StatusBadge,
@@ -267,12 +268,18 @@ function contarPrazos(editais: EditalBusca[]) {
 
 export function CaptacaoPage(props?: PageProps) {
   const onSendToChat = props?.onSendToChat;
+  const { empresa } = useAuth();
   const [termo, setTermo] = useState("");
   const [termoDropdownAberto, setTermoDropdownAberto] = useState(false);
   const [uf, setUf] = useState("todas");
   const [fonte, setFonte] = useState("todas");
   const [classificacaoTipo, setClassificacaoTipo] = useState("todos");
   const [classificacaoOrigem, setClassificacaoOrigem] = useState("todos");
+
+  // Select cascata: Área → Classe → Subclasse
+  const [selectedArea, setSelectedArea] = useState("");
+  const [selectedClasse, setSelectedClasse] = useState("");
+  const [selectedSubclasse, setSelectedSubclasse] = useState("");
   const [modalidadeFiltro, setModalidadeFiltro] = useState("todos");
   const [calcularScore, setCalcularScore] = useState(false);
   const [incluirEncerrados, setIncluirEncerrados] = useState(false);
@@ -318,8 +325,47 @@ export function CaptacaoPage(props?: PageProps) {
   const [modalidadesDisponiveis, setModalidadesDisponiveis] = useState<{ value: string; label: string }[]>([]);
   const [origensDisponiveis, setOrigensDisponiveis] = useState<{ value: string; label: string }[]>([]);
   const [tiposProdutoDisponiveis, setTiposProdutoDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [areasData, setAreasData] = useState<any[]>([]);
   // Produtos do portfólio para select no campo Termo
   const [produtosPortfolio, setProdutosPortfolio] = useState<{ value: string; label: string }[]>([]);
+
+  // Cascata: classes filtradas pela área selecionada
+  const classesForArea = useMemo(() => {
+    if (!selectedArea) return tiposProdutoDisponiveis;
+    const area = areasData.find((a: Record<string, unknown>) => a.id === selectedArea);
+    if (!area?.classes) return [];
+    return (area.classes as Record<string, unknown>[]).map((c: Record<string, unknown>) => ({
+      value: String(c.id ?? ""),
+      label: String(c.nome ?? ""),
+    }));
+  }, [selectedArea, areasData, tiposProdutoDisponiveis]);
+
+  // Cascata: subclasses filtradas pela classe selecionada
+  const subclassesForClasse = useMemo(() => {
+    if (!selectedClasse) return [];
+    for (const area of areasData) {
+      const classes = (area as Record<string, unknown>).classes as Record<string, unknown>[] | undefined;
+      if (classes) {
+        const cls = classes.find((c: Record<string, unknown>) => c.id === selectedClasse);
+        if (cls?.subclasses) {
+          return (cls.subclasses as Record<string, unknown>[]).map((s: Record<string, unknown>) => ({
+            value: String(s.id ?? ""),
+            label: String(s.nome ?? ""),
+          }));
+        }
+      }
+    }
+    return [];
+  }, [selectedClasse, areasData]);
+
+  // Áreas como options para select
+  const areasOptions = useMemo(() => {
+    return areasData.map((a: Record<string, unknown>) => ({
+      value: String(a.id ?? ""),
+      label: String(a.nome ?? ""),
+    }));
+  }, [areasData]);
 
   // Carrega monitoramentos, fontes e parametros ao montar
   useEffect(() => {
@@ -394,7 +440,7 @@ export function CaptacaoPage(props?: PageProps) {
         }
       } catch { /* silencioso */ }
     })();
-    // Carregar tipos de produto (classes) do banco
+    // Carregar áreas, classes e subclasses do banco (hierarquia completa)
     (async () => {
       try {
         const token = localStorage.getItem("editais_ia_access_token");
@@ -404,6 +450,8 @@ export function CaptacaoPage(props?: PageProps) {
         if (res.ok) {
           const data = await res.json();
           if (data.success && Array.isArray(data.items)) {
+            setAreasData(data.items);
+            // Tipos produto flat (para compatibilidade)
             const tipos: { value: string; label: string }[] = [];
             for (const area of data.items) {
               const classes = (area as Record<string, unknown>).classes as Record<string, unknown>[] | undefined;
@@ -414,6 +462,10 @@ export function CaptacaoPage(props?: PageProps) {
               }
             }
             setTiposProdutoDisponiveis(tipos);
+            // Pre-fill area com area_padrao da empresa
+            if (empresa?.area_padrao_id) {
+              setSelectedArea(empresa.area_padrao_id);
+            }
           }
         }
       } catch { /* silencioso */ }
@@ -466,6 +518,13 @@ export function CaptacaoPage(props?: PageProps) {
     if (classificacaoTipo !== "todos") {
       // Tipo Produto selecionado → busca abrangente pelo tipo
       termoBusca = classificacaoTipo.toLowerCase();
+      // Se subclasse selecionada, refinar o termo de busca
+      if (selectedSubclasse) {
+        const sub = subclassesForClasse.find(s => s.value === selectedSubclasse);
+        if (sub) {
+          termoBusca = sub.label.toLowerCase();
+        }
+      }
     } else {
       termoBusca = termo.trim();
     }
@@ -1057,6 +1116,44 @@ export function CaptacaoPage(props?: PageProps) {
             </div>
           </div>
 
+          <div className="form-grid form-grid-3" style={{ marginTop: "12px" }}>
+            <FormField label="Area de Atuacao">
+              <SelectInput
+                value={selectedArea}
+                onChange={(v) => { setSelectedArea(v); setSelectedClasse(""); setSelectedSubclasse(""); setClassificacaoTipo("todos"); }}
+                options={[
+                  { value: "", label: "Todas" },
+                  ...areasOptions,
+                ]}
+              />
+            </FormField>
+            <FormField label="Tipo Produto (Classe)">
+              <SelectInput
+                value={selectedClasse || classificacaoTipo}
+                onChange={(v) => {
+                  setSelectedClasse(v);
+                  setSelectedSubclasse("");
+                  const cls = classesForArea.find(c => c.value === v);
+                  setClassificacaoTipo(cls ? cls.label : "todos");
+                }}
+                options={[
+                  { value: "todos", label: "Todos" },
+                  ...classesForArea,
+                ]}
+              />
+            </FormField>
+            <FormField label="Subclasse (opcional)">
+              <SelectInput
+                value={selectedSubclasse}
+                onChange={setSelectedSubclasse}
+                options={[
+                  { value: "", label: "Todas" },
+                  ...subclassesForClasse,
+                ]}
+              />
+            </FormField>
+          </div>
+
           <div className="form-grid form-grid-4" style={{ marginTop: "12px" }}>
             <FormField label="Modalidade">
               <SelectInput
@@ -1065,16 +1162,6 @@ export function CaptacaoPage(props?: PageProps) {
                 options={[
                   { value: "todos", label: "Todas" },
                   ...modalidadesDisponiveis,
-                ]}
-              />
-            </FormField>
-            <FormField label="Tipo Produto">
-              <SelectInput
-                value={classificacaoTipo}
-                onChange={setClassificacaoTipo}
-                options={[
-                  { value: "todos", label: "Todos" },
-                  ...tiposProdutoDisponiveis,
                 ]}
               />
             </FormField>

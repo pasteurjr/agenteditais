@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
 from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -706,10 +706,11 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, empresa_id: str = None) -> str:
     payload = {
         "user_id": user_id,
         "email": email,
+        "empresa_id": empresa_id,
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
@@ -731,6 +732,15 @@ def require_auth(f):
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             request.user_id = payload["user_id"]
             request.user_email = payload["email"]
+            request.empresa_id = payload.get("empresa_id")
+            # Fallback: se JWT sem empresa_id, buscar primeira empresa do user
+            if not request.empresa_id:
+                db = get_db()
+                try:
+                    empresa = db.query(Empresa).filter(Empresa.user_id == request.user_id).first()
+                    request.empresa_id = empresa.id if empresa else None
+                finally:
+                    db.close()
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token expirado"}), 401
         except jwt.InvalidTokenError:
@@ -742,6 +752,10 @@ def require_auth(f):
 
 def get_current_user_id():
     return getattr(request, 'user_id', None)
+
+
+def get_current_empresa_id():
+    return getattr(request, 'empresa_id', None)
 
 
 # =============================================================================
@@ -768,6 +782,10 @@ def login():
 
         user.last_login_at = datetime.now()
 
+        # Buscar empresa do user
+        empresa = db.query(Empresa).filter(Empresa.user_id == user.id).first()
+        empresa_id = empresa.id if empresa else None
+
         # Create refresh token
         refresh_token_value = str(uuid.uuid4())
         refresh_token = RefreshToken(
@@ -778,13 +796,18 @@ def login():
         db.add(refresh_token)
         db.commit()
 
-        access_token = create_access_token(user.id, user.email)
+        access_token = create_access_token(user.id, user.email, empresa_id=empresa_id)
 
-        return jsonify({
+        resp = {
             "access_token": access_token,
             "refresh_token": refresh_token_value,
-            "user": user.to_dict()
-        })
+            "user": user.to_dict(),
+            "has_empresa": empresa is not None,
+        }
+        if empresa:
+            resp["empresa"] = empresa.to_dict()
+
+        return jsonify(resp)
     finally:
         db.close()
 
@@ -831,7 +854,8 @@ def register():
         return jsonify({
             "access_token": access_token,
             "refresh_token": refresh_token_value,
-            "user": user.to_dict()
+            "user": user.to_dict(),
+            "has_empresa": False,
         }), 201
     finally:
         db.close()
@@ -845,7 +869,12 @@ def get_current_user():
         user = db.query(User).filter(User.id == get_current_user_id()).first()
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
-        return jsonify(user.to_dict())
+        empresa = db.query(Empresa).filter(Empresa.user_id == user.id).first()
+        resp = user.to_dict()
+        resp["has_empresa"] = empresa is not None
+        if empresa:
+            resp["empresa"] = empresa.to_dict()
+        return jsonify(resp)
     finally:
         db.close()
 
@@ -873,12 +902,18 @@ def refresh():
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
 
-        access_token = create_access_token(user.id, user.email)
+        empresa = db.query(Empresa).filter(Empresa.user_id == user.id).first()
+        empresa_id = empresa.id if empresa else None
+        access_token = create_access_token(user.id, user.email, empresa_id=empresa_id)
 
-        return jsonify({
+        resp = {
             "access_token": access_token,
-            "user": user.to_dict()
-        })
+            "user": user.to_dict(),
+            "has_empresa": empresa is not None,
+        }
+        if empresa:
+            resp["empresa"] = empresa.to_dict()
+        return jsonify(resp)
     finally:
         db.close()
 
@@ -902,6 +937,33 @@ def logout():
             db.close()
 
     return jsonify({"message": "Logout realizado com sucesso"})
+
+
+@app.route("/api/auth/switch-empresa", methods=["POST"])
+@require_auth
+def switch_empresa():
+    """Troca a empresa ativa e gera novo token JWT."""
+    data = request.json or {}
+    empresa_id = data.get("empresa_id", "").strip()
+    if not empresa_id:
+        return jsonify({"error": "empresa_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(
+            Empresa.id == empresa_id,
+            Empresa.user_id == request.user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada ou sem permissão"}), 404
+
+        access_token = create_access_token(request.user_id, request.user_email, empresa_id=empresa.id)
+        return jsonify({
+            "access_token": access_token,
+            "empresa": empresa.to_dict(),
+        })
+    finally:
+        db.close()
 
 
 # =============================================================================
@@ -959,6 +1021,7 @@ def chat():
     session_id = data.get("session_id")
     message = data.get("message", "").strip()
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
 
     if not session_id or not message:
         return jsonify({"error": "session_id e message são obrigatórios"}), 400
@@ -1010,10 +1073,10 @@ def chat():
             response_text, resultado = processar_cadastrar_fonte(message, user_id, intencao_resultado)
 
         elif action_type == "buscar_editais":
-            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia)
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, empresa_id=empresa_id)
 
         elif action_type == "buscar_editais_simples":
-            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False)
+            response_text, resultado = processar_buscar_editais(message, user_id, termo_ia=termo_busca_ia, calcular_score=False, empresa_id=empresa_id)
 
         elif action_type == "buscar_edital_numero":
             response_text, resultado = processar_buscar_edital_numero(message, user_id)
@@ -1940,7 +2003,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     }
 
 
-def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None):
+def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, calcular_score: bool = True, incluir_encerrados: bool = None, empresa_id: str = None):
     """
     Processa ação: Buscar editais
 
@@ -2171,7 +2234,7 @@ JSON:"""
     aviso_produtos = None
     if calcular_score:
         print(f"[APP] Calculando score de aderência para {len(editais)} editais...")
-        resultado_score = tool_calcular_score_aderencia(editais, user_id)
+        resultado_score = tool_calcular_score_aderencia(editais, user_id, empresa_id=empresa_id)
 
         if resultado_score.get("success"):
             editais_com_score = resultado_score.get("editais_com_score", editais)
@@ -7745,10 +7808,14 @@ def listar_origens():
 @app.route("/api/areas-produto", methods=["GET"])
 @require_auth
 def listar_areas_produto():
-    """Lista todas as áreas com classes e subclasses aninhadas."""
+    """Lista áreas com classes e subclasses aninhadas (filtradas por empresa)."""
     db = get_db()
     try:
-        items = db.query(AreaProduto).filter(AreaProduto.ativo == True).order_by(AreaProduto.ordem).all()
+        empresa_id = get_current_empresa_id()
+        query = db.query(AreaProduto).filter(AreaProduto.ativo == True)
+        if empresa_id:
+            query = query.filter(AreaProduto.empresa_id == empresa_id)
+        items = query.order_by(AreaProduto.ordem).all()
         return jsonify({"success": True, "items": [a.to_dict() for a in items]})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -7816,7 +7883,7 @@ def buscar_editais_rest():
 
         # Calcular score ANTES de aplicar limite (para pegar os melhores)
         if calcular_score and editais:
-            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id)
+            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id, empresa_id=get_current_empresa_id())
             if resultado_score.get("success"):
                 editais = resultado_score.get("editais_com_score", editais)
 

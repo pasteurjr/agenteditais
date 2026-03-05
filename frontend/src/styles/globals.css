@@ -8192,3 +8192,55 @@ body {
   display: flex;
   align-items: center;
 }
+
+/* ─── Password field ─── */
+
+.password-field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper .text-input {
+  padding-right: 40px;
+  width: 100%;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted, #888);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.password-toggle-btn:hover {
+  color: var(--text-primary, #333);
+  background: var(--bg-secondary, #f0f0f0);
+}
+
+.password-error {
+  margin-top: 6px;
+  color: var(--color-error, #ef4444);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.password-hint {
+  margin-top: 6px;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+  font-style: italic;
+}

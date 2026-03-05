@@ -99,6 +99,9 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
   const [cep, setCep] = useState("");
+  const [areaPadraoId, setAreaPadraoId] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [areasDisponiveis, setAreasDisponiveis] = useState<any[]>([]);
 
   // Emails e celulares multiplos
   const [emails, setEmails] = useState<string[]>([]);
@@ -175,6 +178,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         const celStr = String(emp.celulares ?? "");
         setCelulares(celStr ? celStr.split(",").map(c => c.trim()).filter(Boolean) : []);
         setFreqCertidoes(String(emp.frequencia_busca_certidoes ?? "diaria"));
+        setAreaPadraoId(String(emp.area_padrao_id ?? ""));
 
         // Load sub-tables
         await loadSubTables(id);
@@ -237,6 +241,21 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   useEffect(() => {
     loadEmpresa();
+    // Carregar áreas de produto para o select
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/areas-produto", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items)) {
+            setAreasDisponiveis(data.items);
+          }
+        }
+      } catch { /* silencioso */ }
+    })();
   }, [loadEmpresa]);
 
   const handleSave = async () => {
@@ -257,6 +276,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         cep,
         emails: emails.join(","),
         celulares: celulares.join(","),
+        area_padrao_id: areaPadraoId || null,
       };
 
       if (empresaId) {
@@ -663,6 +683,22 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             </FormField>
             <FormField label="Inscricao Estadual">
               <TextInput value={inscricaoEstadual} onChange={setInscricaoEstadual} />
+            </FormField>
+          </div>
+
+          <div className="form-grid form-grid-1">
+            <FormField label="Area de Atuacao Padrao">
+              <SelectInput
+                value={areaPadraoId}
+                onChange={setAreaPadraoId}
+                options={[
+                  { value: "", label: "Selecione uma area..." },
+                  ...areasDisponiveis.map((a: { id: string; nome: string }) => ({
+                    value: a.id,
+                    label: a.nome,
+                  })),
+                ]}
+              />
             </FormField>
           </div>
 

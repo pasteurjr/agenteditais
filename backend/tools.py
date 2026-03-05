@@ -2997,17 +2997,20 @@ Forneça sua análise em formato JSON:
 ```"""
 
 
-def tool_calcular_score_aderencia(editais: List[Dict], user_id: str) -> Dict[str, Any]:
+def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
-    Calcula o score de aderência para uma lista de editais vs produtos do usuário.
+    Calcula o score de aderência para uma lista de editais vs produtos do usuário/empresa.
     Usa DeepSeek Reasoner para análise detalhada com justificativa.
     """
     import time
 
     db = get_db()
     try:
-        # Buscar produtos do usuário
-        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        # Buscar produtos da empresa (ou do user como fallback)
+        if empresa_id:
+            produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
+        else:
+            produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
 
         if not produtos:
             return {

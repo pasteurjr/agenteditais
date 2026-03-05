@@ -5,7 +5,7 @@ import {
   Gavel, Clock, AlertCircle, Package, BarChart2, Flag, Eye, Users,
   TrendingUp, Scale, AlertTriangle, XCircle, Settings, Building,
   Briefcase, Sliders, GitBranch, Database, Shield, Layers, FileCheck,
-  Bell, Mail, Target, BookOpen, Zap, Globe
+  Bell, Mail, Target, BookOpen, Zap, Globe, UserPlus, FolderTree, Tag, Tags
 } from "lucide-react";
 
 interface User {
@@ -63,6 +63,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
     icon: <Database size={18} />,
     label: "Cadastros",
     items: [
+      { id: "crud-users", icon: <UserPlus size={16} />, label: "Usuarios", page: "crud:users" },
       {
         id: "cad-empresa",
         icon: <Building size={16} />,
@@ -83,6 +84,9 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-produtos", icon: <Package size={14} />, label: "Produtos", page: "crud:produtos" },
           { id: "crud-produtos-specs", icon: <Sliders size={14} />, label: "Especificacoes", page: "crud:produtos-especificacoes" },
           { id: "crud-produtos-docs", icon: <FileText size={14} />, label: "Documentos", page: "crud:produtos-documentos" },
+          { id: "crud-areas-produto", icon: <FolderTree size={14} />, label: "Areas", page: "crud:areas-produto" },
+          { id: "crud-classes-produto", icon: <Tag size={14} />, label: "Classes", page: "crud:classes-produto-v2" },
+          { id: "crud-subclasses-produto", icon: <Tags size={14} />, label: "Subclasses", page: "crud:subclasses-produto" },
         ],
       },
       {

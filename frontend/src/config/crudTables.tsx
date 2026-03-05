@@ -6,7 +6,7 @@ import {
   Building, FileText, Shield, Users, Package, Sliders, Search,
   FileCheck, Layers, BarChart2, Gavel, DollarSign, Scale, Eye,
   Bell, Clock, Mail, Send, Briefcase, TrendingUp, AlertTriangle,
-  Database, BookOpen, Target, Zap, Globe
+  Database, BookOpen, Target, Zap, Globe, UserPlus, FolderTree, Tag, Tags
 } from "lucide-react";
 import type { CrudPageConfig, FieldConfig } from "../components/CrudPage";
 
@@ -43,6 +43,20 @@ export const empresaConfig: CrudPageConfig = {
     { name: "email", label: "Email", type: "email", width: "half" },
     { name: "areas_atuacao", label: "Áreas de Atuação", type: "json", width: "full" },
     { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+  ],
+};
+
+// === USUÁRIOS ===
+
+export const usersConfig: CrudPageConfig = {
+  table: "users",
+  title: "Usuarios",
+  icon: <UserPlus size={24} />,
+  fields: [
+    { name: "name", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "email", label: "Email", type: "email", required: true, width: "half" },
+    { name: "password", label: "Senha", type: "password", required: true, width: "full", confirmField: "password_confirm", placeholder: "Digite a senha" },
+    { name: "picture_url", label: "URL da Foto", type: "text", width: "full" },
   ],
 };
 
@@ -112,6 +126,7 @@ export const produtosConfig: CrudPageConfig = {
     { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
     { name: "codigo_interno", label: "Código Interno", type: "text", width: "half" },
     { name: "categoria", label: "Categoria", type: "select", required: true, options: enumOpts(["equipamento", "reagente", "insumo_hospitalar", "insumo_laboratorial", "informatica", "redes", "mobiliario", "eletronico", "outro"]), width: "half" },
+    { name: "subclasse_id", label: "Subclasse (Classificacao)", type: "text", width: "half", placeholder: "ID da subclasse do produto" },
     { name: "fabricante", label: "Fabricante", type: "text", width: "half" },
     { name: "modelo", label: "Modelo", type: "text", width: "half" },
     { name: "ncm", label: "NCM", type: "text", width: "half" },
@@ -153,6 +168,53 @@ export const produtosDocumentosConfig: CrudPageConfig = {
     { name: "nome_arquivo", label: "Nome do Arquivo", type: "text", required: true, width: "half" },
     { name: "path_arquivo", label: "Caminho do Arquivo", type: "text", required: true, width: "half" },
     { name: "processado", label: "Processado", type: "boolean", width: "half" },
+  ],
+};
+
+// === CLASSIFICAÇÃO DE PRODUTOS ===
+
+export const areasProdutoConfig: CrudPageConfig = {
+  table: "areas-produto",
+  title: "Areas de Produto",
+  icon: <FolderTree size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "descricao", label: "Descricao", type: "textarea", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+  ],
+};
+
+export const classesProdutoV2Config: CrudPageConfig = {
+  table: "classes-produto-v2",
+  title: "Classes de Produto",
+  icon: <Tag size={24} />,
+  parentFk: "area_id",
+  parentTable: "areas-produto",
+  parentLabelField: "nome",
+  fields: [
+    { name: "area_id", label: "Area ID", type: "text", required: true, width: "half" },
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "descricao", label: "Descricao", type: "textarea", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+  ],
+};
+
+export const subclassesProdutoConfig: CrudPageConfig = {
+  table: "subclasses-produto",
+  title: "Subclasses de Produto",
+  icon: <Tags size={24} />,
+  parentFk: "classe_id",
+  parentTable: "classes-produto-v2",
+  parentLabelField: "nome",
+  fields: [
+    { name: "classe_id", label: "Classe ID", type: "text", required: true, width: "half" },
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "ncms", label: "NCMs", type: "json", width: "full" },
+    { name: "campos_mascara", label: "Campos Mascara", type: "json", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
   ],
 };
 
@@ -639,6 +701,7 @@ export const estrategiasEditaisConfig: CrudPageConfig = {
 // ─── All configs map (table slug → config) ────────────────────────────────────
 
 export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
+  "users": usersConfig,
   "empresas": empresaConfig,
   "empresa-documentos": empresaDocumentosConfig,
   "empresa-certidoes": empresaCertidoesConfig,
@@ -646,6 +709,9 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "produtos": produtosConfig,
   "produtos-especificacoes": produtosEspecificacoesConfig,
   "produtos-documentos": produtosDocumentosConfig,
+  "areas-produto": areasProdutoConfig,
+  "classes-produto-v2": classesProdutoV2Config,
+  "subclasses-produto": subclassesProdutoConfig,
   "fontes-editais": fontesEditaisConfig,
   "fontes-certidoes": fontesCertidoesConfig,
   "editais": editaisConfig,

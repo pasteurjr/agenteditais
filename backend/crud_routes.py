@@ -19,9 +19,12 @@ from models import (
     Alerta, Monitoramento, Notificacao, PreferenciasNotificacao,
     Documento, Contrato, ContratoEntrega, Recurso,
     LeadCRM, AcaoPosPerda, AuditoriaLog, AprendizadoFeedback,
-    ParametroScore, Dispensa, EstrategiaEdital, ClasseProduto
+    ParametroScore, Dispensa, EstrategiaEdital, ClasseProduto,
+    AreaProduto, ClasseProdutoV2, SubclasseProduto,
+    ModalidadeLicitacao, OrigemOrgao
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
+import bcrypt
 
 crud_bp = Blueprint('crud', __name__)
 
@@ -38,6 +41,15 @@ def require_auth(f):
         try:
             payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             request.user_id = payload["user_id"]
+            request.empresa_id = payload.get("empresa_id")
+            # Fallback: se JWT sem empresa_id, buscar primeira empresa do user
+            if not request.empresa_id:
+                db = get_db()
+                try:
+                    empresa = db.query(Empresa).filter(Empresa.user_id == request.user_id).first()
+                    request.empresa_id = empresa.id if empresa else None
+                finally:
+                    db.close()
         except pyjwt.ExpiredSignatureError:
             return jsonify({"error": "Token expirado"}), 401
         except pyjwt.InvalidTokenError:
@@ -48,6 +60,10 @@ def require_auth(f):
 
 def get_current_user_id():
     return getattr(request, 'user_id', None)
+
+
+def get_current_empresa_id():
+    return getattr(request, 'empresa_id', None)
 
 
 # ─── Table registry ────────────────────────────────────────────────────────────
@@ -61,6 +77,52 @@ CRUD_TABLES = {
         "search_fields": ["cnpj", "razao_social", "nome_fantasia", "cidade"],
         "label": "Empresa",
         "required": ["cnpj", "razao_social"],
+    },
+    # === Usuários ===
+    "users": {
+        "model": User,
+        "global": True,
+        "search_fields": ["email", "name"],
+        "label": "Usuário",
+        "required": ["email", "name"],
+        "password_field": "password",  # campo virtual — será hasheado
+    },
+    # === Áreas, Classes e Subclasses (por empresa) ===
+    "areas-produto": {
+        "model": AreaProduto,
+        "empresa_scoped": True,
+        "search_fields": ["nome"],
+        "label": "Área de Produto",
+        "required": ["nome"],
+    },
+    "classes-produto-v2": {
+        "model": ClasseProdutoV2,
+        "empresa_scoped": True,
+        "search_fields": ["nome"],
+        "label": "Classe de Produto",
+        "required": ["nome", "area_id"],
+    },
+    "subclasses-produto": {
+        "model": SubclasseProduto,
+        "empresa_scoped": True,
+        "search_fields": ["nome"],
+        "label": "Subclasse de Produto",
+        "required": ["nome", "classe_id"],
+    },
+    # === Tabelas globais (referência) ===
+    "modalidades-licitacao": {
+        "model": ModalidadeLicitacao,
+        "global": True,
+        "search_fields": ["nome"],
+        "label": "Modalidade de Licitação",
+        "required": ["nome"],
+    },
+    "origens-orgao": {
+        "model": OrigemOrgao,
+        "global": True,
+        "search_fields": ["nome"],
+        "label": "Origem do Órgão",
+        "required": ["nome"],
     },
     "empresa-documentos": {
         "model": EmpresaDocumento,
@@ -93,6 +155,7 @@ CRUD_TABLES = {
     "produtos": {
         "model": Produto,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["nome", "codigo_interno", "fabricante", "modelo", "ncm"],
         "label": "Produto",
         "required": ["nome", "categoria"],
@@ -127,6 +190,7 @@ CRUD_TABLES = {
     "fontes-certidoes": {
         "model": FonteCertidao,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["nome", "tipo_certidao", "orgao_emissor", "url_portal", "uf", "cidade"],
         "label": "Fonte de Certidão",
         "required": ["tipo_certidao", "nome", "url_portal"],
@@ -135,6 +199,7 @@ CRUD_TABLES = {
     "editais": {
         "model": Edital,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["numero", "orgao", "objeto", "uf", "cidade"],
         "label": "Edital",
         "required": ["numero", "orgao", "objeto"],
@@ -170,6 +235,7 @@ CRUD_TABLES = {
     "analises": {
         "model": Analise,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["recomendacao"],
         "label": "Análise",
         "required": ["edital_id", "produto_id"],
@@ -187,6 +253,7 @@ CRUD_TABLES = {
     "propostas": {
         "model": Proposta,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["texto_tecnico"],
         "label": "Proposta",
         "required": ["edital_id", "produto_id"],
@@ -203,6 +270,7 @@ CRUD_TABLES = {
     "precos-historicos": {
         "model": PrecoHistorico,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["empresa_vencedora", "cnpj_vencedor"],
         "label": "Preço Histórico",
         "required": [],
@@ -220,6 +288,7 @@ CRUD_TABLES = {
     "alertas": {
         "model": Alerta,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["titulo", "mensagem", "tipo"],
         "label": "Alerta",
         "required": ["edital_id", "tipo", "data_disparo"],
@@ -227,6 +296,7 @@ CRUD_TABLES = {
     "monitoramentos": {
         "model": Monitoramento,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["termo"],
         "label": "Monitoramento",
         "required": ["termo"],
@@ -234,6 +304,7 @@ CRUD_TABLES = {
     "notificacoes": {
         "model": Notificacao,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["titulo", "mensagem"],
         "label": "Notificação",
         "required": ["tipo", "titulo", "mensagem"],
@@ -249,6 +320,7 @@ CRUD_TABLES = {
     "documentos": {
         "model": Documento,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["titulo", "tipo"],
         "label": "Documento Gerado",
         "required": ["tipo", "titulo", "conteudo_md"],
@@ -257,6 +329,7 @@ CRUD_TABLES = {
     "contratos": {
         "model": Contrato,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["numero_contrato", "orgao", "objeto"],
         "label": "Contrato",
         "required": [],
@@ -274,6 +347,7 @@ CRUD_TABLES = {
     "recursos": {
         "model": Recurso,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["motivo", "fundamentacao_legal"],
         "label": "Recurso",
         "required": ["edital_id", "tipo", "prazo_limite"],
@@ -282,6 +356,7 @@ CRUD_TABLES = {
     "leads-crm": {
         "model": LeadCRM,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["orgao", "cnpj_orgao", "contato_nome", "contato_email"],
         "label": "Lead CRM",
         "required": ["orgao"],
@@ -289,6 +364,7 @@ CRUD_TABLES = {
     "acoes-pos-perda": {
         "model": AcaoPosPerda,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["descricao", "responsavel"],
         "label": "Ação Pós-Perda",
         "required": [],
@@ -305,6 +381,7 @@ CRUD_TABLES = {
     "aprendizado-feedback": {
         "model": AprendizadoFeedback,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["tipo_evento", "entidade"],
         "label": "Feedback de Aprendizado",
         "required": ["tipo_evento"],
@@ -313,6 +390,7 @@ CRUD_TABLES = {
     "parametros-score": {
         "model": ParametroScore,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": [],
         "label": "Parâmetros de Score",
         "required": [],
@@ -320,6 +398,7 @@ CRUD_TABLES = {
     "dispensas": {
         "model": Dispensa,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["artigo", "justificativa"],
         "label": "Dispensa",
         "required": ["edital_id"],
@@ -327,6 +406,7 @@ CRUD_TABLES = {
     "estrategias-editais": {
         "model": EstrategiaEdital,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["justificativa", "decidido_por", "edital_id"],
         "label": "Estratégia de Edital",
         "required": ["edital_id"],
@@ -335,6 +415,7 @@ CRUD_TABLES = {
     "classes-produtos": {
         "model": ClasseProduto,
         "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["nome"],
         "label": "Classe de Produto",
         "required": ["nome", "tipo"],
@@ -439,6 +520,7 @@ def get_crud_schema():
             "columns": columns,
             "search_fields": config.get("search_fields", []),
             "user_scoped": config.get("user_scoped", False),
+            "empresa_scoped": config.get("empresa_scoped", False),
             "global": config.get("global", False),
             "read_only": config.get("read_only", False),
             "parent_fk": config.get("parent_fk"),
@@ -458,6 +540,7 @@ def crud_list(table_slug):
 
     model = config["model"]
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     q = request.args.get("q", "").strip()
     parent_id = request.args.get("parent_id")
     limit = min(int(request.args.get("limit", 200)), 500)
@@ -467,8 +550,10 @@ def crud_list(table_slug):
     try:
         query = db.query(model)
 
-        # Scope by user if needed
-        if config.get("user_scoped") and hasattr(model, "user_id"):
+        # Scope by empresa if empresa_scoped
+        if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
+            query = query.filter(model.empresa_id == empresa_id)
+        elif config.get("user_scoped") and hasattr(model, "user_id"):
             query = query.filter(model.user_id == user_id)
         elif config.get("parent_fk") and parent_id:
             fk_col = getattr(model, config["parent_fk"], None)
@@ -515,8 +600,17 @@ def crud_list(table_slug):
         total = query.count()
         items = query.offset(offset).limit(limit).all()
 
+        password_field = config.get("password_field")
+        serialized = []
+        for item in items:
+            d = item.to_dict()
+            if password_field and hasattr(item, "password_hash"):
+                d["has_password"] = bool(item.password_hash)
+                d["password"] = item.password_plain if hasattr(item, "password_plain") else ""
+            serialized.append(d)
+
         return jsonify({
-            "items": [item.to_dict() for item in items],
+            "items": serialized,
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -535,17 +629,26 @@ def crud_get(table_slug, record_id):
 
     model = config["model"]
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         query = db.query(model).filter(model.id == record_id)
-        if config.get("user_scoped") and hasattr(model, "user_id"):
+        if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
+            query = query.filter(model.empresa_id == empresa_id)
+        elif config.get("user_scoped") and hasattr(model, "user_id"):
             query = query.filter(model.user_id == user_id)
 
         item = query.first()
         if not item:
             return jsonify({"error": f"{config['label']} não encontrado(a)"}), 404
 
-        return jsonify(item.to_dict())
+        result = item.to_dict()
+        password_field = config.get("password_field")
+        if password_field and hasattr(item, "password_hash"):
+            result["has_password"] = bool(item.password_hash)
+            result["password"] = item.password_plain if hasattr(item, "password_plain") else ""
+
+        return jsonify(result)
     finally:
         db.close()
 
@@ -579,21 +682,47 @@ def crud_create(table_slug):
         if config.get("user_scoped") and hasattr(model, "user_id"):
             instance.user_id = user_id
 
+        # Set empresa_id if empresa-scoped
+        if config.get("empresa_scoped") and hasattr(model, "empresa_id"):
+            # Usar empresa_id do body se fornecido, senão usar do token
+            instance.empresa_id = data.get("empresa_id") or get_current_empresa_id()
+
         # Set fields from data
         skip_fields = {"id", "created_at", "updated_at"}
+        password_field = config.get("password_field")
         for col in model.__table__.columns:
             if col.name in skip_fields:
                 continue
             if col.name == "user_id" and config.get("user_scoped"):
                 continue
+            if col.name == "empresa_id" and config.get("empresa_scoped"):
+                continue
+            if col.name == "password_hash" and password_field:
+                continue  # handled below
+            if col.name == "password_plain" and password_field:
+                continue  # handled below
             if col.name in data:
                 _set_column_value(instance, col.name, data[col.name], model)
+
+        # Hash password if provided
+        if password_field and data.get(password_field) and hasattr(model, "password_hash"):
+            plain = data[password_field]
+            hashed = bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            instance.password_hash = hashed
+            if hasattr(model, "password_plain"):
+                instance.password_plain = plain
 
         db.add(instance)
         db.commit()
         db.refresh(instance)
 
-        return jsonify(instance.to_dict()), 201
+        result = instance.to_dict()
+        # Add password info for users
+        if password_field and hasattr(instance, "password_hash"):
+            result["has_password"] = bool(instance.password_hash)
+            result["password"] = instance.password_plain if hasattr(instance, "password_plain") else ""
+
+        return jsonify(result), 201
     except Exception as e:
         db.rollback()
         return jsonify({"error": str(e)}), 400
@@ -619,7 +748,10 @@ def crud_update(table_slug, record_id):
     db = get_db()
     try:
         query = db.query(model).filter(model.id == record_id)
-        if config.get("user_scoped") and hasattr(model, "user_id"):
+        empresa_id = get_current_empresa_id()
+        if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
+            query = query.filter(model.empresa_id == empresa_id)
+        elif config.get("user_scoped") and hasattr(model, "user_id"):
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()
@@ -628,16 +760,34 @@ def crud_update(table_slug, record_id):
 
         # Update fields
         skip_fields = {"id", "created_at", "user_id"}
+        password_field = config.get("password_field")
         for col in model.__table__.columns:
             if col.name in skip_fields:
                 continue
+            if col.name == "password_hash" and password_field:
+                continue  # handled below
+            if col.name == "password_plain" and password_field:
+                continue  # handled below
             if col.name in data:
                 _set_column_value(instance, col.name, data[col.name], model)
+
+        # Hash password if provided (non-empty)
+        if password_field and data.get(password_field) and hasattr(model, "password_hash"):
+            plain = data[password_field]
+            hashed = bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            instance.password_hash = hashed
+            if hasattr(model, "password_plain"):
+                instance.password_plain = plain
 
         db.commit()
         db.refresh(instance)
 
-        return jsonify(instance.to_dict())
+        result = instance.to_dict()
+        if password_field and hasattr(instance, "password_hash"):
+            result["has_password"] = bool(instance.password_hash)
+            result["password"] = instance.password_plain if hasattr(instance, "password_plain") else ""
+
+        return jsonify(result)
     except Exception as e:
         db.rollback()
         return jsonify({"error": str(e)}), 400
@@ -662,7 +812,10 @@ def crud_delete(table_slug, record_id):
     db = get_db()
     try:
         query = db.query(model).filter(model.id == record_id)
-        if config.get("user_scoped") and hasattr(model, "user_id"):
+        empresa_id = get_current_empresa_id()
+        if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
+            query = query.filter(model.empresa_id == empresa_id)
+        elif config.get("user_scoped") and hasattr(model, "user_id"):
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()

@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Plus, Save, Trash2, X, Database, ChevronLeft } from "lucide-react";
-import { crudList, crudGet, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import { Search, Plus, Save, Trash2, X, Database, ChevronLeft, Eye, EyeOff, Building } from "lucide-react";
+import { crudList, crudGet, crudCreate, crudUpdate, crudDelete, getCrudSchema } from "../api/crud";
 import type { CrudColumnSchema } from "../api/crud";
+import { useAuth } from "../contexts/AuthContext";
 
 // ─── Field configuration for each CRUD table ──────────────────────────────────
 
 export interface FieldConfig {
   name: string;
   label: string;
-  type: "text" | "number" | "email" | "date" | "datetime" | "textarea" | "select" | "boolean" | "json" | "decimal" | "readonly";
+  type: "text" | "number" | "email" | "date" | "datetime" | "textarea" | "select" | "boolean" | "json" | "decimal" | "readonly" | "password";
   required?: boolean;
   options?: { value: string; label: string }[];
   placeholder?: string;
@@ -16,6 +17,7 @@ export interface FieldConfig {
   hidden?: boolean;
   fkTable?: string;
   fkLabel?: string;
+  confirmField?: string; // name of the confirmation field (for password)
 }
 
 export interface CrudPageConfig {
@@ -99,6 +101,7 @@ export function generateFieldsFromSchema(columns: CrudColumnSchema[]): FieldConf
 
 export function CrudPage({ config }: CrudPageProps) {
   const { table, title, icon, fields, searchPlaceholder, parentFk, parentTable, parentLabelField, parentLabelFn } = config;
+  const { empresa } = useAuth();
 
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
@@ -112,6 +115,19 @@ export function CrudPage({ config }: CrudPageProps) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const [passwordVisible, setPasswordVisible] = useState<Record<string, boolean>>({});
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isEmpresaScopedFromSchema, setIsEmpresaScopedFromSchema] = useState(false);
+
+  // Load empresa_scoped flag from schema
+  useEffect(() => {
+    getCrudSchema().then((schema) => {
+      const tableSchema = schema[table];
+      if (tableSchema?.empresa_scoped) {
+        setIsEmpresaScopedFromSchema(true);
+      }
+    }).catch(() => {});
+  }, [table]);
 
   // ─── Parent selector state (for child tables) ────────────────────────────
   const isChildTable = Boolean(parentFk && parentTable);
@@ -230,8 +246,21 @@ export function CrudPage({ config }: CrudPageProps) {
     setSuccessMsg(null);
     try {
       const full = await crudGet(table, id);
+      // Initialize confirm field for password
+      fields.forEach((f) => {
+        if (f.type === "password") {
+          if (!full[f.name]) full[f.name] = "";
+          if (f.confirmField) full[f.confirmField] = full[f.name] || "";
+        }
+      });
       setFormData(full);
     } catch (err) {
+      fields.forEach((f) => {
+        if (f.type === "password") {
+          if (!item[f.name]) item[f.name] = "";
+          if (f.confirmField) item[f.confirmField] = item[f.name] || "";
+        }
+      });
       setFormData(item);
     }
   };
@@ -258,18 +287,52 @@ export function CrudPage({ config }: CrudPageProps) {
   // ─── Save ─────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
+    // Validate password confirmation
+    const pwFields = fields.filter((f) => f.type === "password");
+    for (const pf of pwFields) {
+      const pw = String(formData[pf.name] ?? "");
+      const confirmName = pf.confirmField || `${pf.name}_confirm`;
+      const confirm = String(formData[confirmName] ?? "");
+      if (pw || confirm) {
+        if (pw !== confirm) {
+          setPasswordError("As senhas não coincidem");
+          return;
+        }
+        if (pw.length < 4) {
+          setPasswordError("A senha deve ter pelo menos 4 caracteres");
+          return;
+        }
+      }
+      if (isNew && pf.required && !pw) {
+        setPasswordError("A senha é obrigatória para novos registros");
+        return;
+      }
+    }
+    setPasswordError(null);
+
+    // Strip confirm fields before sending
+    const dataToSend = { ...formData };
+    for (const pf of pwFields) {
+      const confirmName = pf.confirmField || `${pf.name}_confirm`;
+      delete dataToSend[confirmName];
+      // Don't send empty password on update (means "keep current")
+      if (!isNew && !dataToSend[pf.name]) {
+        delete dataToSend[pf.name];
+      }
+    }
+
     setSaving(true);
     setError(null);
     setSuccessMsg(null);
     try {
       if (isNew) {
-        const created = await crudCreate(table, formData);
+        const created = await crudCreate(table, dataToSend);
         setSelectedId(String(created.id));
         setFormData(created);
         setIsNew(false);
         setSuccessMsg("Registro criado com sucesso!");
       } else if (selectedId) {
-        const updated = await crudUpdate(table, selectedId, formData);
+        const updated = await crudUpdate(table, selectedId, dataToSend);
         setFormData(updated);
         setSuccessMsg("Registro atualizado com sucesso!");
       }
@@ -402,6 +465,56 @@ export function CrudPage({ config }: CrudPageProps) {
             disabled
           />
         );
+      case "password": {
+        const isVisible = passwordVisible[field.name] || false;
+        const confirmName = field.confirmField || `${field.name}_confirm`;
+        const confirmValue = formData[confirmName] ?? "";
+        const hasExisting = Boolean(formData["has_password"]);
+        return (
+          <div className="password-field-group">
+            <div className="password-input-wrapper">
+              <input
+                type={isVisible ? "text" : "password"}
+                className="text-input"
+                value={String(value)}
+                onChange={(e) => {
+                  updateField(field.name, e.target.value);
+                  setPasswordError(null);
+                }}
+                placeholder={hasExisting && !isNew ? "Deixe em branco para manter a atual" : field.placeholder || "Digite a senha"}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setPasswordVisible((prev) => ({ ...prev, [field.name]: !prev[field.name] }))}
+                title={isVisible ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div className="password-input-wrapper" style={{ marginTop: "8px" }}>
+              <input
+                type={isVisible ? "text" : "password"}
+                className="text-input"
+                value={String(confirmValue)}
+                onChange={(e) => {
+                  updateField(confirmName, e.target.value);
+                  setPasswordError(null);
+                }}
+                placeholder="Confirme a senha"
+                autoComplete="new-password"
+              />
+            </div>
+            {passwordError && (
+              <div className="password-error">{passwordError}</div>
+            )}
+            {hasExisting && !isNew && !String(value) && (
+              <div className="password-hint">Senha ja cadastrada. Preencha apenas para alterar.</div>
+            )}
+          </div>
+        );
+      }
       default:
         return (
           <input
@@ -419,6 +532,9 @@ export function CrudPage({ config }: CrudPageProps) {
   // ─── Display value in table list ──────────────────────────────────────────
 
   const getDisplayValue = (item: Record<string, unknown>, field: FieldConfig): string => {
+    if (field.type === "password") {
+      return item[field.name] ? String(item[field.name]) : (item["has_password"] ? "***" : "-");
+    }
     const val = item[field.name];
     if (val === null || val === undefined) return "-";
     if (field.type === "boolean") return val ? "Sim" : "Não";
@@ -438,6 +554,10 @@ export function CrudPage({ config }: CrudPageProps) {
     .slice(0, 6);
   const formFields = fields.filter((f) => !(isChildTable && f.name === parentFk));
   const showForm = isNew || selectedId !== null;
+
+  // Show empresa field for empresa_scoped tables (from schema)
+  const hasEmpresaField = fields.some((f) => f.name === "empresa_id");
+  const showEmpresaField = !hasEmpresaField && empresa && isEmpresaScopedFromSchema;
 
   return (
     <div className="page-container">
@@ -563,6 +683,21 @@ export function CrudPage({ config }: CrudPageProps) {
             </div>
             <div className="card-content">
               <div className="form-grid form-grid-2">
+                {showEmpresaField && empresa && (
+                  <div className="form-field">
+                    <label className="form-field-label">
+                      <Building size={14} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+                      Empresa
+                    </label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={empresa.razao_social || empresa.nome_fantasia || ""}
+                      readOnly
+                      style={{ backgroundColor: "var(--bg-tertiary)", cursor: "default" }}
+                    />
+                  </div>
+                )}
                 {formFields.filter((f) => !f.hidden).map((field) => (
                   <div
                     key={field.name}

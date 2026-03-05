@@ -21,6 +21,7 @@ class User(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=True)
+    password_plain = Column(String(255), nullable=True)
     google_id = Column(String(255), unique=True, nullable=True)
     name = Column(String(255), nullable=False)
     picture_url = Column(Text, nullable=True)
@@ -133,6 +134,7 @@ class Produto(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     nome = Column(String(255), nullable=False)
     codigo_interno = Column(String(50), nullable=True)
     ncm = Column(String(20), nullable=True)
@@ -233,6 +235,7 @@ class AreaProduto(Base):
     __tablename__ = 'areas_produto'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     nome = Column(String(255), nullable=False)
     descricao = Column(Text, nullable=True)
     ativo = Column(Boolean, default=True)
@@ -257,6 +260,7 @@ class ClasseProdutoV2(Base):
     __tablename__ = 'classes_produto_v2'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     nome = Column(String(255), nullable=False)
     area_id = Column(String(36), ForeignKey('areas_produto.id', ondelete='CASCADE'), nullable=False)
     descricao = Column(Text, nullable=True)
@@ -284,6 +288,7 @@ class SubclasseProduto(Base):
     __tablename__ = 'subclasses_produto'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     nome = Column(String(255), nullable=False)
     classe_id = Column(String(36), ForeignKey('classes_produto_v2.id', ondelete='CASCADE'), nullable=False)
     ncms = Column(JSON, nullable=True)
@@ -384,6 +389,7 @@ class Edital(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     numero = Column(String(100), nullable=False)
     orgao = Column(String(255), nullable=False)
     orgao_tipo = Column(Enum('federal', 'estadual', 'municipal', 'autarquia', 'fundacao'), default='municipal')
@@ -577,6 +583,7 @@ class Analise(Base):
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
     produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
 
     # Scores (0 a 100)
     score_tecnico = Column(DECIMAL(5, 2), nullable=True)
@@ -665,6 +672,7 @@ class Proposta(Base):
     produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
     analise_id = Column(String(36), ForeignKey('analises.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
 
     texto_tecnico = Column(Text, nullable=True)
     preco_unitario = Column(DECIMAL(15, 2), nullable=True)
@@ -756,6 +764,7 @@ class PrecoHistorico(Base):
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
     produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='SET NULL'), nullable=True)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
 
     # Valores
     preco_referencia = Column(DECIMAL(15, 2), nullable=True)
@@ -839,6 +848,7 @@ class Alerta(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
 
     # Tipo de alerta
@@ -894,6 +904,7 @@ class Monitoramento(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
 
     # Filtros de busca (mesmos parâmetros da tela de Captação)
     termo = Column(String(255), nullable=False)  # "hematologia", "equipamento laboratorial"
@@ -954,6 +965,7 @@ class Notificacao(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
 
     # Referência
     tipo = Column(Enum('alerta_prazo', 'novo_edital', 'alta_aderencia', 'resultado', 'sistema'), nullable=False)
@@ -1056,6 +1068,7 @@ class Documento(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     session_id = Column(String(36), ForeignKey('sessions.id', ondelete='SET NULL'), nullable=True)
     tipo = Column(String(50), nullable=False)
     titulo = Column(String(255), nullable=False)
@@ -1116,11 +1129,13 @@ class Empresa(Base):
     porte = Column(Enum('me', 'epp', 'medio', 'grande'), nullable=True)
     areas_atuacao = Column(JSON, nullable=True)
     frequencia_busca_certidoes = Column(String(20), default='diaria', nullable=True)
+    area_padrao_id = Column(String(36), ForeignKey('areas_produto.id', ondelete='SET NULL'), nullable=True)
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     user = relationship("User", back_populates="empresas")
+    area_padrao = relationship("AreaProduto", foreign_keys=[area_padrao_id], lazy="joined")
     documentos = relationship("EmpresaDocumento", back_populates="empresa", cascade="all, delete-orphan")
     certidoes = relationship("EmpresaCertidao", back_populates="empresa", cascade="all, delete-orphan")
     responsaveis = relationship("EmpresaResponsavel", back_populates="empresa", cascade="all, delete-orphan")
@@ -1150,6 +1165,8 @@ class Empresa(Base):
             "porte": self.porte,
             "areas_atuacao": self.areas_atuacao,
             "frequencia_busca_certidoes": self.frequencia_busca_certidoes,
+            "area_padrao_id": self.area_padrao_id,
+            "area_padrao_nome": self.area_padrao.nome if self.area_padrao else None,
             "ativo": self.ativo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -1278,6 +1295,7 @@ class FonteCertidao(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     tipo_certidao = Column(Enum(
         'cnd_federal', 'cnd_estadual', 'cnd_municipal', 'fgts', 'trabalhista', 'outro'
     ), nullable=False)
@@ -1338,6 +1356,7 @@ class Contrato(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
     proposta_id = Column(String(36), ForeignKey('propostas.id', ondelete='SET NULL'), nullable=True)
     numero_contrato = Column(String(100), nullable=True)
@@ -1428,6 +1447,7 @@ class Recurso(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
     tipo = Column(Enum('recurso', 'contra_razao', 'impugnacao'), nullable=False)
     motivo = Column(Text, nullable=True)
@@ -1469,6 +1489,7 @@ class LeadCRM(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
     orgao = Column(String(255), nullable=False)
     cnpj_orgao = Column(String(20), nullable=True)
@@ -1518,6 +1539,7 @@ class AcaoPosPerda(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
     lead_crm_id = Column(String(36), ForeignKey('leads_crm.id', ondelete='SET NULL'), nullable=True)
     tipo_acao = Column(Enum('reprocessar_oferta', 'visita_tecnica', 'nova_proposta', 'recurso', 'acompanhar'), nullable=True)
@@ -1596,6 +1618,7 @@ class AprendizadoFeedback(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     tipo_evento = Column(Enum('resultado_edital', 'score_ajustado', 'preco_ajustado', 'feedback_usuario'), nullable=False)
     entidade = Column(String(50), nullable=True)
     entidade_id = Column(String(36), nullable=True)
@@ -1630,6 +1653,7 @@ class ParametroScore(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     peso_tecnico = Column(DECIMAL(5, 2), default=0.40)
     peso_comercial = Column(DECIMAL(5, 2), default=0.25)
     peso_participacao = Column(DECIMAL(5, 2), default=0.20)
@@ -1682,6 +1706,7 @@ class ClasseProduto(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     nome = Column(String(255), nullable=False)
     tipo = Column(String(20), nullable=False, default='classe')  # classe ou subclasse
     ncms = Column(JSON, nullable=True)  # ["9018.19.80", "9027.80.99"]
@@ -1714,6 +1739,7 @@ class Dispensa(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
     artigo = Column(String(50), nullable=True)
     valor_limite = Column(DECIMAL(15, 2), nullable=True)
@@ -1750,6 +1776,7 @@ class EstrategiaEdital(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
     decisao = Column(Enum('go', 'nogo', 'acompanhar'), nullable=True)
     prioridade = Column(Enum('alta', 'media', 'baixa'), nullable=True)

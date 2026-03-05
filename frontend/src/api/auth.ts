@@ -7,15 +7,30 @@ export interface User {
   picture_url: string | null;
 }
 
+export interface EmpresaInfo {
+  id: string;
+  razao_social: string;
+  cnpj: string;
+  nome_fantasia?: string;
+  area_padrao_id?: string;
+  area_padrao_nome?: string;
+  uf?: string;
+  cidade?: string;
+}
+
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
   user: User;
+  has_empresa: boolean;
+  empresa?: EmpresaInfo;
 }
 
 export interface RefreshResponse {
   access_token: string;
   user: User;
+  has_empresa: boolean;
+  empresa?: EmpresaInfo;
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {

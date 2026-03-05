@@ -41,6 +41,7 @@ export interface CrudTableSchema {
   columns: CrudColumnSchema[];
   search_fields: string[];
   user_scoped: boolean;
+  empresa_scoped: boolean;
   global: boolean;
   read_only: boolean;
   parent_fk?: string;
