@@ -7887,10 +7887,11 @@ def buscar_editais_rest():
             if resultado_score.get("success"):
                 editais = resultado_score.get("editais_com_score", editais)
 
-        # Ordenar: abertos primeiro (por encerramento mais próximo), encerrados no final
+        # Ordenar: se tem score, por score desc; senão abertos primeiro por data
         from datetime import datetime as _dt
         def _sort_key_rest(e):
             encerrado = e.get("encerrado", False)
+            score = e.get("score_tecnico", -1)
             d = e.get("data_encerramento") or e.get("data_abertura") or ""
             dt = _dt(2099, 12, 31)
             for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
@@ -7899,6 +7900,9 @@ def buscar_editais_rest():
                     break
                 except (ValueError, TypeError):
                     continue
+            if calcular_score:
+                # Score desc (negativo para reverse), depois abertos primeiro, depois data
+                return (-score, 1 if encerrado else 0, dt)
             return (1 if encerrado else 0, dt)
         editais.sort(key=_sort_key_rest)
 
