@@ -1266,6 +1266,8 @@ export function CaptacaoPage(props?: PageProps) {
                   loading={loading}
                   rowClassName={(e) => getRowClass(e)}
                   onRowClick={(e) => handleAbrirPainel(e)}
+                  defaultSortKey={calcularScore ? "score" : undefined}
+                  defaultSortDirection={calcularScore ? "desc" : "asc"}
                 />
               </Card>
             </div>

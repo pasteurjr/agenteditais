@@ -20,6 +20,8 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   emptyMessage?: string;
   loading?: boolean;
+  defaultSortKey?: string;
+  defaultSortDirection?: "asc" | "desc";
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -33,9 +35,11 @@ export function DataTable<T extends Record<string, unknown>>({
   searchPlaceholder = "Buscar...",
   emptyMessage = "Nenhum item encontrado",
   loading = false,
+  defaultSortKey,
+  defaultSortDirection = "asc",
 }: DataTableProps<T>) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey ?? null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">(defaultSortDirection);
   const [searchTerm, setSearchTerm] = useState("");
 
   const handleSort = (key: string) => {
