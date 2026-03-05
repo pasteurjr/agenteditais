@@ -59,7 +59,12 @@ export function DataTable<T extends Record<string, unknown>>({
     ? [...filteredData].sort((a, b) => {
         const aVal = a[sortKey as keyof T];
         const bVal = b[sortKey as keyof T];
-        const comparison = String(aVal).localeCompare(String(bVal));
+        // Números: ordenar numericamente; strings: localeCompare
+        const aNum = Number(aVal);
+        const bNum = Number(bVal);
+        const comparison = (!isNaN(aNum) && !isNaN(bNum))
+          ? aNum - bNum
+          : String(aVal).localeCompare(String(bVal));
         return sortDirection === "asc" ? comparison : -comparison;
       })
     : filteredData;
