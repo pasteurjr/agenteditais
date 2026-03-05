@@ -112,12 +112,13 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
 9. **buscar_editais**: Buscar EDITAIS/LICITAÇÕES em portais (PNCP, BEC) por TERMO/ÁREA COM cálculo de score de aderência
    Exemplos: "busque editais de tecnologia", "editais da área médica", "busque editais de hematologia"
-   IMPORTANTE: Use quando buscar por TERMO genérico (área, categoria, produto) E calcular score de aderência
+   Também cobre score rápido, híbrido e profundo: "busque editais de hematologia com score rápido", "busque editais com score profundo nos 5 melhores", "busque editais com score híbrido", "busque editais com análise profunda dos 10 melhores"
+   IMPORTANTE: Use quando buscar por TERMO genérico (área, categoria, produto) E calcular score de aderência (qualquer tipo de score: rápido, híbrido ou profundo)
 
 9b. **buscar_editais_simples**: Buscar EDITAIS SEM calcular score - apenas listar os editais encontrados
    Exemplos: "busque editais de tecnologia sem score", "liste editais de hematologia sem calcular aderência", "busque editais de informática apenas listando"
    Palavras-chave: sem score, sem calcular, sem aderência, apenas listar, só listar, listar editais
-   IMPORTANTE: Use quando o usuário quer apenas ver os editais sem análise de aderência
+   IMPORTANTE: Use quando o usuário quer apenas ver os editais sem NENHUMA análise de aderência
 
 10. **buscar_edital_numero**: Buscar UM edital específico pelo NÚMERO
    Exemplos: "busque o edital PE-001/2026", "encontre o edital 90186", "busque edital número 123/2025"
@@ -299,7 +300,7 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 ## IMPORTANTE - TERMO DE BUSCA:
 Se a intenção for **buscar_editais** ou **buscar_editais_simples**, extraia o termo_busca da mensagem.
 REGRA CRÍTICA: Use o termo EXATO que o usuário digitou. NÃO substitua, NÃO "otimize", NÃO troque por sinônimos.
-REMOVA do termo_busca: palavras de comando (busque, editais, no, pncp), modificadores de busca (incluindo encerrados, sem calcular score, últimos X dias, sem score, apenas listando), nomes de fontes (PNCP, ComprasNet, BEC-SP, Licitacoes-e).
+REMOVA do termo_busca: palavras de comando (busque, editais, no, pncp), modificadores de busca (incluindo encerrados, sem calcular score, últimos X dias, sem score, apenas listando, com score rápido, com score profundo, com score híbrido, análise profunda, nos X melhores), nomes de fontes (PNCP, ComprasNet, BEC-SP, Licitacoes-e).
 MANTENHA APENAS as palavras-chave do ASSUNTO/PRODUTO.
 Exemplos:
 - "busque editais de equipamento medico" → termo_busca: "equipamento medico"
@@ -309,6 +310,9 @@ Exemplos:
 - "busque editais de medicamentos incluindo encerrados sem calcular score" → termo_busca: "medicamentos"
 - "busque editais de equipamento medico no PNCP últimos 60 dias" → termo_busca: "equipamento medico"
 - "busque editais de medicamentos incluindo encerrados últimos 30 dias sem calcular score" → termo_busca: "medicamentos"
+- "busque editais de reagentes com score profundo nos 5 melhores" → termo_busca: "reagentes"
+- "busque editais de hematologia com score híbrido nos 10 melhores" → termo_busca: "hematologia"
+- "busque editais de computadores com análise profunda" → termo_busca: "computadores"
 
 ## MENSAGEM DO USUÁRIO:
 "{mensagem}"
@@ -2009,7 +2013,10 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
 
     Novo fluxo:
     1. Busca editais (sem salvar)
-    2. Calcula score de aderência para cada edital vs produtos do usuário (se calcular_score=True)
+    2. Calcula score de aderência para cada edital vs produtos do usuário
+       - tipo_score "rapido" (padrão): score rápido em batch via deepseek-chat
+       - tipo_score "hibrido": rápido em todos + profundo (6 dimensões) nos top N
+       - tipo_score "profundo": profundo (6 dimensões) direto nos N primeiros
     3. Ordena por score
     4. Mostra recomendações (PARTICIPAR/AVALIAR/NÃO PARTICIPAR) com justificativas
     5. Oferece opção de salvar os recomendados
@@ -2076,6 +2083,34 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
     elif 'sem limite' in msg_lower_dias or 'periodo indefinido' in msg_lower_dias:
         dias_busca = 0
 
+    # Detectar tipo de score da mensagem (rapido/hibrido/profundo)
+    tipo_score = "rapido"  # padrão quando calcular_score=True
+    limite_score_profundo = 10  # padrão
+    if not calcular_score:
+        tipo_score = "nenhum"
+    else:
+        msg_lower_score = message.lower()
+        if any(p in msg_lower_score for p in ['score profundo', 'análise profunda', 'analise profunda',
+                                               'score detalhado', 'análise detalhada', 'analise detalhada',
+                                               'com profundo', '6 dimensões', '6 dimensoes', 'score completo']):
+            tipo_score = "profundo"
+        elif any(p in msg_lower_score for p in ['score híbrido', 'score hibrido', 'com híbrido', 'com hibrido',
+                                                 'modo híbrido', 'modo hibrido']):
+            tipo_score = "hibrido"
+        elif any(p in msg_lower_score for p in ['score rápido', 'score rapido', 'com rápido', 'com rapido']):
+            tipo_score = "rapido"
+
+        # Detectar limite para profundo/híbrido: "nos 5 melhores", "top 10", "nos 20 primeiros", "todos"
+        if tipo_score in ("profundo", "hibrido"):
+            limite_match = re.search(r'(?:nos|top|primeiros|melhores)\s+(\d+)', msg_lower_score)
+            if not limite_match:
+                limite_match = re.search(r'(\d+)\s+(?:melhores|primeiros|editais)', msg_lower_score)
+            if limite_match:
+                limite_score_profundo = int(limite_match.group(1))
+                limite_score_profundo = max(1, min(100, limite_score_profundo))
+            elif 'todos' in msg_lower_score and ('profundo' in msg_lower_score or 'híbrido' in msg_lower_score or 'hibrido' in msg_lower_score):
+                limite_score_profundo = 9999  # Todos
+
     # Usar termo da IA se disponível, senão extrair da mensagem
     if termo_ia:
         termo = termo_ia
@@ -2090,10 +2125,20 @@ def processar_buscar_editais(message: str, user_id: str, termo_ia: str = None, c
                      'origem hospital', 'origem municipal', 'origem estadual', 'origem federal',
                      'origem universidade', 'origem autarquia', 'origem lacen',
                      'tipo reagente', 'tipo equipamento', 'tipo comodato', 'tipo aluguel',
-                     'tipo informática', 'tipo informatica', 'tipo insumo']:
+                     'tipo informática', 'tipo informatica', 'tipo insumo',
+                     'com score profundo', 'com score rápido', 'com score rapido',
+                     'com score híbrido', 'com score hibrido', 'score profundo', 'score rápido',
+                     'score rapido', 'score híbrido', 'score hibrido', 'score detalhado',
+                     'score completo', 'análise profunda', 'analise profunda',
+                     'análise detalhada', 'analise detalhada', 'com profundo', 'com rápido',
+                     'com rapido', 'com híbrido', 'com hibrido', 'modo híbrido', 'modo hibrido',
+                     '6 dimensões', '6 dimensoes']:
             termo = _re.sub(r'\b' + _re.escape(mod) + r'\b', '', termo, flags=_re.IGNORECASE)
         # Limpar "últimos X dias"
         termo = _re.sub(r'(?:ultimos|últimos)\s+\d+\s*dias?', '', termo, flags=_re.IGNORECASE)
+        # Limpar "nos N melhores/primeiros", "top N"
+        termo = _re.sub(r'(?:nos|top)\s+\d+\s*(?:melhores|primeiros|editais)?', '', termo, flags=_re.IGNORECASE)
+        termo = _re.sub(r'\d+\s+(?:melhores|primeiros)', '', termo, flags=_re.IGNORECASE)
         # Limpar espaços duplicados
         termo = _re.sub(r'\s+', ' ', termo).strip()
         print(f"[BUSCA] Usando termo da IA: '{termo}'")
@@ -2130,7 +2175,10 @@ JSON:"""
                            'retorne', 'mostre', 'liste', 'quero', 'ver', 'todos', 'área', 'area',
                            'incluindo', 'encerrados', 'sem', 'calcular', 'score', 'aderência', 'aderencia',
                            'apenas', 'listando', 'últimos', 'ultimos', 'dias', 'com', 'web',
-                           'licitacoes-e', 'licitacoes', 'portal', 'compras', 'fonte']
+                           'licitacoes-e', 'licitacoes', 'portal', 'compras', 'fonte',
+                           'rápido', 'rapido', 'híbrido', 'hibrido', 'profundo', 'detalhado',
+                           'completo', 'análise', 'analise', 'profunda', 'detalhada', 'modo',
+                           'melhores', 'primeiros', 'top', 'nos', 'dimensões', 'dimensoes']
         palavras = message.lower().split()
         termos = [p for p in palavras if p not in palavras_ignorar and len(p) > 2]
         termo = ' '.join(termos) if termos else message
@@ -2202,7 +2250,7 @@ JSON:"""
             origem = valor
             break
 
-    print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}', Modalidade: '{modalidade}', Tipo: '{tipo_produto}', Origem: '{origem}'")
+    print(f"[BUSCA] Termo final: '{termo}', Fonte: '{fonte}', UF: '{uf}', Modalidade: '{modalidade}', Tipo: '{tipo_produto}', Origem: '{origem}', Score: '{tipo_score}' (limite={limite_score_profundo})")
 
     # ========== PASSO 1: Buscar editais em MÚLTIPLAS FONTES ==========
     resultado = _buscar_editais_multifonte(
@@ -2232,24 +2280,55 @@ JSON:"""
 
     # ========== PASSO 2: Calcular score de aderência (se solicitado) ==========
     aviso_produtos = None
-    if calcular_score:
-        print(f"[APP] Calculando score de aderência para {len(editais)} editais...")
+    if tipo_score == "rapido" and editais:
+        print(f"[APP] Score RAPIDO para {len(editais)} editais...")
         resultado_score = tool_calcular_score_aderencia(editais, user_id, empresa_id=empresa_id)
-
         if resultado_score.get("success"):
             editais_com_score = resultado_score.get("editais_com_score", editais)
             aviso_produtos = resultado_score.get("aviso")
         else:
             editais_com_score = editais
-    else:
+
+    elif tipo_score == "hibrido" and editais:
+        print(f"[APP] Score HIBRIDO para {len(editais)} editais (profundo nos top {limite_score_profundo})...")
+        # Passo 1: Score rápido em todos
+        resultado_score = tool_calcular_score_aderencia(editais, user_id, empresa_id=empresa_id)
+        if resultado_score.get("success"):
+            editais_com_score = resultado_score.get("editais_com_score", editais)
+            aviso_produtos = resultado_score.get("aviso")
+        else:
+            editais_com_score = editais
+        # Passo 2: Ordenar por score, pegar top N
+        editais_com_score.sort(key=lambda x: x.get("score_tecnico", 0), reverse=True)
+        top_n = editais_com_score[:limite_score_profundo]
+        rest = editais_com_score[limite_score_profundo:]
+        # Passo 3: Score profundo nos top N
+        top_n = _calcular_score_profundo(top_n, user_id, empresa_id)
+        editais_com_score = top_n
+
+    elif tipo_score == "profundo" and editais:
+        print(f"[APP] Score PROFUNDO direto em {min(len(editais), limite_score_profundo)} editais...")
+        target = editais[:limite_score_profundo]
+        target = _calcular_score_profundo(target, user_id, empresa_id)
+        editais_com_score = target
+
+    elif tipo_score == "nenhum":
         print(f"[APP] Busca SIMPLES (sem score) - {len(editais)} editais encontrados")
+        editais_com_score = editais
+    else:
         editais_com_score = editais
 
     # ========== PASSO 3: Formatar resposta ==========
     total_encontrados = len(editais_com_score)
 
     fontes_str = ', '.join(fontes_consultadas) if fontes_consultadas else fonte
-    modo_busca = "com análise de aderência" if calcular_score else "listagem simples (sem score)"
+    _modos_label = {
+        "nenhum": "listagem simples (sem score)",
+        "rapido": "com score rápido de aderência",
+        "hibrido": f"com score híbrido (rápido + profundo nos top {limite_score_profundo})",
+        "profundo": f"com score profundo (6 dimensões) em {min(total_encontrados, limite_score_profundo)} editais",
+    }
+    modo_busca = _modos_label.get(tipo_score, "com análise de aderência")
     response = f"""**Busca realizada:** {termo}
 **Fontes consultadas:** {fontes_str}
 **Modo:** {modo_busca}
@@ -2341,6 +2420,28 @@ JSON:"""
         if justificativa:
             texto += f"\n**Análise:** {justificativa}\n"
 
+        # Score profundo (6 dimensões) se disponível
+        score_profundo = ed.get('score_profundo')
+        if score_profundo:
+            sp_scores = score_profundo.get('scores', {})
+            decisao = score_profundo.get('decisao', 'AVALIAR')
+            decisao_icon = "✅" if decisao == "GO" else ("❌" if decisao == "NO-GO" else "⚠️")
+            texto += f"\n**Score Profundo:** {decisao_icon} **{decisao}** (Geral: {score_profundo.get('score_geral', 0)}%)\n"
+            texto += f"| Dimensão | Score |\n|---|---|\n"
+            for dim_key, dim_label in [('tecnico','Técnico'), ('documental','Documental'), ('complexidade','Complexidade'),
+                                       ('juridico','Jurídico'), ('logistico','Logístico'), ('comercial','Comercial')]:
+                val = sp_scores.get(dim_key, 0)
+                texto += f"| {dim_label} | {val}% |\n"
+            sp_just = score_profundo.get('justificativa', '')
+            if sp_just:
+                texto += f"\n{sp_just}\n"
+            positivos = score_profundo.get('pontos_positivos', [])
+            atencao = score_profundo.get('pontos_atencao', [])
+            if positivos:
+                texto += f"\n**Pontos positivos:** " + "; ".join(positivos[:3]) + "\n"
+            if atencao:
+                texto += f"**Pontos de atenção:** " + "; ".join(atencao[:3]) + "\n"
+
         # Botões de ação
         texto += f"\n"
         if url:
@@ -2397,7 +2498,7 @@ JSON:"""
     qtd_avaliar = len(avaliar)
     qtd_recomendados = qtd_participar + qtd_avaliar
 
-    if calcular_score and qtd_recomendados > 0:
+    if tipo_score != "nenhum" and qtd_recomendados > 0:
         # Busca COM score - mostrar opções por recomendação
         response += f"\n---\n"
         response += f"## 💾 Deseja salvar os editais?\n\n"
@@ -2418,7 +2519,7 @@ JSON:"""
 
         response += f"*Ou digite: \"salvar editais\", \"salvar recomendados\", \"salvar edital PE-2026/001\"*\n"
 
-    elif not calcular_score and len(editais_com_score) > 0:
+    elif tipo_score == "nenhum" and len(editais_com_score) > 0:
         # Busca SEM score - oferecer salvar todos
         response += f"\n---\n"
         response += f"## 💾 Deseja salvar os editais?\n\n"
@@ -7824,6 +7925,145 @@ def listar_areas_produto():
 
 
 # =============================================================================
+# Score Profundo: 6 dimensões via Reasoner para editais da busca
+# =============================================================================
+
+def _salvar_edital_temp_para_score(edital_data, user_id, empresa_id):
+    """Salva edital da busca no banco para poder chamar tool_calcular_scores_validacao.
+    Retorna edital_id se criado/encontrado, None se erro."""
+    db = get_db()
+    try:
+        numero = edital_data.get("numero", "")
+        orgao = edital_data.get("orgao", "")
+
+        # Verificar se já existe
+        existe = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.numero == numero,
+            Edital.orgao == orgao
+        ).first()
+
+        if existe:
+            return str(existe.id)
+
+        # Criar novo
+        from datetime import datetime as _dt
+        novo = Edital(
+            user_id=user_id,
+            empresa_id=empresa_id,
+            numero=numero or f"TEMP-{str(uuid.uuid4())[:8]}",
+            orgao=orgao or "Não identificado",
+            objeto=edital_data.get("objeto") or edital_data.get("descricao") or "—",
+            modalidade="pregao_eletronico",
+            status="novo",
+            fonte=edital_data.get("fonte"),
+            uf=edital_data.get("uf"),
+            cidade=edital_data.get("cidade"),
+            url=edital_data.get("url") or edital_data.get("link"),
+            cnpj_orgao=edital_data.get("cnpj_orgao"),
+            ano_compra=edital_data.get("ano_compra"),
+            seq_compra=edital_data.get("seq_compra"),
+        )
+        if edital_data.get("valor_referencia") or edital_data.get("valor_estimado"):
+            try:
+                novo.valor_referencia = float(edital_data.get("valor_referencia") or edital_data.get("valor_estimado"))
+            except (ValueError, TypeError):
+                pass
+        if edital_data.get("data_abertura"):
+            try:
+                d = edital_data["data_abertura"]
+                if isinstance(d, str):
+                    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                        try:
+                            novo.data_abertura = _dt.strptime(d[:19], fmt)
+                            break
+                        except (ValueError, TypeError):
+                            continue
+            except Exception:
+                pass
+
+        db.add(novo)
+        db.commit()
+        edital_id = str(novo.id)
+        print(f"[SCORE_PROFUNDO] Edital salvo: {numero} -> {edital_id}")
+        return edital_id
+    except Exception as e:
+        db.rollback()
+        print(f"[SCORE_PROFUNDO] Erro ao salvar edital: {e}")
+        return None
+    finally:
+        db.close()
+
+
+def _calcular_score_profundo(editais, user_id, empresa_id):
+    """Score profundo: 6 dimensões via DeepSeek para cada edital."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if not editais:
+        return editais
+
+    t0 = time.time()
+
+    def _score_one(edital):
+        try:
+            edital_id = _salvar_edital_temp_para_score(edital, user_id, empresa_id)
+            if not edital_id:
+                edital["score_tecnico"] = edital.get("score_tecnico", 0)
+                edital["score_profundo"] = None
+                return edital
+
+            resultado = tool_calcular_scores_validacao(
+                edital_id=edital_id, user_id=user_id, produto_id=None
+            )
+
+            if resultado.get("success"):
+                scores = resultado.get("scores", {})
+                score_geral = resultado.get("score_geral", 0)
+                # Só sobrescreve score_tecnico se não havia (modo profundo puro)
+                # No modo hibrido, preserva o score rápido para ordenação
+                if not edital.get("score_tecnico"):
+                    edital["score_tecnico"] = score_geral
+                edital["score_profundo"] = {
+                    "scores": scores,
+                    "score_geral": score_geral,
+                    "decisao": resultado.get("decisao", "AVALIAR"),
+                    "justificativa": resultado.get("justificativa", ""),
+                    "pontos_positivos": resultado.get("pontos_positivos", []),
+                    "pontos_atencao": resultado.get("pontos_atencao", []),
+                }
+                # Mapear decisao GO/NO-GO para recomendacao PARTICIPAR/NÃO PARTICIPAR
+                decisao = resultado.get("decisao", "AVALIAR")
+                if decisao == "GO":
+                    edital["recomendacao"] = "PARTICIPAR"
+                elif decisao == "NO-GO":
+                    edital["recomendacao"] = "NÃO PARTICIPAR"
+                else:
+                    edital["recomendacao"] = "AVALIAR"
+                edital["justificativa"] = resultado.get("justificativa", "")
+            else:
+                edital["score_profundo"] = None
+        except Exception as e:
+            print(f"[SCORE_PROFUNDO] Erro: {e}")
+            edital["score_profundo"] = None
+        return edital
+
+    MAX_WORKERS = min(len(editais), 2)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(_score_one, e): e for e in editais}
+        for future in as_completed(futures, timeout=600):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"[SCORE_PROFUNDO] Future erro: {e}")
+
+    editais.sort(key=lambda x: x.get("score_tecnico", 0), reverse=True)
+    elapsed = time.time() - t0
+    print(f"[SCORE_PROFUNDO] {len(editais)} editais em {elapsed:.1f}s")
+    return editais
+
+
+# =============================================================================
 # Onda 2 - T8: Endpoint REST GET /api/editais/buscar
 # =============================================================================
 
@@ -7852,8 +8092,18 @@ def buscar_editais_rest():
     modalidade = request.args.get("modalidade", "").strip() or None
     tipo_produto = request.args.get("tipoProduto", request.args.get("tipo_produto", "")).strip() or None
     origem = request.args.get("origem", "").strip() or None
-    calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
-    calcular_score = calcular_score_str.lower() == "true"
+    # Score: tipoScore (nenhum/rapido/hibrido/profundo) com retrocompatibilidade
+    tipo_score = request.args.get("tipoScore", request.args.get("tipo_score", "")).strip()
+    limite_score_profundo = int(request.args.get("limiteScoreProfundo", request.args.get("limite_score_profundo", 10)))
+    if limite_score_profundo == 0:
+        limite_score_profundo = 9999  # "Todos"
+
+    # Retrocompatibilidade: calcularScore=true sem tipoScore → "rapido"
+    if not tipo_score:
+        calcular_score_str = request.args.get("calcularScore", request.args.get("calcular_score", "true"))
+        tipo_score = "rapido" if calcular_score_str.lower() == "true" else "nenhum"
+
+    calcular_score = tipo_score != "nenhum"
     incluir_encerrados_str = request.args.get("incluirEncerrados", request.args.get("incluir_encerrados", "false"))
     incluir_encerrados = incluir_encerrados_str.lower() == "true"
     limite = int(request.args.get("limite", request.args.get("limit", 20)))
@@ -7882,10 +8132,30 @@ def buscar_editais_rest():
         editais = resultado_busca.get("editais", [])
 
         # Calcular score ANTES de aplicar limite (para pegar os melhores)
-        if calcular_score and editais:
-            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id, empresa_id=get_current_empresa_id())
+        empresa_id = get_current_empresa_id()
+        if tipo_score == "rapido" and editais:
+            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id, empresa_id=empresa_id)
             if resultado_score.get("success"):
                 editais = resultado_score.get("editais_com_score", editais)
+
+        elif tipo_score == "hibrido" and editais:
+            # Passo 1: Score rápido em TODOS
+            resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id, empresa_id=empresa_id)
+            if resultado_score.get("success"):
+                editais = resultado_score.get("editais_com_score", editais)
+            # Passo 2: Ordenar por score desc, pegar os N melhores
+            editais.sort(key=lambda x: x.get("score_tecnico", 0), reverse=True)
+            top_n = editais[:limite_score_profundo]
+            rest = editais[limite_score_profundo:]
+            # Passo 3: Score profundo nos N melhores
+            top_n = _calcular_score_profundo(top_n, user_id, empresa_id)
+            editais = top_n
+
+        elif tipo_score == "profundo" and editais:
+            # Score profundo direto nos N primeiros (sem triagem rápida)
+            target = editais[:limite_score_profundo]
+            target = _calcular_score_profundo(target, user_id, empresa_id)
+            editais = target
 
         # Ordenar: se tem score, por score desc; senão abertos primeiro por data
         from datetime import datetime as _dt
@@ -7950,6 +8220,7 @@ def buscar_editais_rest():
                 "pdf_url": e.get("pdf_url"),
                 "tipo_produto_inferido": inferir_tipo_produto(_objeto),
                 "origem_inferida": inferir_origem_orgao(_orgao, _orgao_tipo),
+                "score_profundo": e.get("score_profundo"),
             })
 
         return jsonify({

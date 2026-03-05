@@ -50,6 +50,14 @@ interface EditalBusca {
   orgaoTipo?: string;
   justificativa?: string;
   recomendacaoTexto?: string;
+  scoreProfundo?: {
+    scores: { tecnico: number; documental: number; complexidade: number; juridico: number; logistico: number; comercial: number };
+    score_geral: number;
+    decisao: string;
+    justificativa: string;
+    pontos_positivos: string[];
+    pontos_atencao: string[];
+  } | null;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -258,6 +266,14 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     orgaoTipo: String(e.orgao_tipo ?? "outro"),
     justificativa: String(e.justificativa ?? ""),
     recomendacaoTexto: String(e.recomendacao ?? ""),
+    scoreProfundo: e.score_profundo ? {
+      scores: (e.score_profundo as Record<string, unknown>).scores as { tecnico: number; documental: number; complexidade: number; juridico: number; logistico: number; comercial: number },
+      score_geral: Number((e.score_profundo as Record<string, unknown>).score_geral ?? 0),
+      decisao: String((e.score_profundo as Record<string, unknown>).decisao ?? "AVALIAR"),
+      justificativa: String((e.score_profundo as Record<string, unknown>).justificativa ?? ""),
+      pontos_positivos: ((e.score_profundo as Record<string, unknown>).pontos_positivos as string[]) || [],
+      pontos_atencao: ((e.score_profundo as Record<string, unknown>).pontos_atencao as string[]) || [],
+    } : null,
   };
 }
 
@@ -289,7 +305,8 @@ export function CaptacaoPage(props?: PageProps) {
   const [selectedClasse, setSelectedClasse] = useState("");
   const [selectedSubclasse, setSelectedSubclasse] = useState("");
   const [modalidadeFiltro, setModalidadeFiltro] = useState("todos");
-  const [calcularScore, setCalcularScore] = useState(false);
+  const [tipoScore, setTipoScore] = useState<"nenhum" | "rapido" | "hibrido" | "profundo">("nenhum");
+  const [limiteScoreProfundo, setLimiteScoreProfundo] = useState<number>(10);
   const [incluirEncerrados, setIncluirEncerrados] = useState(false);
 
   const [resultados, setResultados] = useState<EditalBusca[]>([]);
@@ -549,11 +566,14 @@ export function CaptacaoPage(props?: PageProps) {
       }
       const params = new URLSearchParams({
         termo: termoBusca,
-        calcularScore: String(calcularScore),
+        tipoScore: tipoScore,
         incluirEncerrados: String(incluirEncerrados),
         limite: "2000",
         diasBusca: diasBusca,
       });
+      if (tipoScore === "hibrido" || tipoScore === "profundo") {
+        params.append("limiteScoreProfundo", String(limiteScoreProfundo));
+      }
       if (uf !== "todas") params.append("uf", uf);
       if (fonte !== "todas") params.append("fonte", fonte);
       if (modalidadeFiltro !== "todos") params.append("modalidade", modalidadeFiltro);
@@ -937,7 +957,7 @@ export function CaptacaoPage(props?: PageProps) {
       key: "score",
       header: "Score",
       width: "70px",
-      render: (e) => calcularScore ? (
+      render: (e) => tipoScore !== "nenhum" ? (
         <div
           className="score-cell-tooltip"
           style={{ position: "relative" }}
@@ -1209,12 +1229,37 @@ export function CaptacaoPage(props?: PageProps) {
             </FormField>
           </div>
 
-          <div className="checkbox-inline">
-            <Checkbox
-              checked={calcularScore}
-              onChange={setCalcularScore}
-              label="Calcular score de aderencia (portfolio)"
-            />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ minWidth: "180px" }}>
+              <FormField label="Analise de Score">
+                <SelectInput
+                  value={tipoScore}
+                  onChange={(v) => setTipoScore(v as "nenhum" | "rapido" | "hibrido" | "profundo")}
+                  options={[
+                    { value: "nenhum", label: "Sem Score" },
+                    { value: "rapido", label: "Score Rapido" },
+                    { value: "hibrido", label: "Score Hibrido" },
+                    { value: "profundo", label: "Score Profundo" },
+                  ]}
+                />
+              </FormField>
+            </div>
+            {(tipoScore === "hibrido" || tipoScore === "profundo") && (
+              <div style={{ minWidth: "140px" }}>
+                <FormField label="Qtd editais profundo">
+                  <SelectInput
+                    value={String(limiteScoreProfundo)}
+                    onChange={(v) => setLimiteScoreProfundo(Number(v))}
+                    options={[
+                      { value: "5", label: "5 editais" },
+                      { value: "10", label: "10 editais" },
+                      { value: "20", label: "20 editais" },
+                      { value: "0", label: "Todos" },
+                    ]}
+                  />
+                </FormField>
+              </div>
+            )}
             <Checkbox
               checked={incluirEncerrados}
               onChange={setIncluirEncerrados}
@@ -1270,8 +1315,8 @@ export function CaptacaoPage(props?: PageProps) {
                   loading={loading}
                   rowClassName={(e) => getRowClass(e)}
                   onRowClick={(e) => handleAbrirPainel(e)}
-                  defaultSortKey={calcularScore ? "score" : undefined}
-                  defaultSortDirection={calcularScore ? "desc" : "asc"}
+                  defaultSortKey={tipoScore !== "nenhum" ? "score" : undefined}
+                  defaultSortDirection={tipoScore !== "nenhum" ? "desc" : "asc"}
                 />
               </Card>
             </div>
@@ -1353,24 +1398,85 @@ export function CaptacaoPage(props?: PageProps) {
 
                   {/* Score principal */}
                   <div className="panel-score-section">
-                    <ScoreCircle score={painelEdital.score} size={100} label="Score Geral" />
+                    <ScoreCircle score={painelEdital.scoreProfundo ? painelEdital.scoreProfundo.score_geral : painelEdital.score} size={100} label="Score Geral" />
                   </div>
 
-                  {/* 3 sub-scores: Técnico e Comercial em gauge circular, Recomendação em estrelas */}
-                  <div className="panel-subscores" style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <ScoreCircle score={painelEdital.scores.tecnico} size={60} />
-                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Tecnica</div>
+                  {painelEdital.scoreProfundo ? (
+                    /* 6 sub-scores do score profundo */
+                    <div className="panel-section">
+                      <h4>6 Dimensoes de Score</h4>
+                      <div style={{ marginBottom: "10px" }}>
+                        {[
+                          { key: "tecnico", label: "Tecnico" },
+                          { key: "documental", label: "Documental" },
+                          { key: "complexidade", label: "Complexidade" },
+                          { key: "juridico", label: "Juridico" },
+                          { key: "logistico", label: "Logistico" },
+                          { key: "comercial", label: "Comercial" },
+                        ].map(dim => {
+                          const val = painelEdital.scoreProfundo!.scores[dim.key as keyof typeof painelEdital.scoreProfundo.scores] ?? 0;
+                          const status: "success" | "warning" | "error" = val >= 70 ? "success" : val >= 40 ? "warning" : "error";
+                          return (
+                            <div key={dim.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                              <span style={{ fontSize: "13px", color: "#cbd5e1" }}>{dim.label}</span>
+                              <StatusBadge status={status} label={`${val}%`} size="small" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Decisao GO/NO-GO */}
+                      <div style={{ marginBottom: "8px", padding: "6px 10px", borderRadius: "6px", backgroundColor: painelEdital.scoreProfundo.decisao === "GO" ? "#052e16" : painelEdital.scoreProfundo.decisao === "NO-GO" ? "#450a0a" : "#1e293b" }}>
+                        <strong style={{ color: painelEdital.scoreProfundo.decisao === "GO" ? "#22c55e" : painelEdital.scoreProfundo.decisao === "NO-GO" ? "#ef4444" : "#eab308" }}>
+                          {painelEdital.scoreProfundo.decisao}
+                        </strong>
+                        {painelEdital.scoreProfundo.justificativa && (
+                          <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "4px" }}>
+                            {painelEdital.scoreProfundo.justificativa}
+                          </div>
+                        )}
+                      </div>
+                      {/* Pontos positivos */}
+                      {painelEdital.scoreProfundo.pontos_positivos.length > 0 && (
+                        <div style={{ marginBottom: "6px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 600, color: "#22c55e", marginBottom: "4px" }}>Pontos positivos:</div>
+                          {painelEdital.scoreProfundo.pontos_positivos.map((p, i) => (
+                            <div key={i} style={{ fontSize: "12px", color: "#cbd5e1", display: "flex", gap: "4px", marginBottom: "2px" }}>
+                              <span style={{ color: "#22c55e", flexShrink: 0 }}>{"\u2714"}</span>
+                              <span>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Pontos de atencao */}
+                      {painelEdital.scoreProfundo.pontos_atencao.length > 0 && (
+                        <div style={{ marginBottom: "6px" }}>
+                          <div style={{ fontSize: "12px", fontWeight: 600, color: "#eab308", marginBottom: "4px" }}>Pontos de atencao:</div>
+                          {painelEdital.scoreProfundo.pontos_atencao.map((p, i) => (
+                            <div key={i} style={{ fontSize: "12px", color: "#cbd5e1", display: "flex", gap: "4px", marginBottom: "2px" }}>
+                              <span style={{ color: "#eab308", flexShrink: 0 }}>{"\u26A0"}</span>
+                              <span>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ textAlign: "center" }}>
-                      <ScoreCircle score={painelEdital.scores.comercial} size={60} />
-                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Comercial</div>
+                  ) : (
+                    /* 3 sub-scores: Técnico e Comercial em gauge circular, Recomendação em estrelas */
+                    <div className="panel-subscores" style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ textAlign: "center" }}>
+                        <ScoreCircle score={painelEdital.scores.tecnico} size={60} />
+                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Tecnica</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <ScoreCircle score={painelEdital.scores.comercial} size={60} />
+                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Aderencia Comercial</div>
+                      </div>
+                      <div style={{ textAlign: "center", flex: 1, minWidth: "120px" }}>
+                        <StarRating score={painelEdital.scores.recomendacao} />
+                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Recomendacao</div>
+                      </div>
                     </div>
-                    <div style={{ textAlign: "center", flex: 1, minWidth: "120px" }}>
-                      <StarRating score={painelEdital.scores.recomendacao} />
-                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Recomendacao</div>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Produto correspondente */}
                   <div className="panel-section">
@@ -1477,7 +1583,8 @@ export function CaptacaoPage(props?: PageProps) {
                     )}
                   </div>
 
-                  {/* Analise de Gaps - C2: Dados reais do endpoint scores-validacao */}
+                  {/* Analise de Gaps - C2: Dados reais do endpoint scores-validacao (somente se nao tem scoreProfundo inline) */}
+                  {!painelEdital.scoreProfundo && (
                   <div className="panel-section">
                     <h4>Analise de Gaps / Validacao</h4>
                     {loadingScores ? (
@@ -1557,6 +1664,7 @@ export function CaptacaoPage(props?: PageProps) {
                       <p className="text-muted">Nenhum gap identificado</p>
                     )}
                   </div>
+                  )}
 
                   {/* Info adicional */}
                   <div className="panel-section">
