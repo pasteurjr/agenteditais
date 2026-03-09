@@ -7955,7 +7955,7 @@ def _salvar_edital_temp_para_score(edital_data, user_id, empresa_id):
             orgao=orgao or "Não identificado",
             objeto=edital_data.get("objeto") or edital_data.get("descricao") or "—",
             modalidade="pregao_eletronico",
-            status="novo",
+            status="temp_score",
             fonte=edital_data.get("fonte"),
             uf=edital_data.get("uf"),
             cidade=edital_data.get("cidade"),
@@ -8058,6 +8058,21 @@ def _calcular_score_profundo(editais, user_id, empresa_id):
                 print(f"[SCORE_PROFUNDO] Future erro: {e}")
 
     editais.sort(key=lambda x: x.get("score_tecnico", 0), reverse=True)
+
+    # Limpar editais temporários criados para o cálculo de score
+    try:
+        db = get_db()
+        temp_deletados = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.status == "temp_score"
+        ).delete()
+        db.commit()
+        if temp_deletados:
+            print(f"[SCORE_PROFUNDO] {temp_deletados} editais temporarios removidos")
+        db.close()
+    except Exception as e:
+        print(f"[SCORE_PROFUNDO] Erro ao limpar temporarios: {e}")
+
     elapsed = time.time() - t0
     print(f"[SCORE_PROFUNDO] {len(editais)} editais em {elapsed:.1f}s")
     return editais
@@ -8121,7 +8136,7 @@ def buscar_editais_rest():
             user_id=user_id,
             uf=uf,
             incluir_encerrados=incluir_encerrados,
-            buscar_detalhes=False,
+            buscar_detalhes=True,
             dias_busca=dias_busca,
             fonte=fonte,
             modalidade=modalidade,
@@ -8215,6 +8230,7 @@ def buscar_editais_rest():
                 "ano_compra": e.get("ano_compra"),
                 "seq_compra": e.get("seq_compra"),
                 "total_itens": e.get("total_itens", 0),
+                "itens": e.get("itens", []),
                 "dados_completos": e.get("dados_completos", False),
                 "encerrado": e.get("encerrado", False),
                 "pdf_url": e.get("pdf_url"),
@@ -8259,7 +8275,10 @@ def listar_editais_salvos():
 
     db = get_db()
     try:
-        query = db.query(Edital).filter(Edital.user_id == user_id)
+        query = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.status != "temp_score",  # Excluir editais temporários criados pelo score profundo
+        )
 
         if status:
             query = query.filter(Edital.status == status)

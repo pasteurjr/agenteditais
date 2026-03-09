@@ -58,6 +58,9 @@ interface EditalBusca {
     pontos_positivos: string[];
     pontos_atencao: string[];
   } | null;
+  // Itens do edital (vindos do PNCP via enriquecimento)
+  itens?: { numero_item?: number; descricao?: string; quantidade?: number; unidade_medida?: string; valor_unitario_estimado?: number; valor_total_estimado?: number }[];
+  totalItens?: number;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -266,6 +269,15 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     orgaoTipo: String(e.orgao_tipo ?? "outro"),
     justificativa: String(e.justificativa ?? ""),
     recomendacaoTexto: String(e.recomendacao ?? ""),
+    itens: Array.isArray(e.itens) ? (e.itens as Record<string, unknown>[]).map(it => ({
+      numero_item: it.numero_item != null ? Number(it.numero_item) : undefined,
+      descricao: String(it.descricao ?? ""),
+      quantidade: it.quantidade != null ? Number(it.quantidade) : undefined,
+      unidade_medida: it.unidade_medida ? String(it.unidade_medida) : undefined,
+      valor_unitario_estimado: it.valor_unitario_estimado != null ? Number(it.valor_unitario_estimado) : undefined,
+      valor_total_estimado: it.valor_total_estimado != null ? Number(it.valor_total_estimado) : undefined,
+    })) : [],
+    totalItens: Number(e.total_itens ?? 0),
     scoreProfundo: e.score_profundo ? {
       scores: (e.score_profundo as Record<string, unknown>).scores as { tecnico: number; documental: number; complexidade: number; juridico: number; logistico: number; comercial: number },
       score_geral: Number((e.score_profundo as Record<string, unknown>).score_geral ?? 0),
@@ -645,11 +657,24 @@ export function CaptacaoPage(props?: PageProps) {
         fonte: edital.fonte || "pncp",
         url: edital.url || null,
       };
-      // Se já tem ID do backend, reutiliza (não duplica)
+      // Se já tem ID do backend (UUID), reutiliza (não duplica)
       if (edital.id && edital.id.length === 36) {
-        // Edital já salvo no banco (UUID completo)
+        // Promover de temp_score para novo se necessário
+        try { await crudUpdate("editais", edital.id, { status: "novo" }); } catch { /* ignora se não existe */ }
         return edital.id;
       }
+      // Verificar se já existe um edital temp_score com mesmo número+órgão
+      try {
+        const existentes = await crudList("editais", { q: edital.numero, per_page: 5 });
+        const tempExistente = (existentes.items || []).find(
+          (e: Record<string, unknown>) => e.numero === edital.numero && e.orgao === edital.orgao
+        );
+        if (tempExistente) {
+          const existId = String(tempExistente.id);
+          await crudUpdate("editais", existId, { status: "novo" });
+          return existId;
+        }
+      } catch { /* ignora — cria novo */ }
       const criado = await crudCreate("editais", payload);
       return String(criado.id ?? "");
     } catch {
@@ -1502,6 +1527,47 @@ export function CaptacaoPage(props?: PageProps) {
                       label={painelEdital.potencialGanho.charAt(0).toUpperCase() + painelEdital.potencialGanho.slice(1)}
                     />
                   </div>
+
+                  {/* Itens do Edital */}
+                  {painelEdital.itens && painelEdital.itens.length > 0 && (
+                    <div className="panel-section">
+                      <h4>Itens do Edital ({painelEdital.itens.length})</h4>
+                      <div style={{ maxHeight: "200px", overflowY: "auto", fontSize: "12px" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ borderBottom: "1px solid #334155", color: "#64748b", fontSize: "11px" }}>
+                              <th style={{ padding: "4px", textAlign: "left" }}>#</th>
+                              <th style={{ padding: "4px", textAlign: "left" }}>Descricao</th>
+                              <th style={{ padding: "4px", textAlign: "right" }}>Qtd</th>
+                              <th style={{ padding: "4px", textAlign: "right" }}>Valor Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {painelEdital.itens.map((item, idx) => (
+                              <tr key={idx} style={{ borderBottom: "1px solid #1e293b" }}>
+                                <td style={{ padding: "4px", color: "#94a3b8" }}>{item.numero_item ?? idx + 1}</td>
+                                <td style={{ padding: "4px", color: "#cbd5e1", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.descricao}>
+                                  {item.descricao && item.descricao.length > 40 ? item.descricao.substring(0, 40) + "..." : item.descricao}
+                                </td>
+                                <td style={{ padding: "4px", color: "#94a3b8", textAlign: "right" }}>
+                                  {item.quantidade ?? "—"} {item.unidade_medida ?? ""}
+                                </td>
+                                <td style={{ padding: "4px", color: "#e2e8f0", textAlign: "right" }}>
+                                  {item.valor_total_estimado ? formatCurrency(item.valor_total_estimado) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {painelEdital.totalItens === 0 && painelEdital.itens?.length === 0 && (
+                    <div className="panel-section">
+                      <h4>Itens do Edital</h4>
+                      <p className="text-muted" style={{ fontSize: "12px" }}>Nenhum item disponivel. Itens sao carregados automaticamente para editais do PNCP.</p>
+                    </div>
+                  )}
 
                   {/* Intencao Estrategica - T15 */}
                   <div className="panel-section">

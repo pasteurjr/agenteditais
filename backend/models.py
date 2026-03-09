@@ -410,7 +410,7 @@ class Edital(Base):
     data_homologacao_prevista = Column(Date, nullable=True)  # Sprint 2
     horario_abertura = Column(String(5), nullable=True)  # HH:MM - Sprint 2
     fuso_horario = Column(String(50), default='America/Sao_Paulo')  # Sprint 2
-    status = Column(Enum('novo', 'analisando', 'participando', 'proposta_enviada', 'em_pregao', 'vencedor', 'perdedor', 'cancelado', 'desistido', 'aberto', 'fechado', 'suspenso', 'ganho', 'perdido'), default='novo')
+    status = Column(Enum('novo', 'analisando', 'participando', 'proposta_enviada', 'em_pregao', 'vencedor', 'perdedor', 'cancelado', 'desistido', 'aberto', 'fechado', 'suspenso', 'ganho', 'perdido', 'temp_score'), default='novo')
     fonte = Column(String(50), nullable=True)
     url = Column(String(500), nullable=True)
     # Dados PNCP para buscar itens e documentos

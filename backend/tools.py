@@ -7157,9 +7157,63 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             ).first()
 
         if not produto:
-            produto = db.query(Produto).filter(
+            # Matching inteligente: comparar objeto do edital com todos os produtos
+            import unicodedata
+            def _norm_text(txt):
+                if not txt:
+                    return ""
+                txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+                return txt.lower().strip()
+
+            todos_produtos = db.query(Produto).filter(
                 Produto.user_id == user_id
-            ).first()
+            ).all()
+
+            if todos_produtos:
+                objeto_norm = _norm_text(edital.objeto or "")
+                objeto_tokens = set(w for w in objeto_norm.split() if len(w) > 2)
+                melhor_score = -1
+                melhor_produto = None
+
+                for p in todos_produtos:
+                    score = 0
+                    # Match por nome do produto
+                    nome_norm = _norm_text(p.nome or "")
+                    nome_tokens = set(w for w in nome_norm.split() if len(w) > 2)
+                    # Tokens em comum entre nome do produto e objeto do edital
+                    tokens_comuns = nome_tokens & objeto_tokens
+                    score += len(tokens_comuns) * 3
+
+                    # Match por fabricante (peso alto - nome exato no objeto)
+                    fab_norm = _norm_text(p.fabricante or "")
+                    if fab_norm and len(fab_norm) > 2 and fab_norm in objeto_norm:
+                        score += 10
+
+                    # Match por modelo (peso alto - número de modelo exato)
+                    mod_norm = _norm_text(p.modelo or "")
+                    if mod_norm and len(mod_norm) > 2 and mod_norm in objeto_norm:
+                        score += 10
+
+                    # Match por categoria
+                    cat_norm = _norm_text(p.categoria or "")
+                    if cat_norm and len(cat_norm) > 2 and cat_norm in objeto_norm:
+                        score += 5
+
+                    # Substring match: nome inteiro do produto aparece no objeto
+                    if nome_norm and len(nome_norm) > 5 and nome_norm in objeto_norm:
+                        score += 15
+
+                    if score > melhor_score:
+                        melhor_score = score
+                        melhor_produto = p
+
+                if melhor_produto and melhor_score > 0:
+                    produto = melhor_produto
+                    print(f"[SCORES_VALIDACAO] Produto matched: '{produto.nome}' (score={melhor_score}) para edital '{(edital.objeto or '')[:60]}'")
+                else:
+                    # Nenhum match — usar primeiro como fallback
+                    produto = todos_produtos[0]
+                    print(f"[SCORES_VALIDACAO] Nenhum match — fallback para '{produto.nome}'")
 
         # Montar informação do produto para o prompt
         if produto:
@@ -7218,6 +7272,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         resposta = call_deepseek(
             [{"role": "user", "content": prompt}],
             max_tokens=1500,
+            temperature=0,
             model_override="deepseek-chat"
         )
 
