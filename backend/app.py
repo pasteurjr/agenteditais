@@ -7289,11 +7289,20 @@ def download_edital_pdf(edital_id):
         # === 2. Extrair dados PNCP da URL se necessário ===
         if not (edital.cnpj_orgao and edital.ano_compra and edital.seq_compra):
             if edital.url and 'pncp.gov.br' in edital.url:
-                match = re.search(r'/editais/(\d{14}\d{0,2})-(\d+)-(\d+)/(\d{4})', edital.url)
+                # Formato /compras/{cnpj}/{ano}/{seq}
+                match = re.search(r'/compras/(\d{14}\d{0,2})/(\d{4})/(\d+)', edital.url)
                 if match:
                     edital.cnpj_orgao = match.group(1)
-                    edital.ano_compra = int(match.group(4))
+                    edital.ano_compra = int(match.group(2))
                     edital.seq_compra = int(match.group(3))
+                else:
+                    # Formato /editais/{cnpj}-{id}-{seq}/{ano}
+                    match = re.search(r'/editais/(\d{14}\d{0,2})-(\d+)-(\d+)/(\d{4})', edital.url)
+                    if match:
+                        edital.cnpj_orgao = match.group(1)
+                        edital.ano_compra = int(match.group(4))
+                        edital.seq_compra = int(match.group(3))
+                if match:
                     db.commit()
                     print(f"[PDF] Dados PNCP extraídos da URL: cnpj={edital.cnpj_orgao}, ano={edital.ano_compra}, seq={edital.seq_compra}")
 
