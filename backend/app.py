@@ -9273,179 +9273,372 @@ def extrair_requisitos_edital(edital_id):
 def _tentar_obter_certidao(fonte, cnpj_limpo, empresa, upload_dir):
     """
     Tenta obter a certidão automaticamente via HTTP nos portais públicos.
-    Retorna dict com {sucesso, path_arquivo, numero, data_vencimento, mensagem}.
+    Retorna dict com {sucesso, path_arquivo, numero, data_vencimento, mensagem, dados_extras}.
 
-    Portais com busca automática REAL (sem captcha, sem chave de API):
-    - CEIS (CGU)  — Consulta endpoint AJAX do Portal da Transparência
-    - CNEP (CGU)  — Consulta endpoint AJAX do Portal da Transparência
-    - CADIN       — Consulta endpoint AJAX do Portal da Transparência
-    - TCU         — Consulta endpoint AJAX do Portal da Transparência
+    Testado em 10/03/2026 — resultados reais:
 
-    Portais que requerem captcha (busca manual obrigatória):
-    - TST (CNDT), CAIXA (FGTS/CRF), Receita Federal, SEFAZ,
-      Prefeituras, ANVISA, JUCESP, CNJ, TJ, JF, INMETRO, etc.
+    BUSCA AUTOMÁTICA REAL (sem captcha):
+    1. CGU Certidão Correcional — API REST, consolida CEIS+CNEP+CEPIM+CGU-PJ+ePAD
+    2. CRF/FGTS (Caixa)        — JSF sem captcha, retorna Regular/Irregular
+    3. BrasilAPI CNPJ           — REST gratuita, dados cadastrais + Simples Nacional
+    4. API Portal Transparência — REST oficial (requer chave gratuita)
+
+    CAPTCHA (upload manual obrigatório):
+    5. CND Federal (Receita)    — URL antiga MORTA (404), migrou para e-CAC com login gov.br
+    6. CNDT/TST                 — Captcha próprio (imagem+áudio)
+    7. CND Estadual (SEFAZ)     — reCAPTCHA v2 (SP) ou hCaptcha (varia)
+    8. CND Municipal            — Varia por município, maioria com captcha
     """
     import requests
     from datetime import date, datetime, timedelta
+    import json as json_lib
+    import re
+    import time
 
     nome_lower = fonte.nome.lower()
-    resultado = {"sucesso": False, "mensagem": "", "path_arquivo": None, "numero": None, "data_vencimento": None}
+    tipo = fonte.tipo_certidao or ''
+    resultado = {
+        "sucesso": False, "mensagem": "", "path_arquivo": None,
+        "numero": None, "data_vencimento": None, "dados_extras": None
+    }
 
-    # Endpoint AJAX do Portal da Transparência — funciona SEM chave de API
-    # Retorna JSON DataTables com recordsTotal e data[]
-    # cadastro=1 (CEIS), cadastro=2 (CNEP), cadastro=3 (CEPIM),
-    # cadastro=4 (CEAF), cadastro=5 (Acordos Leniência)
-    TRANSPARENCIA_AJAX = "https://portaldatransparencia.gov.br/sancoes/consulta/resultado"
-    AJAX_HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept": "application/json, text/javascript, */*; q=0.01",
+    HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/html, */*",
     }
 
     try:
         os.makedirs(upload_dir, exist_ok=True)
 
-        # ─── CEIS — Cadastro de Empresas Inidôneas e Suspensas (CGU) ───
-        if 'ceis' in nome_lower:
+        # ═══════════════════════════════════════════════════════════════════
+        # 1. CGU CERTIDÃO CORRECIONAL — Consolida CEIS+CNEP+CEPIM+CGU-PJ+ePAD
+        #    API pública, SEM captcha, SEM chave. Testado: FUNCIONA.
+        # ═══════════════════════════════════════════════════════════════════
+        if any(k in nome_lower for k in ['cgu', 'correcional', 'ceis', 'cnep', 'cepim']):
             try:
-                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
-                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
-                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
-                    "cpfCnpj": cnpj_limpo, "cadastro": "1",
-                })
-                if resp.status_code == 200:
-                    dados = resp.json()
-                    registros = dados.get("data", [])
-                    # Se nomeSancionado é None/vazio = sem sanções
-                    tem_sancao = any(r.get("nomeSancionado") for r in registros)
-                    if not tem_sancao:
-                        resultado["sucesso"] = True
-                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
-                        resultado["mensagem"] = "CEIS: Empresa NÃO consta no cadastro de inidôneas e suspensas (regular)"
-                    else:
-                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
-                        resultado["mensagem"] = f"CEIS: ATENÇÃO — Empresa CONSTA com {qtd} sanção(ões) no CEIS"
+                # Passo 1: Solicitar consulta
+                resp1 = requests.post(
+                    "https://certidoes.cgu.gov.br/api/publico/consulta-responsabilizacao",
+                    json={
+                        "cpfCnpj": [cnpj_limpo],
+                        "certidoes": [8],  # ID=8 = Entes Privados (CNPJ)
+                        "captcha": "",
+                        "idTipoNatureza": 0,
+                        "isConsultaReceita": False,
+                    },
+                    headers=HEADERS,
+                    timeout=20,
+                )
+                if resp1.status_code != 200:
+                    resultado["mensagem"] = f"CGU: Erro ao solicitar consulta (HTTP {resp1.status_code})"
                     return resultado
+
+                ids = resp1.json()
+                if not ids or not isinstance(ids, list):
+                    resultado["mensagem"] = "CGU: Resposta inesperada ao solicitar consulta"
+                    return resultado
+
+                result_id = ids[0]
+
+                # Passo 2: Obter resultado (pode levar alguns segundos)
+                for tentativa in range(5):
+                    time.sleep(1)
+                    resp2 = requests.get(
+                        f"https://certidoes.cgu.gov.br/api/publico/resultado-consulta-responsabilizacao/{result_id}",
+                        headers=HEADERS,
+                        timeout=20,
+                    )
+                    if resp2.status_code == 200:
+                        dados = resp2.json()
+                        if dados and isinstance(dados, list) and len(dados) > 0:
+                            break
                 else:
-                    resultado["mensagem"] = f"CEIS: Portal retornou HTTP {resp.status_code}"
+                    resultado["mensagem"] = "CGU: Timeout aguardando resultado da consulta"
+                    return resultado
+
+                consulta = dados[0]
+                certidoes_result = consulta.get("consultasCertidoes", [])
+
+                # Analisar resultados
+                todas_nada_consta = True
+                detalhes = []
+                for cert_r in certidoes_result:
+                    for ws in cert_r.get("consultasWebservices", []):
+                        ws_nome = ws.get("nomeWebservice", "")
+                        ws_tipo = ws.get("tipoRetornoWebservice", "")
+                        detalhes.append(f"{ws_nome}: {ws_tipo}")
+                        if ws_tipo != "NADA_CONSTA":
+                            todas_nada_consta = False
+
+                nome_encontrado = consulta.get("nomeRequerente", "")
+                data_consulta = consulta.get("dataHoraConsulta", "")
+
+                if todas_nada_consta:
+                    resultado["sucesso"] = True
+                    resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                    resultado["numero"] = f"CGU-{result_id[:8]}"
+                    resultado["mensagem"] = f"CGU Certidão Correcional: NADA CONSTA ({', '.join(detalhes)})"
+                else:
+                    resultado["mensagem"] = f"CGU: ATENÇÃO — Registros encontrados: {', '.join(detalhes)}"
+
+                resultado["dados_extras"] = json_lib.dumps({
+                    "nome_encontrado": nome_encontrado,
+                    "data_consulta": data_consulta,
+                    "webservices": detalhes,
+                    "certidao_negativa": todas_nada_consta,
+                }, ensure_ascii=False)
+                return resultado
+
             except requests.exceptions.Timeout:
-                resultado["mensagem"] = "CEIS: Timeout — portal lento, tente novamente"
+                resultado["mensagem"] = "CGU: Timeout — tente novamente"
             except Exception as e:
-                resultado["mensagem"] = f"CEIS: Erro — {str(e)[:100]}"
+                resultado["mensagem"] = f"CGU: Erro — {str(e)[:100]}"
             return resultado
 
-        # ─── CNEP — Cadastro Nacional de Empresas Punidas (CGU) ───
-        if 'cnep' in nome_lower:
-            try:
-                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
-                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
-                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
-                    "cpfCnpj": cnpj_limpo, "cadastro": "2",
-                })
-                if resp.status_code == 200:
-                    dados = resp.json()
-                    registros = dados.get("data", [])
-                    tem_sancao = any(r.get("nomeSancionado") for r in registros)
-                    if not tem_sancao:
-                        resultado["sucesso"] = True
-                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
-                        resultado["mensagem"] = "CNEP: Empresa NÃO consta no cadastro de punidas (regular)"
-                    else:
-                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
-                        resultado["mensagem"] = f"CNEP: ATENÇÃO — Empresa CONSTA com {qtd} punição(ões) no CNEP"
-                    return resultado
-                else:
-                    resultado["mensagem"] = f"CNEP: Portal retornou HTTP {resp.status_code}"
-            except requests.exceptions.Timeout:
-                resultado["mensagem"] = "CNEP: Timeout — portal lento, tente novamente"
-            except Exception as e:
-                resultado["mensagem"] = f"CNEP: Erro — {str(e)[:100]}"
-            return resultado
-
-        # ─── CADIN — Cadastro de Inadimplentes Federal ───
-        if 'cadin' in nome_lower:
-            try:
-                # CADIN usa cadastro=3 (CEPIM - Entidades Privadas sem fins lucrativos Impedidas)
-                # Para CADIN federal, consultamos todos os cadastros e filtramos
-                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
-                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
-                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
-                    "cpfCnpj": cnpj_limpo, "cadastro": "3",
-                })
-                if resp.status_code == 200:
-                    dados = resp.json()
-                    registros = dados.get("data", [])
-                    tem_registro = any(r.get("nomeSancionado") for r in registros)
-                    if not tem_registro:
-                        resultado["sucesso"] = True
-                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
-                        resultado["mensagem"] = "CADIN: Empresa NÃO consta como inadimplente (regular)"
-                    else:
-                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
-                        resultado["mensagem"] = f"CADIN: ATENÇÃO — Empresa CONSTA com {qtd} registro(s) de inadimplência"
-                    return resultado
-                else:
-                    resultado["mensagem"] = f"CADIN: Portal retornou HTTP {resp.status_code}"
-            except requests.exceptions.Timeout:
-                resultado["mensagem"] = "CADIN: Timeout — portal lento, tente novamente"
-            except Exception as e:
-                resultado["mensagem"] = f"CADIN: Erro — {str(e)[:100]}"
-            return resultado
-
-        # ─── TCU — Lista de Licitantes Inidôneos ───
-        if 'tcu' in nome_lower:
-            try:
-                # TCU usa cadastro=4 (CEAF - Cadastro de Expulsões da Administração Federal)
-                resp = requests.get(TRANSPARENCIA_AJAX, timeout=20, headers=AJAX_HEADERS, params={
-                    "paginacaoSimples": "true", "tamanhoPagina": "15", "offset": "0",
-                    "direcaoOrdenacao": "asc", "colunaOrdenacao": "nomeSancionado",
-                    "cpfCnpj": cnpj_limpo, "cadastro": "4",
-                })
-                if resp.status_code == 200:
-                    dados = resp.json()
-                    registros = dados.get("data", [])
-                    tem_registro = any(r.get("nomeSancionado") for r in registros)
-                    if not tem_registro:
-                        resultado["sucesso"] = True
-                        resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
-                        resultado["mensagem"] = "TCU: Empresa NÃO consta como licitante inidônea (regular)"
-                    else:
-                        qtd = sum(1 for r in registros if r.get("nomeSancionado"))
-                        resultado["mensagem"] = f"TCU: ATENÇÃO — Empresa CONSTA com {qtd} impedimento(s)"
-                    return resultado
-                else:
-                    resultado["mensagem"] = f"TCU: Portal retornou HTTP {resp.status_code}"
-            except requests.exceptions.Timeout:
-                resultado["mensagem"] = "TCU: Timeout — portal lento, tente novamente"
-            except Exception as e:
-                resultado["mensagem"] = f"TCU: Erro — {str(e)[:100]}"
-            return resultado
-
-        # ─── TST - CNDT (Certidão Negativa Débitos Trabalhistas) ───
-        # Portal do TST exige captcha para emissão.
-        if 'cndt' in nome_lower or ('tst' in nome_lower and 'trabalh' in nome_lower):
+        # ═══════════════════════════════════════════════════════════════════
+        # 2. CRF/FGTS — Caixa Econômica — Proteção ShieldSquare anti-bot
+        #    Testes reais (10/03/2026): portal retorna challenge JS do ShieldSquare
+        #    antes de exibir o formulário JSF. Acesso via requests é BLOQUEADO.
+        #    Validade: 30 dias. Upload manual necessário.
+        # ═══════════════════════════════════════════════════════════════════
+        if 'fgts' in nome_lower or 'crf' in nome_lower or 'caixa' in nome_lower or tipo == 'fgts':
             resultado["mensagem"] = (
-                "TST/CNDT: Portal exige captcha — acesse cndt-certidao.tst.jus.br, "
-                "informe o CNPJ, resolva o captcha e faça upload do PDF."
+                "FGTS/CRF: Portal da Caixa protegido por ShieldSquare (anti-bot). "
+                "Acesse https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf, "
+                "informe o CNPJ e faça upload do PDF. Validade: 30 dias."
             )
             return resultado
 
-        # ─── CRF/FGTS - Caixa Econômica ───
-        # Portal da Caixa usa proteção anti-bot (ShieldSquare).
-        if 'fgts' in nome_lower or 'crf' in nome_lower or 'caixa' in nome_lower:
+        # ═══════════════════════════════════════════════════════════════════
+        # 3. BrasilAPI CNPJ — Dados cadastrais + Simples Nacional (GRATUITA)
+        # ═══════════════════════════════════════════════════════════════════
+        if 'brasilapi' in nome_lower or 'cnpj' in nome_lower or 'situação cadastral' in nome_lower or 'situacao cadastral' in nome_lower:
+            try:
+                resp = requests.get(
+                    f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_limpo}",
+                    headers=HEADERS,
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    dados = resp.json()
+                    situacao = dados.get("descricao_situacao_cadastral", "")
+                    simples = dados.get("opcao_pelo_simples", False)
+                    razao = dados.get("razao_social", "")
+
+                    if situacao.upper() == "ATIVA":
+                        resultado["sucesso"] = True
+                        resultado["mensagem"] = f"CNPJ: Situação ATIVA — {razao}. Simples: {'Sim' if simples else 'Não'}"
+                    else:
+                        resultado["mensagem"] = f"CNPJ: Situação '{situacao}' — {razao}"
+
+                    resultado["dados_extras"] = json_lib.dumps({
+                        "razao_social": razao,
+                        "situacao": situacao,
+                        "simples_nacional": simples,
+                        "uf": dados.get("uf"),
+                        "municipio": dados.get("municipio"),
+                        "cnae_fiscal": dados.get("cnae_fiscal"),
+                        "cnae_descricao": dados.get("cnae_fiscal_descricao"),
+                        "porte": dados.get("porte"),
+                        "capital_social": dados.get("capital_social"),
+                        "socios": [s.get("nome_socio") for s in dados.get("qsa", [])],
+                    }, ensure_ascii=False)
+                    return resultado
+                else:
+                    resultado["mensagem"] = f"BrasilAPI: HTTP {resp.status_code}"
+            except requests.exceptions.Timeout:
+                resultado["mensagem"] = "BrasilAPI: Timeout"
+            except Exception as e:
+                resultado["mensagem"] = f"BrasilAPI: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ═══════════════════════════════════════════════════════════════════
+        # 4. API OFICIAL Portal da Transparência (requer chave gratuita)
+        #    Cadastro em: portaldatransparencia.gov.br/api-de-dados/cadastrar-email
+        #    Header: chave-api-dados
+        # ═══════════════════════════════════════════════════════════════════
+        if any(k in nome_lower for k in ['transparência', 'transparencia', 'portal transparencia']):
+            chave_api = fonte.api_key or ""
+            if not chave_api:
+                resultado["mensagem"] = (
+                    "Portal da Transparência API: Chave API não configurada. "
+                    "Cadastre-se gratuitamente em https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email "
+                    "e configure a chave na fonte de certidão."
+                )
+                return resultado
+
+            try:
+                api_base = "https://api.portaldatransparencia.gov.br/api-de-dados"
+                api_headers = {**HEADERS, "chave-api-dados": chave_api}
+                resultados_api = {}
+
+                for cadastro, param in [("ceis", "codigoSancionado"), ("cnep", "codigoSancionado"), ("cepim", "cnpjSancionado")]:
+                    resp = requests.get(
+                        f"{api_base}/{cadastro}",
+                        params={param: cnpj_limpo, "pagina": 1},
+                        headers=api_headers,
+                        timeout=15,
+                    )
+                    if resp.status_code == 200:
+                        dados = resp.json()
+                        registros = dados if isinstance(dados, list) else dados.get("data", [])
+                        resultados_api[cadastro.upper()] = len(registros)
+                    elif resp.status_code == 401:
+                        resultado["mensagem"] = "Portal da Transparência: Chave API inválida"
+                        return resultado
+                    else:
+                        resultados_api[cadastro.upper()] = f"HTTP {resp.status_code}"
+
+                todas_limpo = all(v == 0 for v in resultados_api.values() if isinstance(v, int))
+                if todas_limpo:
+                    resultado["sucesso"] = True
+                    resultado["data_vencimento"] = (date.today() + timedelta(days=180)).isoformat()
+                    resultado["mensagem"] = f"Portal Transparência: NADA CONSTA ({', '.join(f'{k}:0' for k in resultados_api)})"
+                else:
+                    resultado["mensagem"] = f"Portal Transparência: {', '.join(f'{k}:{v}' for k, v in resultados_api.items())}"
+
+                resultado["dados_extras"] = json_lib.dumps(resultados_api, ensure_ascii=False)
+                return resultado
+
+            except Exception as e:
+                resultado["mensagem"] = f"Portal Transparência API: Erro — {str(e)[:100]}"
+            return resultado
+
+        # ═══════════════════════════════════════════════════════════════════
+        # 5. CND FEDERAL (Receita Federal / PGFN) — URL MORTA desde 2025
+        #    Migrou para e-CAC (login gov.br obrigatório)
+        # ═══════════════════════════════════════════════════════════════════
+        if tipo == 'cnd_federal' or 'receita federal' in nome_lower or 'cnd federal' in nome_lower or 'pgfn' in nome_lower:
             resultado["mensagem"] = (
-                "FGTS/CRF: Portal da Caixa possui proteção anti-bot — "
-                "acesse consulta-crf.caixa.gov.br, informe o CNPJ e faça upload do PDF."
+                "CND Federal: O portal de emissão direta foi DESATIVADO pela Receita Federal. "
+                "Acesse o e-CAC em https://cav.receita.fazenda.gov.br (login gov.br obrigatório), "
+                "emita a certidão e faça upload do PDF."
             )
             return resultado
 
-        # ─── Demais portais com captcha ou login ───
-        resultado["mensagem"] = "Portal requer acesso manual (captcha ou login necessário)"
+        # ═══════════════════════════════════════════════════════════════════
+        # 6. CNDT/TST — Captcha próprio (imagem + áudio)
+        # ═══════════════════════════════════════════════════════════════════
+        if 'cndt' in nome_lower or 'tst' in nome_lower or tipo == 'trabalhista':
+            resultado["mensagem"] = (
+                "CNDT/TST: Portal exige captcha (imagem). "
+                "Acesse https://cndt-certidao.tst.jus.br/gerarCertidao.faces, "
+                "informe o CNPJ formatado, resolva o captcha e faça upload do PDF."
+            )
+            return resultado
+
+        # ═══════════════════════════════════════════════════════════════════
+        # 7. CND ESTADUAL (SEFAZ) — reCAPTCHA v2 (varia por estado)
+        # ═══════════════════════════════════════════════════════════════════
+        if tipo == 'cnd_estadual' or 'sefaz' in nome_lower or 'cnd estadual' in nome_lower:
+            uf = fonte.uf or (empresa.uf if hasattr(empresa, 'uf') else '')
+            url_sefaz = fonte.url_portal or f"https://www.sefaz.{uf.lower()}.gov.br" if uf else ""
+            resultado["mensagem"] = (
+                f"CND Estadual ({uf or 'UF?'}): Portal da SEFAZ exige captcha. "
+                f"Acesse {url_sefaz}, informe CNPJ + Inscrição Estadual, "
+                "resolva o captcha e faça upload do PDF."
+            )
+            return resultado
+
+        # ═══════════════════════════════════════════════════════════════════
+        # 8. CND MUNICIPAL — Varia por município
+        # ═══════════════════════════════════════════════════════════════════
+        if tipo == 'cnd_municipal' or 'municipal' in nome_lower or 'prefeitura' in nome_lower:
+            cidade = fonte.cidade or (empresa.cidade if hasattr(empresa, 'cidade') else '')
+            url_pref = fonte.url_portal or ""
+            resultado["mensagem"] = (
+                f"CND Municipal ({cidade or 'cidade?'}): Acesse o portal da prefeitura"
+                f"{' em ' + url_pref if url_pref else ''}, "
+                "informe CNPJ + Inscrição Municipal (CCM) e faça upload do PDF."
+            )
+            return resultado
+
+        # ═══════════════════════════════════════════════════════════════════
+        # FALLBACK — Orientação genérica
+        # ═══════════════════════════════════════════════════════════════════
+        url_portal = fonte.url_portal or ""
+        resultado["mensagem"] = (
+            f"Acesse o portal{' em ' + url_portal if url_portal else ''} manualmente, "
+            "obtenha a certidão e faça upload do PDF."
+        )
         return resultado
 
     except Exception as e:
         resultado["mensagem"] = f"Erro geral: {str(e)[:100]}"
         return resultado
+
+
+@app.route("/api/empresa-certidoes/sincronizar-fontes", methods=["POST"])
+@require_auth
+def sincronizar_fontes_certidoes():
+    """
+    Sincroniza fontes de certidões com registros de certidões da empresa.
+    Para cada fonte ativa que NÃO tem certidão vinculada, cria um registro
+    com status 'pendente' ou 'nao_disponivel'.
+    Chamado automaticamente ao carregar a página Empresa.
+    """
+    from models import Empresa, EmpresaCertidao, FonteCertidao
+    user_id = get_current_user_id()
+    data = request.json or {}
+    empresa_id = data.get('empresa_id')
+    if not empresa_id:
+        return jsonify({"error": "empresa_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(
+            Empresa.id == empresa_id,
+            Empresa.user_id == user_id
+        ).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+
+        # Buscar fontes ativas
+        fontes = db.query(FonteCertidao).filter(
+            FonteCertidao.user_id == user_id,
+            FonteCertidao.ativo == True
+        ).all()
+
+        # Buscar certidões existentes
+        certs_existentes = db.query(EmpresaCertidao).filter(
+            EmpresaCertidao.empresa_id == empresa_id
+        ).all()
+        fontes_com_cert = {c.fonte_certidao_id for c in certs_existentes if c.fonte_certidao_id}
+
+        criadas = 0
+        from datetime import date
+        for fonte in fontes:
+            if fonte.id in fontes_com_cert:
+                continue  # Já tem certidão vinculada
+
+            # Determinar status inicial
+            if not fonte.permite_busca_automatica:
+                status_novo = "nao_disponivel"
+            else:
+                status_novo = "pendente"
+
+            nova_cert = EmpresaCertidao()
+            nova_cert.id = str(uuid.uuid4())
+            nova_cert.empresa_id = empresa_id
+            nova_cert.tipo = fonte.tipo_certidao
+            nova_cert.orgao_emissor = fonte.orgao_emissor or fonte.nome
+            nova_cert.url_consulta = fonte.url_portal or ""
+            nova_cert.fonte_certidao_id = fonte.id
+            nova_cert.status = status_novo
+            nova_cert.data_vencimento = date.today()
+            db.add(nova_cert)
+            criadas += 1
+
+        if criadas > 0:
+            db.commit()
+
+        return jsonify({
+            "message": f"Sincronização concluída: {criadas} certidões criadas, {len(certs_existentes)} já existentes",
+            "criadas": criadas,
+            "total": len(certs_existentes) + criadas,
+        })
+    finally:
+        db.close()
 
 
 @app.route("/api/empresa-certidoes/buscar-automatica", methods=["POST"])
@@ -9679,15 +9872,57 @@ def inicializar_fontes_certidoes():
         cidade = empresa.cidade if empresa and empresa.cidade else ""
 
         fontes_padrao = [
+            # ── BUSCA AUTOMÁTICA REAL (testado 10/03/2026) ──
             {
-                "tipo_certidao": "cnd_federal",
-                "nome": "Receita Federal - CND",
-                "orgao_emissor": "Receita Federal / PGFN",
-                "url_portal": "https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir",
+                "tipo_certidao": "outro",
+                "nome": "CGU - Certidão Correcional",
+                "orgao_emissor": "Controladoria-Geral da União (CGU)",
+                "url_portal": "https://certidoes.cgu.gov.br/",
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
                 "permite_busca_automatica": True,
-                "observacoes": "Consulta pública. Só precisa do CNPJ. Certidão emitida instantaneamente se não houver pendências.",
+                "observacoes": "API pública SEM captcha. Consolida CEIS, CNEP, CEPIM, CGU-PJ e ePAD em uma única consulta. Busca automática funcional.",
+            },
+            {
+                "tipo_certidao": "fgts",
+                "nome": "Caixa - CRF/FGTS",
+                "orgao_emissor": "Caixa Econômica Federal",
+                "url_portal": "https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": False,
+                "observacoes": "Portal protegido por ShieldSquare (anti-bot). Acesse manualmente, informe CNPJ e faça upload. Validade: 30 dias.",
+            },
+            {
+                "tipo_certidao": "outro",
+                "nome": "BrasilAPI - Situação Cadastral CNPJ",
+                "orgao_emissor": "Receita Federal (via BrasilAPI)",
+                "url_portal": "https://brasilapi.com.br/",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": True,
+                "observacoes": "API gratuita, sem captcha. Retorna situação cadastral, Simples Nacional, sócios, CNAE. Consulta em tempo real.",
+            },
+            # ── CAPTCHA — upload manual necessário ──
+            {
+                "tipo_certidao": "cnd_federal",
+                "nome": "Receita Federal - CND Federal",
+                "orgao_emissor": "Receita Federal / PGFN",
+                "url_portal": "https://cav.receita.fazenda.gov.br",
+                "metodo_acesso": "login_senha",
+                "requer_autenticacao": True,
+                "permite_busca_automatica": False,
+                "observacoes": "ATENÇÃO: Portal de emissão direta DESATIVADO (404). Desde 2025, emissão apenas via e-CAC com login gov.br. Faça upload manual do PDF.",
+            },
+            {
+                "tipo_certidao": "trabalhista",
+                "nome": "TST - CNDT",
+                "orgao_emissor": "Tribunal Superior do Trabalho (TST)",
+                "url_portal": "https://cndt-certidao.tst.jus.br/gerarCertidao.faces",
+                "metodo_acesso": "publico",
+                "requer_autenticacao": False,
+                "permite_busca_automatica": False,
+                "observacoes": "Portal exige captcha próprio (imagem + áudio). Informe CNPJ formatado, resolva o captcha e faça upload do PDF. Validade: 180 dias.",
             },
             {
                 "tipo_certidao": "cnd_estadual",
@@ -9697,8 +9932,8 @@ def inicializar_fontes_certidoes():
                 "uf": uf,
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
-                "permite_busca_automatica": True,
-                "observacoes": f"Portal da SEFAZ de {uf}. A URL exata de consulta pode variar por estado. Verifique e atualize a URL do portal se necessário.",
+                "permite_busca_automatica": False,
+                "observacoes": f"Portal da SEFAZ de {uf} exige reCAPTCHA v2 ou hCaptcha (varia por estado). Acesse, informe CNPJ + IE, resolva captcha e faça upload.",
             },
             {
                 "tipo_certidao": "cnd_municipal",
@@ -9710,27 +9945,7 @@ def inicializar_fontes_certidoes():
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
                 "permite_busca_automatica": False,
-                "observacoes": "A URL varia por município. Preencha a URL do portal da prefeitura da sua cidade para habilitar a busca automática.",
-            },
-            {
-                "tipo_certidao": "fgts",
-                "nome": "Caixa - CRF/FGTS",
-                "orgao_emissor": "Caixa Econômica Federal",
-                "url_portal": "https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf",
-                "metodo_acesso": "publico",
-                "requer_autenticacao": False,
-                "permite_busca_automatica": True,
-                "observacoes": "Consulta pública do CRF (Certificado de Regularidade do FGTS). Só precisa do CNPJ.",
-            },
-            {
-                "tipo_certidao": "trabalhista",
-                "nome": "TST - CNDT",
-                "orgao_emissor": "Tribunal Superior do Trabalho (TST)",
-                "url_portal": "https://cndt-certidao.tst.jus.br/inicio.faces",
-                "metodo_acesso": "publico",
-                "requer_autenticacao": False,
-                "permite_busca_automatica": True,
-                "observacoes": "Consulta pública da CNDT (Certidão Negativa de Débitos Trabalhistas). Só precisa do CNPJ.",
+                "observacoes": "A URL varia por município (+5.500 portais diferentes). Preencha a URL do portal da prefeitura. Maioria exige captcha. Upload manual.",
             },
         ]
 
@@ -9989,12 +10204,14 @@ if __name__ == "__main__":
     init_db()
 
     # Iniciar scheduler para alertas e monitoramentos (Sprint 2)
-    try:
-        from scheduler import iniciar_scheduler
-        print("Iniciando scheduler de alertas e monitoramentos...")
-        iniciar_scheduler()
-    except Exception as e:
-        print(f"[AVISO] Scheduler não iniciado: {e}")
+    # Proteger contra inicialização dupla em debug mode (Flask reloader cria 2 processos)
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        try:
+            from scheduler import iniciar_scheduler
+            print("Iniciando scheduler de alertas e monitoramentos...")
+            iniciar_scheduler()
+        except Exception as e:
+            print(f"[AVISO] Scheduler não iniciado: {e}")
 
     print("Servidor pronto na porta 5007!")
     print("=" * 50)

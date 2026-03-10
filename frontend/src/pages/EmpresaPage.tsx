@@ -192,6 +192,17 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   const loadSubTables = async (id: string) => {
     try {
+      // Sincronizar fontes de certidões → cria registros pendentes para fontes sem certidão
+      try {
+        const tokenFn = getCrudTokenGetter();
+        const token = tokenFn ? await tokenFn() : null;
+        await fetch("/api/empresa-certidoes/sincronizar-fontes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ empresa_id: id }),
+        });
+      } catch { /* silencioso — não impede carregar a página */ }
+
       const [docsRes, certRes, respRes] = await Promise.all([
         crudList("empresa-documentos", { parent_id: id }),
         crudList("empresa-certidoes", { parent_id: id }),
@@ -517,7 +528,21 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     }
   };
 
-  const getCertidaoStatus = (status: CertidaoAutomatica["status"]) => {
+  const getCertidaoStatus = (cert: CertidaoAutomatica) => {
+    const status = cert.status;
+    // Verificar vencimento próximo (< 15 dias)
+    if (status === "valida" && cert.validade) {
+      const hoje = new Date();
+      const venc = new Date(cert.validade);
+      const diasRestantes = Math.ceil((venc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+      if (diasRestantes <= 0) {
+        return <StatusBadge status="error" label="Vencida" size="small" />;
+      }
+      if (diasRestantes <= 15) {
+        return <StatusBadge status="warning" label={`Vence em ${diasRestantes}d`} size="small" />;
+      }
+      return <StatusBadge status="success" label="Valida" size="small" />;
+    }
     switch (status) {
       case "valida":
         return <StatusBadge status="success" label="Valida" size="small" />;
@@ -547,7 +572,16 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         <div className="table-actions">
           {d.arquivo ? (
             <>
-              <button title="Visualizar" onClick={() => window.open(`/api/empresa-documentos/${d.id}/download`, "_blank")}><Eye size={16} /></button>
+              <button title="Visualizar" onClick={async () => {
+                const tokenFn = getCrudTokenGetter();
+                const token = tokenFn ? await tokenFn() : null;
+                const res = await fetch(`/api/empresa-documentos/${d.id}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, "_blank");
+                }
+              }}><Eye size={16} /></button>
               <button title="Download" onClick={async () => {
                 const tokenFn = getCrudTokenGetter();
                 const token = tokenFn ? await tokenFn() : null;
@@ -573,7 +607,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const certidaoColumns: Column<CertidaoAutomatica>[] = [
     { key: "certidao", header: "Certidao", sortable: true },
     { key: "orgao_emissor", header: "Orgao Emissor", render: (c) => c.orgao_emissor || "-" },
-    { key: "status", header: "Status", render: (c) => getCertidaoStatus(c.status) },
+    { key: "status", header: "Status", render: (c) => getCertidaoStatus(c) },
     { key: "validade", header: "Validade", render: (c) => c.validade || "-" },
     {
       key: "acoes",

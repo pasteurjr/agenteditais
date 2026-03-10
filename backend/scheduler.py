@@ -381,7 +381,7 @@ def job_verificar_certidoes():
             if not empresa.user_id:
                 continue
 
-            # 1. Certidões que vencem nos próximos 15 dias
+            # 1. Certidões que vencem nos próximos 15 dias → Notificação (sem Alerta — modelo Alerta exige edital_id)
             certidoes_vencendo = db.query(EmpresaCertidao).filter(
                 EmpresaCertidao.empresa_id == empresa.id,
                 EmpresaCertidao.status == 'valida',
@@ -394,35 +394,21 @@ def job_verificar_certidoes():
                 dias_restantes = (cert.data_vencimento - hoje).days
                 nome_cert = cert.orgao_emissor or cert.tipo
 
-                # Verificar se já existe alerta recente para esta certidão
-                alerta_existente = db.query(Alerta).filter(
-                    Alerta.user_id == empresa.user_id,
-                    Alerta.tipo == 'prazo',
-                    Alerta.referencia_id == cert.id,
-                    Alerta.status.in_(['agendado', 'disparado']),
+                # Verificar se já existe notificação recente para esta certidão (evitar duplicatas)
+                notif_existente = db.query(Notificacao).filter(
+                    Notificacao.user_id == empresa.user_id,
+                    Notificacao.tipo == 'sistema',
+                    Notificacao.titulo.like(f"%{nome_cert}%vencen%"),
+                    Notificacao.created_at >= datetime.now() - timedelta(days=3),
                 ).first()
 
-                if not alerta_existente:
-                    # Criar alerta
-                    alerta = Alerta()
-                    alerta.id = str(uuid.uuid4())
-                    alerta.user_id = empresa.user_id
-                    alerta.tipo = 'prazo'
-                    alerta.titulo = f"Certidão vencendo: {nome_cert}"
-                    alerta.mensagem = f"A certidão '{nome_cert}' da empresa {empresa.razao_social} vence em {dias_restantes} dia(s) ({cert.data_vencimento.isoformat()})."
-                    alerta.referencia_tipo = 'certidao'
-                    alerta.referencia_id = cert.id
-                    alerta.data_disparo = datetime.now()
-                    alerta.status = 'disparado'
-                    db.add(alerta)
-
-                    # Criar notificação no sistema
+                if not notif_existente:
                     notif = Notificacao()
                     notif.id = str(uuid.uuid4())
                     notif.user_id = empresa.user_id
                     notif.tipo = 'sistema'
-                    notif.titulo = f"Certidão vencendo em {dias_restantes} dias"
-                    notif.mensagem = f"A certidão '{nome_cert}' vence em {cert.data_vencimento.isoformat()}. Renove antes do vencimento."
+                    notif.titulo = f"Certidão vencendo em {dias_restantes} dias: {nome_cert}"
+                    notif.mensagem = f"A certidão '{nome_cert}' da empresa {empresa.razao_social} vence em {dias_restantes} dia(s) ({cert.data_vencimento.isoformat()}). Renove antes do vencimento."
                     notif.lida = False
                     notif.created_at = datetime.now()
                     db.add(notif)
@@ -509,7 +495,7 @@ def job_verificar_certidoes():
                         if resultado.get("path_arquivo"):
                             cert.path_arquivo = resultado["path_arquivo"]
                         if resultado.get("numero"):
-                            cert.numero_certidao = resultado["numero"]
+                            cert.numero = resultado["numero"]
                         cert.observacoes = resultado.get("mensagem", "")
                         rebuscadas_empresa += 1
 
