@@ -21,7 +21,8 @@ from models import (
     LeadCRM, AcaoPosPerda, AuditoriaLog, AprendizadoFeedback,
     ParametroScore, Dispensa, EstrategiaEdital, ClasseProduto,
     AreaProduto, ClasseProdutoV2, SubclasseProduto,
-    ModalidadeLicitacao, OrigemOrgao
+    ModalidadeLicitacao, OrigemOrgao,
+    CategoriaDocumento, DocumentoNecessario
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -194,6 +195,7 @@ CRUD_TABLES = {
         "search_fields": ["nome", "tipo_certidao", "orgao_emissor", "url_portal", "uf", "cidade"],
         "label": "Fonte de Certidão",
         "required": ["tipo_certidao", "nome", "url_portal"],
+        "encrypt_fields": ["senha_criptografada"],
     },
     # === Editais ===
     "editais": {
@@ -421,6 +423,21 @@ CRUD_TABLES = {
         "required": ["nome", "tipo"],
         "parent_field": "classe_pai_id",
     },
+    # === Documentos: Categorias e Tipos Necessários ===
+    "categorias-documento": {
+        "model": CategoriaDocumento,
+        "global": True,
+        "search_fields": ["nome"],
+        "label": "Categoria de Documento",
+        "required": ["nome"],
+    },
+    "documentos-necessarios": {
+        "model": DocumentoNecessario,
+        "global": True,
+        "search_fields": ["nome", "tipo_chave", "base_legal"],
+        "label": "Documento Necessário",
+        "required": ["nome", "tipo_chave"],
+    },
 }
 
 
@@ -601,12 +618,16 @@ def crud_list(table_slug):
         items = query.offset(offset).limit(limit).all()
 
         password_field = config.get("password_field")
+        encrypt_fields = config.get("encrypt_fields", [])
         serialized = []
         for item in items:
             d = item.to_dict()
             if password_field and hasattr(item, "password_hash"):
                 d["has_password"] = bool(item.password_hash)
                 d["password"] = item.password_plain if hasattr(item, "password_plain") else ""
+            for enc_field in encrypt_fields:
+                if d.get(enc_field):
+                    d[enc_field] = "••••••••"
             serialized.append(d)
 
         return jsonify({
@@ -712,6 +733,13 @@ def crud_create(table_slug):
             if hasattr(model, "password_plain"):
                 instance.password_plain = plain
 
+        # Encrypt fields (Fernet reversible encryption)
+        for enc_field in config.get("encrypt_fields", []):
+            val = getattr(instance, enc_field, None)
+            if val and isinstance(val, str) and val.strip():
+                from crypto_utils import encrypt_password
+                setattr(instance, enc_field, encrypt_password(val))
+
         db.add(instance)
         db.commit()
         db.refresh(instance)
@@ -721,6 +749,11 @@ def crud_create(table_slug):
         if password_field and hasattr(instance, "password_hash"):
             result["has_password"] = bool(instance.password_hash)
             result["password"] = instance.password_plain if hasattr(instance, "password_plain") else ""
+
+        # Mask encrypted fields in response
+        for enc_field in config.get("encrypt_fields", []):
+            if result.get(enc_field):
+                result[enc_field] = "••••••••"
 
         return jsonify(result), 201
     except Exception as e:
@@ -779,6 +812,17 @@ def crud_update(table_slug, record_id):
             if hasattr(model, "password_plain"):
                 instance.password_plain = plain
 
+        # Encrypt fields (Fernet reversible encryption)
+        for enc_field in config.get("encrypt_fields", []):
+            if enc_field in data:
+                val = data[enc_field]
+                if val and isinstance(val, str) and val.strip() and val != "••••••••":
+                    from crypto_utils import encrypt_password
+                    setattr(instance, enc_field, encrypt_password(val))
+                elif not val or val.strip() == "":
+                    setattr(instance, enc_field, None)
+                # Se val == "••••••••", não altera (mantém o valor existente)
+
         db.commit()
         db.refresh(instance)
 
@@ -786,6 +830,11 @@ def crud_update(table_slug, record_id):
         if password_field and hasattr(instance, "password_hash"):
             result["has_password"] = bool(instance.password_hash)
             result["password"] = instance.password_plain if hasattr(instance, "password_plain") else ""
+
+        # Mask encrypted fields in response
+        for enc_field in config.get("encrypt_fields", []):
+            if result.get(enc_field):
+                result[enc_field] = "••••••••"
 
         return jsonify(result)
     except Exception as e:

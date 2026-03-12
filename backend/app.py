@@ -3,7 +3,7 @@ Agente de Editais - Backend Flask
 MVP com 9 ações via Select + Prompt
 """
 import os
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
 from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
@@ -8594,6 +8594,25 @@ def exportar_proposta(proposta_id):
 
 
 # =============================================================================
+# Documentos Necessários — lista de tipos para dropdown
+# =============================================================================
+
+@app.route("/api/documentos-necessarios", methods=["GET"])
+@require_auth
+def listar_documentos_necessarios():
+    """Retorna todos os tipos de documentos necessários (ativos), agrupados por categoria."""
+    from models import DocumentoNecessario, CategoriaDocumento
+    db = get_db()
+    try:
+        docs = db.query(DocumentoNecessario).outerjoin(CategoriaDocumento).filter(
+            DocumentoNecessario.ativo == True
+        ).order_by(CategoriaDocumento.ordem, DocumentoNecessario.ordem).all()
+        return jsonify([d.to_dict() for d in docs])
+    finally:
+        db.close()
+
+
+# =============================================================================
 # B1: Upload real de arquivo na EmpresaPage (persistir no disco)
 # =============================================================================
 
@@ -8611,7 +8630,7 @@ def upload_empresa_documento():
     - data_emissao: (opcional) data de emissão
     - data_vencimento: (opcional) data de vencimento
     """
-    from models import Empresa, EmpresaDocumento
+    from models import Empresa, EmpresaDocumento, DocumentoNecessario
     user_id = get_current_user_id()
 
     if 'file' not in request.files:
@@ -8622,30 +8641,46 @@ def upload_empresa_documento():
         return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
     empresa_id = request.form.get('empresa_id')
-    tipo_raw = request.form.get('tipo', 'outro')
-    # Normalizar tipo: "Habilitacao Fiscal" -> "habilitacao_fiscal", "AFE" -> "afe"
-    tipo = tipo_raw.lower().replace(' ', '_').replace('de_', '')
-    # Mapear nomes do frontend para snake_case do BD
-    _tipo_map = {
-        'contrato_social': 'contrato_social', 'procuracao': 'procuracao',
-        'certidao_negativa': 'certidao_negativa', 'habilitacao_fiscal': 'habilitacao_fiscal',
-        'habilitacao_economica': 'habilitacao_economica', 'balanco_patrimonial': 'balanco',
-        'qualificacao_tecnica': 'qualificacao_tecnica', 'atestado_capacidade': 'atestado_capacidade',
-        'afe': 'afe', 'cbpad': 'cbpad', 'cbpp': 'cbpp',
-        'corpo_bombeiros': 'bombeiros', 'bombeiros': 'bombeiros',
-        'alvara': 'alvara', 'registro_conselho': 'registro_conselho',
-        'outro': 'outro',
-    }
-    tipo = _tipo_map.get(tipo, tipo)
-    # Fallback: se ainda não está no enum, usar 'outro'
+    documento_necessario_id = request.form.get('documento_necessario_id')
+
     _tipos_validos = {
         'contrato_social', 'atestado_capacidade', 'balanco', 'alvara',
         'registro_conselho', 'procuracao', 'certidao_negativa',
         'habilitacao_fiscal', 'habilitacao_economica', 'qualificacao_tecnica',
         'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
     }
-    if tipo not in _tipos_validos:
-        tipo = 'outro'
+
+    tipo = 'outro'
+    doc_nec = None
+    if documento_necessario_id:
+        # Resolver tipo a partir do DocumentoNecessario
+        db_tmp = get_db()
+        try:
+            doc_nec = db_tmp.query(DocumentoNecessario).filter(
+                DocumentoNecessario.id == documento_necessario_id
+            ).first()
+            if doc_nec and doc_nec.tipo_chave in _tipos_validos:
+                tipo = doc_nec.tipo_chave
+        finally:
+            db_tmp.close()
+
+    if tipo == 'outro' and not documento_necessario_id:
+        # Fallback: tentar resolver pelo campo tipo legado
+        tipo_raw = request.form.get('tipo', 'outro')
+        tipo_norm = tipo_raw.lower().replace(' ', '_').replace('de_', '')
+        _tipo_map = {
+            'contrato_social': 'contrato_social', 'procuracao': 'procuracao',
+            'certidao_negativa': 'certidao_negativa', 'habilitacao_fiscal': 'habilitacao_fiscal',
+            'habilitacao_economica': 'habilitacao_economica', 'balanco_patrimonial': 'balanco',
+            'qualificacao_tecnica': 'qualificacao_tecnica', 'atestado_capacidade': 'atestado_capacidade',
+            'afe': 'afe', 'cbpad': 'cbpad', 'cbpp': 'cbpp',
+            'corpo_bombeiros': 'bombeiros', 'bombeiros': 'bombeiros',
+            'alvara': 'alvara', 'registro_conselho': 'registro_conselho',
+            'outro': 'outro',
+        }
+        tipo = _tipo_map.get(tipo_norm, tipo_norm)
+        if tipo not in _tipos_validos:
+            tipo = 'outro'
 
     if not empresa_id:
         return jsonify({"error": "empresa_id é obrigatório"}), 400
@@ -8677,6 +8712,8 @@ def upload_empresa_documento():
         doc.tipo = tipo
         doc.nome_arquivo = file.filename
         doc.path_arquivo = filepath
+        if documento_necessario_id:
+            doc.documento_necessario_id = documento_necessario_id
 
         # Datas opcionais
         data_emissao = request.form.get('data_emissao')
@@ -8791,6 +8828,74 @@ def download_empresa_certidao(certidao_id):
         db.close()
 
 
+def _extrair_dados_certidao_pdf(filepath):
+    """
+    Extrai texto do PDF de certidão e usa LLM para identificar dados estruturados:
+    numero, data_emissao, data_vencimento, orgao_emissor, situacao, resumo.
+    Retorna dict ou None se falhar.
+    """
+    try:
+        import fitz
+        texto = ""
+        doc = fitz.open(filepath)
+        for page in doc:
+            texto += page.get_text()
+        doc.close()
+
+        if not texto or len(texto.strip()) < 30:
+            print(f"[CERTIDAO-IA] PDF sem texto suficiente: {len(texto)} chars")
+            return None
+
+        # Limitar texto para não estourar contexto
+        texto_truncado = texto[:6000]
+
+        from llm import call_deepseek
+        prompt = f"""Analise o texto abaixo extraído de uma certidão e retorne APENAS um JSON com os campos:
+
+- "numero": número/código da certidão (string ou null)
+- "data_emissao": data de emissão no formato YYYY-MM-DD (string ou null)
+- "data_vencimento": data de validade/vencimento no formato YYYY-MM-DD (string ou null)
+- "orgao_emissor": órgão que emitiu (ex: "Receita Federal", "FGTS/Caixa", "TST") (string ou null)
+- "situacao": uma das opções: "valida", "vencida", "invalida", "negativa", "positiva", "positiva com efeito de negativa", "nada consta", "regular", "irregular" (string)
+- "resumo": resumo em 1-2 frases do conteúdo da certidão (string)
+
+Regras:
+- Se o texto indicar "NADA CONSTA", "NEGATIVA", "REGULAR" → situacao = correspondente
+- Se indicar "POSITIVA" (sem "efeito de negativa") → situacao = "positiva" (débitos existem)
+- Datas devem ser convertidas para YYYY-MM-DD
+- Se não conseguir identificar um campo, use null
+- Retorne APENAS o JSON, sem explicações
+
+TEXTO DA CERTIDÃO:
+{texto_truncado}"""
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=1000,
+            model_override="deepseek-chat"
+        )
+
+        if not resposta:
+            return None
+
+        # Extrair JSON da resposta
+        import json as json_mod
+        import re
+        # Tentar encontrar JSON na resposta
+        json_match = re.search(r'\{[^{}]*\}', resposta, re.DOTALL)
+        if json_match:
+            dados = json_mod.loads(json_match.group())
+            print(f"[CERTIDAO-IA] Dados extraídos: {dados}")
+            return dados
+
+        print(f"[CERTIDAO-IA] Resposta sem JSON válido: {resposta[:200]}")
+        return None
+
+    except Exception as e:
+        print(f"[CERTIDAO-IA] Erro na extração: {e}")
+        return None
+
+
 @app.route("/api/empresa-certidoes/<certidao_id>/upload", methods=["POST"])
 @require_auth
 def upload_empresa_certidao(certidao_id):
@@ -8836,19 +8941,54 @@ def upload_empresa_certidao(certidao_id):
         filepath = os.path.join(upload_dir, f"{uuid.uuid4().hex[:8]}_{safe_name}")
         file.save(filepath)
 
-        # Atualizar certidão
+        # Extrair texto do PDF e usar IA para identificar dados da certidão
         from datetime import date as _date, datetime as _dt
+        dados_ia = _extrair_dados_certidao_pdf(filepath)
+
         cert.path_arquivo = filepath
-        cert.status = 'valida'
         cert.data_emissao = _date.today()
 
+        if dados_ia:
+            # IA extraiu dados — aplicar automaticamente
+            if dados_ia.get("data_vencimento"):
+                try:
+                    cert.data_vencimento = _dt.strptime(dados_ia["data_vencimento"], '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    pass
+            if dados_ia.get("data_emissao"):
+                try:
+                    cert.data_emissao = _dt.strptime(dados_ia["data_emissao"], '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    pass
+            if dados_ia.get("numero"):
+                cert.numero = dados_ia["numero"]
+            if dados_ia.get("orgao_emissor"):
+                cert.orgao_emissor = dados_ia["orgao_emissor"]
+
+            situacao = (dados_ia.get("situacao") or "").lower()
+            if situacao in ("valida", "válida", "regular", "positiva com efeito de negativa", "nada consta", "negativa"):
+                cert.status = 'valida'
+            elif situacao in ("vencida", "expirada"):
+                cert.status = 'vencida'
+            elif situacao in ("invalida", "inválida", "positiva", "irregular"):
+                cert.status = 'pendente'
+            else:
+                cert.status = 'valida'  # Upload manual = assume válida
+
+            cert.mensagem = dados_ia.get("resumo") or "Certidão enviada por upload manual"
+            cert.dados_extras = {k: v for k, v in dados_ia.items() if k not in ("resumo",) and v}
+        else:
+            # Falha na extração IA — salvar com dados mínimos
+            cert.status = 'valida'
+            cert.mensagem = "Certidão enviada por upload manual (extração automática indisponível)"
+
+        # Fallback: dados do formulário sobrescrevem IA se enviados
         data_venc = request.form.get('data_vencimento')
         if data_venc:
             try:
                 cert.data_vencimento = _dt.strptime(data_venc, '%Y-%m-%d').date()
             except ValueError:
                 pass
-
         numero = request.form.get('numero')
         if numero:
             cert.numero = numero
@@ -8856,8 +8996,9 @@ def upload_empresa_certidao(certidao_id):
         db.commit()
         return jsonify({
             "success": True,
-            "message": f"Certidão atualizada com sucesso",
+            "message": f"Certidão atualizada com sucesso" + (" (dados extraídos por IA)" if dados_ia else ""),
             "certidao": cert.to_dict(),
+            "dados_extraidos": dados_ia,
         })
 
     except Exception as e:
@@ -9396,17 +9537,30 @@ def _tentar_obter_certidao(fonte, cnpj_limpo, empresa, upload_dir):
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
-        # 2. CRF/FGTS — Caixa Econômica — Proteção ShieldSquare anti-bot
-        #    Testes reais (10/03/2026): portal retorna challenge JS do ShieldSquare
-        #    antes de exibir o formulário JSF. Acesso via requests é BLOQUEADO.
-        #    Validade: 30 dias. Upload manual necessário.
+        # 2. CRF/FGTS — Caixa Econômica — Automação via Playwright
+        #    ShieldSquare anti-bot: Playwright executa o JS challenge.
+        #    Fallback: mensagem de upload manual.
         # ═══════════════════════════════════════════════════════════════════
         if 'fgts' in nome_lower or 'crf' in nome_lower or 'caixa' in nome_lower or tipo == 'fgts':
-            resultado["mensagem"] = (
-                "FGTS/CRF: Portal da Caixa protegido por ShieldSquare (anti-bot). "
-                "Acesse https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf, "
-                "informe o CNPJ e faça upload do PDF. Validade: 30 dias."
-            )
+            try:
+                from certidao_browser import buscar_fgts_browser
+                print(f"[CERTIDAO] FGTS: Tentando automação via Playwright...")
+                resultado_browser = buscar_fgts_browser(cnpj_limpo, upload_dir)
+                if resultado_browser.get("sucesso") or resultado_browser.get("dados_extras"):
+                    return resultado_browser
+                # Falhou — usar mensagem do browser como fallback
+                resultado["mensagem"] = resultado_browser.get("mensagem", "")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[CERTIDAO] FGTS browser erro: {e}")
+
+            if not resultado["mensagem"]:
+                resultado["mensagem"] = (
+                    "FGTS/CRF: Automação indisponível. "
+                    "Acesse https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf, "
+                    "informe o CNPJ e faça upload do PDF. Validade: 30 dias."
+                )
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
@@ -9428,6 +9582,7 @@ def _tentar_obter_certidao(fonte, cnpj_limpo, empresa, upload_dir):
                     if situacao.upper() == "ATIVA":
                         resultado["sucesso"] = True
                         resultado["mensagem"] = f"CNPJ: Situação ATIVA — {razao}. Simples: {'Sim' if simples else 'Não'}"
+                        resultado["data_vencimento"] = (date.today() + timedelta(days=30)).isoformat()
                     else:
                         resultado["mensagem"] = f"CNPJ: Situação '{situacao}' — {razao}"
 
@@ -9505,39 +9660,79 @@ def _tentar_obter_certidao(fonte, cnpj_limpo, empresa, upload_dir):
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
-        # 5. CND FEDERAL (Receita Federal / PGFN) — URL MORTA desde 2025
-        #    Migrou para e-CAC (login gov.br obrigatório)
+        # 5. CND FEDERAL (Receita Federal / PGFN) — MANUAL
+        #    Portal exige hCaptcha invisível (domínios gov.br bloqueados por solvers)
         # ═══════════════════════════════════════════════════════════════════
         if tipo == 'cnd_federal' or 'receita federal' in nome_lower or 'cnd federal' in nome_lower or 'pgfn' in nome_lower:
             resultado["mensagem"] = (
-                "CND Federal: O portal de emissão direta foi DESATIVADO pela Receita Federal. "
-                "Acesse o e-CAC em https://cav.receita.fazenda.gov.br (login gov.br obrigatório), "
-                "emita a certidão e faça upload do PDF."
+                "CND Federal: Busca automática não disponível — portal da Receita exige hCaptcha "
+                "que não pode ser resolvido automaticamente. "
+                "Acesse https://servicos.receitafederal.gov.br/servico/certidoes/, "
+                "selecione Pessoa Jurídica, informe o CNPJ e clique Emitir Certidão. "
+                "Faça upload do PDF — a IA extrai os dados automaticamente."
             )
+            resultado["dados_extras"] = {
+                "Método": "MANUAL — hCaptcha gov.br não suportado por solvers",
+                "Portal": "https://servicos.receitafederal.gov.br/servico/certidoes/",
+                "Procedimento": "Selecionar Pessoa Jurídica → Informar CNPJ → Emitir Certidão → Upload PDF",
+                "Validade": "180 dias",
+            }
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
-        # 6. CNDT/TST — Captcha próprio (imagem + áudio)
+        # 6. CNDT/TST — Automação via Playwright + CapSolver (captcha imagem)
         # ═══════════════════════════════════════════════════════════════════
         if 'cndt' in nome_lower or 'tst' in nome_lower or tipo == 'trabalhista':
-            resultado["mensagem"] = (
-                "CNDT/TST: Portal exige captcha (imagem). "
-                "Acesse https://cndt-certidao.tst.jus.br/gerarCertidao.faces, "
-                "informe o CNPJ formatado, resolva o captcha e faça upload do PDF."
-            )
+            try:
+                from certidao_browser import buscar_tst_browser
+                from config import CAPSOLVER_API_KEY as _cap_key
+                if _cap_key:
+                    print(f"[CERTIDAO] TST: Tentando automação via Playwright + CapSolver...")
+                    resultado_browser = buscar_tst_browser(cnpj_limpo, upload_dir)
+                    if resultado_browser.get("sucesso") or resultado_browser.get("dados_extras"):
+                        return resultado_browser
+                    resultado["mensagem"] = resultado_browser.get("mensagem", "")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[CERTIDAO] TST browser erro: {e}")
+
+            if not resultado["mensagem"]:
+                resultado["mensagem"] = (
+                    "CNDT/TST: Automação indisponível (CapSolver não configurado ou falha). "
+                    "Acesse https://cndt-certidao.tst.jus.br/gerarCertidao.faces, "
+                    "informe o CNPJ formatado, resolva o captcha e faça upload do PDF."
+                )
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
-        # 7. CND ESTADUAL (SEFAZ) — reCAPTCHA v2 (varia por estado)
+        # 7. CND ESTADUAL (SEFAZ) — Automação via Playwright + CapSolver
         # ═══════════════════════════════════════════════════════════════════
         if tipo == 'cnd_estadual' or 'sefaz' in nome_lower or 'cnd estadual' in nome_lower:
             uf = fonte.uf or (empresa.uf if hasattr(empresa, 'uf') else '')
-            url_sefaz = fonte.url_portal or f"https://www.sefaz.{uf.lower()}.gov.br" if uf else ""
-            resultado["mensagem"] = (
-                f"CND Estadual ({uf or 'UF?'}): Portal da SEFAZ exige captcha. "
-                f"Acesse {url_sefaz}, informe CNPJ + Inscrição Estadual, "
-                "resolva o captcha e faça upload do PDF."
-            )
+            url_sefaz = fonte.url_portal or (f"https://www.sefaz.{uf.lower()}.gov.br" if uf else "")
+
+            try:
+                from certidao_browser import buscar_sefaz_browser
+                from config import CAPSOLVER_API_KEY as _cap_key
+                if _cap_key and url_sefaz:
+                    ie = fonte.cnpj_consulta or ""  # IE pode estar no cnpj_consulta
+                    print(f"[CERTIDAO] SEFAZ-{uf}: Tentando automação via Playwright + CapSolver...")
+                    resultado_browser = buscar_sefaz_browser(cnpj_limpo, uf, url_sefaz, upload_dir, ie)
+                    if resultado_browser.get("sucesso") or resultado_browser.get("dados_extras"):
+                        return resultado_browser
+                    resultado["mensagem"] = resultado_browser.get("mensagem", "")
+            except ImportError:
+                pass
+            except Exception as e:
+                print(f"[CERTIDAO] SEFAZ browser erro: {e}")
+
+            if not resultado["mensagem"]:
+                resultado["mensagem"] = (
+                    f"CND Estadual ({uf or 'UF?'}): Automação indisponível. "
+                    f"Acesse {url_sefaz}, informe CNPJ + Inscrição Estadual, "
+                    "resolva o captcha e faça upload do PDF."
+                )
             return resultado
 
         # ═══════════════════════════════════════════════════════════════════
@@ -9703,10 +9898,19 @@ def buscar_certidoes_automatica():
 
             # Classificar a fonte
             if not fonte.permite_busca_automatica:
-                # Fonte manual — apenas registrar
+                # Fonte manual — usar observacoes da fonte como orientação detalhada
                 stats["manuais"] += 1
                 status_novo = "nao_disponivel"
-                acao = "Upload manual necessário"
+                acao = fonte.observacoes or "Upload manual necessário"
+                # Guardar dados estruturados da fonte para o modal de detalhes
+                resultado_auto = {
+                    "dados_extras": {
+                        "Método de Acesso": fonte.metodo_acesso or "publico",
+                        "Portal": fonte.url_portal or "Não informado",
+                        "Requer Autenticação": "Sim" if fonte.requer_autenticacao else "Não",
+                        "Procedimento": "Acesse o portal, emita a certidão e faça upload do PDF",
+                    }
+                }
             elif fonte.requer_autenticacao and not fonte.usuario and not fonte.api_key and not fonte.certificado_path:
                 # Requer autenticação mas sem credenciais
                 stats["autenticadas"] += 1
@@ -9744,9 +9948,14 @@ def buscar_certidoes_automatica():
                 cert_existente.url_consulta = url_consulta
                 cert_existente.orgao_emissor = fonte.orgao_emissor or fonte.nome
                 cert_existente.fonte_certidao_id = fonte.id
-                if cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
-                    cert_existente.status = 'vencida'
-                elif status_novo == 'valida':
+                # Persistir mensagem e dados_extras da busca
+                cert_existente.mensagem = acao
+                if resultado_auto and resultado_auto.get("dados_extras"):
+                    import json as json_mod
+                    de = resultado_auto["dados_extras"]
+                    cert_existente.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
+                if status_novo == 'valida':
+                    # Nova busca retornou válida — atualizar dados PRIMEIRO
                     cert_existente.status = 'valida'
                     if resultado_auto and resultado_auto.get("path_arquivo"):
                         cert_existente.path_arquivo = resultado_auto["path_arquivo"]
@@ -9758,6 +9967,11 @@ def buscar_certidoes_automatica():
                     if resultado_auto and resultado_auto.get("numero"):
                         cert_existente.numero = resultado_auto["numero"]
                     cert_existente.data_emissao = date.today()
+                    # Verificar se a nova validade já venceu
+                    if cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
+                        cert_existente.status = 'vencida'
+                elif cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
+                    cert_existente.status = 'vencida'
                 elif cert_existente.status in ('buscando', 'erro'):
                     cert_existente.status = status_novo
                 resultados.append({
@@ -9791,6 +10005,12 @@ def buscar_certidoes_automatica():
                     nova_cert.data_vencimento = date.today()
                 if resultado_auto and resultado_auto.get("numero"):
                     nova_cert.numero = resultado_auto["numero"]
+                # Persistir mensagem e dados_extras
+                nova_cert.mensagem = acao
+                if resultado_auto and resultado_auto.get("dados_extras"):
+                    import json as json_mod
+                    de = resultado_auto["dados_extras"]
+                    nova_cert.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
                 if status_novo == 'valida':
                     nova_cert.data_emissao = date.today()
                 db.add(nova_cert)
@@ -9845,6 +10065,241 @@ def buscar_certidoes_automatica():
 
 
 # =============================================================================
+# Busca de Certidões com SSE (Server-Sent Events) — progresso em tempo real
+# =============================================================================
+
+@app.route("/api/empresa-certidoes/buscar-stream", methods=["POST"])
+@require_auth
+def buscar_certidoes_stream():
+    """
+    Mesmo que buscar_certidoes_automatica(), mas retorna SSE stream com progresso.
+    Cada fonte emite 2 eventos: 'searching' (início) e 'result' (resultado).
+    Evento final: 'complete' com stats.
+    """
+    import json as json_mod
+    from models import Empresa, EmpresaCertidao, FonteCertidao
+    from datetime import date, datetime
+
+    user_id = get_current_user_id()
+    data = request.json or {}
+    empresa_id = data.get('empresa_id')
+
+    if not empresa_id:
+        return jsonify({"error": "empresa_id é obrigatório"}), 400
+
+    def generate():
+        db = get_db()
+        try:
+            empresa = db.query(Empresa).filter(
+                Empresa.id == empresa_id,
+                Empresa.user_id == user_id
+            ).first()
+            if not empresa:
+                yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Empresa não encontrada'})}\n\n"
+                return
+            if not empresa.cnpj:
+                yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Empresa sem CNPJ cadastrado'})}\n\n"
+                return
+
+            cnpj = empresa.cnpj.replace('.', '').replace('/', '').replace('-', '').strip()
+
+            fontes = db.query(FonteCertidao).filter(
+                FonteCertidao.user_id == user_id,
+                FonteCertidao.ativo == True
+            ).all()
+
+            if not fontes:
+                yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Nenhuma fonte de certidão cadastrada.'})}\n\n"
+                return
+
+            total = len(fontes)
+            nomes_fontes = [f.nome for f in fontes]
+            yield f"data: {json_mod.dumps({'type': 'start', 'total': total, 'fontes': nomes_fontes})}\n\n"
+
+            resultados = []
+            stats = {"publicas": 0, "autenticadas": 0, "manuais": 0, "sem_api_key": 0, "obtidas_auto": 0}
+
+            for idx, fonte in enumerate(fontes):
+                # Emit searching event
+                yield f"data: {json_mod.dumps({'type': 'searching', 'index': idx + 1, 'total': total, 'fonte': fonte.nome, 'fonte_id': fonte.id})}\n\n"
+
+                cert_existente = db.query(EmpresaCertidao).filter(
+                    EmpresaCertidao.empresa_id == empresa_id,
+                    EmpresaCertidao.fonte_certidao_id == fonte.id
+                ).first()
+
+                url_consulta = fonte.url_portal or ""
+                resultado_auto = None
+
+                # Classificar a fonte
+                if not fonte.permite_busca_automatica:
+                    stats["manuais"] += 1
+                    status_novo = "nao_disponivel"
+                    acao = fonte.observacoes or "Upload manual necessário"
+                    resultado_auto = {
+                        "dados_extras": {
+                            "Método de Acesso": fonte.metodo_acesso or "publico",
+                            "Portal": fonte.url_portal or "Não informado",
+                            "Requer Autenticação": "Sim" if fonte.requer_autenticacao else "Não",
+                            "Procedimento": "Acesse o portal, emita a certidão e faça upload do PDF",
+                        }
+                    }
+                    sucesso_flag = False
+                elif fonte.requer_autenticacao and not fonte.usuario and not fonte.api_key and not fonte.certificado_path:
+                    stats["autenticadas"] += 1
+                    status_novo = "pendente"
+                    acao = f"Configure credenciais ({fonte.metodo_acesso}) em Fontes de Certidões"
+                    sucesso_flag = False
+                else:
+                    stats["publicas"] += 1
+                    status_novo = "buscando"
+                    acao = "Buscando automaticamente..."
+
+                    upload_dir = os.path.join(UPLOAD_FOLDER, 'empresa', empresa_id, 'certidoes')
+                    resultado_auto = _tentar_obter_certidao(fonte, cnpj, empresa, upload_dir)
+
+                    if resultado_auto and resultado_auto.get("sucesso"):
+                        status_novo = "valida"
+                        acao = resultado_auto.get("mensagem", "Certidão obtida automaticamente")
+                        stats["obtidas_auto"] += 1
+                        sucesso_flag = True
+                    elif resultado_auto:
+                        status_novo = "pendente"
+                        acao = resultado_auto.get("mensagem", "Acesse o portal manualmente")
+                        if "Chave de API não configurada" in acao or "Chave de API inválida" in acao:
+                            stats["sem_api_key"] += 1
+                        sucesso_flag = False
+                    else:
+                        status_novo = "pendente"
+                        acao = "Acesse o portal para emitir a certidão"
+                        sucesso_flag = False
+
+                # Atualizar fonte
+                fonte.ultima_consulta = datetime.now()
+                fonte.resultado_ultima_consulta = 'sucesso' if status_novo == 'valida' else 'erro'
+
+                # Criar/atualizar certidão
+                if cert_existente:
+                    cert_existente.url_consulta = url_consulta
+                    cert_existente.orgao_emissor = fonte.orgao_emissor or fonte.nome
+                    cert_existente.fonte_certidao_id = fonte.id
+                    cert_existente.mensagem = acao
+                    if resultado_auto and resultado_auto.get("dados_extras"):
+                        de = resultado_auto["dados_extras"]
+                        cert_existente.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
+                    if status_novo == 'valida':
+                        cert_existente.status = 'valida'
+                        if resultado_auto and resultado_auto.get("path_arquivo"):
+                            cert_existente.path_arquivo = resultado_auto["path_arquivo"]
+                        if resultado_auto and resultado_auto.get("data_vencimento"):
+                            try:
+                                cert_existente.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
+                            except (ValueError, TypeError):
+                                pass
+                        if resultado_auto and resultado_auto.get("numero"):
+                            cert_existente.numero = resultado_auto["numero"]
+                        cert_existente.data_emissao = date.today()
+                        if cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
+                            cert_existente.status = 'vencida'
+                    elif cert_existente.data_vencimento and cert_existente.data_vencimento < date.today():
+                        cert_existente.status = 'vencida'
+                    elif cert_existente.status in ('buscando', 'erro'):
+                        cert_existente.status = status_novo
+                    resultados.append({"fonte_nome": fonte.nome, "acao": acao, "status": status_novo})
+                else:
+                    nova_cert = EmpresaCertidao()
+                    nova_cert.id = str(uuid.uuid4())
+                    nova_cert.empresa_id = empresa_id
+                    nova_cert.tipo = fonte.tipo_certidao
+                    nova_cert.orgao_emissor = fonte.orgao_emissor or fonte.nome
+                    nova_cert.url_consulta = url_consulta
+                    nova_cert.fonte_certidao_id = fonte.id
+                    nova_cert.status = status_novo
+                    if resultado_auto and resultado_auto.get("path_arquivo"):
+                        nova_cert.path_arquivo = resultado_auto["path_arquivo"]
+                    if resultado_auto and resultado_auto.get("data_vencimento"):
+                        try:
+                            nova_cert.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
+                        except (ValueError, TypeError):
+                            nova_cert.data_vencimento = date.today()
+                    else:
+                        nova_cert.data_vencimento = date.today()
+                    if resultado_auto and resultado_auto.get("numero"):
+                        nova_cert.numero = resultado_auto["numero"]
+                    nova_cert.mensagem = acao
+                    if resultado_auto and resultado_auto.get("dados_extras"):
+                        de = resultado_auto["dados_extras"]
+                        nova_cert.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
+                    if status_novo == 'valida':
+                        nova_cert.data_emissao = date.today()
+                    db.add(nova_cert)
+                    resultados.append({"fonte_nome": fonte.nome, "acao": acao, "status": status_novo})
+
+                # Emit result event
+                yield f"data: {json_mod.dumps({'type': 'result', 'index': idx + 1, 'total': total, 'fonte': fonte.nome, 'fonte_id': fonte.id, 'sucesso': sucesso_flag, 'status': status_novo, 'mensagem': acao})}\n\n"
+
+            db.commit()
+
+            # Build summary
+            obtidas = stats.get("obtidas_auto", 0)
+            sem_key = stats.get("sem_api_key", 0)
+            partes = [f"Busca concluída: {len(resultados)} fontes"]
+            detalhes = []
+            if obtidas > 0:
+                detalhes.append(f"{obtidas} obtidas automaticamente")
+            if sem_key > 0:
+                detalhes.append(f"{sem_key} aguardando chave de API")
+            if stats['autenticadas'] > 0:
+                detalhes.append(f"{stats['autenticadas']} aguardando credenciais")
+            if stats['manuais'] > 0:
+                detalhes.append(f"{stats['manuais']} manuais")
+            msg = partes[0] + " — " + ", ".join(detalhes) if detalhes else partes[0]
+
+            yield f"data: {json_mod.dumps({'type': 'complete', 'message': msg, 'stats': stats})}\n\n"
+
+        except Exception as e:
+            db.rollback()
+            yield f"data: {json_mod.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            db.close()
+
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive',
+    })
+
+
+# =============================================================================
+# CapSolver - Status da automação de certidões
+# =============================================================================
+
+@app.route("/api/capsolver/status", methods=["GET"])
+@require_auth
+def capsolver_status():
+    """Retorna status do CapSolver (configurado, saldo) para o frontend."""
+    import requests
+    from config import CAPSOLVER_API_KEY
+    if not CAPSOLVER_API_KEY:
+        return jsonify({"configurado": False, "mensagem": "CapSolver não configurado. FGTS, TST e SEFAZ requerem upload manual."})
+
+    try:
+        resp = requests.post("https://api.capsolver.com/getBalance", json={
+            "clientKey": CAPSOLVER_API_KEY
+        }, timeout=10)
+        data = resp.json()
+        if data.get("errorId", 0) != 0:
+            return jsonify({"configurado": False, "mensagem": f"CapSolver: {data.get('errorDescription', 'Erro')}"})
+        return jsonify({
+            "configurado": True,
+            "saldo": data.get("balance", 0),
+            "mensagem": f"CapSolver ativo — saldo: ${data.get('balance', 0):.2f}"
+        })
+    except Exception as e:
+        return jsonify({"configurado": False, "mensagem": f"CapSolver: erro de conexão — {str(e)[:80]}"})
+
+
+# =============================================================================
 # Fontes de Certidões - Inicializar fontes padrão
 # =============================================================================
 
@@ -9890,8 +10345,8 @@ def inicializar_fontes_certidoes():
                 "url_portal": "https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf",
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
-                "permite_busca_automatica": False,
-                "observacoes": "Portal protegido por ShieldSquare (anti-bot). Acesse manualmente, informe CNPJ e faça upload. Validade: 30 dias.",
+                "permite_busca_automatica": True,
+                "observacoes": "Portal com ShieldSquare (anti-bot). Automação via Playwright. Validade: 30 dias.",
             },
             {
                 "tipo_certidao": "outro",
@@ -9903,7 +10358,7 @@ def inicializar_fontes_certidoes():
                 "permite_busca_automatica": True,
                 "observacoes": "API gratuita, sem captcha. Retorna situação cadastral, Simples Nacional, sócios, CNAE. Consulta em tempo real.",
             },
-            # ── CAPTCHA — upload manual necessário ──
+            # ── AUTOMAÇÃO VIA PLAYWRIGHT + CAPSOLVER ──
             {
                 "tipo_certidao": "cnd_federal",
                 "nome": "Receita Federal - CND Federal",
@@ -9911,8 +10366,8 @@ def inicializar_fontes_certidoes():
                 "url_portal": "https://cav.receita.fazenda.gov.br",
                 "metodo_acesso": "login_senha",
                 "requer_autenticacao": True,
-                "permite_busca_automatica": False,
-                "observacoes": "ATENÇÃO: Portal de emissão direta DESATIVADO (404). Desde 2025, emissão apenas via e-CAC com login gov.br. Faça upload manual do PDF.",
+                "permite_busca_automatica": True,
+                "observacoes": "Automação via e-CAC com certificado digital A1 ou login gov.br. Configure credenciais na fonte para busca automática.",
             },
             {
                 "tipo_certidao": "trabalhista",
@@ -9921,8 +10376,8 @@ def inicializar_fontes_certidoes():
                 "url_portal": "https://cndt-certidao.tst.jus.br/gerarCertidao.faces",
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
-                "permite_busca_automatica": False,
-                "observacoes": "Portal exige captcha próprio (imagem + áudio). Informe CNPJ formatado, resolva o captcha e faça upload do PDF. Validade: 180 dias.",
+                "permite_busca_automatica": True,
+                "observacoes": "Automação via Playwright + CapSolver (captcha imagem). Validade: 180 dias.",
             },
             {
                 "tipo_certidao": "cnd_estadual",
@@ -9932,8 +10387,8 @@ def inicializar_fontes_certidoes():
                 "uf": uf,
                 "metodo_acesso": "publico",
                 "requer_autenticacao": False,
-                "permite_busca_automatica": False,
-                "observacoes": f"Portal da SEFAZ de {uf} exige reCAPTCHA v2 ou hCaptcha (varia por estado). Acesse, informe CNPJ + IE, resolva captcha e faça upload.",
+                "permite_busca_automatica": True,
+                "observacoes": f"Automação via Playwright + CapSolver (reCAPTCHA/hCaptcha). Estado: {uf}.",
             },
             {
                 "tipo_certidao": "cnd_municipal",

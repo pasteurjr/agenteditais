@@ -488,6 +488,7 @@ def job_verificar_certidoes():
 
                     if resultado["sucesso"] and cert:
                         from datetime import date
+                        import json as json_mod
                         cert.status = 'valida'
                         cert.data_emissao = date.today()
                         if resultado.get("data_vencimento"):
@@ -496,7 +497,10 @@ def job_verificar_certidoes():
                             cert.path_arquivo = resultado["path_arquivo"]
                         if resultado.get("numero"):
                             cert.numero = resultado["numero"]
-                        cert.observacoes = resultado.get("mensagem", "")
+                        cert.mensagem = resultado.get("mensagem", "")
+                        if resultado.get("dados_extras"):
+                            de = resultado["dados_extras"]
+                            cert.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
                         rebuscadas_empresa += 1
 
                     # Atualizar última consulta na fonte

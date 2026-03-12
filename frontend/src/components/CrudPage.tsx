@@ -9,7 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 export interface FieldConfig {
   name: string;
   label: string;
-  type: "text" | "number" | "email" | "date" | "datetime" | "textarea" | "select" | "boolean" | "json" | "decimal" | "readonly" | "password";
+  type: "text" | "number" | "email" | "date" | "datetime" | "textarea" | "select" | "boolean" | "json" | "decimal" | "readonly" | "password" | "fk";
   required?: boolean;
   options?: { value: string; label: string }[];
   placeholder?: string;
@@ -137,6 +137,9 @@ export function CrudPage({ config }: CrudPageProps) {
   const [parentSearch, setParentSearch] = useState("");
   const parentDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // FK field options: { [fieldName]: { value, label }[] }
+  const [fkOptions, setFkOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+
   const getParentLabel = useCallback((item: Record<string, unknown>): string => {
     if (parentLabelFn) return parentLabelFn(item);
     if (parentLabelField) {
@@ -170,6 +173,25 @@ export function CrudPage({ config }: CrudPageProps) {
       loadParentItems();
     }
   }, [isChildTable, loadParentItems]);
+
+  // Load FK options for fk-type fields
+  useEffect(() => {
+    const fkFields = fields.filter(f => f.type === "fk" && f.fkTable && f.fkLabel);
+    if (fkFields.length === 0) return;
+    (async () => {
+      const opts: Record<string, { value: string; label: string }[]> = {};
+      for (const f of fkFields) {
+        try {
+          const res = await crudList(f.fkTable!, { limit: 200 });
+          opts[f.name] = res.items.map(item => ({
+            value: String(item.id),
+            label: String(item[f.fkLabel!] || item.nome || item.id),
+          }));
+        } catch { /* silent */ }
+      }
+      setFkOptions(opts);
+    })();
+  }, [fields]);
 
   const handleParentSearch = (value: string) => {
     setParentSearch(value);
@@ -515,6 +537,21 @@ export function CrudPage({ config }: CrudPageProps) {
           </div>
         );
       }
+      case "fk": {
+        const options = fkOptions[field.name] || [];
+        return (
+          <select
+            className="select-input"
+            value={String(value || "")}
+            onChange={(e) => updateField(field.name, e.target.value || null)}
+          >
+            <option value="">Selecione...</option>
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        );
+      }
       default:
         return (
           <input
@@ -542,6 +579,10 @@ export function CrudPage({ config }: CrudPageProps) {
     if (field.type === "select" && field.options) {
       const opt = field.options.find((o) => o.value === String(val));
       return opt ? opt.label : String(val);
+    }
+    if (field.type === "fk" && fkOptions[field.name]) {
+      const opt = fkOptions[field.name].find((o) => o.value === String(val));
+      return opt ? opt.label : String(val).slice(0, 8);
     }
     const s = String(val);
     return s.length > 50 ? s.slice(0, 50) + "..." : s;

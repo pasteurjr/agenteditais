@@ -65,6 +65,12 @@ BEC_CACHE_TTL_HOURS = int(os.getenv("BEC_CACHE_TTL_HOURS", "24"))
 COMPRASNET_API_URL = "https://compras.dados.gov.br/licitacoes/v1/licitacoes.json"
 COMPRASNET_TIMEOUT = int(os.getenv("COMPRASNET_TIMEOUT", "10"))
 
+# CapSolver (resolução automática de captchas para certidões)
+CAPSOLVER_API_KEY = os.getenv("CAPSOLVER_API_KEY", "")
+
+# Criptografia de senhas (Fernet symmetric key)
+CRYPTO_KEY = os.getenv("CRYPTO_KEY", "")
+
 # MindsDB (Consultas analíticas via linguagem natural)
 MINDSDB_HOST = os.getenv("MINDSDB_HOST", "192.168.1.100")
 MINDSDB_PORT = os.getenv("MINDSDB_PORT", "47334")

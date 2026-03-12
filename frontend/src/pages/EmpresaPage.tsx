@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Pencil, Search, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Pencil, Search, Sparkles, Globe, Info } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
@@ -45,6 +45,16 @@ interface Responsavel {
   telefone?: string;
 }
 
+interface DocNecessario {
+  id: string;
+  categoria: string;
+  nome: string;
+  descricao?: string;
+  tipo_chave: string;
+  obrigatorio: boolean;
+  ordem: number;
+}
+
 interface CertidaoAutomatica {
   id: string;
   certidao: string;
@@ -57,7 +67,10 @@ interface CertidaoAutomatica {
   orgao_emissor?: string;
   fonte_certidao_id?: string;
   fonte_nome?: string;
+  numero?: string;
   permite_busca_automatica?: boolean;
+  mensagem?: string;
+  dados_extras?: Record<string, unknown>;
 }
 
 const TIPO_RESPONSAVEL_OPTIONS = [
@@ -131,6 +144,12 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [certidoesMsg, setCertidoesMsg] = useState<string | null>(null);
   const [freqCertidoes, setFreqCertidoes] = useState<string>("diaria");
 
+  // Certidoes search progress log
+  const [certLogLines, setCertLogLines] = useState<{type: string; text: string; status?: string; time: string}[]>([]);
+  const [showCertLog, setShowCertLog] = useState(false);
+  const [certLogProgress, setCertLogProgress] = useState<{current: number; total: number}>({current: 0, total: 0});
+  const certLogRef = useRef<HTMLDivElement>(null);
+
   // New/Edit responsavel form
   const [editingRespId, setEditingRespId] = useState<string | null>(null);
   const [novoRespTipo, setNovoRespTipo] = useState("");
@@ -141,8 +160,22 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   // New doc form
   const [novoDocTipo, setNovoDocTipo] = useState("");
+  const [novoDocNecId, setNovoDocNecId] = useState("");
   const [novoDocValidade, setNovoDocValidade] = useState("");
   const [novoDocFile, setNovoDocFile] = useState<File | null>(null);
+  const [docNecessarios, setDocNecessarios] = useState<DocNecessario[]>([]);
+
+  // Certidao detail modal
+  const [showCertDetailModal, setShowCertDetailModal] = useState(false);
+  const [certDetail, setCertDetail] = useState<CertidaoAutomatica | null>(null);
+
+  // Certidao detail edit fields
+  const [certEditNumero, setCertEditNumero] = useState("");
+  const [certEditValidade, setCertEditValidade] = useState("");
+  const [certEditOrgao, setCertEditOrgao] = useState("");
+  const [certEditStatus, setCertEditStatus] = useState("");
+  const [certSaving, setCertSaving] = useState(false);
+  const [certSaved, setCertSaved] = useState(false);
 
   // Upload certidao modal
   const [showCertUploadModal, setShowCertUploadModal] = useState(false);
@@ -151,6 +184,8 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [uploadCertFile, setUploadCertFile] = useState<File | null>(null);
   const [uploadCertValidade, setUploadCertValidade] = useState("");
   const [uploadCertNumero, setUploadCertNumero] = useState("");
+  const [uploadingCert, setUploadingCert] = useState(false);
+  const [capsolverStatus, setCapsolverStatus] = useState<{configurado: boolean; mensagem: string; saldo?: number} | null>(null);
 
   const loadEmpresa = useCallback(async () => {
     try {
@@ -215,7 +250,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         return {
           id: String(d.id ?? ""),
           nome: String(d.nome_arquivo || d.nome || d.tipo || ""),
-          tipo: String(d.tipo ?? ""),
+          tipo: String(d.documento_necessario_nome || d.tipo || ""),
           validade: dataVenc,
           status: calcDocStatus(hasArquivo, dataVenc),
           arquivo: d.path_arquivo ? String(d.path_arquivo) : (d.arquivo ? String(d.arquivo) : undefined),
@@ -233,8 +268,11 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           url_consulta: c.url_consulta ? String(c.url_consulta) : undefined,
           orgao_emissor: c.orgao_emissor ? String(c.orgao_emissor) : undefined,
           fonte_certidao_id: c.fonte_certidao_id ? String(c.fonte_certidao_id) : undefined,
+          numero: c.numero ? String(c.numero) : undefined,
           fonte_nome: c.fonte_nome ? String(c.fonte_nome) : undefined,
           permite_busca_automatica: c.permite_busca_automatica !== false,
+          mensagem: c.mensagem ? String(c.mensagem) : undefined,
+          dados_extras: c.dados_extras && typeof c.dados_extras === "object" ? c.dados_extras as Record<string, unknown> : undefined,
       })));
 
       setResponsaveis(respRes.items.map(r => ({
@@ -267,7 +305,42 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         }
       } catch { /* silencioso */ }
     })();
+    // Carregar tipos de documentos necessários para o dropdown
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/documentos-necessarios", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setDocNecessarios(data);
+          }
+        }
+      } catch { /* silencioso */ }
+    })();
+    // Verificar status do CapSolver
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/capsolver/status", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCapsolverStatus(data);
+        }
+      } catch { /* silencioso */ }
+    })();
   }, [loadEmpresa]);
+
+  // Auto-scroll log to bottom
+  useEffect(() => {
+    if (certLogRef.current) {
+      certLogRef.current.scrollTop = certLogRef.current.scrollHeight;
+    }
+  }, [certLogLines]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -375,10 +448,13 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   };
 
   const handleSalvarDocumento = async () => {
-    if (!novoDocTipo || !empresaId) return;
+    if ((!novoDocTipo && !novoDocNecId) || !empresaId) return;
     try {
       const formData = new FormData();
       formData.append("empresa_id", empresaId);
+      if (novoDocNecId) {
+        formData.append("documento_necessario_id", novoDocNecId);
+      }
       formData.append("tipo", novoDocTipo);
       if (novoDocValidade) formData.append("data_vencimento", novoDocValidade);
       if (novoDocFile) {
@@ -404,6 +480,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
       await loadSubTables(empresaId);
       setNovoDocTipo("");
+      setNovoDocNecId("");
       setNovoDocValidade("");
       setNovoDocFile(null);
       setShowDocModal(false);
@@ -432,13 +509,17 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     return headers;
   };
 
+  const [freqSalva, setFreqSalva] = useState(false);
   const handleFreqCertidoesChange = async (valor: string) => {
     setFreqCertidoes(valor);
     if (empresaId) {
       try {
         await crudUpdate("empresas", empresaId, { frequencia_busca_certidoes: valor });
+        setFreqSalva(true);
+        setTimeout(() => setFreqSalva(false), 2000);
       } catch (err) {
         console.error("Erro ao salvar frequência:", err);
+        setError("Erro ao salvar frequência de busca");
       }
     }
   };
@@ -454,23 +535,76 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     }
     setBuscandoCertidoes(true);
     setCertidoesMsg(null);
+    setCertLogLines([]);
+    setShowCertLog(true);
+    setCertLogProgress({current: 0, total: 0});
+
+    const now = () => new Date().toLocaleTimeString("pt-BR", {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+    const addLog = (line: {type: string; text: string; status?: string; time: string}) => {
+      setCertLogLines(prev => [...prev, line]);
+    };
+
     try {
       const headers = await getAuthHeaders();
-
-      const res = await fetch("/api/empresa-certidoes/buscar-automatica", {
+      const res = await fetch("/api/empresa-certidoes/buscar-stream", {
         method: "POST",
         headers,
         body: JSON.stringify({ empresa_id: empresaId }),
       });
-      const data = await res.json();
+
       if (!res.ok) {
-        throw new Error(data.error || "Erro ao buscar certidoes");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro ao buscar certidoes");
       }
 
-      setCertidoesMsg(`${data.message}. ${data.nota || ""}`);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Stream não disponível");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === "start") {
+              setCertLogProgress({current: 0, total: evt.total});
+              addLog({type: "info", text: `Iniciando busca em ${evt.total} fontes de certidao...`, time: now()});
+            } else if (evt.type === "searching") {
+              setCertLogProgress(p => ({...p, current: evt.index - 1}));
+              addLog({type: "searching", text: `Buscando: ${evt.fonte}...`, time: now()});
+            } else if (evt.type === "result") {
+              setCertLogProgress(p => ({...p, current: evt.index}));
+              const icon = evt.sucesso
+                ? "OBTIDA"
+                : evt.status === "nao_disponivel"
+                  ? "MANUAL - faca upload do PDF"
+                  : "PENDENTE - verifique configuracao";
+              addLog({type: "result", text: `[${icon}] ${evt.fonte}: ${evt.mensagem}`, status: evt.status, time: now()});
+            } else if (evt.type === "complete") {
+              addLog({type: "complete", text: evt.message, time: now()});
+              setCertidoesMsg(evt.message);
+            } else if (evt.type === "error") {
+              addLog({type: "error", text: `ERRO: ${evt.message}`, time: now()});
+              setError(evt.message);
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+
       await loadSubTables(empresaId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao buscar certidoes");
+      const msg = err instanceof Error ? err.message : "Erro ao buscar certidoes";
+      addLog({type: "error", text: `ERRO: ${msg}`, time: now()});
+      setError(msg);
     } finally {
       setBuscandoCertidoes(false);
     }
@@ -487,6 +621,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   const handleUploadCertidao = async () => {
     if (!uploadCertId || !uploadCertFile) return;
+    setUploadingCert(true);
     try {
       const formData = new FormData();
       formData.append("file", uploadCertFile);
@@ -510,10 +645,16 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         throw new Error(err.error || "Erro ao fazer upload da certidao");
       }
 
+      const result = await res.json();
       setShowCertUploadModal(false);
+      if (result.dados_extraidos) {
+        alert(`Dados extraídos automaticamente por IA:\n• Situação: ${result.dados_extraidos.situacao || "N/I"}\n• Validade: ${result.dados_extraidos.data_vencimento || "N/I"}\n• Número: ${result.dados_extraidos.numero || "N/I"}\n• Órgão: ${result.dados_extraidos.orgao_emissor || "N/I"}`);
+      }
       if (empresaId) await loadSubTables(empresaId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao fazer upload da certidao");
+    } finally {
+      setUploadingCert(false);
     }
   };
 
@@ -528,34 +669,38 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     }
   };
 
-  const getCertidaoStatus = (cert: CertidaoAutomatica) => {
-    const status = cert.status;
-    // Verificar vencimento próximo (< 15 dias)
-    if (status === "valida" && cert.validade) {
-      const hoje = new Date();
-      const venc = new Date(cert.validade);
-      const diasRestantes = Math.ceil((venc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-      if (diasRestantes <= 0) {
-        return <StatusBadge status="error" label="Vencida" size="small" />;
+  const handleSaveCertEdit = async () => {
+    if (!certDetail) return;
+    setCertSaving(true);
+    setCertSaved(false);
+    try {
+      const payload: Record<string, string | null> = {};
+      if (certEditNumero !== (certDetail.numero || "")) payload.numero = certEditNumero || null;
+      if (certEditValidade !== (certDetail.validade || "")) payload.data_vencimento = certEditValidade || null;
+      if (certEditOrgao !== (certDetail.orgao_emissor || "")) payload.orgao_emissor = certEditOrgao || null;
+      if (certEditStatus !== (certDetail.status || "")) payload.status = certEditStatus || null;
+
+      if (Object.keys(payload).length === 0) {
+        setCertSaving(false);
+        setCertSaved(true);
+        setTimeout(() => setCertSaved(false), 2000);
+        return;
       }
-      if (diasRestantes <= 15) {
-        return <StatusBadge status="warning" label={`Vence em ${diasRestantes}d`} size="small" />;
+
+      await crudUpdate("empresa-certidoes", certDetail.id, payload);
+      // Update local state
+      setCertDetail({ ...certDetail, numero: certEditNumero || undefined, validade: certEditValidade, orgao_emissor: certEditOrgao || undefined, status: certEditStatus as CertidaoAutomatica["status"] });
+      setCertSaved(true);
+      setTimeout(() => setCertSaved(false), 2000);
+      // Refresh table
+      if (empresaId) {
+        await loadSubTables(empresaId);
       }
-      return <StatusBadge status="success" label="Valida" size="small" />;
-    }
-    switch (status) {
-      case "valida":
-        return <StatusBadge status="success" label="Valida" size="small" />;
-      case "vencida":
-        return <StatusBadge status="error" label="Vencida" size="small" />;
-      case "pendente":
-        return <StatusBadge status="warning" label="Pendente" size="small" />;
-      case "buscando":
-        return <StatusBadge status="info" label="Buscando..." size="small" />;
-      case "erro":
-        return <StatusBadge status="error" label="Erro" size="small" />;
-      case "nao_disponivel":
-        return <StatusBadge status="neutral" label="Manual" size="small" />;
+    } catch (err) {
+      console.error("Erro ao salvar certidao:", err);
+      alert("Erro ao salvar alteracoes.");
+    } finally {
+      setCertSaving(false);
     }
   };
 
@@ -606,38 +751,113 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
   const certidaoColumns: Column<CertidaoAutomatica>[] = [
     { key: "certidao", header: "Certidao", sortable: true },
-    { key: "orgao_emissor", header: "Orgao Emissor", render: (c) => c.orgao_emissor || "-" },
-    { key: "status", header: "Status", render: (c) => getCertidaoStatus(c) },
-    { key: "validade", header: "Validade", render: (c) => c.validade || "-" },
+    {
+      key: "modo",
+      header: "Modo",
+      width: "100px",
+      render: (c) => {
+        const auto = c.permite_busca_automatica !== false;
+        return (
+          <span style={{
+            display: "inline-block",
+            padding: "2px 8px",
+            borderRadius: "10px",
+            fontSize: "11px",
+            fontWeight: 500,
+            background: auto ? "rgba(34,197,94,0.12)" : "rgba(234,179,8,0.12)",
+            color: auto ? "#16a34a" : "#ca8a04",
+          }}>
+            {auto ? "Automatica" : "Manual"}
+          </span>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "130px",
+      render: (c) => {
+        const st = c.status;
+        if (st === "valida" && c.validade) {
+          const dias = Math.ceil((new Date(c.validade).getTime() - Date.now()) / 86400000);
+          if (dias <= 0) return <StatusBadge status="error" label="Vencida" size="small" />;
+          if (dias <= 15) return <StatusBadge status="warning" label={`Vence em ${dias}d`} size="small" />;
+          return <StatusBadge status="success" label={`Valida (${dias}d)`} size="small" />;
+        }
+        if (st === "valida") return <StatusBadge status="success" label="Valida" size="small" />;
+        if (st === "vencida") return <StatusBadge status="error" label="Vencida" size="small" />;
+        if (st === "nao_disponivel") return <StatusBadge status="neutral" label="Aguarda upload" size="small" />;
+        if (st === "pendente") return <StatusBadge status="warning" label="Acao necessaria" size="small" />;
+        if (st === "buscando") return <StatusBadge status="info" label="Buscando..." size="small" />;
+        if (st === "erro") return <StatusBadge status="error" label="Erro" size="small" />;
+        return <StatusBadge status="neutral" label={st || "-"} size="small" />;
+      },
+    },
+    {
+      key: "validade",
+      header: "Validade",
+      width: "100px",
+      render: (c) => c.validade ? new Date(c.validade + "T00:00:00").toLocaleDateString("pt-BR") : "-",
+    },
+    {
+      key: "pdf",
+      header: "PDF",
+      width: "50px",
+      render: (c) => c.path_arquivo
+        ? <button title="Visualizar PDF" onClick={async () => {
+            const tokenFn = getCrudTokenGetter();
+            const token = tokenFn ? await tokenFn() : null;
+            const res = await fetch(`/api/empresa-certidoes/${c.id}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+            if (res.ok) {
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              window.open(url, "_blank");
+            }
+          }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-success, #22c55e)" }}>
+            <Eye size={16} />
+          </button>
+        : <span style={{ color: "var(--text-muted, #ccc)", fontSize: "11px" }}>—</span>,
+    },
     {
       key: "acoes",
       header: "Acoes",
-      width: "220px",
+      width: "140px",
       render: (c) => (
-        <div className="table-actions">
-          {c.url_consulta && (
-            <button title={`Abrir portal: ${c.orgao_emissor || c.certidao}`} onClick={() => window.open(c.url_consulta, "_blank")} style={{ color: "var(--color-primary, #3b82f6)" }}>
-              <Eye size={16} />
-            </button>
-          )}
-          <button title="Upload certidao (PDF)" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
-            <Upload size={16} />
+        <div className="table-actions" style={{ gap: "2px" }}>
+          <button title="Editar certidao" onClick={() => {
+            setCertDetail(c);
+            setCertEditNumero(c.numero || "");
+            setCertEditValidade(c.validade || "");
+            setCertEditOrgao(c.orgao_emissor || "");
+            setCertEditStatus(c.status || "");
+            setCertSaved(false);
+            setShowCertDetailModal(true);
+          }} style={{ color: "var(--color-primary, #3b82f6)" }}>
+            <Pencil size={15} />
+          </button>
+          <button title="Upload PDF" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
+            <Upload size={15} />
           </button>
           {c.path_arquivo && (
-            <button title="Download certidao" onClick={async () => {
+            <button title="Download PDF" onClick={async () => {
               const tokenFn = getCrudTokenGetter();
               const token = tokenFn ? await tokenFn() : null;
-              const res = await fetch(`/api/empresa-certidoes/${c.id}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+              const res = await fetch(`/api/empresa-certidoes/${c.id}/download?download=true`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
               if (res.ok) {
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement("a"); a.href = url; a.download = c.certidao || "certidao"; a.click(); URL.revokeObjectURL(url);
+                const a = document.createElement("a"); a.href = url; a.download = `${c.certidao || "certidao"}.pdf`; a.click(); URL.revokeObjectURL(url);
               }
-            }}><Download size={16} /></button>
+            }} style={{ color: "var(--color-success, #22c55e)" }}><Download size={15} /></button>
           )}
           {c.permite_busca_automatica !== false && (
             <button title="Atualizar esta certidao" disabled={buscandoCertidoes} onClick={() => handleBuscarCertidoes()}>
-              <RefreshCw size={16} className={buscandoCertidoes ? "spin" : ""} />
+              <RefreshCw size={15} className={buscandoCertidoes ? "spin" : ""} />
+            </button>
+          )}
+          {c.url_consulta && (
+            <button title={`Abrir portal: ${c.orgao_emissor || c.certidao}`} onClick={() => window.open(c.url_consulta, "_blank")} style={{ color: "var(--color-info, #06b6d4)" }}>
+              <Globe size={15} />
             </button>
           )}
         </div>
@@ -898,9 +1118,91 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             />
           }
         >
-          {certidoesMsg && (
+          {certidoesMsg && !showCertLog && (
             <div style={{ padding: "8px 12px", marginBottom: "12px", background: "var(--bg-success, #dcfce7)", borderRadius: "6px", fontSize: "13px", color: "var(--text-success, #166534)" }}>
               {certidoesMsg}
+            </div>
+          )}
+          {/* Janela de progresso da busca de certidoes */}
+          {showCertLog && (
+            <div style={{
+              margin: "0 0 12px 0",
+              border: "1px solid var(--border, #333)",
+              borderRadius: "8px",
+              overflow: "hidden",
+              background: "#1a1a2e",
+            }}>
+              {/* Header */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "8px 12px",
+                background: "#16213e",
+                borderBottom: "1px solid #2a2a4a",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>
+                    Progresso da Busca
+                    {certLogProgress.total > 0 && ` (${certLogProgress.current}/${certLogProgress.total})`}
+                  </span>
+                  {buscandoCertidoes && <Loader2 size={14} className="spin" style={{ color: "#60a5fa" }} />}
+                </div>
+                {!buscandoCertidoes && (
+                  <button
+                    onClick={() => setShowCertLog(false)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "2px" }}
+                    title="Fechar"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              {/* Progress bar */}
+              {certLogProgress.total > 0 && (
+                <div style={{ height: "3px", background: "#2a2a4a" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${(certLogProgress.current / certLogProgress.total) * 100}%`,
+                    background: buscandoCertidoes ? "#3b82f6" : "#22c55e",
+                    transition: "width 0.3s ease",
+                  }} />
+                </div>
+              )}
+              {/* Log lines */}
+              <div
+                style={{
+                  maxHeight: "250px",
+                  overflowY: "auto",
+                  padding: "8px 0",
+                  fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                  fontSize: "12px",
+                  lineHeight: "1.7",
+                }}
+                ref={certLogRef}
+              >
+                {certLogLines.map((line, i) => (
+                  <div key={i} style={{
+                    padding: "2px 12px",
+                    color:
+                      line.type === "error" ? "#f87171" :
+                      line.type === "complete" ? "#4ade80" :
+                      line.type === "searching" ? "#60a5fa" :
+                      line.status === "valida" ? "#4ade80" :
+                      line.status === "nao_disponivel" ? "#fbbf24" :
+                      line.status === "pendente" ? "#fb923c" :
+                      "#cbd5e1",
+                  }}>
+                    <span style={{ color: "#64748b", marginRight: "8px" }}>{line.time}</span>
+                    {line.type === "searching" && <span style={{ color: "#60a5fa" }}>{">> "}</span>}
+                    {line.type === "result" && <span style={{ color: line.status === "valida" ? "#4ade80" : "#fbbf24" }}>{"<< "}</span>}
+                    {line.type === "complete" && <span style={{ color: "#4ade80" }}>{"== "}</span>}
+                    {line.type === "error" && <span style={{ color: "#f87171" }}>{"!! "}</span>}
+                    {line.text}
+                  </div>
+                ))}
+                {buscandoCertidoes && certLogLines.length === 0 && (
+                  <div style={{ padding: "8px 12px", color: "#64748b" }}>Conectando...</div>
+                )}
+              </div>
             </div>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 12px", marginBottom: "8px" }}>
@@ -916,6 +1218,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
               <option value="quinzenal">Quinzenal</option>
               <option value="mensal">Mensal</option>
             </select>
+            {freqSalva && <span style={{ fontSize: "12px", color: "var(--color-success, #22c55e)", fontWeight: 500 }}>Salvo!</span>}
           </div>
           <DataTable
             data={certidoes}
@@ -929,11 +1232,27 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           {certidoes.length > 0 && (
             <div style={{ padding: "8px 12px", marginTop: "8px", fontSize: "12px", color: "var(--text-muted, #888)" }}>
               {(() => {
-                const publicas = certidoes.filter(c => c.permite_busca_automatica !== false && c.status !== "nao_disponivel").length;
-                const manuais = certidoes.filter(c => c.status === "nao_disponivel").length;
-                return `${certidoes.length} certidões (${publicas} com busca automática, ${manuais} manuais). `;
+                const automaticas = certidoes.filter(c => c.permite_busca_automatica !== false).length;
+                const manuais = certidoes.length - automaticas;
+                return `${certidoes.length} certidoes (${automaticas} automaticas, ${manuais} manuais). `;
               })()}
-              Clique no icone <Eye size={12} style={{ display: "inline", verticalAlign: "middle" }} /> para abrir o portal do orgao emissor.
+              {capsolverStatus && (
+                <span style={{
+                  display: "inline-block",
+                  marginLeft: "8px",
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  background: capsolverStatus.configurado ? "rgba(34,197,94,0.15)" : "rgba(234,179,8,0.15)",
+                  color: capsolverStatus.configurado ? "#16a34a" : "#ca8a04",
+                }}>
+                  {capsolverStatus.configurado
+                    ? `CapSolver: $${capsolverStatus.saldo?.toFixed(2) || "0.00"}`
+                    : "CapSolver: nao configurado"
+                  }
+                </span>
+              )}
             </div>
           )}
         </Card>
@@ -966,38 +1285,28 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowDocModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarDocumento} disabled={!novoDocTipo}>Enviar</button>
+            <button className="btn btn-primary" onClick={handleSalvarDocumento} disabled={!novoDocNecId}>Enviar</button>
           </>
         }
       >
         <FormField label="Tipo de Documento" required>
-          <select className="select-input" value={novoDocTipo} onChange={(e) => setNovoDocTipo(e.target.value)}>
+          <select className="select-input" value={novoDocNecId} onChange={(e) => {
+            const selId = e.target.value;
+            setNovoDocNecId(selId);
+            const dn = docNecessarios.find(d => d.id === selId);
+            setNovoDocTipo(dn ? dn.tipo_chave : selId);
+          }}>
             <option value="">Selecione...</option>
-            <optgroup label="Habilitacao Juridica">
-              <option value="Contrato Social">Contrato Social</option>
-              <option value="Procuracao">Procuracao</option>
-            </optgroup>
-            <optgroup label="Habilitacao Fiscal">
-              <option value="Certidao Negativa">Certidao Negativa</option>
-              <option value="Habilitacao Fiscal">Habilitacao Fiscal</option>
-            </optgroup>
-            <optgroup label="Habilitacao Economica/Financeira">
-              <option value="Habilitacao Economica">Habilitacao Economica</option>
-              <option value="Balanco Patrimonial">Balanco Patrimonial</option>
-            </optgroup>
-            <optgroup label="Qualificacao Tecnica">
-              <option value="Qualificacao Tecnica">Qualificacao Tecnica</option>
-              <option value="Atestado de Capacidade">Atestado de Capacidade</option>
-            </optgroup>
-            <optgroup label="Sanitarias/Regulatorias">
-              <option value="AFE">AFE (ANVISA)</option>
-              <option value="CBPAD">CBPAD</option>
-              <option value="CBPP">CBPP</option>
-              <option value="Corpo de Bombeiros">Corpo de Bombeiros</option>
-            </optgroup>
-            <optgroup label="Outros">
-              <option value="Outro">Outro</option>
-            </optgroup>
+            {(() => {
+              const cats = [...new Set(docNecessarios.map(d => d.categoria))];
+              return cats.map(cat => (
+                <optgroup key={cat} label={cat}>
+                  {docNecessarios.filter(d => d.categoria === cat).map(d => (
+                    <option key={d.id} value={d.id}>{d.nome}</option>
+                  ))}
+                </optgroup>
+              ));
+            })()}
           </select>
         </FormField>
         <FormField label="Arquivo">
@@ -1058,6 +1367,206 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         </FormField>
       </Modal>
 
+      {/* Modal Detalhes Certidao — CRUD */}
+      <Modal
+        isOpen={showCertDetailModal}
+        onClose={() => { setShowCertDetailModal(false); setCertDetail(null); }}
+        title={`${certDetail?.certidao || "Certidao"}`}
+        footer={
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-primary" onClick={handleSaveCertEdit} disabled={certSaving}>
+              {certSaving ? <><Loader2 size={14} className="spin" /> Salvando...</> : "Salvar"}
+            </button>
+            {certSaved && <span style={{ color: "var(--color-success, #22c55e)", fontSize: "12px", fontWeight: 600 }}>Salvo!</span>}
+            {certDetail?.url_consulta && (
+              <button className="btn btn-secondary" onClick={() => window.open(certDetail.url_consulta, "_blank")}>
+                <Globe size={14} /> Portal
+              </button>
+            )}
+            {certDetail?.path_arquivo && (
+              <button className="btn btn-secondary" onClick={async () => {
+                const tokenFn = getCrudTokenGetter();
+                const token = tokenFn ? await tokenFn() : null;
+                const res = await fetch(`/api/empresa-certidoes/${certDetail.id}/download?download=true`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href = url; a.download = `${certDetail.certidao || "certidao"}.pdf`; a.click(); URL.revokeObjectURL(url);
+                }
+              }}>
+                <Download size={14} /> Download
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={() => { setShowCertDetailModal(false); setCertDetail(null); }}>Fechar</button>
+          </div>
+        }
+      >
+        {certDetail && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* O que fazer — destaque contextual */}
+            {(() => {
+              const st = certEditStatus || certDetail.status;
+              const auto = certDetail.permite_busca_automatica !== false;
+              const temArquivo = !!certDetail.path_arquivo;
+              let bgColor = ""; let textColor = ""; let icon = <Info size={16} />; let titulo = ""; let instrucao = "";
+
+              if (st === "valida" && temArquivo) {
+                bgColor = "rgba(34,197,94,0.1)"; textColor = "#16a34a";
+                icon = <Download size={16} />;
+                titulo = "Certidao valida";
+                instrucao = "Certidao obtida e dentro da validade.";
+              } else if (st === "valida" && !temArquivo) {
+                bgColor = "rgba(34,197,94,0.1)"; textColor = "#16a34a";
+                titulo = "Certidao valida (sem PDF)";
+                instrucao = "Resultado positivo registrado. Nenhum PDF gerado.";
+              } else if (st === "vencida" && auto) {
+                bgColor = "rgba(239,68,68,0.1)"; textColor = "#dc2626";
+                icon = <RefreshCw size={16} />;
+                titulo = "Certidao vencida";
+                instrucao = "Clique em 'Buscar Certidoes' para renovar automaticamente.";
+              } else if (st === "vencida" && !auto) {
+                bgColor = "rgba(239,68,68,0.1)"; textColor = "#dc2626";
+                icon = <Upload size={16} />;
+                titulo = "Certidao vencida — renovacao manual";
+                instrucao = "Acesse o portal, emita nova certidao e faca upload.";
+              } else if (st === "nao_disponivel") {
+                bgColor = "rgba(234,179,8,0.1)"; textColor = "#ca8a04";
+                icon = <Upload size={16} />;
+                titulo = "Upload manual necessario";
+                instrucao = "Acesse o portal, emita a certidao e faca upload. A IA extrai os dados do PDF.";
+              } else if (st === "pendente") {
+                bgColor = "rgba(249,115,22,0.1)"; textColor = "#ea580c";
+                icon = <AlertCircle size={16} />;
+                titulo = "Acao necessaria";
+                instrucao = certDetail.mensagem || "Verifique a configuracao da fonte ou faca upload manual.";
+              } else if (st === "erro") {
+                bgColor = "rgba(239,68,68,0.1)"; textColor = "#dc2626";
+                icon = <AlertCircle size={16} />;
+                titulo = "Erro na busca";
+                instrucao = "Tente novamente ou faca upload manual.";
+              } else {
+                bgColor = "rgba(100,116,139,0.1)"; textColor = "#64748b";
+                titulo = "Aguardando";
+                instrucao = "Clique em 'Buscar Certidoes' para iniciar.";
+              }
+
+              return (
+                <div style={{ padding: "10px 14px", background: bgColor, borderRadius: "8px", borderLeft: `4px solid ${textColor}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: textColor, fontWeight: 600, fontSize: "13px" }}>
+                    {icon} {titulo}
+                  </div>
+                  <div style={{ fontSize: "12px", lineHeight: "1.4", color: "var(--text-primary, #333)", marginTop: "4px" }}>
+                    {instrucao}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* PDF inline viewer */}
+            {certDetail.path_arquivo && (
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary, #666)", marginBottom: "6px" }}>
+                  Documento PDF
+                </div>
+                <iframe
+                  src={`/api/empresa-certidoes/${certDetail.id}/download`}
+                  style={{ width: "100%", height: "280px", border: "1px solid var(--border, #e2e8f0)", borderRadius: "6px" }}
+                  title="Certidao PDF"
+                />
+              </div>
+            )}
+
+            {/* Campos editaveis */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Status</label>
+                <select
+                  value={certEditStatus}
+                  onChange={(e) => setCertEditStatus(e.target.value)}
+                  style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)", background: "var(--bg-secondary, #fff)", color: "var(--text-primary, #333)", fontSize: "13px" }}
+                >
+                  <option value="valida">Valida</option>
+                  <option value="vencida">Vencida</option>
+                  <option value="pendente">Aguardando acao</option>
+                  <option value="nao_disponivel">Upload manual</option>
+                  <option value="erro">Erro</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Modo</label>
+                <div style={{ padding: "6px 8px", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary, #666)" }}>
+                  {certDetail.permite_busca_automatica !== false ? "Automatica" : "Manual"}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Validade</label>
+                <input
+                  type="date"
+                  value={certEditValidade}
+                  onChange={(e) => setCertEditValidade(e.target.value)}
+                  style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)", background: "var(--bg-secondary, #fff)", color: "var(--text-primary, #333)", fontSize: "13px" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Data Emissao</label>
+                <div style={{ padding: "6px 8px", fontSize: "13px", color: "var(--text-secondary, #666)" }}>
+                  {certDetail.data_obtencao ? new Date(certDetail.data_obtencao + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Numero</label>
+                <input
+                  type="text"
+                  value={certEditNumero}
+                  onChange={(e) => setCertEditNumero(e.target.value)}
+                  placeholder="Numero da certidao"
+                  style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)", background: "var(--bg-secondary, #fff)", color: "var(--text-primary, #333)", fontSize: "13px" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted, #888)", marginBottom: "4px", display: "block" }}>Orgao Emissor</label>
+                <input
+                  type="text"
+                  value={certEditOrgao}
+                  onChange={(e) => setCertEditOrgao(e.target.value)}
+                  placeholder="Orgao emissor"
+                  style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)", background: "var(--bg-secondary, #fff)", color: "var(--text-primary, #333)", fontSize: "13px" }}
+                />
+              </div>
+            </div>
+
+            {/* Resultado da busca */}
+            {certDetail.mensagem && (
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary, #666)", marginBottom: "4px" }}>
+                  Resultado da Busca
+                </div>
+                <div style={{ fontSize: "12px", lineHeight: "1.5", padding: "8px 12px", background: "var(--bg-tertiary, #f8fafc)", borderRadius: "6px", whiteSpace: "pre-wrap", maxHeight: "100px", overflowY: "auto" }}>
+                  {certDetail.mensagem}
+                </div>
+              </div>
+            )}
+
+            {/* Dados extras */}
+            {certDetail.dados_extras && Object.keys(certDetail.dados_extras).length > 0 && (
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary, #666)", marginBottom: "4px" }}>
+                  Dados Detalhados
+                </div>
+                <div style={{ fontSize: "12px", padding: "8px 12px", background: "var(--bg-tertiary, #f8fafc)", borderRadius: "6px", maxHeight: "120px", overflowY: "auto" }}>
+                  {Object.entries(certDetail.dados_extras).map(([key, val]) => (
+                    <div key={key} style={{ display: "flex", gap: "8px", padding: "3px 0", borderBottom: "1px solid var(--border, #e2e8f020)" }}>
+                      <span style={{ color: "var(--text-muted, #888)", minWidth: "140px" }}>{key.replace(/_/g, " ")}</span>
+                      <span style={{ fontWeight: 500 }}>{Array.isArray(val) ? val.join(", ") : String(val ?? "—")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {/* Modal Upload Certidao */}
       <Modal
         isOpen={showCertUploadModal}
@@ -1066,8 +1575,8 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setShowCertUploadModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleUploadCertidao} disabled={!uploadCertFile}>
-              <Upload size={14} /> Enviar
+            <button className="btn btn-primary" onClick={handleUploadCertidao} disabled={!uploadCertFile || uploadingCert}>
+              <Upload size={14} /> {uploadingCert ? "Analisando PDF..." : "Enviar"}
             </button>
           </>
         }
@@ -1081,11 +1590,12 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           />
         </FormField>
         <FormField label="Data de Vencimento">
-          <TextInput
-            value={uploadCertValidade}
-            onChange={setUploadCertValidade}
+          <input
             type="date"
-            placeholder="YYYY-MM-DD"
+            value={uploadCertValidade}
+            onChange={(e) => setUploadCertValidade(e.target.value)}
+            className="form-input"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--border, #e2e8f0)", background: "var(--bg-secondary, #fff)", color: "var(--text-primary, #333)", fontSize: "14px" }}
           />
         </FormField>
         <FormField label="Numero da Certidao">
@@ -1096,8 +1606,8 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           />
         </FormField>
         <div style={{ padding: "8px 0", fontSize: "12px", color: "var(--text-muted, #888)" }}>
-          Apos o upload, a certidao sera marcada como <strong>Valida</strong>.
-          Informe a data de vencimento para receber alertas automaticos antes do vencimento.
+          A IA analisara o PDF automaticamente e extraira: <strong>validade, numero, orgao emissor e situacao</strong>.
+          Os campos acima sao opcionais — se preenchidos, sobrescrevem os dados extraidos pela IA.
         </div>
       </Modal>
     </div>
