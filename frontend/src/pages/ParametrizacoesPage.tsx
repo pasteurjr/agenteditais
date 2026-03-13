@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { PageProps } from "../types";
-import { Settings, Globe, Bell, Palette, Plus, Play, Pause, Trash2, ChevronDown, ChevronRight, Pencil, MapPin, CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2, AlertCircle, Lock, Info } from "lucide-react";
-import { Card, DataTable, ActionButton, TabPanel, FormField, TextInput, Checkbox, SelectInput, Modal, StatusBadge } from "../components/common";
-import type { Column } from "../components/common";
-import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import { Settings, Globe, Bell, Palette, Play, Pause, MapPin, CheckCircle, AlertTriangle, XCircle, Loader2, Lock, Info, DollarSign } from "lucide-react";
+import { Card, ActionButton, TabPanel, FormField, TextInput, Checkbox, SelectInput, StatusBadge } from "../components/common";
+import { crudList, crudCreate, crudUpdate } from "../api/crud";
 
 interface Fonte {
   id: string;
@@ -23,11 +22,17 @@ interface ClasseProdutoAPI {
   qtd_produtos: number;
 }
 
+interface CampoMascara {
+  campo: string;
+  placeholder: string;
+}
+
 interface Subclasse {
   id: string;
   nome: string;
   ncms: string;
   produtos: number;
+  campos_mascara?: CampoMascara[] | null;
 }
 
 interface Classe {
@@ -71,50 +76,26 @@ const ESTADOS_BR = [
   { uf: "SP", nome: "Sao Paulo" }, { uf: "SE", nome: "Sergipe" }, { uf: "TO", nome: "Tocantins" },
 ];
 
-const DOCS_EXIGIDOS = [
-  { tipo: "contrato_social", label: "Contrato Social" },
-  { tipo: "habilitacao_fiscal", label: "Habilitacao Fiscal" },
-  { tipo: "habilitacao_economica", label: "Habilitacao Economica" },
-  { tipo: "qualificacao_tecnica", label: "Qualificacao Tecnica" },
-  { tipo: "atestado_capacidade", label: "Atestado de Capacidade" },
-  { tipo: "afe", label: "AFE (Alvara Funcionamento)" },
-  { tipo: "cbpad", label: "CBPAD" },
-  { tipo: "cbpp", label: "CBPP" },
-  { tipo: "corpo_bombeiros", label: "Corpo de Bombeiros" },
-  { tipo: "balanco_patrimonial", label: "Balanco Patrimonial" },
-];
 
-export function ParametrizacoesPage({ onSendToChat }: PageProps) {
+export function ParametrizacoesPage(_props: PageProps) {
   const [fontes, setFontes] = useState<Fonte[]>([]);
   const [loadingFontes, setLoadingFontes] = useState(true);
   const [errorFontes, setErrorFontes] = useState<string | null>(null);
   const [parametros, setParametros] = useState<ParametroScore[]>([]);
   const [loadingParametros, setLoadingParametros] = useState(true);
   const [classes, setClasses] = useState<Classe[]>([]);
-  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
-  const [loadingClasses, setLoadingClasses] = useState(true);
 
   // Parametros-score state (persisted)
   const [paramScoreId, setParamScoreId] = useState<string | null>(null);
   const [paramScore, setParamScore] = useState<ParametroScoreAPI | null>(null);
   const [loadingParamScore, setLoadingParamScore] = useState(true);
   const [savingParamScore, setSavingParamScore] = useState(false);
-  const [savingClasse, setSavingClasse] = useState(false);
 
   // Palavras-chave e NCMs editing
   const [editingPalavras, setEditingPalavras] = useState(false);
   const [palavrasText, setPalavrasText] = useState("");
   const [editingNcms, setEditingNcms] = useState(false);
   const [ncmsText, setNcmsText] = useState("");
-
-  // Edit mode for classes (null = creating new, string = editing existing id)
-  const [editingClasseId, setEditingClasseId] = useState<string | null>(null);
-
-  // Fonte modal form state
-  const [novaFonteNome, setNovaFonteNome] = useState("");
-  const [novaFonteTipo, setNovaFonteTipo] = useState<"api" | "scraper">("api");
-  const [novaFonteUrl, setNovaFonteUrl] = useState("");
-  const [salvandoFonte, setSalvandoFonte] = useState(false);
 
   // Configuracoes de notificacao
   const [emailNotif, setEmailNotif] = useState("contato@aquila.com.br");
@@ -128,15 +109,9 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
   const [idioma, setIdioma] = useState("pt-BR");
   const [fusoHorario, setFusoHorario] = useState("America/Sao_Paulo");
 
-  // Tipos de edital
-  const [tiposEdital, setTiposEdital] = useState({
-    comodato: false,
-    venda: false,
-    aluguel: false,
-    consumo: false,
-    insumosLab: false,
-    insumosHosp: false,
-  });
+  // Tipos de edital (modalidades do banco)
+  const [modalidades, setModalidades] = useState<{ id: string; nome: string; ativo: boolean }[]>([]);
+  const [tiposEditalSelecionados, setTiposEditalSelecionados] = useState<Set<string>>(new Set());
 
   // Regiao de atuacao
   const [estadosSelecionados, setEstadosSelecionados] = useState<Set<string>>(new Set());
@@ -149,19 +124,21 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
   const [sam, setSam] = useState("");
   const [som, setSom] = useState("");
 
-  // Modais
-  const [showFonteModal, setShowFonteModal] = useState(false);
-  const [showClasseModal, setShowClasseModal] = useState(false);
-  const [showSubclasseModal, setShowSubclasseModal] = useState(false);
-  const [selectedClasseId, setSelectedClasseId] = useState<string | null>(null);
+  // RF-014: Custos e Margens
+  const [markupPadrao, setMarkupPadrao] = useState("");
+  const [custosFixos, setCustosFixos] = useState("");
+  const [freteBase, setFreteBase] = useState("");
 
-  // Campos do formulario de classe
-  const [novaClasseNome, setNovaClasseNome] = useState("");
-  const [novaClasseNCMs, setNovaClasseNCMs] = useState("");
+  // Pesos de Score (8 dimensoes)
+  const [pesoTecnico, setPesoTecnico] = useState("0.25");
+  const [pesoComercial, setPesoComercial] = useState("0.15");
+  const [pesoParticipacao, setPesoParticipacao] = useState("0.05");
+  const [pesoGanho, setPesoGanho] = useState("0.10");
+  const [pesoDocumental, setPesoDocumental] = useState("0.15");
+  const [pesoComplexidade, setPesoComplexidade] = useState("0.10");
+  const [pesoJuridico, setPesoJuridico] = useState("0.10");
+  const [pesoLogistico, setPesoLogistico] = useState("0.10");
 
-  // Campos do formulario de subclasse
-  const [novaSubclasseNome, setNovaSubclasseNome] = useState("");
-  const [novaSubclasseNCMs, setNovaSubclasseNCMs] = useState("");
 
   // R1: Feedback salvar notificacoes
   const [notifSalvas, setNotifSalvas] = useState(false);
@@ -169,13 +146,6 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
   // R2: Feedback salvar preferencias
   const [prefSalvas, setPrefSalvas] = useState(false);
 
-  // R3: Fontes documentais da empresa
-  const [empresaDocs, setEmpresaDocs] = useState<string[]>([]);
-  const [empresaDocsLoaded, setEmpresaDocsLoaded] = useState(false);
-
-  // R4: Editar subclasse
-  const [editingSubclasseId, setEditingSubclasseId] = useState<string | null>(null);
-  const [editingSubclasseClasseId, setEditingSubclasseClasseId] = useState<string | null>(null);
 
   // R5: Norteadores - tooltip state
   const [showPortfolioHint, setShowPortfolioHint] = useState(false);
@@ -218,23 +188,21 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     }
   }, []);
 
-  // Helper to convert tipos_edital array to checkbox state
-  const tiposArrayToState = (tipos: string[]) => ({
-    comodato: tipos.includes("comodato"),
-    venda: tipos.includes("venda"),
-    aluguel: tipos.includes("aluguel"),
-    consumo: tipos.includes("consumo"),
-    insumosLab: tipos.includes("insumosLab"),
-    insumosHosp: tipos.includes("insumosHosp"),
-  });
-
-  // Helper to convert checkbox state to tipos_edital array
-  const tiposStateToArray = (state: typeof tiposEdital) =>
-    Object.entries(state).filter(([, v]) => v).map(([k]) => k);
+  const loadModalidades = useCallback(async () => {
+    try {
+      const res = await crudList("modalidades-licitacao", { limit: 100 });
+      setModalidades(res.items.map(m => ({
+        id: String(m.id),
+        nome: String(m.nome),
+        ativo: Boolean(m.ativo ?? true),
+      })));
+    } catch {
+      // May not exist yet
+    }
+  }, []);
 
   const loadClasses = useCallback(async () => {
     try {
-      setLoadingClasses(true);
       const res = await crudList("classes-produtos", { limit: 500 });
       const items = res.items as unknown as ClasseProdutoAPI[];
 
@@ -252,14 +220,13 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
             nome: s.nome,
             ncms: Array.isArray(s.ncms) ? s.ncms.join(", ") : String(s.ncms || ""),
             produtos: s.qtd_produtos || 0,
+            campos_mascara: Array.isArray(s.campos_mascara) ? s.campos_mascara as unknown as CampoMascara[] : null,
           })),
         };
       });
       setClasses(tree);
     } catch {
       // May not exist yet
-    } finally {
-      setLoadingClasses(false);
     }
   }, []);
 
@@ -282,8 +249,22 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         setTam(p.tam != null ? String(p.tam) : "");
         setSam(p.sam != null ? String(p.sam) : "");
         setSom(p.som != null ? String(p.som) : "");
+        // RF-014: Custos e Margens
+        setMarkupPadrao(p.markup_padrao != null ? String(p.markup_padrao) : "");
+        setCustosFixos(p.custos_fixos != null ? String(p.custos_fixos) : "");
+        setFreteBase(p.frete_base != null ? String(p.frete_base) : "");
         const tipos = Array.isArray(p.tipos_edital) ? p.tipos_edital : [];
-        setTiposEdital(tiposArrayToState(tipos));
+        setTiposEditalSelecionados(new Set(tipos));
+
+        // Populate score weights
+        if (p.peso_tecnico != null) setPesoTecnico(String(p.peso_tecnico));
+        if (p.peso_comercial != null) setPesoComercial(String(p.peso_comercial));
+        if (p.peso_participacao != null) setPesoParticipacao(String(p.peso_participacao));
+        if (p.peso_ganho != null) setPesoGanho(String(p.peso_ganho));
+        if (p.peso_documental != null) setPesoDocumental(String(p.peso_documental));
+        if (p.peso_complexidade != null) setPesoComplexidade(String(p.peso_complexidade));
+        if (p.peso_juridico != null) setPesoJuridico(String(p.peso_juridico));
+        if (p.peso_logistico != null) setPesoLogistico(String(p.peso_logistico));
       }
     } catch {
       // May not exist yet
@@ -297,18 +278,8 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     loadParametros();
     loadClasses();
     loadParamScore();
-
-    // R3: Carregar documentos da empresa
-    crudList("empresas", { limit: 1 }).then(async (empRes) => {
-      if (empRes.items.length > 0) {
-        const docsRes = await crudList("empresa-documentos", { parent_id: String(empRes.items[0].id) });
-        setEmpresaDocs(docsRes.items.map(d => String(d.tipo || "")).filter(Boolean));
-      }
-      setEmpresaDocsLoaded(true);
-    }).catch(() => {
-      setEmpresaDocsLoaded(true);
-    });
-  }, [loadFontes, loadParametros, loadClasses, loadParamScore]);
+    loadModalidades();
+  }, [loadFontes, loadParametros, loadClasses, loadParamScore, loadModalidades]);
 
   const handleToggleFonte = async (id: string) => {
     const fonte = fontes.find(f => f.id === id);
@@ -321,43 +292,6 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     }
   };
 
-  const handleExcluirFonte = async (id: string) => {
-    if (!confirm("Excluir esta fonte?")) return;
-    try {
-      await crudDelete("fontes-editais", id);
-      setFontes(fontes.filter(f => f.id !== id));
-    } catch (err) {
-      setErrorFontes(err instanceof Error ? err.message : "Erro ao excluir fonte");
-    }
-  };
-
-  const handleSalvarFonte = async () => {
-    if (!novaFonteNome.trim()) return;
-    setSalvandoFonte(true);
-    try {
-      const created = await crudCreate("fontes-editais", {
-        nome: novaFonteNome,
-        tipo: novaFonteTipo,
-        url: novaFonteUrl,
-        ativa: true,
-      });
-      setFontes([...fontes, {
-        id: String(created.id ?? ""),
-        nome: novaFonteNome,
-        tipo: novaFonteTipo,
-        url: novaFonteUrl,
-        ativa: true,
-      }]);
-      setNovaFonteNome("");
-      setNovaFonteTipo("api");
-      setNovaFonteUrl("");
-      setShowFonteModal(false);
-    } catch (err) {
-      setErrorFontes(err instanceof Error ? err.message : "Erro ao salvar fonte");
-    } finally {
-      setSalvandoFonte(false);
-    }
-  };
 
   const getParamPeso = (nome: string) =>
     parametros.find(p => p.nome === nome)?.peso?.toString() || "";
@@ -368,18 +302,6 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
       await crudUpdate("parametros-score", p.id, { peso: Number(valor) });
       setParametros(parametros.map(pm => pm.id === p.id ? { ...pm, peso: Number(valor) } : pm));
     }
-  };
-
-  const toggleClasseExpansion = (classeId: string) => {
-    setExpandedClasses(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(classeId)) {
-        newSet.delete(classeId);
-      } else {
-        newSet.add(classeId);
-      }
-      return newSet;
-    });
   };
 
   // Helper to ensure parametros-score record exists, returns the id
@@ -458,8 +380,42 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     });
   };
 
+  // RF-014: Salvar custos e margens
+  const handleSalvarCustos = async () => {
+    await saveParamScore({
+      markup_padrao: markupPadrao ? Number(markupPadrao) : 0,
+      custos_fixos: custosFixos ? Number(custosFixos) : 0,
+      frete_base: freteBase ? Number(freteBase) : 0,
+    });
+  };
+
+  const handleSalvarPesosScore = async () => {
+    await saveParamScore({
+      peso_tecnico: parseFloat(pesoTecnico) || 0,
+      peso_comercial: parseFloat(pesoComercial) || 0,
+      peso_participacao: parseFloat(pesoParticipacao) || 0,
+      peso_ganho: parseFloat(pesoGanho) || 0,
+      peso_documental: parseFloat(pesoDocumental) || 0,
+      peso_complexidade: parseFloat(pesoComplexidade) || 0,
+      peso_juridico: parseFloat(pesoJuridico) || 0,
+      peso_logistico: parseFloat(pesoLogistico) || 0,
+    });
+  };
+
   const handleSalvarTiposEdital = async () => {
-    await saveParamScore({ tipos_edital: tiposStateToArray(tiposEdital) });
+    await saveParamScore({ tipos_edital: Array.from(tiposEditalSelecionados) });
+  };
+
+  const toggleModalidade = (nome: string) => {
+    setTiposEditalSelecionados(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nome)) {
+        newSet.delete(nome);
+      } else {
+        newSet.add(nome);
+      }
+      return newSet;
+    });
   };
 
   const handleSalvarPalavrasChave = async () => {
@@ -506,15 +462,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     }
   };
 
-  // R5: Helper to switch tab programmatically
-  const switchToTab = (tabId: string) => {
-    const container = tabContainerRef.current;
-    if (!container) return;
-    const tabBtn = container.querySelector<HTMLButtonElement>(`.tab-panel-tab:nth-child(${tabs.findIndex(t => t.id === tabId) + 1})`);
-    if (tabBtn) tabBtn.click();
-  };
-
-  // R5: Helper to scroll to a card by title text
+  // Helper to scroll to a card by title text
   const scrollToCard = (titleText: string) => {
     const container = tabContainerRef.current;
     if (!container) return;
@@ -527,188 +475,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
     }
   };
 
-  // Funcao placeholder — tool_gerar_classes_portfolio sera criada na Onda 4 (T48)
-  const handleGerarComIA = () => {};
-
-  const handleExcluirClasse = async (classeId: string) => {
-    if (!confirm("Excluir esta classe e suas subclasses?")) return;
-    try {
-      // Also delete subclasses belonging to this class
-      const classe = classes.find(c => c.id === classeId);
-      if (classe) {
-        for (const sub of classe.subclasses) {
-          await crudDelete("classes-produtos", sub.id);
-        }
-      }
-      await crudDelete("classes-produtos", classeId);
-      setClasses(classes.filter(c => c.id !== classeId));
-    } catch (err) {
-      console.error("Erro ao excluir classe:", err);
-    }
-  };
-
-  const handleEditarClasse = (classe: Classe) => {
-    setEditingClasseId(classe.id);
-    setNovaClasseNome(classe.nome);
-    setNovaClasseNCMs(classe.ncms);
-    setShowClasseModal(true);
-  };
-
-  const handleExcluirSubclasse = async (classeId: string, subId: string) => {
-    if (!confirm("Excluir esta subclasse?")) return;
-    try {
-      await crudDelete("classes-produtos", subId);
-      setClasses(classes.map(c => {
-        if (c.id === classeId) {
-          return { ...c, subclasses: c.subclasses.filter(s => s.id !== subId) };
-        }
-        return c;
-      }));
-    } catch (err) {
-      console.error("Erro ao excluir subclasse:", err);
-    }
-  };
-
-  const handleSalvarClasse = async () => {
-    if (!novaClasseNome.trim()) return;
-    setSavingClasse(true);
-    try {
-      const ncmsArray = novaClasseNCMs.split(",").map(n => n.trim()).filter(Boolean);
-      if (editingClasseId) {
-        // Update existing
-        await crudUpdate("classes-produtos", editingClasseId, {
-          nome: novaClasseNome,
-          ncms: ncmsArray,
-        });
-        setClasses(classes.map(c =>
-          c.id === editingClasseId
-            ? { ...c, nome: novaClasseNome, ncms: novaClasseNCMs }
-            : c
-        ));
-        setEditingClasseId(null);
-      } else {
-        // Create new
-        const created = await crudCreate("classes-produtos", {
-          nome: novaClasseNome,
-          tipo: "classe",
-          ncms: ncmsArray,
-        });
-        const novaClasse: Classe = {
-          id: String(created.id),
-          nome: novaClasseNome,
-          ncms: novaClasseNCMs,
-          produtos: 0,
-          subclasses: [],
-        };
-        setClasses([...classes, novaClasse]);
-      }
-      setNovaClasseNome("");
-      setNovaClasseNCMs("");
-      setShowClasseModal(false);
-    } catch (err) {
-      console.error("Erro ao salvar classe:", err);
-    } finally {
-      setSavingClasse(false);
-    }
-  };
-
-  const handleSalvarSubclasse = async () => {
-    if (!novaSubclasseNome.trim() || !selectedClasseId) return;
-    setSavingClasse(true);
-    try {
-      const ncmsArray = novaSubclasseNCMs.split(",").map(n => n.trim()).filter(Boolean);
-
-      if (editingSubclasseId) {
-        // R4: Update existing subclasse
-        await crudUpdate("classes-produtos", editingSubclasseId, {
-          nome: novaSubclasseNome,
-          ncms: ncmsArray,
-        });
-        setClasses(classes.map(c => {
-          if (c.id === editingSubclasseClasseId) {
-            return {
-              ...c,
-              subclasses: c.subclasses.map(s =>
-                s.id === editingSubclasseId
-                  ? { ...s, nome: novaSubclasseNome, ncms: novaSubclasseNCMs }
-                  : s
-              ),
-            };
-          }
-          return c;
-        }));
-        setEditingSubclasseId(null);
-        setEditingSubclasseClasseId(null);
-      } else {
-        // Create new subclasse
-        const created = await crudCreate("classes-produtos", {
-          nome: novaSubclasseNome,
-          tipo: "subclasse",
-          classe_pai_id: Number(selectedClasseId),
-          ncms: ncmsArray,
-        });
-        setClasses(classes.map(c => {
-          if (c.id === selectedClasseId) {
-            return {
-              ...c,
-              subclasses: [
-                ...c.subclasses,
-                {
-                  id: String(created.id),
-                  nome: novaSubclasseNome,
-                  ncms: novaSubclasseNCMs,
-                  produtos: 0,
-                },
-              ],
-            };
-          }
-          return c;
-        }));
-      }
-      setNovaSubclasseNome("");
-      setNovaSubclasseNCMs("");
-      setShowSubclasseModal(false);
-      setSelectedClasseId(null);
-    } catch (err) {
-      console.error("Erro ao salvar subclasse:", err);
-    } finally {
-      setSavingClasse(false);
-    }
-  };
-
-  const fonteColumns: Column<Fonte>[] = [
-    { key: "nome", header: "Nome", sortable: true },
-    { key: "tipo", header: "Tipo", render: (f) => f.tipo.toUpperCase() },
-    { key: "url", header: "URL" },
-    {
-      key: "ativa",
-      header: "Status",
-      render: (f) => (
-        <span className={`status-badge ${f.ativa ? "status-badge-success" : "status-badge-neutral"}`}>
-          {f.ativa ? "Ativa" : "Inativa"}
-        </span>
-      ),
-    },
-    {
-      key: "acoes",
-      header: "Acoes",
-      width: "100px",
-      render: (f) => (
-        <div className="table-actions">
-          <button
-            title={f.ativa ? "Pausar" : "Ativar"}
-            onClick={() => handleToggleFonte(f.id)}
-          >
-            {f.ativa ? <Pause size={16} /> : <Play size={16} />}
-          </button>
-          <button title="Excluir" className="danger" onClick={() => handleExcluirFonte(f.id)}><Trash2 size={16} /></button>
-        </div>
-      ),
-    },
-  ];
-
   const tabs = [
-    { id: "produtos", label: "Produtos", icon: <Settings size={16} /> },
     { id: "comercial", label: "Comercial", icon: <Globe size={16} /> },
     { id: "fontes", label: "Fontes de Busca", icon: <Globe size={16} /> },
     { id: "notificacoes", label: "Notificacoes", icon: <Bell size={16} /> },
@@ -731,283 +498,6 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
         <TabPanel tabs={tabs}>
           {(activeTab) => {
             switch (activeTab) {
-              case "produtos":
-                return (
-                  <>
-                    <Card
-                      title="Estrutura de Classificacao"
-                      actions={
-                        <div className="card-actions">
-                          <ActionButton icon={<Plus size={14} />} label="Nova Classe" onClick={() => setShowClasseModal(true)} />
-                          <ActionButton
-                            icon={<Lock size={14} />}
-                            label="Gerar com IA (Onda 4)"
-                            onClick={() => {}}
-                            disabled
-                          />
-                        </div>
-                      }
-                    >
-                      {loadingClasses ? (
-                        <div className="loading-center">
-                          <Loader2 size={20} className="spin" />
-                          <span>Carregando classes...</span>
-                        </div>
-                      ) : (
-                      <div className="classes-tree">
-                        {classes.length === 0 && (
-                          <p className="text-muted" style={{ padding: "16px", textAlign: "center" }}>
-                            Nenhuma classe cadastrada. Clique em "Nova Classe" para comecar.
-                          </p>
-                        )}
-                        {classes.map((classe) => (
-                          <div key={classe.id} className="classe-item">
-                            <div
-                              className="classe-header"
-                              onClick={() => toggleClasseExpansion(classe.id)}
-                            >
-                              <span className="classe-expand-icon">
-                                {expandedClasses.has(classe.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                              </span>
-                              <span className="classe-nome">{classe.nome}</span>
-                              <span className="classe-ncm">NCMs: {classe.ncms}</span>
-                              <span className="classe-count">{classe.subclasses.length} subclasses</span>
-                              <span className="classe-count">{classe.produtos} produtos</span>
-                              <div className="classe-actions">
-                                <button title="Adicionar Subclasse" onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedClasseId(classe.id);
-                                  setShowSubclasseModal(true);
-                                }}><Plus size={14} /></button>
-                                <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarClasse(classe); }}><Pencil size={14} /></button>
-                                <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluirClasse(classe.id); }}><Trash2 size={14} /></button>
-                              </div>
-                            </div>
-                            {expandedClasses.has(classe.id) && classe.subclasses.length > 0 && (
-                              <div className="subclasses-list">
-                                {classe.subclasses.map((sub) => (
-                                  <div key={sub.id} className="subclasse-item">
-                                    <span className="subclasse-nome">{sub.nome}</span>
-                                    <span className="subclasse-ncm">NCMs: {sub.ncms}</span>
-                                    <span className="subclasse-count">{sub.produtos} produtos</span>
-                                    <div className="subclasse-actions">
-                                      <button title="Editar" onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingSubclasseId(sub.id);
-                                        setEditingSubclasseClasseId(classe.id);
-                                        setNovaSubclasseNome(sub.nome);
-                                        setNovaSubclasseNCMs(sub.ncms || "");
-                                        setSelectedClasseId(classe.id);
-                                        setShowSubclasseModal(true);
-                                      }}><Pencil size={14} /></button>
-                                      <button title="Excluir" className="danger" onClick={() => handleExcluirSubclasse(classe.id, sub.id)}><Trash2 size={14} /></button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      )}
-                    </Card>
-
-                    <Card title="Tipos de Edital Desejados">
-                      <div className="checkbox-grid">
-                        <Checkbox
-                          checked={tiposEdital.comodato}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, comodato: v })}
-                          label="Comodato de equipamentos"
-                        />
-                        <Checkbox
-                          checked={tiposEdital.venda}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, venda: v })}
-                          label="Venda de equipamentos"
-                        />
-                        <Checkbox
-                          checked={tiposEdital.aluguel}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, aluguel: v })}
-                          label="Aluguel com consumo de reagentes"
-                        />
-                        <Checkbox
-                          checked={tiposEdital.consumo}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, consumo: v })}
-                          label="Consumo de reagentes"
-                        />
-                        <Checkbox
-                          checked={tiposEdital.insumosLab}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, insumosLab: v })}
-                          label="Compra de insumos laboratoriais"
-                        />
-                        <Checkbox
-                          checked={tiposEdital.insumosHosp}
-                          onChange={(v) => setTiposEdital({ ...tiposEdital, insumosHosp: v })}
-                          label="Compra de insumos hospitalares"
-                        />
-                      </div>
-                      <div className="form-actions" style={{ marginTop: "12px" }}>
-                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Tipos"} variant="primary" onClick={handleSalvarTiposEdital} disabled={savingParamScore} />
-                      </div>
-                    </Card>
-
-                    {/* Norteadores de Score */}
-                    <Card title="Norteadores de Score" subtitle="Configuracoes que alimentam o calculo de scores multi-dimensionais">
-                      <div className="norteadores-grid">
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Estrutura de Classificacao")}>
-                          <div className="norteador-header">
-                            {classes.length > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(a) Classificacao/Agrupamento</span>
-                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
-                          </div>
-                          <p className="norteador-desc">Arvore de classes e subclasses acima</p>
-                          {classes.length > 0
-                            ? <StatusBadge status="success" label={`${classes.length} classe(s) configurada(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => switchToTab("comercial")}>
-                          <div className="norteador-header">
-                            {estadosSelecionados.size > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(b) Score Comercial</span>
-                            <span className="score-feed-badge feed-comercial">Score Comercial</span>
-                          </div>
-                          <p className="norteador-desc">Regiao de atuacao, prazos e mercado (aba Comercial)</p>
-                          {estadosSelecionados.size > 0
-                            ? <StatusBadge status="success" label={`${estadosSelecionados.size} estado(s) selecionado(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Tipos de Edital Desejados")}>
-                          <div className="norteador-header">
-                            {tiposStateToArray(tiposEdital).length > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(c) Tipos de Edital</span>
-                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
-                          </div>
-                          <p className="norteador-desc">Checkboxes de tipos de edital acima</p>
-                          {tiposStateToArray(tiposEdital).length > 0
-                            ? <StatusBadge status="success" label={`${tiposStateToArray(tiposEdital).length} tipo(s) selecionado(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer", position: "relative" }} onClick={() => {
-                          setShowPortfolioHint(true);
-                          setTimeout(() => setShowPortfolioHint(false), 3000);
-                        }}>
-                          <div className="norteador-header">
-                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                            <span className="norteador-label">(d) Score Tecnico</span>
-                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
-                          </div>
-                          <p className="norteador-desc">Baseado nas especificacoes dos produtos do Portfolio</p>
-                          <StatusBadge status="success" label="Configurar no Portfolio" size="small" />
-                          {showPortfolioHint && (
-                            <div style={{
-                              position: "absolute", bottom: "-32px", left: "50%", transform: "translateX(-50%)",
-                              background: "#1e293b", color: "#fff", padding: "6px 12px", borderRadius: "6px",
-                              fontSize: "12px", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
-                            }}>
-                              <Info size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-                              Configure na pagina Portfolio
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => switchToTab("comercial")}>
-                          <div className="norteador-header">
-                            <AlertTriangle size={16} style={{ color: "#eab308" }} />
-                            <span className="norteador-label">(e) Score Participacao</span>
-                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
-                          </div>
-                          <p className="norteador-desc">Documentos frequentemente solicitados em editais (configurar abaixo)</p>
-                          <StatusBadge status="warning" label="Em configuracao" size="small" />
-                        </div>
-
-                        <div className="norteador-item">
-                          <div className="norteador-header">
-                            <XCircle size={16} style={{ color: "#6b7280" }} />
-                            <span className="norteador-label">(f) Score Aderencia de Ganho</span>
-                            <span className="score-feed-badge feed-ganho">Score Ganho</span>
-                          </div>
-                          <p className="norteador-desc">Historico: taxa de vitoria, margem media praticada</p>
-                          <StatusBadge status="neutral" label="A definir" size="small" />
-                        </div>
-                      </div>
-
-                      {/* Historico para Score Ganho */}
-                      <div className="norteador-config-section">
-                        <h4>Configurar Score Aderencia de Ganho (f)</h4>
-                        {loadingParametros ? (
-                          <div className="loading-center"><Loader2 size={16} className="spin" /><span>Carregando...</span></div>
-                        ) : (
-                          <div className="form-grid form-grid-3">
-                            <FormField label="Taxa de Vitoria Historica (%)">
-                              <TextInput value={getParamPeso("taxa_vitoria")} onChange={(v) => updateParamPeso("taxa_vitoria", v)} placeholder="Ex: 35" type="number" />
-                            </FormField>
-                            <FormField label="Margem Media Praticada (%)">
-                              <TextInput value={getParamPeso("margem_media")} onChange={(v) => updateParamPeso("margem_media", v)} placeholder="Ex: 15" type="number" />
-                            </FormField>
-                            <FormField label="Total de Licitacoes Participadas">
-                              <TextInput value={getParamPeso("total_licitacoes")} onChange={(v) => updateParamPeso("total_licitacoes", v)} placeholder="Ex: 120" type="number" />
-                            </FormField>
-                          </div>
-                        )}
-                        <ActionButton icon={<Lock size={14} />} label="Calcular pesos com IA (Onda 4)" onClick={() => {}} disabled />
-                      </div>
-                    </Card>
-
-                    {/* Fontes Documentais Exigidas */}
-                    <Card
-                      title="Fontes Documentais Exigidas por Editais"
-                      subtitle="Documentos que editais costumam solicitar - ligado ao cadastro da Empresa"
-                    >
-                      {!empresaDocsLoaded ? (
-                        <div className="loading-center">
-                          <Loader2 size={16} className="spin" />
-                          <span>Carregando documentos da empresa...</span>
-                        </div>
-                      ) : empresaDocs.length === 0 && empresaDocsLoaded ? (
-                        <div className="docs-exigidos-grid">
-                          {DOCS_EXIGIDOS.map((doc, i) => (
-                            <div key={i} className="doc-exigido-item">
-                              <span style={{ fontSize: "14px" }}>{doc.label}</span>
-                              <StatusBadge
-                                status="error"
-                                label="Nao temos"
-                                size="small"
-                              />
-                            </div>
-                          ))}
-                          <p className="text-muted" style={{ marginTop: "12px", fontSize: "12px", gridColumn: "1 / -1" }}>
-                            Configure documentos na pagina Empresa
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="docs-exigidos-grid">
-                          {DOCS_EXIGIDOS.map((doc, i) => (
-                            <div key={i} className="doc-exigido-item">
-                              <span style={{ fontSize: "14px" }}>{doc.label}</span>
-                              <StatusBadge
-                                status={empresaDocs.includes(doc.tipo) ? "success" : "error"}
-                                label={empresaDocs.includes(doc.tipo) ? "Temos" : "Nao temos"}
-                                size="small"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <p className="text-muted" style={{ marginTop: "12px", fontSize: "12px" }}>
-                        Status "Temos/Nao temos" e sincronizado com a pagina Empresa &rarr; Documentos
-                      </p>
-                    </Card>
-                  </>
-                );
-
               case "comercial":
                 return (
                   <>
@@ -1086,6 +576,200 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                         <ActionButton icon={<Lock size={14} />} label="Calcular com IA (Onda 4)" onClick={() => {}} disabled />
                       </div>
                     </Card>
+
+                    <Card title="Custos e Margens" icon={<DollarSign size={18} />}>
+                      <div className="form-grid form-grid-3">
+                        <FormField label="Markup Padrao (%)" hint="Percentual de markup sobre custo">
+                          <TextInput value={markupPadrao} onChange={(v) => setMarkupPadrao(v)} type="number" placeholder="Ex: 30" />
+                        </FormField>
+                        <FormField label="Custos Fixos Mensais (R$)" hint="Custos operacionais fixos mensais">
+                          <TextInput value={custosFixos} onChange={(v) => setCustosFixos(v)} type="number" prefix="R$" placeholder="Ex: 15000" />
+                        </FormField>
+                        <FormField label="Frete Base (R$)" hint="Custo base de frete por entrega">
+                          <TextInput value={freteBase} onChange={(v) => setFreteBase(v)} type="number" prefix="R$" placeholder="Ex: 500" />
+                        </FormField>
+                      </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Custos"} variant="primary" onClick={handleSalvarCustos} disabled={savingParamScore} />
+                      </div>
+                    </Card>
+
+                    <Card title="Modalidades de Licitacao Desejadas" subtitle="Selecione as modalidades em que a empresa deseja participar">
+                      {modalidades.length === 0 ? (
+                        <p className="text-muted" style={{ padding: 12, textAlign: "center", fontSize: 13 }}>
+                          Nenhuma modalidade cadastrada.
+                          <button style={{ marginLeft: 8, color: "var(--accent)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                            onClick={() => window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "crud:modalidades-licitacao" } }))}>
+                            Cadastrar Modalidades
+                          </button>
+                        </p>
+                      ) : (
+                        <div className="checkbox-grid">
+                          {modalidades.filter(m => m.ativo).map(m => (
+                            <Checkbox
+                              key={m.id}
+                              checked={tiposEditalSelecionados.has(m.nome)}
+                              onChange={() => toggleModalidade(m.nome)}
+                              label={m.nome}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Modalidades"} variant="primary" onClick={handleSalvarTiposEdital} disabled={savingParamScore} />
+                      </div>
+                    </Card>
+
+                    <Card title="Pesos de Score (6 Dimensoes + Operacionais)" subtitle="Pesos que ponderam cada dimensao no calculo do score final. As 6 dimensoes do workflow: Tecnico, Documental, Complexidade, Juridico, Logistico, Comercial, mais pesos operacionais Participacao e Ganho.">
+                      <div className="form-grid form-grid-2">
+                        <FormField label="Peso Tecnico" hint="Aderencia tecnica do produto">
+                          <TextInput value={pesoTecnico} onChange={(v) => setPesoTecnico(v)} type="number" placeholder="0.25" />
+                        </FormField>
+                        <FormField label="Peso Documental" hint="Regularidade documental e certidoes">
+                          <TextInput value={pesoDocumental} onChange={(v) => setPesoDocumental(v)} type="number" placeholder="0.15" />
+                        </FormField>
+                        <FormField label="Peso Complexidade" hint="Complexidade tecnica do edital">
+                          <TextInput value={pesoComplexidade} onChange={(v) => setPesoComplexidade(v)} type="number" placeholder="0.10" />
+                        </FormField>
+                        <FormField label="Peso Juridico" hint="Risco juridico e clausulas restritivas">
+                          <TextInput value={pesoJuridico} onChange={(v) => setPesoJuridico(v)} type="number" placeholder="0.10" />
+                        </FormField>
+                        <FormField label="Peso Logistico" hint="Viabilidade logistica e prazo de entrega">
+                          <TextInput value={pesoLogistico} onChange={(v) => setPesoLogistico(v)} type="number" placeholder="0.10" />
+                        </FormField>
+                        <FormField label="Peso Comercial" hint="Viabilidade comercial e preco">
+                          <TextInput value={pesoComercial} onChange={(v) => setPesoComercial(v)} type="number" placeholder="0.15" />
+                        </FormField>
+                        <FormField label="Peso Participacao" hint="Historico de participacao em editais">
+                          <TextInput value={pesoParticipacao} onChange={(v) => setPesoParticipacao(v)} type="number" placeholder="0.05" />
+                        </FormField>
+                        <FormField label="Peso Ganho" hint="Taxa de vitoria historica">
+                          <TextInput value={pesoGanho} onChange={(v) => setPesoGanho(v)} type="number" placeholder="0.10" />
+                        </FormField>
+                      </div>
+                      <div style={{ marginTop: "8px", fontSize: "13px", color: "#64748b" }}>
+                        Soma atual: {(
+                          parseFloat(pesoTecnico || "0") + parseFloat(pesoComercial || "0") +
+                          parseFloat(pesoParticipacao || "0") + parseFloat(pesoGanho || "0") +
+                          parseFloat(pesoDocumental || "0") + parseFloat(pesoComplexidade || "0") +
+                          parseFloat(pesoJuridico || "0") + parseFloat(pesoLogistico || "0")
+                        ).toFixed(2)}
+                      </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Pesos"} variant="primary" onClick={handleSalvarPesosScore} disabled={savingParamScore} />
+                      </div>
+                    </Card>
+
+                    {/* Norteadores de Score */}
+                    <Card title="Norteadores de Score" subtitle="Configuracoes que alimentam o calculo de scores multi-dimensionais">
+                      <div className="norteadores-grid">
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "crud:classes-produto-v2" } }))}>
+                          <div className="norteador-header">
+                            {classes.length > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
+                            <span className="norteador-label">(a) Classificacao/Agrupamento</span>
+                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
+                          </div>
+                          <p className="norteador-desc">Arvore de classes e subclasses (aba Produtos)</p>
+                          {classes.length > 0
+                            ? <StatusBadge status="success" label={`${classes.length} classe(s) configurada(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
+                        </div>
+
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Regiao de Atuacao")}>
+                          <div className="norteador-header">
+                            {estadosSelecionados.size > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
+                            <span className="norteador-label">(b) Score Comercial</span>
+                            <span className="score-feed-badge feed-comercial">Score Comercial</span>
+                          </div>
+                          <p className="norteador-desc">Regiao de atuacao, prazos e mercado (acima)</p>
+                          {estadosSelecionados.size > 0
+                            ? <StatusBadge status="success" label={`${estadosSelecionados.size} estado(s) selecionado(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
+                        </div>
+
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Modalidades de Licitacao")}>
+                          <div className="norteador-header">
+                            {tiposEditalSelecionados.size > 0
+                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
+                            <span className="norteador-label">(c) Modalidades de Licitacao</span>
+                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
+                          </div>
+                          <p className="norteador-desc">Modalidades de licitacao desejadas (acima)</p>
+                          {tiposEditalSelecionados.size > 0
+                            ? <StatusBadge status="success" label={`${tiposEditalSelecionados.size} modalidade(s) selecionada(s)`} size="small" />
+                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
+                        </div>
+
+                        <div className="norteador-item" style={{ cursor: "pointer", position: "relative" }} onClick={() => {
+                          setShowPortfolioHint(true);
+                          setTimeout(() => setShowPortfolioHint(false), 3000);
+                        }}>
+                          <div className="norteador-header">
+                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                            <span className="norteador-label">(d) Score Tecnico</span>
+                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
+                          </div>
+                          <p className="norteador-desc">Baseado nas especificacoes dos produtos do Portfolio</p>
+                          <StatusBadge status="success" label="Configurar no Portfolio" size="small" />
+                          {showPortfolioHint && (
+                            <div style={{
+                              position: "absolute", bottom: "-32px", left: "50%", transform: "translateX(-50%)",
+                              background: "#1e293b", color: "#fff", padding: "6px 12px", borderRadius: "6px",
+                              fontSize: "12px", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                            }}>
+                              <Info size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                              Configure na pagina Portfolio
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Custos e Margens")}>
+                          <div className="norteador-header">
+                            <AlertTriangle size={16} style={{ color: "#eab308" }} />
+                            <span className="norteador-label">(e) Score Participacao</span>
+                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
+                          </div>
+                          <p className="norteador-desc">Documentos frequentemente solicitados em editais</p>
+                          <StatusBadge status="warning" label="Em configuracao" size="small" />
+                        </div>
+
+                        <div className="norteador-item">
+                          <div className="norteador-header">
+                            <XCircle size={16} style={{ color: "#6b7280" }} />
+                            <span className="norteador-label">(f) Score Aderencia de Ganho</span>
+                            <span className="score-feed-badge feed-ganho">Score Ganho</span>
+                          </div>
+                          <p className="norteador-desc">Historico: taxa de vitoria, margem media praticada</p>
+                          <StatusBadge status="neutral" label="A definir" size="small" />
+                        </div>
+                      </div>
+
+                      {/* Historico para Score Ganho */}
+                      <div className="norteador-config-section">
+                        <h4>Configurar Score Aderencia de Ganho (f)</h4>
+                        {loadingParametros ? (
+                          <div className="loading-center"><Loader2 size={16} className="spin" /><span>Carregando...</span></div>
+                        ) : (
+                          <div className="form-grid form-grid-3">
+                            <FormField label="Taxa de Vitoria Historica (%)">
+                              <TextInput value={getParamPeso("taxa_vitoria")} onChange={(v) => updateParamPeso("taxa_vitoria", v)} placeholder="Ex: 35" type="number" />
+                            </FormField>
+                            <FormField label="Margem Media Praticada (%)">
+                              <TextInput value={getParamPeso("margem_media")} onChange={(v) => updateParamPeso("margem_media", v)} placeholder="Ex: 15" type="number" />
+                            </FormField>
+                            <FormField label="Total de Licitacoes Participadas">
+                              <TextInput value={getParamPeso("total_licitacoes")} onChange={(v) => updateParamPeso("total_licitacoes", v)} placeholder="Ex: 120" type="number" />
+                            </FormField>
+                          </div>
+                        )}
+                        <ActionButton icon={<Lock size={14} />} label="Calcular pesos com IA (Onda 4)" onClick={() => {}} disabled />
+                      </div>
+                    </Card>
                     </>
                     )}
                   </>
@@ -1094,28 +778,16 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
               case "fontes":
                 return (
                   <>
-                    {errorFontes && (
-                      <div className="portfolio-error">
-                        <AlertCircle size={16} />
-                        <span>{errorFontes}</span>
-                        <button onClick={loadFontes}>Tentar novamente</button>
-                      </div>
-                    )}
                     <Card
                       title="Fontes de Editais"
+                      subtitle="Fontes ativas para busca de editais"
                       actions={
-                        <div className="card-actions">
-                          <ActionButton
-                            icon={<RefreshCw size={14} />}
-                            label="Atualizar"
-                            onClick={loadFontes}
-                          />
-                          <ActionButton
-                            icon={<Plus size={14} />}
-                            label="Cadastrar Fonte"
-                            onClick={() => setShowFonteModal(true)}
-                          />
-                        </div>
+                        <ActionButton
+                          icon={<Settings size={14} />}
+                          label="Gerenciar Fontes"
+                          variant="primary"
+                          onClick={() => window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "crud:fontes-editais" } }))}
+                        />
                       }
                     >
                       {loadingFontes ? (
@@ -1123,8 +795,33 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                           <Loader2 size={20} className="spin" />
                           <span>Carregando fontes...</span>
                         </div>
+                      ) : fontes.length === 0 ? (
+                        <p className="text-muted" style={{ padding: 12, textAlign: "center", fontSize: 13 }}>
+                          Nenhuma fonte cadastrada. Use o botao acima para gerenciar fontes.
+                        </p>
                       ) : (
-                        <DataTable data={fontes} columns={fonteColumns} idKey="id" emptyMessage="Nenhuma fonte cadastrada. Use 'Cadastrar via IA' ou adicione manualmente." />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {fontes.map(f => (
+                            <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                <span style={{ fontSize: 13, fontWeight: 500 }}>{f.nome}</span>
+                                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{f.tipo.toUpperCase()}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span className={`status-badge ${f.ativa ? "status-badge-success" : "status-badge-neutral"}`} style={{ fontSize: 11 }}>
+                                  {f.ativa ? "Ativa" : "Inativa"}
+                                </span>
+                                <button
+                                  title={f.ativa ? "Desativar" : "Ativar"}
+                                  onClick={() => handleToggleFonte(f.id)}
+                                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 4 }}
+                                >
+                                  {f.ativa ? <Pause size={14} /> : <Play size={14} />}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </Card>
 
@@ -1205,6 +902,7 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
                         </p>
                       </div>
                     </Card>
+
                   </>
                 );
 
@@ -1306,86 +1004,6 @@ export function ParametrizacoesPage({ onSendToChat }: PageProps) {
           }}
         </TabPanel>
       </div>
-
-      {/* Modal Nova Fonte */}
-      <Modal
-        isOpen={showFonteModal}
-        onClose={() => setShowFonteModal(false)}
-        title="Cadastrar Fonte de Editais"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setShowFonteModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarFonte} disabled={salvandoFonte || !novaFonteNome}>
-              {salvandoFonte ? <Loader2 size={14} className="spin" /> : null} Salvar
-            </button>
-          </>
-        }
-      >
-        <FormField label="Nome" required>
-          <TextInput value={novaFonteNome} onChange={setNovaFonteNome} />
-        </FormField>
-        <FormField label="Tipo" required>
-          <SelectInput
-            value={novaFonteTipo}
-            onChange={(v) => setNovaFonteTipo(v as "api" | "scraper")}
-            options={[
-              { value: "api", label: "API" },
-              { value: "scraper", label: "Scraper" },
-            ]}
-            placeholder="Selecione..."
-          />
-        </FormField>
-        <FormField label="URL" required>
-          <TextInput value={novaFonteUrl} onChange={setNovaFonteUrl} type="url" />
-        </FormField>
-      </Modal>
-
-      {/* Modal Nova/Editar Classe */}
-      <Modal
-        isOpen={showClasseModal}
-        onClose={() => { setShowClasseModal(false); setEditingClasseId(null); setNovaClasseNome(""); setNovaClasseNCMs(""); }}
-        title={editingClasseId ? "Editar Classe de Produto" : "Nova Classe de Produto"}
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => { setShowClasseModal(false); setEditingClasseId(null); setNovaClasseNome(""); setNovaClasseNCMs(""); }}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarClasse} disabled={savingClasse || !novaClasseNome}>
-              {savingClasse ? <Loader2 size={14} className="spin" /> : null} Salvar
-            </button>
-          </>
-        }
-      >
-        <FormField label="Nome da Classe" required>
-          <TextInput value={novaClasseNome} onChange={setNovaClasseNome} placeholder="Ex: Reagentes" />
-        </FormField>
-        <FormField label="NCMs (separados por virgula)">
-          <TextInput value={novaClasseNCMs} onChange={setNovaClasseNCMs} placeholder="3822, 3002, 3006" />
-        </FormField>
-      </Modal>
-
-      {/* Modal Nova/Editar Subclasse */}
-      <Modal
-        isOpen={showSubclasseModal}
-        onClose={() => { setShowSubclasseModal(false); setSelectedClasseId(null); setEditingSubclasseId(null); setEditingSubclasseClasseId(null); setNovaSubclasseNome(""); setNovaSubclasseNCMs(""); }}
-        title={editingSubclasseId ? "Editar Subclasse de Produto" : "Nova Subclasse de Produto"}
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => { setShowSubclasseModal(false); setSelectedClasseId(null); setEditingSubclasseId(null); setEditingSubclasseClasseId(null); setNovaSubclasseNome(""); setNovaSubclasseNCMs(""); }}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarSubclasse} disabled={savingClasse || !novaSubclasseNome}>
-              {savingClasse ? <Loader2 size={14} className="spin" /> : null} Salvar
-            </button>
-          </>
-        }
-      >
-        <FormField label="Classe Pai">
-          <TextInput value={classes.find(c => c.id === selectedClasseId)?.nome || ""} onChange={() => {}} disabled />
-        </FormField>
-        <FormField label="Nome da Subclasse" required>
-          <TextInput value={novaSubclasseNome} onChange={setNovaSubclasseNome} placeholder="Ex: Reagentes Diagnostico" />
-        </FormField>
-        <FormField label="NCMs da Subclasse (separados por virgula)" required>
-          <TextInput value={novaSubclasseNCMs} onChange={setNovaSubclasseNCMs} placeholder="3822.00.90, 3822.00.10" />
-        </FormField>
-      </Modal>
     </div>
   );
 }

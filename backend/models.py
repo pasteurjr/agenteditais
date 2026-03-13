@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM models for the Editais IA system.
 """
-from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, create_engine, UniqueConstraint
+from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, Float, create_engine, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -144,6 +144,9 @@ class Produto(Base):
     modelo = Column(String(255), nullable=True)
     descricao = Column(Text, nullable=True)
     preco_referencia = Column(DECIMAL(15, 2), nullable=True)
+    status_pipeline = Column(String(20), default="cadastrado")  # cadastrado, qualificado, ofertado, vencedor
+    registro_anvisa = Column(String(30), nullable=True)
+    anvisa_status = Column(String(20), nullable=True)  # ativo, em_analise, cancelado, null
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -164,6 +167,9 @@ class Produto(Base):
             "modelo": self.modelo,
             "descricao": self.descricao,
             "preco_referencia": float(self.preco_referencia) if self.preco_referencia else None,
+            "status_pipeline": self.status_pipeline or "cadastrado",
+            "registro_anvisa": self.registro_anvisa,
+            "anvisa_status": self.anvisa_status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_specs:
@@ -426,10 +432,15 @@ class Edital(Base):
     pdf_path = Column(String(500), nullable=True)  # Caminho local se baixado
     dados_completos = Column(Boolean, default=False)  # Se tem todos os dados do PNCP
     fonte_tipo = Column(String(20), nullable=True)  # 'api' ou 'scraper'
+    # RF-013: Vinculo edital -> classe/subclasse de produto
+    classe_produto_id = Column(String(36), ForeignKey("classes_produto_v2.id"), nullable=True)
+    subclasse_produto_id = Column(String(36), ForeignKey("subclasses_produto.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     user = relationship("User", back_populates="editais")
+    classe_produto = relationship("ClasseProdutoV2", foreign_keys=[classe_produto_id])
+    subclasse_produto = relationship("SubclasseProduto", foreign_keys=[subclasse_produto_id])
     requisitos = relationship("EditalRequisito", back_populates="edital", cascade="all, delete-orphan")
     documentos = relationship("EditalDocumento", back_populates="edital", cascade="all, delete-orphan")
     analises = relationship("Analise", back_populates="edital", cascade="all, delete-orphan")
@@ -477,6 +488,8 @@ class Edital(Base):
             "cnpj_orgao": self.cnpj_orgao,
             "ano_compra": self.ano_compra,
             "seq_compra": self.seq_compra,
+            "classe_produto_id": self.classe_produto_id,
+            "subclasse_produto_id": self.subclasse_produto_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_requisitos:
@@ -1172,6 +1185,66 @@ class Empresa(Base):
         }
 
 
+class CategoriaDocumento(Base):
+    """Categorias de documentos para licitações (Habilitação Jurídica, Fiscal, etc.)"""
+    __tablename__ = 'categorias_documento'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(100), nullable=False, unique=True)
+    descricao = Column(Text, nullable=True)
+    ordem = Column(Integer, default=0)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    documentos_necessarios = relationship("DocumentoNecessario", back_populates="categoria_rel")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "ordem": self.ordem,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DocumentoNecessario(Base):
+    """Tipos de documentos necessários para licitações — popula o dropdown de upload"""
+    __tablename__ = 'documentos_necessarios'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    categoria_id = Column(String(36), ForeignKey('categorias_documento.id', ondelete='SET NULL'), nullable=True)
+    nome = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=True)
+    tipo_chave = Column(String(50), nullable=False, unique=True)
+    base_legal = Column(String(500), nullable=True)
+    validade_dias = Column(Integer, nullable=True)
+    obrigatorio = Column(Boolean, default=True)
+    ativo = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    categoria_rel = relationship("CategoriaDocumento", back_populates="documentos_necessarios")
+    documentos = relationship("EmpresaDocumento", back_populates="documento_necessario")
+
+    def to_dict(self):
+        cat = self.categoria_rel
+        return {
+            "id": self.id,
+            "categoria_id": self.categoria_id,
+            "categoria": cat.nome if cat else None,
+            "nome": self.nome,
+            "descricao": self.descricao,
+            "tipo_chave": self.tipo_chave,
+            "base_legal": self.base_legal,
+            "validade_dias": self.validade_dias,
+            "obrigatorio": self.obrigatorio,
+            "ativo": self.ativo,
+            "ordem": self.ordem,
+        }
+
+
 class EmpresaDocumento(Base):
     """Documentos da empresa (contrato social, atestados, etc)"""
     __tablename__ = 'empresa_documentos'
@@ -1184,6 +1257,7 @@ class EmpresaDocumento(Base):
         'habilitacao_fiscal', 'habilitacao_economica', 'qualificacao_tecnica',
         'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
     ), nullable=False)
+    documento_necessario_id = Column(String(36), ForeignKey('documentos_necessarios.id', ondelete='SET NULL'), nullable=True)
     nome_arquivo = Column(String(255), nullable=False)
     path_arquivo = Column(String(500), nullable=False)
     data_emissao = Column(Date, nullable=True)
@@ -1195,12 +1269,17 @@ class EmpresaDocumento(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     empresa = relationship("Empresa", back_populates="documentos")
+    documento_necessario = relationship("DocumentoNecessario", back_populates="documentos")
 
     def to_dict(self):
+        dn = self.documento_necessario
         return {
             "id": self.id,
             "empresa_id": self.empresa_id,
             "tipo": self.tipo,
+            "documento_necessario_id": self.documento_necessario_id,
+            "documento_necessario_nome": dn.nome if dn else None,
+            "documento_necessario_categoria": dn.categoria_rel.nome if dn and dn.categoria_rel else None,
             "nome_arquivo": self.nome_arquivo,
             "path_arquivo": self.path_arquivo,
             "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
@@ -1225,6 +1304,8 @@ class EmpresaCertidao(Base):
     path_arquivo = Column(String(500), nullable=True)
     status = Column(Enum('valida', 'vencida', 'pendente', 'buscando', 'erro', 'nao_disponivel'), default='pendente')
     url_consulta = Column(String(500), nullable=True)
+    mensagem = Column(Text, nullable=True)
+    dados_extras = Column(JSON, nullable=True)
     fonte_certidao_id = Column(String(36), ForeignKey('fontes_certidoes.id', ondelete='SET NULL'), nullable=True)
     edital_requisito_id = Column(String(36), ForeignKey('editais_requisitos.id', ondelete='SET NULL'), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -1245,6 +1326,8 @@ class EmpresaCertidao(Base):
             "path_arquivo": self.path_arquivo,
             "status": self.status,
             "url_consulta": self.url_consulta,
+            "mensagem": self.mensagem,
+            "dados_extras": self.dados_extras,
             "fonte_certidao_id": self.fonte_certidao_id,
             "fonte_nome": (self.fonte.nome if self.fonte else None) if self.fonte_certidao_id else None,
             "permite_busca_automatica": (self.fonte.permite_busca_automatica if self.fonte else True) if self.fonte_certidao_id else True,
@@ -1648,16 +1731,20 @@ class AprendizadoFeedback(Base):
 # ==================== PARAMETRIZAÇÕES ====================
 
 class ParametroScore(Base):
-    """Parâmetros de score e pesos configuráveis por usuário"""
+    """Parâmetros de score e pesos configuráveis por empresa"""
     __tablename__ = 'parametros_score'
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
-    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
-    peso_tecnico = Column(DECIMAL(5, 2), default=0.40)
-    peso_comercial = Column(DECIMAL(5, 2), default=0.25)
-    peso_participacao = Column(DECIMAL(5, 2), default=0.20)
-    peso_ganho = Column(DECIMAL(5, 2), default=0.15)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False, unique=True)
+    peso_tecnico = Column(DECIMAL(5, 2), default=0.25)
+    peso_comercial = Column(DECIMAL(5, 2), default=0.15)
+    peso_participacao = Column(DECIMAL(5, 2), default=0.05)
+    peso_ganho = Column(DECIMAL(5, 2), default=0.10)
+    peso_documental = Column(DECIMAL(5, 2), default=0.15)
+    peso_complexidade = Column(DECIMAL(5, 2), default=0.10)
+    peso_juridico = Column(DECIMAL(5, 2), default=0.10)
+    peso_logistico = Column(DECIMAL(5, 2), default=0.10)
     limiar_go = Column(DECIMAL(5, 2), default=70.0)
     limiar_nogo = Column(DECIMAL(5, 2), default=40.0)
     margem_minima = Column(DECIMAL(5, 2), nullable=True)
@@ -1671,6 +1758,10 @@ class ParametroScore(Base):
     tipos_edital = Column(JSON, nullable=True)           # ["comodato", "venda", ...]
     palavras_chave = Column(JSON, nullable=True)         # ["microscopio", "centrifuga"]
     ncms_busca = Column(JSON, nullable=True)             # ["9018.19.80"]
+    # RF-014: Custos e Margens
+    markup_padrao = Column(Float, default=0.0)           # Markup % padrao
+    custos_fixos = Column(Float, default=0.0)            # Custos operacionais fixos mensais
+    frete_base = Column(Float, default=0.0)              # Custo base de frete
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1684,6 +1775,10 @@ class ParametroScore(Base):
             "peso_comercial": float(self.peso_comercial) if self.peso_comercial else None,
             "peso_participacao": float(self.peso_participacao) if self.peso_participacao else None,
             "peso_ganho": float(self.peso_ganho) if self.peso_ganho else None,
+            "peso_documental": float(self.peso_documental) if self.peso_documental else None,
+            "peso_complexidade": float(self.peso_complexidade) if self.peso_complexidade else None,
+            "peso_juridico": float(self.peso_juridico) if self.peso_juridico else None,
+            "peso_logistico": float(self.peso_logistico) if self.peso_logistico else None,
             "limiar_go": float(self.limiar_go) if self.limiar_go else None,
             "limiar_nogo": float(self.limiar_nogo) if self.limiar_nogo else None,
             "margem_minima": float(self.margem_minima) if self.margem_minima else None,
@@ -1696,6 +1791,9 @@ class ParametroScore(Base):
             "tipos_edital": self.tipos_edital,
             "palavras_chave": self.palavras_chave,
             "ncms_busca": self.ncms_busca,
+            "markup_padrao": self.markup_padrao,
+            "custos_fixos": self.custos_fixos,
+            "frete_base": self.frete_base,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

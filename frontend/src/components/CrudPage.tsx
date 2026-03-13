@@ -18,6 +18,7 @@ export interface FieldConfig {
   fkTable?: string;
   fkLabel?: string;
   confirmField?: string; // name of the confirmation field (for password)
+  renderCustom?: (value: unknown, onChange: (val: unknown) => void) => React.ReactNode;
 }
 
 export interface CrudPageConfig {
@@ -30,6 +31,12 @@ export interface CrudPageConfig {
   parentTable?: string;
   parentLabelField?: string;
   parentLabelFn?: (item: Record<string, unknown>) => string;
+  /** Custom component that replaces the default form when creating a new record.
+   *  Receives onSaved (call after successful save to reload list) and onCancel. */
+  renderCreateForm?: (props: { onSaved: () => void; onCancel: () => void }) => React.ReactNode;
+  /** Custom component that replaces the default form when editing.
+   *  Receives the item data, onSaved and onCancel. */
+  renderEditForm?: (props: { item: Record<string, unknown>; onSaved: () => void; onCancel: () => void }) => React.ReactNode;
 }
 
 interface CrudPageProps {
@@ -100,7 +107,7 @@ export function generateFieldsFromSchema(columns: CrudColumnSchema[]): FieldConf
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function CrudPage({ config }: CrudPageProps) {
-  const { table, title, icon, fields, searchPlaceholder, parentFk, parentTable, parentLabelField, parentLabelFn } = config;
+  const { table, title, icon, fields, searchPlaceholder, parentFk, parentTable, parentLabelField, parentLabelFn, renderCreateForm, renderEditForm } = config;
   const { empresa } = useAuth();
 
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
@@ -409,6 +416,10 @@ export function CrudPage({ config }: CrudPageProps) {
     if (field.hidden) return null;
     const value = formData[field.name] ?? "";
 
+    if (field.renderCustom) {
+      return field.renderCustom(value, (val) => updateField(field.name, val));
+    }
+
     switch (field.type) {
       case "select":
         return (
@@ -691,8 +702,25 @@ export function CrudPage({ config }: CrudPageProps) {
         {error && <div className="crud-message crud-message-error">{error}</div>}
         {successMsg && <div className="crud-message crud-message-success">{successMsg}</div>}
 
-        {/* Form area */}
-        {showForm && (
+        {/* Custom create form (replaces default form on new) */}
+        {isNew && renderCreateForm && (
+          renderCreateForm({
+            onSaved: () => { setIsNew(false); loadItems(); },
+            onCancel: () => { setIsNew(false); setError(null); },
+          })
+        )}
+
+        {/* Custom edit form (replaces default form on edit) */}
+        {!isNew && selectedId && renderEditForm && (
+          renderEditForm({
+            item: formData,
+            onSaved: () => { setSelectedId(null); loadItems(); },
+            onCancel: () => { setSelectedId(null); setError(null); },
+          })
+        )}
+
+        {/* Form area (default — used when no custom form applies) */}
+        {showForm && !(isNew && renderCreateForm) && !(!isNew && selectedId && renderEditForm) && (
           <div className="card">
             <div className="card-header">
               <div className="card-header-left">

@@ -174,6 +174,8 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-dispensas", icon: <Zap size={14} />, label: "Dispensas", page: "crud:dispensas" },
           { id: "crud-estrategias", icon: <Target size={14} />, label: "Estrategias", page: "crud:estrategias-editais" },
           { id: "crud-fontes", icon: <Search size={14} />, label: "Fontes Editais", page: "crud:fontes-editais" },
+          { id: "crud-modalidades", icon: <Gavel size={14} />, label: "Modalidades Licitacao", page: "crud:modalidades-licitacao" },
+          { id: "crud-origens", icon: <GitBranch size={14} />, label: "Origens Orgao", page: "crud:origens-orgao" },
           { id: "crud-cat-doc", icon: <FolderTree size={14} />, label: "Categorias Documento", page: "crud:categorias-documento" },
           { id: "crud-docs-nec", icon: <FileText size={14} />, label: "Docs Necessarios", page: "crud:documentos-necessarios" },
         ],

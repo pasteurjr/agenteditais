@@ -2,13 +2,139 @@
  * Configuração de todas as tabelas CRUD.
  * Define campos, labels e tipos para cada tabela.
  */
+import React from "react";
 import {
   Building, FileText, Shield, Users, Package, Sliders, Search,
   FileCheck, Layers, BarChart2, Gavel, DollarSign, Scale, Eye,
   Bell, Clock, Mail, Send, Briefcase, TrendingUp, AlertTriangle,
-  Database, BookOpen, Target, Zap, Globe, UserPlus, FolderTree, Tag, Tags
+  Database, BookOpen, Target, Zap, Globe, UserPlus, FolderTree, Tag, Tags, GitBranch,
+  Plus, Trash2
 } from "lucide-react";
 import type { CrudPageConfig, FieldConfig } from "../components/CrudPage";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+
+// ─── Editor visual de campos_mascara ──────────────────────────────────────────
+
+export interface CampoMascara {
+  campo: string;
+  tipo: "texto" | "numero" | "decimal" | "select" | "boolean";
+  unidade?: string;
+  placeholder?: string;
+  opcoes?: string[];       // Para tipo "select"
+  obrigatorio?: boolean;
+}
+
+const TIPOS_CAMPO = [
+  { value: "texto", label: "Texto" },
+  { value: "numero", label: "Número inteiro" },
+  { value: "decimal", label: "Decimal" },
+  { value: "select", label: "Seleção" },
+  { value: "boolean", label: "Sim/Não" },
+];
+
+function CamposMascaraEditor({ value, onChange }: { value: unknown; onChange: (val: unknown) => void }) {
+  const campos: CampoMascara[] = Array.isArray(value)
+    ? value.map((v: Record<string, unknown>) => ({ campo: String(v.campo || v.nome || ""), tipo: (v.tipo as CampoMascara["tipo"]) || "texto", unidade: v.unidade ? String(v.unidade) : undefined, placeholder: v.placeholder ? String(v.placeholder) : undefined, opcoes: Array.isArray(v.opcoes) ? v.opcoes.map(String) : undefined, obrigatorio: Boolean(v.obrigatorio) }))
+    : [];
+
+  const updateCampo = (idx: number, key: string, val: unknown) => {
+    const updated = [...campos];
+    updated[idx] = { ...updated[idx], [key]: val };
+    onChange(updated);
+  };
+
+  const addCampo = () => {
+    onChange([...campos, { campo: "", tipo: "texto", placeholder: "" }]);
+  };
+
+  const removeCampo = (idx: number) => {
+    onChange(campos.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 13, color: "#94a3b8" }}>Campos técnicos da máscara de entrada</span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addCampo} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, padding: "4px 8px" }}>
+          <Plus size={12} /> Adicionar Campo
+        </button>
+      </div>
+      {campos.length === 0 && (
+        <p style={{ fontSize: 12, color: "#64748b", textAlign: "center", padding: 12 }}>
+          Nenhum campo definido. Clique em "Adicionar Campo" para criar a máscara.
+        </p>
+      )}
+      {/* Header */}
+      {campos.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 4, fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+          <span style={{ flex: 2 }}>Nome do campo</span>
+          <span style={{ width: 110 }}>Tipo</span>
+          <span style={{ width: 70 }}>Unidade</span>
+          <span style={{ flex: 1 }}>Placeholder / Opções</span>
+          <span style={{ width: 30, textAlign: "center" }}>Obr.</span>
+          <span style={{ width: 28 }}></span>
+        </div>
+      )}
+      {campos.map((campo, idx) => (
+        <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
+          <input
+            type="text"
+            className="text-input"
+            value={campo.campo}
+            onChange={(e) => updateCampo(idx, "campo", e.target.value)}
+            placeholder="Nome (ex: Potencia)"
+            style={{ flex: 2 }}
+          />
+          <select
+            className="text-input"
+            value={campo.tipo}
+            onChange={(e) => updateCampo(idx, "tipo", e.target.value)}
+            style={{ width: 110 }}
+          >
+            {TIPOS_CAMPO.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <input
+            type="text"
+            className="text-input"
+            value={campo.unidade || ""}
+            onChange={(e) => updateCampo(idx, "unidade", e.target.value || undefined)}
+            placeholder="Un."
+            style={{ width: 70 }}
+          />
+          {campo.tipo === "select" ? (
+            <input
+              type="text"
+              className="text-input"
+              value={(campo.opcoes || []).join(", ")}
+              onChange={(e) => updateCampo(idx, "opcoes", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
+              placeholder="Opções separadas por vírgula"
+              style={{ flex: 1 }}
+            />
+          ) : (
+            <input
+              type="text"
+              className="text-input"
+              value={campo.placeholder || ""}
+              onChange={(e) => updateCampo(idx, "placeholder", e.target.value)}
+              placeholder="Ex: 1500W"
+              style={{ flex: 1 }}
+            />
+          )}
+          <input
+            type="checkbox"
+            checked={campo.obrigatorio || false}
+            onChange={(e) => updateCampo(idx, "obrigatorio", e.target.checked)}
+            title="Obrigatório"
+            style={{ width: 16, height: 16, cursor: "pointer" }}
+          />
+          <button type="button" onClick={() => removeCampo(idx)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 4 }}>
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── Helper: Enum → options ───────────────────────────────────────────────────
 
@@ -118,6 +244,592 @@ export const empresaResponsaveisConfig: CrudPageConfig = {
 
 // === 2. PORTFOLIO ===
 
+// ─── Formulário customizado de criação de Produto (Área → Classe → Subclasse → Máscara) ─
+
+interface SpecCampo {
+  campo: string;
+  tipo: "texto" | "numero" | "decimal" | "select" | "boolean";
+  unidade?: string;
+  placeholder?: string;
+  opcoes?: string[];
+  obrigatorio?: boolean;
+}
+
+function parseMascara(raw: unknown): SpecCampo[] {
+  try {
+    let mascara = typeof raw === "string" ? JSON.parse(raw) : raw;
+    // Handle double-encoded JSON
+    if (typeof mascara === "string") mascara = JSON.parse(mascara);
+    if (!Array.isArray(mascara) || mascara.length === 0) return [];
+    return mascara.map((m: Record<string, unknown>) => ({
+      campo: String(m.campo || m.nome || ""),
+      tipo: (m.tipo as SpecCampo["tipo"]) || "texto",
+      unidade: m.unidade ? String(m.unidade) : undefined,
+      placeholder: m.placeholder ? String(m.placeholder) : undefined,
+      opcoes: Array.isArray(m.opcoes) ? m.opcoes.map(String) : undefined,
+      obrigatorio: Boolean(m.obrigatorio),
+    }));
+  } catch { return []; }
+}
+
+function ProdutoCreateForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => void }) {
+  const [areas, setAreas] = React.useState<Record<string, unknown>[]>([]);
+  const [classes, setClasses] = React.useState<Record<string, unknown>[]>([]);
+  const [subclasses, setSubclasses] = React.useState<Record<string, unknown>[]>([]);
+
+  const [areaId, setAreaId] = React.useState("");
+  const [classeId, setClasseId] = React.useState("");
+  const [subclasseId, setSubclasseId] = React.useState("");
+  const [nome, setNome] = React.useState("");
+  const [fabricante, setFabricante] = React.useState("");
+  const [modelo, setModelo] = React.useState("");
+  const [ncm, setNcm] = React.useState("");
+  const [precoRef, setPrecoRef] = React.useState("");
+  const [descricao, setDescricao] = React.useState("");
+  const [specs, setSpecs] = React.useState<Record<string, string>>({});
+  const [categoria, setCategoria] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const CATEGORIAS = ["equipamento", "reagente", "insumo_hospitalar", "insumo_laboratorial", "informatica", "redes", "mobiliario", "eletronico", "outro"];
+
+  // Carregar hierarquia
+  React.useEffect(() => {
+    Promise.all([
+      crudList("areas-produto", { limit: 100 }),
+      crudList("classes-produto-v2", { limit: 200 }),
+      crudList("subclasses-produto", { limit: 500 }),
+    ]).then(([a, c, s]) => {
+      setAreas(a.items || []);
+      setClasses(c.items || []);
+      setSubclasses(s.items || []);
+    }).catch(() => {});
+  }, []);
+
+  // Filtros cascata
+  const classesFiltradas = areaId ? classes.filter(c => String(c.area_id) === areaId) : [];
+  const subclassesFiltradas = classeId ? subclasses.filter(s => String(s.classe_id) === classeId) : [];
+
+  // Máscara da subclasse
+  const subSelecionada = subclasses.find(s => String(s.id) === subclasseId);
+  const mascara: SpecCampo[] = subSelecionada ? parseMascara(subSelecionada.campos_mascara) : [];
+
+  const handleAreaChange = (v: string) => { setAreaId(v); setClasseId(""); setSubclasseId(""); setNcm(""); setSpecs({}); };
+  const handleClasseChange = (v: string) => { setClasseId(v); setSubclasseId(""); setNcm(""); setSpecs({}); };
+  const handleSubclasseChange = (v: string) => {
+    setSubclasseId(v);
+    setSpecs({});
+    const sub = subclasses.find(s => String(s.id) === v);
+    if (sub && sub.ncms) {
+      const ncms = Array.isArray(sub.ncms) ? sub.ncms : [sub.ncms];
+      setNcm(String(ncms[0] || ""));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!nome.trim()) { setError("Nome é obrigatório"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      // 1. Criar produto
+      const produto = await crudCreate("produtos", {
+        nome,
+        fabricante,
+        modelo,
+        ncm,
+        subclasse_id: subclasseId || null,
+        categoria: categoria || "outro",
+        preco_referencia: precoRef ? Number(precoRef) : null,
+        descricao,
+        status_pipeline: "cadastrado",
+      });
+      const produtoId = String(produto.id);
+
+      // 2. Salvar especificações da máscara
+      const specsPreenchidas = Object.entries(specs).filter(([, v]) => v.trim());
+      for (const [campo, valor] of specsPreenchidas) {
+        const specDef = mascara.find(m => m.campo === campo);
+        await crudCreate("produtos-especificacoes", {
+          produto_id: produtoId,
+          nome_especificacao: campo,
+          valor,
+          unidade: specDef?.unidade || null,
+        });
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectStyle: React.CSSProperties = { width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border, #333)", background: "var(--bg-secondary, #1a1a2e)", color: "var(--text-primary, #e2e8f0)", fontSize: 14 };
+  const inputStyle = selectStyle;
+  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, marginBottom: 4, color: "var(--text-secondary, #94a3b8)" };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-header-left">
+          <button className="crud-back-btn" onClick={onCancel} title="Cancelar" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}>
+            ← Voltar
+          </button>
+          <h3 className="card-title">Novo Produto</h3>
+        </div>
+      </div>
+      <div className="card-content">
+        {error && <div className="crud-message crud-message-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+        {/* Linha 1: Nome + Área */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Nome do Produto *</label>
+            <input style={inputStyle} value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Centrífuga Refrigerada" />
+          </div>
+          <div>
+            <label style={labelStyle}>Área</label>
+            <select style={selectStyle} value={areaId} onChange={e => handleAreaChange(e.target.value)}>
+              <option value="">Selecione a área...</option>
+              {areas.map(a => <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Linha 2: Classe + Subclasse */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Classe</label>
+            <select style={selectStyle} value={classeId} onChange={e => handleClasseChange(e.target.value)} disabled={!areaId}>
+              <option value="">Selecione a classe...</option>
+              {classesFiltradas.map(c => <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Subclasse</label>
+            <select style={selectStyle} value={subclasseId} onChange={e => handleSubclasseChange(e.target.value)} disabled={!classeId}>
+              <option value="">Selecione a subclasse...</option>
+              {subclassesFiltradas.map(s => <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Linha 3: NCM + Fabricante + Modelo */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>NCM <span style={{ fontSize: 11, color: "#64748b" }}>(auto da subclasse)</span></label>
+            <input style={inputStyle} value={ncm} onChange={e => setNcm(e.target.value)} placeholder="Selecione a subclasse..." />
+          </div>
+          <div>
+            <label style={labelStyle}>Fabricante</label>
+            <input style={inputStyle} value={fabricante} onChange={e => setFabricante(e.target.value)} placeholder="Ex: Shimadzu" />
+          </div>
+          <div>
+            <label style={labelStyle}>Modelo</label>
+            <input style={inputStyle} value={modelo} onChange={e => setModelo(e.target.value)} placeholder="Ex: UV-2600i" />
+          </div>
+        </div>
+
+        {/* Linha 4: Categoria + Preço + Descrição */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Categoria *</label>
+            <select style={selectStyle} value={categoria} onChange={e => setCategoria(e.target.value)}>
+              <option value="">Selecione...</option>
+              {CATEGORIAS.map(c => <option key={c} value={c}>{c.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Preço Referência (R$)</label>
+            <input style={inputStyle} type="number" value={precoRef} onChange={e => setPrecoRef(e.target.value)} placeholder="Ex: 25000" />
+          </div>
+          <div>
+            <label style={labelStyle}>Descrição</label>
+            <input style={inputStyle} value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Descrição do produto" />
+          </div>
+        </div>
+
+        {/* Especificações dinâmicas da máscara */}
+        {mascara.length > 0 && (
+          <div style={{ marginTop: 8, marginBottom: 16, padding: 16, background: "rgba(139,92,246,0.06)", borderRadius: 8, border: "1px solid rgba(139,92,246,0.2)" }}>
+            <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#8b5cf6", display: "flex", alignItems: "center", gap: 6 }}>
+              <Sliders size={16} />
+              Especificações Técnicas — {String(subSelecionada?.nome || "")}
+            </h4>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {mascara.map(spec => (
+                <div key={spec.campo}>
+                  <label style={labelStyle}>
+                    {spec.campo}
+                    {spec.unidade && <span style={{ color: "#64748b" }}> ({spec.unidade})</span>}
+                    {spec.obrigatorio && <span style={{ color: "#ef4444" }}> *</span>}
+                  </label>
+                  {spec.tipo === "select" && spec.opcoes ? (
+                    <select style={selectStyle} value={specs[spec.campo] || ""} onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}>
+                      <option value="">Selecione...</option>
+                      {spec.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : spec.tipo === "boolean" ? (
+                    <select style={selectStyle} value={specs[spec.campo] || ""} onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}>
+                      <option value="">Selecione...</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                  ) : (
+                    <input
+                      style={inputStyle}
+                      type={spec.tipo === "numero" || spec.tipo === "decimal" ? "number" : "text"}
+                      value={specs[spec.campo] || ""}
+                      onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}
+                      placeholder={spec.placeholder || ""}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Botões */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="action-button action-button-secondary" onClick={onCancel}>Cancelar</button>
+          <button className="action-button action-button-primary" onClick={handleSave} disabled={saving || !nome.trim()}>
+            {saving ? "Salvando..." : "Salvar Produto"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Formulário de edição de Produto (mostra máscara da subclasse + specs existentes) ─
+
+function ProdutoEditForm({ item, onSaved, onCancel }: { item: Record<string, unknown>; onSaved: () => void; onCancel: () => void }) {
+  const produtoId = String(item.id || "");
+  const [areas, setAreas] = React.useState<Record<string, unknown>[]>([]);
+  const [classes, setClasses] = React.useState<Record<string, unknown>[]>([]);
+  const [subclasses, setSubclasses] = React.useState<Record<string, unknown>[]>([]);
+  const [existingSpecs, setExistingSpecs] = React.useState<Record<string, unknown>[]>([]);
+
+  const [areaId, setAreaId] = React.useState("");
+  const [classeId, setClasseId] = React.useState("");
+  const [subclasseId, setSubclasseId] = React.useState(String(item.subclasse_id || ""));
+  const [nome, setNome] = React.useState(String(item.nome || ""));
+  const [fabricante, setFabricante] = React.useState(String(item.fabricante || ""));
+  const [modelo, setModelo] = React.useState(String(item.modelo || ""));
+  const [ncm, setNcm] = React.useState(String(item.ncm || ""));
+  const [precoRef, setPrecoRef] = React.useState(item.preco_referencia != null ? String(item.preco_referencia) : "");
+  const [categoria, setCategoria] = React.useState(String(item.categoria || ""));
+  const [descricao, setDescricao] = React.useState(String(item.descricao || ""));
+  const [statusPipeline, setStatusPipeline] = React.useState(String(item.status_pipeline || "cadastrado"));
+  const [registroAnvisa, setRegistroAnvisa] = React.useState(String(item.registro_anvisa || ""));
+  const [specs, setSpecs] = React.useState<Record<string, string>>({});
+  const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loaded, setLoaded] = React.useState(false);
+
+  const CATEGORIAS = ["equipamento", "reagente", "insumo_hospitalar", "insumo_laboratorial", "informatica", "redes", "mobiliario", "eletronico", "outro"];
+
+  // Carregar hierarquia + specs existentes
+  React.useEffect(() => {
+    Promise.all([
+      crudList("areas-produto", { limit: 100 }),
+      crudList("classes-produto-v2", { limit: 200 }),
+      crudList("subclasses-produto", { limit: 500 }),
+      crudList("produtos-especificacoes", { parent_id: produtoId, limit: 200 }),
+    ]).then(([a, c, s, specsRes]) => {
+      setAreas(a.items || []);
+      setClasses(c.items || []);
+      setSubclasses(s.items || []);
+      setExistingSpecs(specsRes.items || []);
+
+      // Preencher specs existentes no form
+      const specsMap: Record<string, string> = {};
+      for (const sp of (specsRes.items || [])) {
+        specsMap[String(sp.nome_especificacao || sp.campo || "")] = String(sp.valor || "");
+      }
+      setSpecs(specsMap);
+
+      // Resolver cascata a partir da subclasse_id do produto
+      const subId = String(item.subclasse_id || "");
+      if (subId) {
+        const sub = (s.items || []).find((x: Record<string, unknown>) => String(x.id) === subId);
+        if (sub) {
+          const clsId = String(sub.classe_id || "");
+          setClasseId(clsId);
+          const cls = (c.items || []).find((x: Record<string, unknown>) => String(x.id) === clsId);
+          if (cls) setAreaId(String(cls.area_id || ""));
+        }
+      }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [produtoId, item.subclasse_id]);
+
+  // Filtros cascata
+  const classesFiltradas = areaId ? classes.filter(c => String(c.area_id) === areaId) : [];
+  const subclassesFiltradas = classeId ? subclasses.filter(s => String(s.classe_id) === classeId) : [];
+
+  // Máscara da subclasse
+  const subSelecionada = subclasses.find(s => String(s.id) === subclasseId);
+  const mascara: SpecCampo[] = subSelecionada ? parseMascara(subSelecionada.campos_mascara) : [];
+
+  const handleAreaChange = (v: string) => { setAreaId(v); setClasseId(""); setSubclasseId(""); setSpecs({}); };
+  const handleClasseChange = (v: string) => { setClasseId(v); setSubclasseId(""); setSpecs({}); };
+  const handleSubclasseChange = (v: string) => {
+    setSubclasseId(v);
+    // Manter specs existentes que correspondem à nova máscara
+    const sub = subclasses.find(s => String(s.id) === v);
+    if (sub) {
+      const newMascara = parseMascara(sub.campos_mascara);
+      const campos = new Set(newMascara.map(m => m.campo));
+      const kept: Record<string, string> = {};
+      for (const [k, val] of Object.entries(specs)) {
+        if (campos.has(k)) kept[k] = val;
+      }
+      setSpecs(kept);
+      // Auto NCM
+      if (sub.ncms) {
+        const ncms = Array.isArray(sub.ncms) ? sub.ncms : [sub.ncms];
+        setNcm(String(ncms[0] || ""));
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    if (!nome.trim()) { setError("Nome é obrigatório"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      // 1. Atualizar produto
+      await crudUpdate("produtos", produtoId, {
+        nome, fabricante, modelo, ncm,
+        subclasse_id: subclasseId || null,
+        categoria: categoria || "outro",
+        preco_referencia: precoRef ? Number(precoRef) : null,
+        descricao,
+        status_pipeline: statusPipeline,
+        registro_anvisa: registroAnvisa || null,
+      });
+
+      // 2. Deletar specs antigas e recriar
+      for (const sp of existingSpecs) {
+        await crudDelete("produtos-especificacoes", String(sp.id));
+      }
+
+      // 3. Criar specs novas
+      const specsPreenchidas = Object.entries(specs).filter(([, v]) => v.trim());
+      for (const [campo, valor] of specsPreenchidas) {
+        const specDef = mascara.find(m => m.campo === campo);
+        await crudCreate("produtos-especificacoes", {
+          produto_id: produtoId,
+          nome_especificacao: campo,
+          valor,
+          unidade: specDef?.unidade || null,
+        });
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Excluir o produto "${nome}"?`)) return;
+    setDeleting(true);
+    try {
+      await crudDelete("produtos", produtoId);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir");
+      setDeleting(false);
+    }
+  };
+
+  const selectStyle: React.CSSProperties = { width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border, #333)", background: "var(--bg-secondary, #1a1a2e)", color: "var(--text-primary, #e2e8f0)", fontSize: 14 };
+  const inputStyle = selectStyle;
+  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 500, marginBottom: 4, color: "var(--text-secondary, #94a3b8)" };
+
+  if (!loaded) return <div style={{ padding: 24, textAlign: "center", color: "#64748b" }}>Carregando...</div>;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-header-left">
+          <button className="crud-back-btn" onClick={onCancel} title="Voltar" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}>
+            ← Voltar
+          </button>
+          <h3 className="card-title">Editar Produto</h3>
+        </div>
+        <div className="card-header-right" style={{ display: "flex", gap: 8 }}>
+          <button className="action-button action-button-danger" onClick={handleDelete} disabled={deleting}>
+            {deleting ? "Excluindo..." : "Excluir"}
+          </button>
+        </div>
+      </div>
+      <div className="card-content">
+        {error && <div className="crud-message crud-message-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+        {/* Linha 1: Nome + Área */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Nome do Produto *</label>
+            <input style={inputStyle} value={nome} onChange={e => setNome(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Área</label>
+            <select style={selectStyle} value={areaId} onChange={e => handleAreaChange(e.target.value)}>
+              <option value="">Selecione a área...</option>
+              {areas.map(a => <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Linha 2: Classe + Subclasse */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Classe</label>
+            <select style={selectStyle} value={classeId} onChange={e => handleClasseChange(e.target.value)} disabled={!areaId}>
+              <option value="">Selecione a classe...</option>
+              {classesFiltradas.map(c => <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Subclasse</label>
+            <select style={selectStyle} value={subclasseId} onChange={e => handleSubclasseChange(e.target.value)} disabled={!classeId}>
+              <option value="">Selecione a subclasse...</option>
+              {subclassesFiltradas.map(s => <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Linha 3: Categoria + NCM + Fabricante + Modelo */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Categoria</label>
+            <select style={selectStyle} value={categoria} onChange={e => setCategoria(e.target.value)}>
+              <option value="">Selecione...</option>
+              {CATEGORIAS.map(c => <option key={c} value={c}>{c.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>NCM</label>
+            <input style={inputStyle} value={ncm} onChange={e => setNcm(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Fabricante</label>
+            <input style={inputStyle} value={fabricante} onChange={e => setFabricante(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Modelo</label>
+            <input style={inputStyle} value={modelo} onChange={e => setModelo(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Linha 4: Preço + Status + ANVISA + Descrição */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>Preço Referência (R$)</label>
+            <input style={inputStyle} type="number" value={precoRef} onChange={e => setPrecoRef(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Status Pipeline</label>
+            <select style={selectStyle} value={statusPipeline} onChange={e => setStatusPipeline(e.target.value)}>
+              <option value="cadastrado">Cadastrado</option>
+              <option value="qualificado">Qualificado</option>
+              <option value="ofertado">Ofertado</option>
+              <option value="vencedor">Vencedor</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Registro ANVISA</label>
+            <input style={inputStyle} value={registroAnvisa} onChange={e => setRegistroAnvisa(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Descrição</label>
+            <input style={inputStyle} value={descricao} onChange={e => setDescricao(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Especificações dinâmicas da máscara */}
+        {mascara.length > 0 && (
+          <div style={{ marginTop: 8, marginBottom: 16, padding: 16, background: "rgba(139,92,246,0.06)", borderRadius: 8, border: "1px solid rgba(139,92,246,0.2)" }}>
+            <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#8b5cf6", display: "flex", alignItems: "center", gap: 6 }}>
+              <Sliders size={16} />
+              Especificações Técnicas — {String(subSelecionada?.nome || "")}
+            </h4>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {mascara.map(spec => (
+                <div key={spec.campo}>
+                  <label style={labelStyle}>
+                    {spec.campo}
+                    {spec.unidade && <span style={{ color: "#64748b" }}> ({spec.unidade})</span>}
+                    {spec.obrigatorio && <span style={{ color: "#ef4444" }}> *</span>}
+                  </label>
+                  {spec.tipo === "select" && spec.opcoes ? (
+                    <select style={selectStyle} value={specs[spec.campo] || ""} onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}>
+                      <option value="">Selecione...</option>
+                      {spec.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : spec.tipo === "boolean" ? (
+                    <select style={selectStyle} value={specs[spec.campo] || ""} onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}>
+                      <option value="">Selecione...</option>
+                      <option value="Sim">Sim</option>
+                      <option value="Não">Não</option>
+                    </select>
+                  ) : (
+                    <input
+                      style={inputStyle}
+                      type={spec.tipo === "numero" || spec.tipo === "decimal" ? "number" : "text"}
+                      value={specs[spec.campo] || ""}
+                      onChange={e => setSpecs(p => ({ ...p, [spec.campo]: e.target.value }))}
+                      placeholder={spec.placeholder || ""}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Specs que existem mas não estão na máscara (dados legados) */}
+        {(() => {
+          const mascaraCampos = new Set(mascara.map(m => m.campo));
+          const legados = Object.entries(specs).filter(([k, v]) => !mascaraCampos.has(k) && v.trim());
+          if (legados.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 16, padding: 16, background: "rgba(234,179,8,0.06)", borderRadius: 8, border: "1px solid rgba(234,179,8,0.2)" }}>
+              <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#eab308" }}>
+                Especificações:
+              </h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {legados.map(([campo, valor]) => (
+                  <div key={campo}>
+                    <label style={labelStyle}>{campo}</label>
+                    <input style={inputStyle} value={valor} onChange={e => setSpecs(p => ({ ...p, [campo]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Botões */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="action-button action-button-secondary" onClick={onCancel}>Cancelar</button>
+          <button className="action-button action-button-primary" onClick={handleSave} disabled={saving || !nome.trim()}>
+            {saving ? "Salvando..." : "Salvar Produto"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const produtosConfig: CrudPageConfig = {
   table: "produtos",
   title: "Produtos",
@@ -126,13 +838,28 @@ export const produtosConfig: CrudPageConfig = {
     { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
     { name: "codigo_interno", label: "Código Interno", type: "text", width: "half" },
     { name: "categoria", label: "Categoria", type: "select", required: true, options: enumOpts(["equipamento", "reagente", "insumo_hospitalar", "insumo_laboratorial", "informatica", "redes", "mobiliario", "eletronico", "outro"]), width: "half" },
-    { name: "subclasse_id", label: "Subclasse (Classificacao)", type: "text", width: "half", placeholder: "ID da subclasse do produto" },
+    { name: "subclasse_id", label: "Subclasse", type: "fk", fkTable: "subclasses-produto", fkLabel: "nome", width: "half" },
     { name: "fabricante", label: "Fabricante", type: "text", width: "half" },
     { name: "modelo", label: "Modelo", type: "text", width: "half" },
     { name: "ncm", label: "NCM", type: "text", width: "half" },
     { name: "preco_referencia", label: "Preço Referência", type: "decimal", width: "half" },
+    { name: "status_pipeline", label: "Status Pipeline", type: "select", options: [
+      { value: "cadastrado", label: "Cadastrado" },
+      { value: "qualificado", label: "Qualificado" },
+      { value: "ofertado", label: "Ofertado" },
+      { value: "vencedor", label: "Vencedor" },
+    ], width: "half" },
+    { name: "registro_anvisa", label: "Registro ANVISA", type: "text", placeholder: "Ex: 80100300012", width: "half" },
+    { name: "anvisa_status", label: "Status ANVISA", type: "select", options: [
+      { value: "", label: "N/A" },
+      { value: "ativo", label: "Ativo" },
+      { value: "em_analise", label: "Em Analise" },
+      { value: "cancelado", label: "Cancelado" },
+    ], width: "half" },
     { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
   ],
+  renderCreateForm: (props) => <ProdutoCreateForm {...props} />,
+  renderEditForm: (props) => <ProdutoEditForm {...props} />,
 };
 
 export const produtosEspecificacoesConfig: CrudPageConfig = {
@@ -212,7 +939,33 @@ export const subclassesProdutoConfig: CrudPageConfig = {
     { name: "classe_id", label: "Classe ID", type: "text", required: true, width: "half" },
     { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
     { name: "ncms", label: "NCMs", type: "json", width: "full" },
-    { name: "campos_mascara", label: "Campos Mascara", type: "json", width: "full" },
+    { name: "campos_mascara", label: "Campos Mascara", type: "json", width: "full", renderCustom: (value, onChange) => React.createElement(CamposMascaraEditor, { value, onChange }) },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+  ],
+};
+
+// === 2B. MODALIDADES E ORIGENS ===
+
+export const modalidadesLicitacaoConfig: CrudPageConfig = {
+  table: "modalidades-licitacao",
+  title: "Modalidades de Licitação",
+  icon: <Gavel size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+  ],
+};
+
+export const origensOrgaoConfig: CrudPageConfig = {
+  table: "origens-orgao",
+  title: "Origens de Órgão",
+  icon: <GitBranch size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
     { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
     { name: "ordem", label: "Ordem", type: "number", width: "half" },
   ],
@@ -247,7 +1000,7 @@ export const fontesCertidoesConfig: CrudPageConfig = {
     { name: "metodo_acesso", label: "Método de Acesso", type: "select", options: enumOpts(["publico", "login_senha", "certificado_digital", "api_key"]), width: "half" },
     { name: "requer_autenticacao", label: "Requer Autenticação", type: "boolean", width: "half" },
     { name: "usuario", label: "Usuário/Login", type: "text", width: "half", placeholder: "Login no portal (se necessário)" },
-    { name: "senha_criptografada", label: "Senha", type: "text", width: "half", placeholder: "Senha (se necessário)" },
+    { name: "senha_criptografada", label: "Senha", type: "text", width: "half", placeholder: "Deixe em branco para manter. Valor salvo é criptografado." },
     { name: "certificado_path", label: "Caminho do Certificado Digital", type: "text", width: "full", placeholder: "/caminho/certificado.pfx" },
     { name: "api_key", label: "API Key", type: "text", width: "half", placeholder: "Chave de API (se necessário)" },
     { name: "cnpj_consulta", label: "CNPJ para Consulta", type: "text", width: "half", placeholder: "Se diferente do CNPJ da empresa" },
@@ -271,7 +1024,7 @@ export const editaisConfig: CrudPageConfig = {
     { name: "numero", label: "Número", type: "text", required: true, width: "half" },
     { name: "orgao", label: "Órgão", type: "text", required: true, width: "half" },
     { name: "orgao_tipo", label: "Tipo de Órgão", type: "select", options: enumOpts(["federal", "estadual", "municipal", "autarquia", "fundacao"]), width: "half" },
-    { name: "modalidade", label: "Modalidade", type: "select", options: enumOpts(["pregao_eletronico", "pregao_presencial", "concorrencia", "tomada_precos", "convite", "dispensa", "inexigibilidade"]), width: "half" },
+    { name: "modalidade_id", label: "Modalidade", type: "fk", fkTable: "modalidades-licitacao", fkLabel: "nome", width: "half" },
     { name: "categoria", label: "Categoria", type: "select", options: enumOpts(["comodato", "venda_equipamento", "aluguel_com_consumo", "aluguel_sem_consumo", "consumo_reagentes", "consumo_insumos", "servicos", "informatica", "redes", "mobiliario", "outro"]), width: "half" },
     { name: "status", label: "Status", type: "select", options: enumOpts(["novo", "analisando", "participando", "proposta_enviada", "em_pregao", "vencedor", "perdedor", "cancelado", "desistido", "aberto", "fechado", "suspenso", "ganho", "perdido"]), width: "half" },
     { name: "objeto", label: "Objeto", type: "textarea", required: true, width: "full" },
@@ -657,13 +1410,20 @@ export const parametrosScoreConfig: CrudPageConfig = {
   title: "Parâmetros de Score",
   icon: <Target size={24} />,
   fields: [
-    { name: "peso_tecnico", label: "Peso Técnico", type: "decimal", width: "half" },
-    { name: "peso_comercial", label: "Peso Comercial", type: "decimal", width: "half" },
-    { name: "peso_participacao", label: "Peso Participação", type: "decimal", width: "half" },
-    { name: "peso_ganho", label: "Peso Ganho", type: "decimal", width: "half" },
+    { name: "peso_tecnico", label: "Peso Técnico", type: "decimal", width: "half", placeholder: "Aderência técnica do produto" },
+    { name: "peso_comercial", label: "Peso Comercial", type: "decimal", width: "half", placeholder: "Viabilidade comercial e preço" },
+    { name: "peso_participacao", label: "Peso Participação", type: "decimal", width: "half", placeholder: "Histórico de participação" },
+    { name: "peso_ganho", label: "Peso Ganho", type: "decimal", width: "half", placeholder: "Taxa de vitória histórica" },
+    { name: "peso_documental", label: "Peso Documental", type: "decimal", width: "half", placeholder: "Regularidade documental e certidões" },
+    { name: "peso_complexidade", label: "Peso Complexidade", type: "decimal", width: "half", placeholder: "Complexidade técnica do edital" },
+    { name: "peso_juridico", label: "Peso Jurídico", type: "decimal", width: "half", placeholder: "Risco jurídico e cláusulas restritivas" },
+    { name: "peso_logistico", label: "Peso Logístico", type: "decimal", width: "half", placeholder: "Viabilidade logística e prazo de entrega" },
     { name: "limiar_go", label: "Limiar GO", type: "decimal", width: "half" },
     { name: "limiar_nogo", label: "Limiar NO-GO", type: "decimal", width: "half" },
     { name: "margem_minima", label: "Margem Mínima", type: "decimal", width: "half" },
+    { name: "markup_padrao", label: "Markup Padrao (%)", type: "number", placeholder: "Ex: 30" },
+    { name: "custos_fixos", label: "Custos Fixos Mensais (R$)", type: "number", placeholder: "Ex: 15000" },
+    { name: "frete_base", label: "Frete Base (R$)", type: "number", placeholder: "Ex: 500" },
   ],
 };
 
@@ -698,6 +1458,39 @@ export const estrategiasEditaisConfig: CrudPageConfig = {
   ],
 };
 
+// === CATEGORIAS DE DOCUMENTO ===
+
+export const categoriasDocumentoConfig: CrudPageConfig = {
+  table: "categorias-documento",
+  title: "Categorias de Documento",
+  icon: <FolderTree size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+  ],
+};
+
+// === DOCUMENTOS NECESSÁRIOS ===
+
+export const documentosNecessariosConfig: CrudPageConfig = {
+  table: "documentos-necessarios",
+  title: "Documentos Necessários",
+  icon: <FileText size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "tipo_chave", label: "Tipo Chave (slug)", type: "text", required: true, width: "half" },
+    { name: "categoria_id", label: "Categoria", type: "fk", fkTable: "categorias-documento", fkLabel: "nome", width: "half" },
+    { name: "base_legal", label: "Base Legal", type: "text", width: "half" },
+    { name: "descricao", label: "Descrição", type: "textarea", width: "full" },
+    { name: "validade_dias", label: "Validade (dias)", type: "number", width: "half" },
+    { name: "obrigatorio", label: "Obrigatório", type: "boolean", width: "half" },
+    { name: "ordem", label: "Ordem", type: "number", width: "half" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+  ],
+};
+
 // ─── All configs map (table slug → config) ────────────────────────────────────
 
 export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
@@ -714,6 +1507,8 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "subclasses-produto": subclassesProdutoConfig,
   "fontes-editais": fontesEditaisConfig,
   "fontes-certidoes": fontesCertidoesConfig,
+  "modalidades-licitacao": modalidadesLicitacaoConfig,
+  "origens-orgao": origensOrgaoConfig,
   "editais": editaisConfig,
   "editais-requisitos": editaisRequisitosConfig,
   "editais-documentos": editaisDocumentosConfig,
@@ -737,4 +1532,6 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "parametros-score": parametrosScoreConfig,
   "dispensas": dispensasConfig,
   "estrategias-editais": estrategiasEditaisConfig,
+  "categorias-documento": categoriasDocumentoConfig,
+  "documentos-necessarios": documentosNecessariosConfig,
 };

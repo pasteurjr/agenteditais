@@ -6,7 +6,7 @@ import os
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
 from llm import call_deepseek
 from tools import (
     tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -256,6 +256,15 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
 
 41. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
+
+### CADASTRO DE PRODUTOS:
+47. **cadastrar_produto**: Cadastrar um produto manualmente com dados do formulário
+    Exemplos: "cadastre manualmente o produto: Nome=...", "registre o produto X", "cadastre o produto Y"
+    Palavras-chave: cadastre manualmente, cadastre o produto, registre o produto, criar produto
+
+48. **buscar_anvisa**: Buscar registros de produtos na ANVISA
+    Exemplos: "busque o registro ANVISA numero 12345", "busque registros ANVISA para o produto X", "consulte ANVISA do produto Y"
+    Palavras-chave: anvisa, registro anvisa, buscar anvisa, consultar anvisa
 
 ### ANÁLISE DE EDITAIS:
 42. **resumir_edital**: Fazer um resumo de um edital cadastrado
@@ -533,6 +542,16 @@ def detectar_intencao_fallback(message: str) -> str:
         if any(p in msg for p in ["cadastr", "adicion", "nova fonte"]):
             return "cadastrar_fonte"
         return "listar_fontes"
+
+    # 8.5 Cadastrar produto manualmente (via formulário do Portfolio)
+    if any(p in msg for p in ["cadastre manualmente o produto", "cadastre o produto", "cadastrar produto",
+                               "registre o produto", "criar produto", "crie o produto", "adicione o produto"]):
+        return "cadastrar_produto"
+
+    # 8.6 Buscar registros ANVISA
+    if any(p in msg for p in ["anvisa", "registro anvisa", "busque anvisa", "consulte anvisa",
+                               "buscar anvisa", "consultar anvisa", "registros anvisa"]):
+        return "buscar_anvisa"
 
     # 9. Cadastrar edital manualmente - ANTES de buscar editais
     if any(p in msg for p in ["cadastre o edital", "cadastrar edital", "registre o edital", "adicione o edital", "inserir edital"]):
@@ -1153,6 +1172,12 @@ def chat():
 
         elif action_type == "verificar_completude":
             response_text, resultado = processar_verificar_completude(message, user_id)
+
+        elif action_type == "cadastrar_produto":
+            response_text, resultado = processar_cadastrar_produto(message, user_id)
+
+        elif action_type == "buscar_anvisa":
+            response_text, resultado = processar_buscar_anvisa(message, user_id)
 
         elif action_type == "cadastrar_edital":
             response_text, resultado = processar_cadastrar_edital(message, user_id, intencao_resultado)
@@ -3114,6 +3139,247 @@ Novos dados:
         return response, resultado
     else:
         return f"❌ Erro ao atualizar edital: {resultado.get('error')}", resultado
+
+
+def processar_cadastrar_produto(message: str, user_id: str):
+    """
+    Cadastra produto manualmente a partir dos dados enviados pelo formulário do Portfolio.
+    Formato: Cadastre manualmente o produto: Nome="X", Fabricante="Y", Modelo="Z",
+             Categoria="W", SubclasseId="uuid", NCM="N". Especificacoes: campo=valor[unidade]{tipo}, ...
+    """
+    import re
+    from decimal import Decimal, InvalidOperation
+    db = get_db()
+    try:
+        empresa_id = get_current_empresa_id()
+
+        # Parsear campos do prompt
+        def extrair(campo):
+            m = re.search(rf'{campo}="([^"]*)"', message)
+            return m.group(1).strip() if m else None
+
+        nome = extrair("Nome")
+        fabricante = extrair("Fabricante")
+        modelo = extrair("Modelo")
+        categoria = extrair("Categoria")
+        subclasse_id = extrair("SubclasseId")
+        ncm = extrair("NCM")
+
+        if not nome:
+            return "Informe ao menos o nome do produto. Ex: Cadastre o produto: Nome=\"Analisador X\"", {"error": "nome_obrigatorio"}
+
+        # Validar categoria
+        categorias_validas = ['equipamento', 'reagente', 'insumo_hospitalar', 'insumo_laboratorial',
+                             'informatica', 'redes', 'mobiliario', 'eletronico', 'comodato', 'outro']
+        if not categoria or categoria not in categorias_validas:
+            categoria = "outro"
+
+        # Validar subclasse_id se fornecido
+        if subclasse_id:
+            sub_exists = db.query(SubclasseProduto).filter(SubclasseProduto.id == subclasse_id).first()
+            if not sub_exists:
+                subclasse_id = None  # Ignorar ID inválido
+
+        # Verificar duplicidade
+        existente = db.query(Produto).filter(
+            Produto.user_id == user_id,
+            Produto.nome == nome
+        ).first()
+        if existente:
+            return f"Produto **{nome}** ja existe (ID: {existente.id}). Use 'atualizar produto' para modificar.", {"error": "duplicado", "produto_id": existente.id}
+
+        # Criar produto
+        produto = Produto(
+            user_id=user_id,
+            empresa_id=empresa_id,
+            nome=nome,
+            fabricante=fabricante,
+            modelo=modelo,
+            categoria=categoria,
+            subclasse_id=subclasse_id,
+            ncm=ncm,
+            status_pipeline="cadastrado",
+        )
+        db.add(produto)
+        db.flush()
+        produto_id = produto.id
+
+        # Parsear especificações com formato enriquecido: campo=valor[unidade]{tipo}
+        specs_criadas = []
+        specs_match = re.search(r'Especificacoes:\s*(.+)$', message)
+        if specs_match:
+            specs_str = specs_match.group(1)
+            for par in specs_str.split(","):
+                par = par.strip()
+                if "=" in par:
+                    campo, resto = par.split("=", 1)
+                    campo = campo.strip()
+                    resto = resto.strip()
+
+                    # Extrair unidade [xxx] e tipo {xxx} do resto
+                    unidade = None
+                    tipo = "texto"
+                    un_match = re.search(r'\[([^\]]+)\]', resto)
+                    if un_match:
+                        unidade = un_match.group(1)
+                        resto = resto[:un_match.start()] + resto[un_match.end():]
+                    tp_match = re.search(r'\{([^\}]+)\}', resto)
+                    if tp_match:
+                        tipo = tp_match.group(1)
+                        resto = resto[:tp_match.start()] + resto[tp_match.end():]
+
+                    valor = resto.strip()
+                    if campo and valor:
+                        # Converter valor numérico se tipo é numero/decimal
+                        valor_numerico = None
+                        if tipo in ("numero", "decimal"):
+                            try:
+                                valor_numerico = Decimal(valor.replace(",", "."))
+                            except (InvalidOperation, ValueError):
+                                pass
+
+                        spec = ProdutoEspecificacao(
+                            produto_id=produto_id,
+                            nome_especificacao=campo,
+                            valor=valor,
+                            unidade=unidade,
+                            valor_numerico=valor_numerico,
+                        )
+                        db.add(spec)
+                        specs_criadas.append(f"{campo}: {valor}{f' {unidade}' if unidade else ''}")
+
+        db.commit()
+
+        specs_text = ""
+        if specs_criadas:
+            specs_list = "\n".join([f"  - {s}" for s in specs_criadas])
+            specs_text = f"\n\n**Especificacoes cadastradas ({len(specs_criadas)}):**\n{specs_list}"
+
+        subclasse_text = ""
+        if subclasse_id:
+            sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == subclasse_id).first()
+            subclasse_text = f"\n- **Subclasse:** {sub.nome if sub else subclasse_id}"
+
+        response = f"""## Produto cadastrado com sucesso
+
+- **Nome:** {nome}
+- **Categoria:** {categoria}{subclasse_text}
+- **Fabricante:** {fabricante or 'N/I'}
+- **Modelo:** {modelo or 'N/I'}
+- **NCM:** {ncm or 'N/I'}
+- **Status:** cadastrado{specs_text}
+
+O produto foi salvo no banco. Voce pode ver na aba "Meus Produtos" do Portfolio."""
+
+        return response, {"success": True, "produto_id": produto_id, "nome": nome}
+
+    except Exception as e:
+        db.rollback()
+        print(f"[ERRO] processar_cadastrar_produto: {e}")
+        return f"Erro ao cadastrar produto: {str(e)}", {"error": str(e)}
+    finally:
+        db.close()
+
+
+def processar_buscar_anvisa(message: str, user_id: str):
+    """
+    Busca registros de produtos na ANVISA via web search.
+    Aceita número de registro ou nome do produto.
+    Atualiza campo registro_anvisa e anvisa_status do produto se encontrar.
+    """
+    import re
+    db = get_db()
+    try:
+        # Extrair número de registro ou nome do produto
+        registro_match = re.search(r'(?:numero|nº|n°|registro)\s*[:\s]*(\d{8,15})', message, re.IGNORECASE)
+        registro = registro_match.group(1) if registro_match else None
+
+        # Extrair nome do produto
+        nome_match = re.search(r'(?:produto|para o|para)\s+(.+?)(?:\s+na\s+anvisa|\s*$)', message, re.IGNORECASE)
+        nome_produto = nome_match.group(1).strip() if nome_match else None
+
+        if not registro and not nome_produto:
+            # Tentar extrair qualquer número grande
+            num_match = re.search(r'\b(\d{8,15})\b', message)
+            if num_match:
+                registro = num_match.group(1)
+            else:
+                # Extrair o que sobra após remover palavras de comando
+                cleaned = re.sub(r'(?:busque?|registros?|anvisa|consulte?|do|da|de|o|a|na|no|para)\s*', '', message, flags=re.IGNORECASE).strip()
+                if cleaned:
+                    nome_produto = cleaned
+
+        if not registro and not nome_produto:
+            return "Informe o número do registro ANVISA ou o nome do produto para buscar.", {"error": "dados_insuficientes"}
+
+        # Buscar via web search (ANVISA Consulta Produtos)
+        if registro:
+            query = f"site:consultas.anvisa.gov.br registro {registro}"
+            search_label = f"registro **{registro}**"
+        else:
+            query = f"site:consultas.anvisa.gov.br {nome_produto} registro produto"
+            search_label = f"produto **{nome_produto}**"
+
+        print(f"[ANVISA] Buscando: {query}")
+
+        # Usar tool_web_search para buscar
+        resultado_web = tool_web_search(query, user_id, num_results=5)
+
+        results = resultado_web.get("results", [])
+        pdf_results = resultado_web.get("pdf_results", [])
+
+        # Também buscar no portal Consulta Produtos ANVISA
+        query2 = f"ANVISA consulta produtos {registro or nome_produto} situação registro"
+        resultado_web2 = tool_web_search(query2, user_id, num_results=5)
+        results.extend(resultado_web2.get("results", []))
+
+        if not results:
+            return f"Nenhum resultado encontrado na ANVISA para {search_label}. Tente com outro termo ou verifique o número do registro.", {"error": "sem_resultados"}
+
+        # Tentar atualizar produto no banco (se registro encontrado e produto existe)
+        produto_atualizado = None
+        if registro:
+            produto = db.query(Produto).filter(
+                Produto.user_id == user_id,
+                Produto.registro_anvisa == None  # noqa: E711
+            ).first()
+            if nome_produto:
+                produto = db.query(Produto).filter(
+                    Produto.user_id == user_id,
+                    Produto.nome.ilike(f"%{nome_produto}%")
+                ).first()
+            if produto:
+                produto.registro_anvisa = registro
+                produto.anvisa_status = "ativo"
+                db.commit()
+                produto_atualizado = produto.nome
+
+        # Formatar resposta
+        links_text = ""
+        for i, r in enumerate(results[:8]):
+            title = r.get("title", "Sem título")
+            url = r.get("url", "")
+            snippet = r.get("snippet", "")[:120]
+            links_text += f"\n{i+1}. [{title}]({url})\n   {snippet}\n"
+
+        update_text = ""
+        if produto_atualizado:
+            update_text = f"\n\n**Produto atualizado:** {produto_atualizado} → Registro ANVISA: {registro}, Status: Ativo"
+
+        response = f"""## Resultados ANVISA para {search_label}
+
+{links_text}
+{update_text}
+
+**Dica:** Acesse os links acima para verificar a situação do registro no portal da ANVISA."""
+
+        return response, {"success": True, "results_count": len(results), "registro": registro}
+
+    except Exception as e:
+        print(f"[ERRO] processar_buscar_anvisa: {e}")
+        return f"Erro ao buscar ANVISA: {str(e)}", {"error": str(e)}
+    finally:
+        db.close()
 
 
 def processar_atualizar_produto(message: str, user_id: str):

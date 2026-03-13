@@ -17,7 +17,7 @@ from models import (
     FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital,
-    ParametroScore, Empresa
+    ParametroScore, Empresa, SubclasseProduto
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -224,6 +224,60 @@ TEXTO:
 
 JSON:
 """
+
+def _build_prompt_mascara(texto: str, campos_mascara: list) -> str:
+    """
+    Constrói prompt de extração dirigido pelos campos da máscara da subclasse.
+    Extrai exatamente os campos definidos na máscara + quaisquer outros encontrados.
+    """
+    campos_lista = []
+    for c in campos_mascara:
+        nome = c.get("campo") or c.get("nome") or ""
+        tipo = c.get("tipo", "texto")
+        unidade = c.get("unidade", "")
+        obrig = " (OBRIGATÓRIO)" if c.get("obrigatorio") else ""
+        desc = f'- "{nome}"'
+        if unidade:
+            desc += f" (unidade: {unidade})"
+        if tipo == "numero":
+            desc += " [valor inteiro]"
+        elif tipo == "decimal":
+            desc += " [valor decimal]"
+        elif tipo == "select":
+            opcoes = c.get("opcoes", [])
+            if opcoes:
+                desc += f" [opções: {', '.join(opcoes)}]"
+        elif tipo == "boolean":
+            desc += " [Sim/Não]"
+        desc += obrig
+        campos_lista.append(desc)
+
+    campos_str = "\n".join(campos_lista)
+
+    return f"""Extraia as especificações técnicas do texto abaixo.
+
+CAMPOS PRIORITÁRIOS que DEVEM ser extraídos (se disponíveis no texto):
+{campos_str}
+
+Além desses, extraia TAMBÉM qualquer outra especificação técnica relevante encontrada no texto.
+
+Para cada especificação, retorne um objeto JSON com:
+- nome: nome descritivo da especificação
+- valor: valor completo como está no texto
+- unidade: unidade de medida se houver
+- valor_numerico: valor numérico (se aplicável), como float
+- operador: "=", "<", "<=", ">=", ">", "range" (se aplicável)
+- valor_min: valor mínimo se for faixa (float)
+- valor_max: valor máximo se for faixa (float)
+
+Retorne APENAS um array JSON válido, sem texto adicional.
+
+TEXTO:
+{texto}
+
+JSON:
+"""
+
 
 PROMPT_EXTRAIR_REQUISITOS = """Você é um especialista em análise de editais de licitação.
 
@@ -995,19 +1049,17 @@ def _encontrar_paginas_specs(paginas: List[Dict[str, Any]]) -> str:
     return texto_specs
 
 
-def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db) -> List[Dict]:
+def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db, campos_mascara: list = None) -> List[Dict]:
     """
     Processa documento grande em chunks e extrai especificações.
-    Usa contexto de 60000 tokens (~240000 chars) do DeepSeek.
+    Se campos_mascara fornecido, usa prompt dirigido para extrair exatamente esses campos.
     """
-    MAX_CHUNK_SIZE = 60000  # Chars por chunk (conservador para ~15k tokens)
+    MAX_CHUNK_SIZE = 60000
     specs_totais = []
 
-    # Se texto cabe em um chunk, processar direto
     if len(texto_completo) <= MAX_CHUNK_SIZE:
         chunks = [texto_completo]
     else:
-        # Dividir em chunks
         chunks = []
         for i in range(0, len(texto_completo), MAX_CHUNK_SIZE):
             chunks.append(texto_completo[i:i + MAX_CHUNK_SIZE])
@@ -1017,7 +1069,12 @@ def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db) -> List[D
     for i, chunk in enumerate(chunks):
         print(f"[TOOLS] Processando chunk {i+1}/{len(chunks)} ({len(chunk)} chars)")
 
-        prompt = PROMPT_EXTRAIR_SPECS.format(texto=chunk)
+        # Usar prompt dirigido se temos campos_mascara
+        if campos_mascara and isinstance(campos_mascara, list) and len(campos_mascara) > 0:
+            prompt = _build_prompt_mascara(chunk, campos_mascara)
+        else:
+            prompt = PROMPT_EXTRAIR_SPECS.format(texto=chunk)
+
         resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=16000)
 
         try:
@@ -1053,13 +1110,13 @@ def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db) -> List[D
 
 def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
                           categoria: str = None, fabricante: str = None,
-                          modelo: str = None) -> Dict[str, Any]:
+                          modelo: str = None, subclasse_id: str = None) -> Dict[str, Any]:
     """
     Processa um arquivo PDF uploadado:
     1. Extrai texto com PyMuPDF (todas as páginas)
     2. Busca inteligentemente páginas com especificações
     3. Usa IA para identificar nome do produto, fabricante e especificações
-    4. Processa em chunks se necessário
+    4. Usa campos_mascara da subclasse (se disponível) para guiar extração
     5. Salva produto e specs no banco
     """
     db = get_db()
@@ -1136,42 +1193,56 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
                 }
             }
 
-        # 4. Criar produto no banco
+        # 4. Validar subclasse e carregar campos_mascara
+        campos_mascara = None
+        if subclasse_id:
+            sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == subclasse_id).first()
+            if sub:
+                if sub.campos_mascara:
+                    try:
+                        campos_mascara = json.loads(sub.campos_mascara) if isinstance(sub.campos_mascara, str) else sub.campos_mascara
+                        print(f"[TOOLS] Usando campos_mascara da subclasse '{sub.nome}': {len(campos_mascara)} campos")
+                    except Exception:
+                        campos_mascara = None
+            else:
+                subclasse_id = None  # ID inválido
+
+        # 5. Criar produto no banco
         produto = Produto(
             user_id=user_id,
             nome=nome_produto,
             categoria=categoria,
             fabricante=fabricante,
-            modelo=modelo
+            modelo=modelo,
+            subclasse_id=subclasse_id
         )
         db.add(produto)
         db.flush()
 
-        # 4. Salvar documento (texto completo)
+        # 6. Salvar documento (texto completo)
         doc_registro = ProdutoDocumento(
             produto_id=produto.id,
             tipo='manual',
             nome_arquivo=os.path.basename(filepath),
             path_arquivo=filepath,
-            texto_extraido=texto_completo,  # Texto completo
+            texto_extraido=texto_completo,
             processado=False
         )
         db.add(doc_registro)
 
-        # 5. Buscar páginas com especificações
+        # 7. Buscar páginas com especificações
         print(f"[TOOLS] Buscando páginas com especificações técnicas...")
         texto_specs = _encontrar_paginas_specs(paginas)
 
         if not texto_specs:
-            # Fallback: usar últimas páginas (onde geralmente ficam as specs)
             print(f"[TOOLS] Nenhuma página de specs encontrada, usando últimas páginas")
             ultimas_paginas = paginas[-20:] if len(paginas) > 20 else paginas
             texto_specs = "\n".join([p["texto"] for p in ultimas_paginas])
 
         print(f"[TOOLS] Texto de specs: {len(texto_specs)} caracteres")
 
-        # 6. Extrair especificações em chunks
-        specs_salvas = _extrair_specs_em_chunks(texto_specs, produto.id, db)
+        # 8. Extrair especificações em chunks (com máscara se disponível)
+        specs_salvas = _extrair_specs_em_chunks(texto_specs, produto.id, db, campos_mascara=campos_mascara)
 
         # 7. Marcar documento como processado
         doc_registro.processado = True

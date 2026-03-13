@@ -253,6 +253,9 @@ export interface Produto {
   modelo?: string;
   descricao?: string;
   preco_referencia?: number;
+  status_pipeline?: string;
+  registro_anvisa?: string;
+  anvisa_status?: string;
   created_at: string;
   especificacoes?: ProdutoEspecificacao[];
 }

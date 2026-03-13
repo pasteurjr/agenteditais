@@ -61,6 +61,9 @@ interface EditalBusca {
   // Itens do edital (vindos do PNCP via enriquecimento)
   itens?: { numero_item?: number; descricao?: string; quantidade?: number; unidade_medida?: string; valor_unitario_estimado?: number; valor_total_estimado?: number }[];
   totalItens?: number;
+  // RF-013: Vinculo com classe/subclasse de produto
+  classe_produto_id?: string;
+  subclasse_produto_id?: string;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -286,6 +289,8 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
       pontos_positivos: ((e.score_profundo as Record<string, unknown>).pontos_positivos as string[]) || [],
       pontos_atencao: ((e.score_profundo as Record<string, unknown>).pontos_atencao as string[]) || [],
     } : null,
+    classe_produto_id: e.classe_produto_id ? String(e.classe_produto_id) : undefined,
+    subclasse_produto_id: e.subclasse_produto_id ? String(e.subclasse_produto_id) : undefined,
   };
 }
 
@@ -320,6 +325,10 @@ export function CaptacaoPage(props?: PageProps) {
   const [tipoScore, setTipoScore] = useState<"nenhum" | "rapido" | "hibrido" | "profundo">("nenhum");
   const [limiteScoreProfundo, setLimiteScoreProfundo] = useState<number>(10);
   const [incluirEncerrados, setIncluirEncerrados] = useState(false);
+
+  // RF-013: Filtro local por classe de produto
+  const [filtroClasseProduto, setFiltroClasseProduto] = useState("todos");
+  const [classesV2, setClassesV2] = useState<{ value: string; label: string }[]>([]);
 
   const [resultados, setResultados] = useState<EditalBusca[]>([]);
   const [loading, setLoading] = useState(false);
@@ -359,7 +368,7 @@ export function CaptacaoPage(props?: PageProps) {
   // Fontes de editais carregadas do banco
   const [fontesDisponiveis, setFontesDisponiveis] = useState<{ value: string; label: string }[]>([]);
   // Modalidades, origens e tipos de produto carregados do banco
-  const [modalidadesDisponiveis, setModalidadesDisponiveis] = useState<{ value: string; label: string }[]>([]);
+  const [modalidadesDisponiveis, setModalidadesDisponiveis] = useState<{ value: string; label: string; id: string }[]>([]);
   const [origensDisponiveis, setOrigensDisponiveis] = useState<{ value: string; label: string }[]>([]);
   const [tiposProdutoDisponiveis, setTiposProdutoDisponiveis] = useState<{ value: string; label: string }[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -454,6 +463,7 @@ export function CaptacaoPage(props?: PageProps) {
             setModalidadesDisponiveis(data.items.map((m: Record<string, unknown>) => ({
               value: String(m.nome ?? ""),
               label: String(m.nome ?? ""),
+              id: String(m.id ?? ""),
             })));
           }
         }
@@ -505,6 +515,17 @@ export function CaptacaoPage(props?: PageProps) {
             }
           }
         }
+      } catch { /* silencioso */ }
+    })();
+    // RF-013: Carregar classes de produto v2 para filtro local
+    (async () => {
+      try {
+        const res = await crudList("classes-produto-v2", { limit: 200 });
+        const items = res.items as Record<string, unknown>[];
+        setClassesV2(items.map(c => ({
+          value: String(c.id ?? ""),
+          label: String(c.nome ?? ""),
+        })));
       } catch { /* silencioso */ }
     })();
     // C1: Carregar estados de atuacao para calculo de score comercial
@@ -623,17 +644,13 @@ export function CaptacaoPage(props?: PageProps) {
   // T14: Salvar edital via CRUD
   const salvarEditalNoBanco = async (edital: EditalBusca): Promise<string | null> => {
     try {
-      // Mapear modalidade para ENUM válido do banco
-      const modalidadeMap: Record<string, string> = {
-        "pregao_eletronico": "pregao_eletronico",
-        "pregao_presencial": "pregao_presencial",
-        "concorrencia": "concorrencia",
-        "tomada_precos": "tomada_precos",
-        "convite": "convite",
-        "dispensa": "dispensa",
-        "inexigibilidade": "inexigibilidade",
-      };
-      const modalidade = modalidadeMap[edital.classificacaoTipo] || "pregao_eletronico";
+      // Buscar modalidade_id da tabela ModalidadeLicitacao
+      const modNome = edital.modalidade && edital.modalidade !== "—" ? edital.modalidade : "";
+      const modMatch = modalidadesDisponiveis.find(m =>
+        m.value.toLowerCase().replace(/[^a-z]/g, "").includes(modNome.toLowerCase().replace(/[^a-z]/g, "")) ||
+        modNome.toLowerCase().replace(/[^a-z]/g, "").includes(m.value.toLowerCase().replace(/[^a-z]/g, ""))
+      );
+      const modalidade_id = modMatch?.id || null;
 
       const payload: Record<string, unknown> = {
         numero: edital.numero,
@@ -641,7 +658,7 @@ export function CaptacaoPage(props?: PageProps) {
         orgao_tipo: edital.orgaoTipo || "municipal",
         uf: edital.uf !== "—" ? edital.uf : null,
         objeto: edital.objeto,
-        modalidade,
+        modalidade_id,
         valor_referencia: edital.valor || null,
         data_abertura: (() => {
           // Converter DD/MM/YYYY para YYYY-MM-DD para o MySQL
@@ -884,7 +901,13 @@ export function CaptacaoPage(props?: PageProps) {
     return "Nao atendido";
   };
 
-  const prazos = contarPrazos(resultados.length > 0 ? resultados : []);
+  // RF-013: Filtro local por classe de produto
+  const filteredResultados = useMemo(() => {
+    if (filtroClasseProduto === "todos") return resultados;
+    return resultados.filter(e => e.classe_produto_id === filtroClasseProduto);
+  }, [resultados, filtroClasseProduto]);
+
+  const prazos = contarPrazos(filteredResultados.length > 0 ? filteredResultados : []);
 
   const columns: Column<EditalBusca>[] = [
     {
@@ -928,16 +951,13 @@ export function CaptacaoPage(props?: PageProps) {
       width: "120px",
       sortable: true,
       render: (e) => {
-        const MOD: Record<string, string> = {
-          pregao_eletronico: "Pregão Eletrônico",
-          pregao_presencial: "Pregão Presencial",
-          concorrencia: "Concorrência",
-          tomada_precos: "Tomada de Preços",
-          convite: "Convite",
-          dispensa: "Dispensa",
-          inexigibilidade: "Inexigibilidade",
-        };
-        return <span style={{ fontSize: "0.8em" }}>{MOD[e.modalidade ?? ""] || e.modalidade || "—"}</span>;
+        // Buscar nome da modalidade na tabela do banco
+        const modVal = e.modalidade ?? "";
+        const modLabel = modalidadesDisponiveis.find(m =>
+          m.value.toLowerCase().replace(/[^a-z]/g, "").includes(modVal.toLowerCase().replace(/[^a-z]/g, "")) ||
+          modVal.toLowerCase().replace(/[^a-z]/g, "").includes(m.value.toLowerCase().replace(/[^a-z]/g, ""))
+        )?.label || modVal || "—";
+        return <span style={{ fontSize: "0.8em" }}>{modLabel}</span>;
       },
     },
     {
@@ -1235,6 +1255,16 @@ export function CaptacaoPage(props?: PageProps) {
                 placeholder="Ex: 9027.80.99"
               />
             </FormField>
+            <FormField label="Classe de Produto (filtro local)">
+              <SelectInput
+                value={filtroClasseProduto}
+                onChange={setFiltroClasseProduto}
+                options={[
+                  { value: "todos", label: "Todas as classes" },
+                  ...classesV2,
+                ]}
+              />
+            </FormField>
           </div>
 
           <div className="form-grid form-grid-4" style={{ marginTop: "12px" }}>
@@ -1305,7 +1335,7 @@ export function CaptacaoPage(props?: PageProps) {
             {/* Tabela de resultados */}
             <div className="captacao-table-area">
               <Card
-                title={`Resultados (${resultados.length} editais encontrados)`}
+                title={`Resultados (${filteredResultados.length} editais encontrados${filtroClasseProduto !== "todos" ? " - filtrado" : ""})`}
                 icon={<FileText size={18} />}
                 actions={
                   <div className="card-actions">
@@ -1333,7 +1363,7 @@ export function CaptacaoPage(props?: PageProps) {
                 )}
 
                 <DataTable
-                  data={resultados}
+                  data={filteredResultados}
                   columns={columns}
                   idKey="id"
                   emptyMessage="Nenhum edital encontrado"
