@@ -628,48 +628,32 @@ export function CrudPage({ config }: CrudPageProps) {
       </div>
 
       <div className="page-content">
-        {/* Parent selector for child tables */}
+        {/* Parent selector for child tables — dropdown */}
         {isChildTable && (
-          <div className="card crud-parent-selector">
-            <div className="card-content">
-              <label className="form-field-label crud-parent-label">
-                Selecione o registro principal:
-              </label>
-              <div className="crud-parent-search-row">
-                <div className="crud-search-box">
-                  <Search size={16} />
-                  <input
-                    type="text"
-                    placeholder={`Buscar...`}
-                    value={parentSearch}
-                    onChange={(e) => handleParentSearch(e.target.value)}
-                  />
-                  {parentSearch && (
-                    <button className="crud-search-clear" onClick={() => { setParentSearch(""); loadParentItems(); }}>
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
+          <div className="card crud-parent-selector" style={{ marginBottom: "1rem" }}>
+            <div className="card-content" style={{ padding: "0.75rem 1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <label className="form-field-label" style={{ margin: 0, whiteSpace: "nowrap", fontWeight: 600 }}>
+                  Filtrar por:
+                </label>
+                {parentLoading ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><div className="loading-spinner small" /> Carregando...</div>
+                ) : (
+                  <select
+                    className="form-input"
+                    style={{ flex: 1, maxWidth: "400px" }}
+                    value={selectedParentId || ""}
+                    onChange={(e) => { const v = e.target.value; setSelectedParentId(v || null); setSelectedId(null); setIsNew(false); setFormData({}); }}
+                  >
+                    <option value="">— Selecione —</option>
+                    {parentItems.map((item) => (
+                      <option key={String(item.id)} value={String(item.id)}>
+                        {getParentLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-              {parentLoading ? (
-                <div className="crud-parent-loading"><div className="loading-spinner small" /> Carregando...</div>
-              ) : (
-                <div className="crud-parent-list">
-                  {parentItems.map((item) => (
-                    <button
-                      key={String(item.id)}
-                      className={`crud-parent-item ${selectedParentId === String(item.id) ? "active" : ""}`}
-                      onClick={() => handleSelectParent(String(item.id))}
-                    >
-                      <span className="crud-parent-item-label">{getParentLabel(item)}</span>
-                      {selectedParentId === String(item.id) && <span className="crud-parent-check">&#10003;</span>}
-                    </button>
-                  ))}
-                  {parentItems.length === 0 && (
-                    <div className="crud-parent-empty">Nenhum registro encontrado</div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         )}

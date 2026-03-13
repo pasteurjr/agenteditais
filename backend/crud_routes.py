@@ -102,6 +102,7 @@ CRUD_TABLES = {
         "search_fields": ["nome"],
         "label": "Classe de Produto",
         "required": ["nome", "area_id"],
+        "parent_fk": "area_id",
     },
     "subclasses-produto": {
         "model": SubclasseProduto,
@@ -109,6 +110,7 @@ CRUD_TABLES = {
         "search_fields": ["nome"],
         "label": "Subclasse de Produto",
         "required": ["nome", "classe_id"],
+        "parent_fk": "classe_id",
     },
     # === Tabelas globais (referência) ===
     "modalidades-licitacao": {
@@ -596,6 +598,12 @@ def crud_list(table_slug):
                     ).all()]
                     if fk_col is not None:
                         query = query.filter(fk_col.in_(parent_ids))
+
+        # Additional parent filter (works alongside empresa_scoped/user_scoped)
+        if parent_id and config.get("parent_fk"):
+            fk_col = getattr(model, config["parent_fk"], None)
+            if fk_col is not None:
+                query = query.filter(fk_col == parent_id)
 
         # Search
         if q and config.get("search_fields"):
