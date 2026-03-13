@@ -935,6 +935,9 @@ export const subclassesProdutoConfig: CrudPageConfig = {
   parentFk: "classe_id",
   parentTable: "classes-produto-v2",
   parentLabelField: "nome",
+  grandparentTable: "areas-produto",
+  grandparentFk: "area_id",
+  grandparentLabelField: "Área",
   fields: [
     { name: "classe_id", label: "Classe", type: "fk", fkTable: "classes-produto-v2", fkLabel: "nome", required: true, width: "half" },
     { name: "nome", label: "Nome", type: "text", required: true, width: "half" },

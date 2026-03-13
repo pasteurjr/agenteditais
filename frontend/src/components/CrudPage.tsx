@@ -31,6 +31,10 @@ export interface CrudPageConfig {
   parentTable?: string;
   parentLabelField?: string;
   parentLabelFn?: (item: Record<string, unknown>) => string;
+  /** Optional grandparent filter — adds a second dropdown that filters the parent dropdown */
+  grandparentTable?: string;
+  grandparentFk?: string;        // FK column on the parent table pointing to grandparent
+  grandparentLabelField?: string;
   /** Custom component that replaces the default form when creating a new record.
    *  Receives onSaved (call after successful save to reload list) and onCancel. */
   renderCreateForm?: (props: { onSaved: () => void; onCancel: () => void }) => React.ReactNode;
@@ -107,7 +111,7 @@ export function generateFieldsFromSchema(columns: CrudColumnSchema[]): FieldConf
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function CrudPage({ config }: CrudPageProps) {
-  const { table, title, icon, fields, searchPlaceholder, parentFk, parentTable, parentLabelField, parentLabelFn, renderCreateForm, renderEditForm } = config;
+  const { table, title, icon, fields, searchPlaceholder, parentFk, parentTable, parentLabelField, parentLabelFn, grandparentTable, grandparentFk, grandparentLabelField, renderCreateForm, renderEditForm } = config;
   const { empresa } = useAuth();
 
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
@@ -144,6 +148,12 @@ export function CrudPage({ config }: CrudPageProps) {
   const [parentSearch, setParentSearch] = useState("");
   const parentDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // ─── Grandparent selector state (optional, e.g. Área → Classe → Subclasse)
+  const hasGrandparent = Boolean(grandparentTable && grandparentFk);
+  const [grandparentItems, setGrandparentItems] = useState<Record<string, unknown>[]>([]);
+  const [selectedGrandparentId, setSelectedGrandparentId] = useState<string | null>(null);
+  const [grandparentLoading, setGrandparentLoading] = useState(false);
+
   // FK field options: { [fieldName]: { value, label }[] }
   const [fkOptions, setFkOptions] = useState<Record<string, { value: string; label: string }[]>>({});
 
@@ -176,10 +186,41 @@ export function CrudPage({ config }: CrudPageProps) {
   }, [parentTable]);
 
   useEffect(() => {
-    if (isChildTable) {
+    if (isChildTable && !hasGrandparent) {
       loadParentItems();
     }
-  }, [isChildTable, loadParentItems]);
+  }, [isChildTable, hasGrandparent, loadParentItems]);
+
+  // ─── Load grandparent items ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!hasGrandparent || !grandparentTable) return;
+    setGrandparentLoading(true);
+    crudList(grandparentTable, { limit: 200 })
+      .then((res) => setGrandparentItems(res.items))
+      .catch(() => {})
+      .finally(() => setGrandparentLoading(false));
+  }, [hasGrandparent, grandparentTable]);
+
+  // When grandparent changes, reload parent items filtered by grandparent
+  useEffect(() => {
+    if (!hasGrandparent || !parentTable || !grandparentFk) return;
+    if (!selectedGrandparentId) {
+      setParentItems([]);
+      setSelectedParentId(null);
+      return;
+    }
+    setParentLoading(true);
+    crudList(parentTable, { parent_id: selectedGrandparentId, limit: 200 })
+      .then((res) => {
+        setParentItems(res.items);
+        setSelectedParentId(null);
+        setSelectedId(null);
+        setIsNew(false);
+        setFormData({});
+      })
+      .catch(() => {})
+      .finally(() => setParentLoading(false));
+  }, [hasGrandparent, parentTable, grandparentFk, selectedGrandparentId]);
 
   // Load FK options for fk-type fields
   useEffect(() => {
@@ -620,7 +661,7 @@ export function CrudPage({ config }: CrudPageProps) {
             <h1>{title}</h1>
             <p>
               {isChildTable && !selectedParentId
-                ? "Selecione um registro principal abaixo"
+                ? "Use os filtros abaixo para listar registros"
                 : `${total} registro${total !== 1 ? "s" : ""}`}
             </p>
           </div>
@@ -628,22 +669,48 @@ export function CrudPage({ config }: CrudPageProps) {
       </div>
 
       <div className="page-content">
-        {/* Parent selector for child tables — dropdown */}
+        {/* Parent selector for child tables — dropdown(s) */}
         {isChildTable && (
           <div className="card crud-parent-selector" style={{ marginBottom: "1rem" }}>
             <div className="card-content" style={{ padding: "0.75rem 1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                {/* Grandparent dropdown (optional, e.g. Área) */}
+                {hasGrandparent && (
+                  <>
+                    <label className="form-field-label" style={{ margin: 0, whiteSpace: "nowrap", fontWeight: 600 }}>
+                      {grandparentLabelField ? grandparentLabelField.charAt(0).toUpperCase() + grandparentLabelField.slice(1) : "Filtrar"}:
+                    </label>
+                    {grandparentLoading ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><div className="loading-spinner small" /> Carregando...</div>
+                    ) : (
+                      <select
+                        className="form-input"
+                        style={{ flex: 1, maxWidth: "300px" }}
+                        value={selectedGrandparentId || ""}
+                        onChange={(e) => { setSelectedGrandparentId(e.target.value || null); }}
+                      >
+                        <option value="">— Selecione —</option>
+                        {grandparentItems.map((item) => (
+                          <option key={String(item.id)} value={String(item.id)}>
+                            {String(item.nome || item.razao_social || item.titulo || item.id)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
                 <label className="form-field-label" style={{ margin: 0, whiteSpace: "nowrap", fontWeight: 600 }}>
-                  Filtrar por:
+                  {hasGrandparent ? (parentFk ? parentFk.replace(/_id$/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "Filtrar") : "Filtrar por"}:
                 </label>
                 {parentLoading ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><div className="loading-spinner small" /> Carregando...</div>
                 ) : (
                   <select
                     className="form-input"
-                    style={{ flex: 1, maxWidth: "400px" }}
+                    style={{ flex: 1, maxWidth: hasGrandparent ? "300px" : "400px" }}
                     value={selectedParentId || ""}
                     onChange={(e) => { const v = e.target.value; setSelectedParentId(v || null); setSelectedId(null); setIsNew(false); setFormData({}); }}
+                    disabled={hasGrandparent && !selectedGrandparentId}
                   >
                     <option value="">— Selecione —</option>
                     {parentItems.map((item) => (
