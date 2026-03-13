@@ -753,6 +753,51 @@ export function CrudPage({ config }: CrudPageProps) {
         {error && <div className="crud-message crud-message-error">{error}</div>}
         {successMsg && <div className="crud-message crud-message-success">{successMsg}</div>}
 
+        {/* Table list — logo abaixo da busca */}
+        <div className="card">
+          <div className="card-content" style={{ padding: 0 }}>
+            <div className="data-table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    {tableFields.map((f) => (
+                      <th key={f.name}>{f.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={tableFields.length} className="data-table-loading">
+                        <div className="loading-spinner small" />
+                        Carregando...
+                      </td>
+                    </tr>
+                  ) : items.length === 0 ? (
+                    <tr>
+                      <td colSpan={tableFields.length} className="data-table-empty">
+                        Nenhum registro encontrado
+                      </td>
+                    </tr>
+                  ) : (
+                    items.map((item) => (
+                      <tr
+                        key={String(item.id)}
+                        className={`clickable ${selectedId === String(item.id) ? "selected" : ""}`}
+                        onClick={() => handleSelectItem(item)}
+                      >
+                        {tableFields.map((f) => (
+                          <td key={f.name}>{getDisplayValue(item, f)}</td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         {/* Custom create form (replaces default form on new) */}
         {isNew && renderCreateForm && (
           renderCreateForm({
@@ -834,51 +879,6 @@ export function CrudPage({ config }: CrudPageProps) {
             </div>
           </div>
         )}
-
-        {/* Table list */}
-        <div className="card">
-          <div className="card-content" style={{ padding: 0 }}>
-            <div className="data-table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {tableFields.map((f) => (
-                      <th key={f.name}>{f.label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={tableFields.length} className="data-table-loading">
-                        <div className="loading-spinner small" />
-                        Carregando...
-                      </td>
-                    </tr>
-                  ) : items.length === 0 ? (
-                    <tr>
-                      <td colSpan={tableFields.length} className="data-table-empty">
-                        Nenhum registro encontrado
-                      </td>
-                    </tr>
-                  ) : (
-                    items.map((item) => (
-                      <tr
-                        key={String(item.id)}
-                        className={`clickable ${selectedId === String(item.id) ? "selected" : ""}`}
-                        onClick={() => handleSelectItem(item)}
-                      >
-                        {tableFields.map((f) => (
-                          <td key={f.name}>{getDisplayValue(item, f)}</td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
