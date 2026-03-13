@@ -6120,20 +6120,21 @@ def tool_classificar_edital(edital_id: int = None, texto_edital: str = None, use
 
 # ==================== SPRINT 1 - FUNCIONALIDADE 9: VERIFICAR COMPLETUDE DO PRODUTO ====================
 
-def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str = None, user_id: str = None) -> Dict[str, Any]:
+def tool_verificar_completude_produto(produto_id: str = None, nome_produto: str = None, user_id: str = None) -> Dict[str, Any]:
     """
-    Verifica se um produto tem todas as informações necessárias para participar de licitações.
+    Verifica completude do produto: dados básicos + especificações vs máscara da subclasse.
 
     Args:
         produto_id: ID do produto
-        nome_produto: Nome do produto (busca)
+        nome_produto: Nome do produto (busca por ILIKE)
         user_id: ID do usuário
 
     Returns:
-        Dict com análise de completude e recomendações
+        Dict com campos_basicos, mascara_check, percentuais e recomendações
     """
     from database import SessionLocal
-    from models import Produto, ProdutoEspecificacao
+    from models import Produto, ProdutoEspecificacao, SubclasseProduto
+    import json
 
     db = SessionLocal()
 
@@ -6152,51 +6153,93 @@ def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str 
         if not produto:
             return {"success": False, "error": f"Produto não encontrado: {nome_produto or produto_id}"}
 
-        # Campos obrigatórios e opcionais
-        campos_obrigatorios = {
-            "nome": produto.nome,
-            "fabricante": produto.fabricante,
-            "modelo": produto.modelo,
-            "categoria": produto.categoria
-        }
+        # Campos básicos
+        campos_basicos = [
+            {"campo": "Nome", "preenchido": bool(produto.nome), "valor": produto.nome or ""},
+            {"campo": "Fabricante", "preenchido": bool(produto.fabricante), "valor": produto.fabricante or ""},
+            {"campo": "Modelo", "preenchido": bool(produto.modelo), "valor": produto.modelo or ""},
+            {"campo": "NCM", "preenchido": bool(produto.ncm and produto.ncm.strip()), "valor": produto.ncm or ""},
+            {"campo": "SKU / Codigo Interno", "preenchido": bool(produto.codigo_interno), "valor": produto.codigo_interno or ""},
+            {"campo": "Subclasse", "preenchido": bool(produto.subclasse_id), "valor": ""},
+            {"campo": "Registro ANVISA", "preenchido": bool(produto.registro_anvisa), "valor": produto.registro_anvisa or ""},
+        ]
 
-        campos_opcionais = {
-            "descricao": produto.descricao if hasattr(produto, 'descricao') else None,
-            "registro_anvisa": produto.registro_anvisa if hasattr(produto, 'registro_anvisa') else None,
-        }
+        # Resolver nome da subclasse
+        subclasse_nome = None
+        mascara_check = []
+        if produto.subclasse_id:
+            sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == produto.subclasse_id).first()
+            if sub:
+                subclasse_nome = sub.nome
+                campos_basicos[5]["valor"] = sub.nome
 
-        # Buscar especificações
-        specs = db.query(ProdutoEspecificacao).filter(
-            ProdutoEspecificacao.produto_id == produto.id
-        ).all()
+                # Parse máscara
+                mascara_raw = sub.campos_mascara
+                mascara = []
+                if mascara_raw:
+                    try:
+                        if isinstance(mascara_raw, str):
+                            mascara_raw = json.loads(mascara_raw)
+                        if isinstance(mascara_raw, str):
+                            mascara_raw = json.loads(mascara_raw)
+                        if isinstance(mascara_raw, list):
+                            mascara = mascara_raw
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
-        # Análise
-        campos_preenchidos = sum(1 for v in campos_obrigatorios.values() if v)
-        total_obrigatorios = len(campos_obrigatorios)
-        percentual_completude = (campos_preenchidos / total_obrigatorios) * 100
+                # Buscar specs do produto
+                specs = db.query(ProdutoEspecificacao).filter(
+                    ProdutoEspecificacao.produto_id == produto.id
+                ).all()
+                specs_map = {s.nome_especificacao.lower(): s.valor or "" for s in specs}
 
-        campos_faltantes = [k for k, v in campos_obrigatorios.items() if not v]
+                # Comparar cada campo da máscara
+                for m in mascara:
+                    campo_nome = str(m.get("campo") or m.get("nome") or "")
+                    if not campo_nome:
+                        continue
+                    valor = specs_map.get(campo_nome.lower(), "")
+                    preenchido = bool(valor.strip()) and valor.strip() != "-"
+                    mascara_check.append({
+                        "campo": campo_nome,
+                        "preenchido": preenchido,
+                        "valor": valor,
+                        "unidade": str(m.get("unidade", "") or ""),
+                    })
 
-        # Recomendações
-        recomendacoes = []
-        if not produto.fabricante:
-            recomendacoes.append("Adicione o fabricante do produto")
-        if not produto.modelo:
-            recomendacoes.append("Adicione o modelo do produto")
-        if len(specs) < 5:
-            recomendacoes.append(f"Adicione mais especificações técnicas (atual: {len(specs)})")
-        if not hasattr(produto, 'registro_anvisa') or not produto.registro_anvisa:
-            recomendacoes.append("Adicione o registro ANVISA (se aplicável)")
+        # Calcular percentuais
+        basicos_preenchidos = sum(1 for c in campos_basicos if c["preenchido"])
+        pct_basicos = round((basicos_preenchidos / len(campos_basicos)) * 100)
+
+        mascara_preenchidos = sum(1 for c in mascara_check if c["preenchido"])
+        pct_mascara = round((mascara_preenchidos / len(mascara_check)) * 100) if mascara_check else 100
+
+        total = len(campos_basicos) + len(mascara_check)
+        total_ok = basicos_preenchidos + mascara_preenchidos
+        pct_geral = round((total_ok / total) * 100) if total > 0 else 0
 
         # Status
-        if percentual_completude >= 100 and len(specs) >= 5:
+        if pct_geral >= 90:
             status = "completo"
-        elif percentual_completude >= 75:
+        elif pct_geral >= 70:
             status = "quase_completo"
-        elif percentual_completude >= 50:
+        elif pct_geral >= 40:
             status = "incompleto"
         else:
             status = "muito_incompleto"
+
+        # Recomendações
+        recomendacoes = []
+        for c in campos_basicos:
+            if not c["preenchido"]:
+                recomendacoes.append(f"Preencha o campo '{c['campo']}'")
+        faltantes_mascara = [c["campo"] for c in mascara_check if not c["preenchido"]]
+        if faltantes_mascara:
+            if len(faltantes_mascara) <= 5:
+                for f in faltantes_mascara:
+                    recomendacoes.append(f"Preencha especificacao '{f}'")
+            else:
+                recomendacoes.append(f"{len(faltantes_mascara)} especificacoes da mascara nao preenchidas")
 
         return {
             "success": True,
@@ -6205,20 +6248,19 @@ def tool_verificar_completude_produto(produto_id: int = None, nome_produto: str 
                 "nome": produto.nome,
                 "fabricante": produto.fabricante,
                 "modelo": produto.modelo,
-                "categoria": produto.categoria
+                "categoria": produto.categoria,
+                "subclasse_id": produto.subclasse_id,
             },
+            "subclasse_nome": subclasse_nome,
+            "campos_basicos": campos_basicos,
+            "mascara_check": mascara_check,
             "completude": {
-                "percentual": round(percentual_completude, 1),
+                "percentual_geral": pct_geral,
+                "percentual_basicos": pct_basicos,
+                "percentual_mascara": pct_mascara,
                 "status": status,
-                "campos_preenchidos": campos_preenchidos,
-                "total_campos": total_obrigatorios
             },
-            "especificacoes": {
-                "total": len(specs),
-                "minimo_recomendado": 5
-            },
-            "campos_faltantes": campos_faltantes,
-            "recomendacoes": recomendacoes
+            "recomendacoes": recomendacoes,
         }
 
     except Exception as e:

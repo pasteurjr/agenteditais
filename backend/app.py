@@ -5107,7 +5107,7 @@ def processar_classificar_edital(message: str, user_id: str):
 # ==================== SPRINT 1 - FUNCIONALIDADE 9: VERIFICAR COMPLETUDE ====================
 
 def processar_verificar_completude(message: str, user_id: str):
-    """Processa verificação de completude de produto."""
+    """Processa verificação de completude de produto — usa mesmo tool do endpoint REST."""
     from tools import tool_verificar_completude_produto
 
     # Extrair nome do produto usando helper
@@ -5127,9 +5127,10 @@ def processar_verificar_completude(message: str, user_id: str):
 
     produto = resultado.get("produto", {})
     completude = resultado.get("completude", {})
-    specs = resultado.get("especificacoes", {})
+    campos_basicos = resultado.get("campos_basicos", [])
+    mascara_check = resultado.get("mascara_check", [])
+    subclasse_nome = resultado.get("subclasse_nome")
 
-    # Emoji de status
     status_emoji = {
         "completo": "✅",
         "quase_completo": "🟡",
@@ -5141,38 +5142,48 @@ def processar_verificar_completude(message: str, user_id: str):
 
 ### Produto: {produto.get('nome', 'N/A')}
 
-| Campo | Valor |
-|-------|-------|
-| **Fabricante** | {produto.get('fabricante', '❌ Não informado')} |
-| **Modelo** | {produto.get('modelo', '❌ Não informado')} |
-| **Categoria** | {produto.get('categoria', '❌ Não informado')} |
+**Status:** {status_emoji.get(completude.get('status'), '❓')} {completude.get('status', 'N/A').replace('_', ' ').title()}
+
+| Métrica | Percentual |
+|---------|-----------|
+| **Geral** | {completude.get('percentual_geral', 0)}% |
+| **Dados Básicos** | {completude.get('percentual_basicos', 0)}% |
+| **Especificações** | {completude.get('percentual_mascara', 0)}% |
 
 ---
 
-### 📊 Status de Completude
+### Dados Básicos
 
-| Métrica | Valor |
-|---------|-------|
-| **Status** | {status_emoji.get(completude.get('status'), '❓')} {completude.get('status', 'N/A').replace('_', ' ').title()} |
-| **Percentual** | {completude.get('percentual', 0):.1f}% |
-| **Campos Preenchidos** | {completude.get('campos_preenchidos', 0)}/{completude.get('total_campos', 0)} |
-| **Especificações** | {specs.get('total', 0)}/{specs.get('minimo_recomendado', 5)} recomendadas |
+"""
+    for c in campos_basicos:
+        emoji = "✅" if c["preenchido"] else "❌"
+        valor = c["valor"] if c["preenchido"] else "Não preenchido"
+        response += f"- {emoji} **{c['campo']}**: {valor}\n"
 
+    if subclasse_nome and mascara_check:
+        preenchidos = sum(1 for c in mascara_check if c["preenchido"])
+        response += f"""
 ---
 
-### ⚠️ Campos Faltantes
+### Especificações — {subclasse_nome} ({preenchidos}/{len(mascara_check)})
 
 """
-    for campo in resultado.get("campos_faltantes", []):
-        response += f"- ❌ {campo}\n"
+        faltantes = [c for c in mascara_check if not c["preenchido"]]
+        if faltantes:
+            response += "**Faltantes:**\n"
+            for c in faltantes[:20]:
+                un = f" ({c['unidade']})" if c.get("unidade") else ""
+                response += f"- ❌ {c['campo']}{un}\n"
+            if len(faltantes) > 20:
+                response += f"- ... e mais {len(faltantes) - 20} campos\n"
+    elif not subclasse_nome:
+        response += "\n⚠️ Produto sem subclasse atribuída — não é possível verificar especificações contra a máscara.\n"
 
-    response += """
-
-### 💡 Recomendações
-
-"""
-    for rec in resultado.get("recomendacoes", []):
-        response += f"- {rec}\n"
+    recomendacoes = resultado.get("recomendacoes", [])
+    if recomendacoes:
+        response += "\n---\n\n### 💡 Recomendações\n\n"
+        for rec in recomendacoes:
+            response += f"- {rec}\n"
 
     return response, resultado
 
@@ -7463,6 +7474,18 @@ def get_produto(produto_id):
         return jsonify(produto.to_dict(include_specs=True))
     finally:
         db.close()
+
+
+@app.route("/api/produtos/<produto_id>/completude", methods=["GET"])
+@require_auth
+def get_produto_completude(produto_id):
+    """Verifica completude do produto: dados básicos + specs vs máscara da subclasse."""
+    from tools import tool_verificar_completude_produto
+    user_id = get_current_user_id()
+    resultado = tool_verificar_completude_produto(produto_id=produto_id, user_id=user_id)
+    if not resultado.get("success"):
+        return jsonify({"error": resultado.get("error", "Erro")}), 404
+    return jsonify(resultado)
 
 
 # =============================================================================

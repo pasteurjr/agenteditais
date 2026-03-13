@@ -3,13 +3,14 @@ import {
   Briefcase, Upload, Globe, Search, RefreshCw, Trash2, Eye, Plus, Shield,
   Sparkles, Radio, AlertCircle, Loader2, FileText, BookOpen, Receipt,
   ClipboardList, FolderOpen, MonitorSmartphone, ChevronDown, ChevronRight,
-  Filter, Zap, ArrowDown, ArrowRight, CheckCircle, DollarSign, AlertTriangle
+  Filter, Zap, ArrowDown, ArrowRight, CheckCircle, DollarSign, AlertTriangle,
+  Edit2, Save, X
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
-import { getProdutos, getProduto, sendMessage, sendMessageWithFile, createSession } from "../api/client";
-import type { Produto, ProdutoEspecificacao } from "../api/client";
-import { crudList } from "../api/crud";
+import { getProdutos, getProduto, getProdutoCompletude, sendMessage, sendMessageWithFile, createSession } from "../api/client";
+import type { Produto, ProdutoEspecificacao, CompletudeResult } from "../api/client";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 
 interface PortfolioPageProps {
   onSendToChat: (message: string, file?: File) => Promise<void>;
@@ -141,6 +142,31 @@ const SPECS_POR_CLASSE: Record<string, { campo: string; placeholder: string }[]>
   ],
 };
 
+interface SpecCampoTop {
+  campo: string;
+  tipo: "texto" | "numero" | "decimal" | "select" | "boolean";
+  unidade?: string;
+  placeholder?: string;
+  opcoes?: string[];
+  obrigatorio?: boolean;
+}
+
+function parseMascaraTop(raw: unknown): SpecCampoTop[] {
+  try {
+    let mascara = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (typeof mascara === "string") mascara = JSON.parse(mascara);
+    if (!Array.isArray(mascara) || mascara.length === 0) return [];
+    return mascara.map((m: Record<string, unknown>) => ({
+      campo: String(m.campo || m.nome || ""),
+      tipo: (m.tipo as SpecCampoTop["tipo"]) || "texto",
+      unidade: m.unidade ? String(m.unidade) : undefined,
+      placeholder: m.placeholder ? String(m.placeholder) : undefined,
+      opcoes: Array.isArray(m.opcoes) ? m.opcoes.map(String) : undefined,
+      obrigatorio: Boolean(m.obrigatorio),
+    }));
+  } catch { return []; }
+}
+
 export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // Aba ativa
   const [activeTab, setActiveTab] = useState<"produtos" | "uploads" | "cadastro" | "classificacao">("produtos");
@@ -151,9 +177,13 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoriaFilter, setCategoriaFilter] = useState("todas");
+  const [filtroArea, setFiltroArea] = useState("");
+  const [filtroClasse, setFiltroClasse] = useState("");
+  const [filtroSubclasse, setFiltroSubclasse] = useState("");
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
   const [selectedProdutoFull, setSelectedProdutoFull] = useState<Produto | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const detalheRef = useRef<HTMLDivElement>(null);
 
   // === UPLOADS ===
   const [uploadingType, setUploadingType] = useState<string | null>(null);
@@ -185,9 +215,23 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [monitoramentos, setMonitoramentos] = useState<Record<string, unknown>[]>([]);
   const [monitoramentosLoading, setMonitoramentosLoading] = useState(false);
 
+  // === COMPLETUDE ===
+  const [completudeResult, setCompletudeResult] = useState<CompletudeResult | null>(null);
+  const [completudeLoading, setCompletudeLoading] = useState(false);
+
   // === FEEDBACK DE PROCESSAMENTO ===
   const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [iaResponse, setIaResponse] = useState<string | null>(null);
+
+  // === EDIÇÃO DE PRODUTO ===
+  const [editProduto, setEditProduto] = useState<Produto | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editArea, setEditArea] = useState("");
+  const [editClasse, setEditClasse] = useState("");
+  const [editSubclasse, setEditSubclasse] = useState("");
+  const [editSpecs, setEditSpecs] = useState<Record<string, { id?: string; valor: string; unidade?: string }>>({});
+  const [editLoading, setEditLoading] = useState(false);
 
   // === MODALS ===
   const [showAnvisaModal, setShowAnvisaModal] = useState(false);
@@ -257,17 +301,37 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       setSelectedProdutoFull(produto);
     } finally {
       setLoadingDetail(false);
+      setTimeout(() => detalheRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     }
   }, []);
 
+  // Mapas para filtro hierárquico
+  const subclasseToClasseMap = Object.fromEntries(subclassesBackend.map(s => [String(s.id), String(s.classe_id || "")]));
+  const classeToAreaMap = Object.fromEntries(classesV2Backend.map(c => [String(c.id), String(c.area_id || "")]));
+
   const filteredProdutos = produtos.filter((p) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      p.nome.toLowerCase().includes(term) ||
-      (p.fabricante || "").toLowerCase().includes(term) ||
-      (p.modelo || "").toLowerCase().includes(term)
-    );
+    // Filtro por texto
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const match = p.nome.toLowerCase().includes(term) ||
+        (p.fabricante || "").toLowerCase().includes(term) ||
+        (p.modelo || "").toLowerCase().includes(term);
+      if (!match) return false;
+    }
+    // Filtro por subclasse
+    if (filtroSubclasse && p.subclasse_id !== filtroSubclasse) return false;
+    // Filtro por classe (via subclasse do produto)
+    if (filtroClasse && !filtroSubclasse) {
+      const classeId = p.subclasse_id ? subclasseToClasseMap[p.subclasse_id] : "";
+      if (classeId !== filtroClasse) return false;
+    }
+    // Filtro por área (via classe da subclasse do produto)
+    if (filtroArea && !filtroClasse && !filtroSubclasse) {
+      const classeId = p.subclasse_id ? subclasseToClasseMap[p.subclasse_id] : "";
+      const areaId = classeId ? classeToAreaMap[classeId] : "";
+      if (areaId !== filtroArea) return false;
+    }
+    return true;
   });
 
   // ============================================================
@@ -440,14 +504,127 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
 
   const handleExcluir = async (produto: Produto) => {
     if (!confirm(`Tem certeza que deseja excluir "${produto.nome}"?`)) return;
-    await onSendToChat(`Exclua o produto ${produto.nome}`);
-    setSelectedProduto(null);
-    setSelectedProdutoFull(null);
-    setTimeout(() => fetchProdutos(), 2000);
+    try {
+      await crudDelete("produtos", produto.id);
+      setSelectedProduto(null);
+      setSelectedProdutoFull(null);
+      setEditProduto(null);
+      fetchProdutos();
+    } catch (err) {
+      setError(`Erro ao excluir: ${err instanceof Error ? err.message : "Falha"}`);
+    }
   };
 
   const handleVerificarCompletude = async (produto: Produto) => {
-    await onSendToChat(`Verifique a completude do produto ${produto.nome}`);
+    setCompletudeLoading(true);
+    try {
+      const result = await getProdutoCompletude(produto.id);
+      setCompletudeResult(result);
+    } catch (err) {
+      setError(`Erro ao verificar completude: ${err instanceof Error ? err.message : "Falha"}`);
+    } finally {
+      setCompletudeLoading(false);
+    }
+  };
+
+  const handleEditarAbrir = async (produto: Produto) => {
+    setEditProduto(produto);
+    setEditForm({
+      nome: produto.nome || "",
+      fabricante: produto.fabricante || "",
+      modelo: produto.modelo || "",
+      codigo_interno: produto.codigo_interno || "",
+      ncm: produto.ncm || "",
+      descricao: produto.descricao || "",
+    });
+
+    // Resolver hierarquia: subclasse → classe → área
+    const subId = produto.subclasse_id || "";
+    setEditSubclasse(subId);
+    if (subId) {
+      const sub = subclassesBackend.find(s => String(s.id) === subId);
+      const clsId = sub ? String(sub.classe_id || "") : "";
+      setEditClasse(clsId);
+      if (clsId) {
+        const cls = classesV2Backend.find(c => String(c.id) === clsId);
+        setEditArea(cls ? String(cls.area_id || "") : "");
+      } else {
+        setEditArea("");
+      }
+    } else {
+      setEditClasse("");
+      setEditArea("");
+    }
+
+    // Carregar especificações existentes
+    setEditLoading(true);
+    try {
+      const full = await getProduto(produto.id);
+      const specsMap: Record<string, { id?: string; valor: string; unidade?: string }> = {};
+      if (full.especificacoes) {
+        for (const spec of full.especificacoes) {
+          specsMap[spec.nome_especificacao] = {
+            id: spec.id,
+            valor: spec.valor || "",
+            unidade: spec.unidade || "",
+          };
+        }
+      }
+      setEditSpecs(specsMap);
+    } catch {
+      setEditSpecs({});
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Máscara da subclasse selecionada na edição
+  const editMascara = (() => {
+    if (!editSubclasse) return [];
+    const sub = subclassesBackend.find(s => String(s.id) === editSubclasse);
+    if (!sub || !sub.campos_mascara) return [];
+    return parseMascaraTop(sub.campos_mascara);
+  })();
+
+  const handleEditarSalvar = async () => {
+    if (!editProduto) return;
+    setEditSaving(true);
+    try {
+      // Salvar dados básicos do produto
+      await crudUpdate("produtos", editProduto.id, {
+        ...editForm,
+        subclasse_id: editSubclasse || null,
+      });
+
+      // Salvar especificações: update existentes, create novas
+      for (const campo of editMascara) {
+        const specData = editSpecs[campo.campo];
+        const valor = specData?.valor?.trim() || "";
+        if (!valor) continue;
+        if (specData?.id) {
+          // Update existente
+          await crudUpdate("produtos-especificacoes", specData.id, {
+            valor,
+            unidade: campo.unidade || specData.unidade || "",
+          });
+        } else {
+          // Criar nova
+          await crudCreate("produtos-especificacoes", {
+            produto_id: editProduto.id,
+            nome_especificacao: campo.campo,
+            valor,
+            unidade: campo.unidade || "",
+          });
+        }
+      }
+
+      setEditProduto(null);
+      fetchProdutos();
+    } catch (err) {
+      setError(`Erro ao salvar: ${err instanceof Error ? err.message : "Falha"}`);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // ANVISA
@@ -592,20 +769,22 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // NCM alert: products without NCM
   const produtosSemNcm = filteredProdutos.filter(p => !p.ncm || p.ncm.trim() === "");
 
+  // Mapa de subclasses para exibir nome na tabela
+  const subclasseMap = Object.fromEntries(subclassesBackend.map(s => [String(s.id), String(s.nome || "")]));
+
+  const getSubclasseNome = (p: Produto): string => {
+    if (p.subclasse_id && subclasseMap[p.subclasse_id]) return subclasseMap[p.subclasse_id];
+    return p.categoria || "-";
+  };
+
   // Colunas da tabela
   const columns: Column<Produto>[] = [
     { key: "nome", header: "Produto", sortable: true },
     { key: "fabricante", header: "Fabricante", sortable: true, render: (p) => p.fabricante || "-" },
-    { key: "modelo", header: "Modelo", render: (p) => p.modelo || "-" },
-    { key: "categoria", header: "Classe", sortable: true, render: (p) => p.categoria || "-" },
+    { key: "codigo_interno", header: "SKU", render: (p) => p.codigo_interno || "-" },
     {
-      key: "ncm", header: "NCM",
-      render: (p) => {
-        const hasNcm = p.ncm && p.ncm.trim() !== "";
-        return hasNcm
-          ? <span>{p.ncm}</span>
-          : <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#f59e0b" }} title="NCM nao cadastrado"><AlertTriangle size={14} /> -</span>;
-      },
+      key: "categoria", header: "Subclasse", sortable: true,
+      render: (p) => getSubclasseNome(p),
     },
     {
       key: "status_pipeline", header: "Status", sortable: true,
@@ -624,15 +803,11 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       },
     },
     {
-      key: "completude", header: "Completude",
-      render: (p) => <ScoreBar score={calcCompletude(p)} size="small" />,
-      sortable: true,
-    },
-    {
-      key: "acoes", header: "Acoes", width: "180px",
+      key: "acoes", header: "Acoes", width: "200px",
       render: (p) => (
         <div className="table-actions">
           <button title="Visualizar" onClick={(e) => { e.stopPropagation(); handleSelectProduto(p); }}><Eye size={16} /></button>
+          <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarAbrir(p); }}><Edit2 size={16} /></button>
           <button title="Reprocessar IA" onClick={(e) => { e.stopPropagation(); handleReprocessar(p); }}><RefreshCw size={16} /></button>
           <button title="Verificar Completude" onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }}><Search size={16} /></button>
           <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluir(p); }}><Trash2 size={16} /></button>
@@ -743,16 +918,64 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
               </div>
             )}
 
+            {/* Filtros: Área → Classe → Subclasse */}
+            <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Área:</label>
+                <select
+                  className="form-input"
+                  style={{ minWidth: 160 }}
+                  value={filtroArea}
+                  onChange={(e) => { setFiltroArea(e.target.value); setFiltroClasse(""); setFiltroSubclasse(""); }}
+                >
+                  <option value="">Todas</option>
+                  {areasBackend.map(a => (
+                    <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Classe:</label>
+                <select
+                  className="form-input"
+                  style={{ minWidth: 160 }}
+                  value={filtroClasse}
+                  disabled={!filtroArea}
+                  onChange={(e) => { setFiltroClasse(e.target.value); setFiltroSubclasse(""); }}
+                >
+                  <option value="">Todas</option>
+                  {classesV2Backend
+                    .filter(c => !filtroArea || String(c.area_id) === filtroArea)
+                    .map(c => (
+                      <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>
+                    ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Subclasse:</label>
+                <select
+                  className="form-input"
+                  style={{ minWidth: 180 }}
+                  value={filtroSubclasse}
+                  disabled={!filtroClasse}
+                  onChange={(e) => setFiltroSubclasse(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {subclassesBackend
+                    .filter(s => !filtroClasse || String(s.classe_id) === filtroClasse)
+                    .map(s => (
+                      <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
             <Card>
               <FilterBar
                 searchValue={searchTerm}
                 onSearchChange={setSearchTerm}
                 searchPlaceholder="Buscar produto, fabricante, modelo..."
-                filters={[{
-                  key: "categoria", label: "Classe",
-                  value: categoriaFilter, onChange: setCategoriaFilter,
-                  options: CATEGORIAS_FILTER,
-                }]}
+                filters={[]}
               />
               <DataTable
                 data={filteredProdutos}
@@ -767,6 +990,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
 
             {/* Detalhes do produto selecionado */}
             {detalhe && (
+              <div ref={detalheRef}>
               <Card
                 title={`Detalhes: ${detalhe.nome}`}
                 actions={
@@ -839,6 +1063,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                   </div>
                 )}
               </Card>
+              </div>
             )}
           </>
         )}
@@ -1313,6 +1538,217 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
           </>
         )}
       </div>
+
+      {/* === MODAL COMPLETUDE === */}
+      <Modal
+        isOpen={!!completudeResult || completudeLoading}
+        onClose={() => { setCompletudeResult(null); setCompletudeLoading(false); }}
+        title={completudeResult ? `Completude: ${completudeResult.produto.nome}` : "Verificando completude..."}
+        footer={
+          <button className="btn btn-secondary" onClick={() => setCompletudeResult(null)}>Fechar</button>
+        }
+      >
+        {completudeLoading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2rem 0", justifyContent: "center" }}>
+            <Loader2 size={20} className="spin" /> Analisando...
+          </div>
+        ) : completudeResult && (
+          <>
+            {/* Barras de percentual */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_geral >= 80 ? "#22c55e" : completudeResult.completude.percentual_geral >= 50 ? "#f59e0b" : "#ef4444" }}>
+                  {completudeResult.completude.percentual_geral}%
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Geral</div>
+              </div>
+              <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_basicos >= 80 ? "#22c55e" : "#f59e0b" }}>
+                  {completudeResult.completude.percentual_basicos}%
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Dados Basicos</div>
+              </div>
+              <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_mascara >= 80 ? "#22c55e" : completudeResult.completude.percentual_mascara >= 50 ? "#f59e0b" : "#ef4444" }}>
+                  {completudeResult.completude.percentual_mascara}%
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Especificacoes</div>
+              </div>
+            </div>
+
+            {/* Campos básicos */}
+            <h4 style={{ margin: "0 0 8px", fontSize: "0.9rem" }}>Dados Basicos ({completudeResult.campos_basicos.filter(c => c.preenchido).length}/{completudeResult.campos_basicos.length})</h4>
+            <table style={{ width: "100%", fontSize: "0.85rem", marginBottom: 16, borderCollapse: "collapse" }}>
+              <tbody>
+                {completudeResult.campos_basicos.map(c => (
+                  <tr key={c.campo} style={{ borderBottom: "1px solid var(--border-primary)" }}>
+                    <td style={{ padding: "4px 8px", width: 24 }}>
+                      {c.preenchido
+                        ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                        : <AlertCircle size={16} style={{ color: "#ef4444" }} />}
+                    </td>
+                    <td style={{ padding: "4px 8px", fontWeight: 500 }}>{c.campo}</td>
+                    <td style={{ padding: "4px 8px", color: c.preenchido ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                      {c.preenchido ? c.valor : "Nao preenchido"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Especificações vs máscara */}
+            {completudeResult.subclasse_nome ? (
+              <>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.9rem" }}>
+                  Especificacoes — {completudeResult.subclasse_nome} ({completudeResult.mascara_check.filter(c => c.preenchido).length}/{completudeResult.mascara_check.length})
+                </h4>
+                <div style={{ maxHeight: 300, overflowY: "auto" }}>
+                  <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                    <tbody>
+                      {completudeResult.mascara_check.map(c => (
+                        <tr key={c.campo} style={{ borderBottom: "1px solid var(--border-primary)" }}>
+                          <td style={{ padding: "3px 8px", width: 24 }}>
+                            {c.preenchido
+                              ? <CheckCircle size={14} style={{ color: "#22c55e" }} />
+                              : <AlertCircle size={14} style={{ color: "#ef4444" }} />}
+                          </td>
+                          <td style={{ padding: "3px 8px", fontWeight: 500 }}>
+                            {c.campo}{c.unidade ? ` (${c.unidade})` : ""}
+                          </td>
+                          <td style={{ padding: "3px 8px", color: c.preenchido ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                            {c.preenchido ? c.valor : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: "12px", background: "rgba(245,158,11,0.08)", borderRadius: 8, color: "#f59e0b", fontSize: "0.9rem", display: "flex", alignItems: "center", gap: 8 }}>
+                <AlertTriangle size={16} />
+                Produto sem subclasse atribuida — nao e possivel verificar especificacoes contra a mascara.
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
+
+      {/* === MODAL EDITAR PRODUTO === */}
+      <Modal
+        isOpen={!!editProduto}
+        onClose={() => setEditProduto(null)}
+        title={`Editar: ${editProduto?.nome || ""}`}
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setEditProduto(null)}>
+              <X size={14} /> Cancelar
+            </button>
+            <button className="btn btn-primary" onClick={handleEditarSalvar} disabled={editSaving || !editForm.nome}>
+              {editSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Salvar
+            </button>
+          </>
+        }
+      >
+        {editLoading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2rem 0", justifyContent: "center" }}>
+            <Loader2 size={20} className="spin" /> Carregando dados...
+          </div>
+        ) : (
+          <>
+            {/* Dados básicos */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <FormField label="Nome" required>
+                <TextInput value={editForm.nome || ""} onChange={(v) => setEditForm(f => ({ ...f, nome: v }))} placeholder="Nome do produto" />
+              </FormField>
+              <FormField label="Fabricante">
+                <TextInput value={editForm.fabricante || ""} onChange={(v) => setEditForm(f => ({ ...f, fabricante: v }))} placeholder="Fabricante" />
+              </FormField>
+              <FormField label="Modelo">
+                <TextInput value={editForm.modelo || ""} onChange={(v) => setEditForm(f => ({ ...f, modelo: v }))} placeholder="Modelo" />
+              </FormField>
+              <FormField label="SKU / Codigo Interno">
+                <TextInput value={editForm.codigo_interno || ""} onChange={(v) => setEditForm(f => ({ ...f, codigo_interno: v }))} placeholder="Codigo interno / SKU" />
+              </FormField>
+              <FormField label="NCM">
+                <TextInput value={editForm.ncm || ""} onChange={(v) => setEditForm(f => ({ ...f, ncm: v }))} placeholder="Ex: 9027.30.00" />
+              </FormField>
+              <FormField label="Descricao">
+                <TextInput value={editForm.descricao || ""} onChange={(v) => setEditForm(f => ({ ...f, descricao: v }))} placeholder="Descricao do produto" />
+              </FormField>
+            </div>
+
+            {/* Classificação: Área → Classe → Subclasse */}
+            <div style={{ marginTop: 16, padding: "12px 0", borderTop: "1px solid var(--border-primary)" }}>
+              <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", color: "var(--text-primary)" }}>Classificacao</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <FormField label="Area">
+                  <select className="form-input" value={editArea} onChange={(e) => { setEditArea(e.target.value); setEditClasse(""); setEditSubclasse(""); }}>
+                    <option value="">Selecione...</option>
+                    {areasBackend.map(a => <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>)}
+                  </select>
+                </FormField>
+                <FormField label="Classe">
+                  <select className="form-input" value={editClasse} disabled={!editArea} onChange={(e) => { setEditClasse(e.target.value); setEditSubclasse(""); }}>
+                    <option value="">Selecione...</option>
+                    {classesV2Backend.filter(c => String(c.area_id) === editArea).map(c => <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>)}
+                  </select>
+                </FormField>
+                <FormField label="Subclasse">
+                  <select className="form-input" value={editSubclasse} disabled={!editClasse} onChange={(e) => setEditSubclasse(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {subclassesBackend.filter(s => String(s.classe_id) === editClasse).map(s => <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>)}
+                  </select>
+                </FormField>
+              </div>
+            </div>
+
+            {/* Especificações da máscara */}
+            {editMascara.length > 0 && (
+              <div style={{ marginTop: 16, padding: "12px 0", borderTop: "1px solid var(--border-primary)" }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", color: "var(--text-primary)" }}>
+                  Especificacoes Tecnicas ({editMascara.length} campos)
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {editMascara.map((campo) => {
+                    const specVal = editSpecs[campo.campo]?.valor || "";
+                    return (
+                      <FormField key={campo.campo} label={`${campo.campo}${campo.unidade ? ` (${campo.unidade})` : ""}`}>
+                        {campo.tipo === "select" && campo.opcoes ? (
+                          <select
+                            className="form-input"
+                            value={specVal}
+                            onChange={(e) => setEditSpecs(prev => ({ ...prev, [campo.campo]: { ...prev[campo.campo], valor: e.target.value } }))}
+                          >
+                            <option value="">Selecione...</option>
+                            {campo.opcoes.map(op => <option key={op} value={op}>{op}</option>)}
+                          </select>
+                        ) : campo.tipo === "boolean" ? (
+                          <select
+                            className="form-input"
+                            value={specVal}
+                            onChange={(e) => setEditSpecs(prev => ({ ...prev, [campo.campo]: { ...prev[campo.campo], valor: e.target.value } }))}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Sim">Sim</option>
+                            <option value="Nao">Nao</option>
+                          </select>
+                        ) : (
+                          <TextInput
+                            value={specVal}
+                            onChange={(v) => setEditSpecs(prev => ({ ...prev, [campo.campo]: { ...prev[campo.campo], valor: v } }))}
+                            placeholder={campo.placeholder || campo.campo}
+                          />
+                        )}
+                      </FormField>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
 
       {/* === MODAL ANVISA === */}
       <Modal

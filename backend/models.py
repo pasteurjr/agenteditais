@@ -163,6 +163,7 @@ class Produto(Base):
             "codigo_interno": self.codigo_interno,
             "ncm": self.ncm,
             "categoria": self.categoria,
+            "subclasse_id": self.subclasse_id,
             "fabricante": self.fabricante,
             "modelo": self.modelo,
             "descricao": self.descricao,

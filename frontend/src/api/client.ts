@@ -249,6 +249,7 @@ export interface Produto {
   codigo_interno?: string;
   ncm?: string;
   categoria: string;
+  subclasse_id?: string;
   fabricante?: string;
   modelo?: string;
   descricao?: string;
@@ -287,6 +288,24 @@ export async function getProduto(produtoId: string): Promise<Produto> {
   const res = await fetch(`${API_BASE}/api/produtos/${produtoId}`, { headers });
   if (res.status === 401) throw new Error("Não autenticado");
   if (!res.ok) throw new Error("Produto não encontrado");
+  return res.json();
+}
+
+export interface CompletudeResult {
+  success: boolean;
+  produto: { id: string; nome: string; fabricante?: string; modelo?: string; categoria?: string; subclasse_id?: string };
+  subclasse_nome: string | null;
+  campos_basicos: { campo: string; preenchido: boolean; valor: string }[];
+  mascara_check: { campo: string; preenchido: boolean; valor: string; unidade?: string }[];
+  completude: { percentual_geral: number; percentual_basicos: number; percentual_mascara: number; status: string };
+  recomendacoes: string[];
+}
+
+export async function getProdutoCompletude(produtoId: string): Promise<CompletudeResult> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/produtos/${produtoId}/completude`, { headers });
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) throw new Error("Erro ao verificar completude");
   return res.json();
 }
 
