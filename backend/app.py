@@ -9,7 +9,7 @@ from flask_cors import CORS
 from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
 from llm import call_deepseek
 from tools import (
-    tool_web_search, tool_download_arquivo, tool_processar_upload,
+    _web_search, tool_web_search, tool_download_arquivo, tool_processar_upload,
     tool_extrair_especificacoes, tool_cadastrar_fonte, tool_listar_fontes,
     tool_buscar_editais_fonte, tool_buscar_editais_scraper, tool_extrair_requisitos,
     tool_listar_editais, tool_listar_produtos, tool_calcular_aderencia, tool_gerar_proposta,
@@ -72,6 +72,9 @@ PROMPTS_PRONTOS = [
     {"id": "buscar_tipo_produto", "nome": "🔍 Buscar por tipo produto", "prompt": "Busque editais de [TERMO] do tipo [TIPO_PRODUTO]"},
     {"id": "buscar_origem", "nome": "🔍 Buscar por origem", "prompt": "Busque editais de [TERMO] de origem [ORIGEM]"},
     {"id": "buscar_filtros", "nome": "🔍 Buscar com filtros", "prompt": "Busque editais de [TERMO] em [UF], modalidade [MODALIDADE], origem [ORIGEM]"},
+    # === BUSCA WEB E ANVISA ===
+    {"id": "buscar_anvisa", "nome": "🛡️ Buscar registro ANVISA", "prompt": "Busque registros ANVISA para o produto [NOME_PRODUTO]"},
+    {"id": "buscar_web_manual", "nome": "🌐 Buscar manual na web", "prompt": "Busque o manual do produto [NOME_PRODUTO] na web e cadastre"},
 ]
 
 
@@ -3312,44 +3315,64 @@ def processar_buscar_anvisa(message: str, user_id: str):
         if not registro and not nome_produto:
             return "Informe o número do registro ANVISA ou o nome do produto para buscar.", {"error": "dados_insuficientes"}
 
-        # Buscar via web search (ANVISA Consulta Produtos)
+        # Buscar via _web_search direto (sem filetype:pdf que tool_web_search adiciona)
         if registro:
-            query = f"site:consultas.anvisa.gov.br registro {registro}"
             search_label = f"registro **{registro}**"
         else:
-            query = f"site:consultas.anvisa.gov.br {nome_produto} registro produto"
             search_label = f"produto **{nome_produto}**"
 
-        print(f"[ANVISA] Buscando: {query}")
+        # Query 1: busca direta com ANVISA
+        query1 = f"{registro or nome_produto} registro ANVISA produto saude"
+        print(f"[ANVISA] Buscando: {query1}")
+        results = _web_search(query1, num_results=5)
 
-        # Usar tool_web_search para buscar
-        resultado_web = tool_web_search(query, user_id, num_results=5)
-
-        results = resultado_web.get("results", [])
-        pdf_results = resultado_web.get("pdf_results", [])
-
-        # Também buscar no portal Consulta Produtos ANVISA
+        # Query 2: complementar
         query2 = f"ANVISA consulta produtos {registro or nome_produto} situação registro"
-        resultado_web2 = tool_web_search(query2, user_id, num_results=5)
-        results.extend(resultado_web2.get("results", []))
+        print(f"[ANVISA] Buscando: {query2}")
+        results2 = _web_search(query2, num_results=5)
+
+        # Deduplicar por link
+        seen_links = {r.get("link") for r in results}
+        for r in results2:
+            if r.get("link") not in seen_links:
+                results.append(r)
+                seen_links.add(r.get("link"))
 
         if not results:
             return f"Nenhum resultado encontrado na ANVISA para {search_label}. Tente com outro termo ou verifique o número do registro.", {"error": "sem_resultados"}
 
-        # Tentar atualizar produto no banco (se registro encontrado e produto existe)
+        # Tentar extrair número de registro dos resultados
+        import re as re2
+        registro_encontrado = registro
+        if not registro_encontrado:
+            for r in results:
+                title_snippet = f"{r.get('title', '')} {r.get('snippet', '')}"
+                match = re2.search(r'(?:registro|nº|n°)\s*(?:ANVISA\s*)?[:\s]*(\d{8,15})', title_snippet, re2.IGNORECASE)
+                if not match:
+                    match = re2.search(r'\b(\d{11,15})\b', title_snippet)
+                if match:
+                    registro_encontrado = match.group(1)
+                    break
+
+        # Tentar atualizar produto no banco
         produto_atualizado = None
-        if registro:
+        if registro_encontrado and nome_produto:
+            produto = db.query(Produto).filter(
+                Produto.user_id == user_id,
+                Produto.nome.ilike(f"%{nome_produto}%")
+            ).first()
+            if produto:
+                produto.registro_anvisa = registro_encontrado
+                produto.anvisa_status = "ativo"
+                db.commit()
+                produto_atualizado = produto.nome
+        elif registro_encontrado:
             produto = db.query(Produto).filter(
                 Produto.user_id == user_id,
                 Produto.registro_anvisa == None  # noqa: E711
             ).first()
-            if nome_produto:
-                produto = db.query(Produto).filter(
-                    Produto.user_id == user_id,
-                    Produto.nome.ilike(f"%{nome_produto}%")
-                ).first()
             if produto:
-                produto.registro_anvisa = registro
+                produto.registro_anvisa = registro_encontrado
                 produto.anvisa_status = "ativo"
                 db.commit()
                 produto_atualizado = produto.nome
@@ -3358,13 +3381,15 @@ def processar_buscar_anvisa(message: str, user_id: str):
         links_text = ""
         for i, r in enumerate(results[:8]):
             title = r.get("title", "Sem título")
-            url = r.get("url", "")
+            url = r.get("link", "")
             snippet = r.get("snippet", "")[:120]
             links_text += f"\n{i+1}. [{title}]({url})\n   {snippet}\n"
 
         update_text = ""
         if produto_atualizado:
-            update_text = f"\n\n**Produto atualizado:** {produto_atualizado} → Registro ANVISA: {registro}, Status: Ativo"
+            update_text = f"\n\n✅ **Produto atualizado:** {produto_atualizado} → Registro ANVISA: {registro_encontrado}, Status: Ativo"
+        elif registro_encontrado:
+            update_text = f"\n\n📋 **Registro encontrado:** {registro_encontrado}"
 
         response = f"""## Resultados ANVISA para {search_label}
 
@@ -3373,7 +3398,7 @@ def processar_buscar_anvisa(message: str, user_id: str):
 
 **Dica:** Acesse os links acima para verificar a situação do registro no portal da ANVISA."""
 
-        return response, {"success": True, "results_count": len(results), "registro": registro}
+        return response, {"success": True, "results_count": len(results), "registro": registro_encontrado}
 
     except Exception as e:
         print(f"[ERRO] processar_buscar_anvisa: {e}")
@@ -6980,6 +7005,7 @@ def chat_upload():
 
     session_id = request.form.get('session_id')
     message = request.form.get('message', '').strip()
+    subclasse_id = request.form.get('subclasse_id')  # Para guiar extração com campos_mascara
 
     if not session_id:
         return jsonify({"error": "session_id é obrigatório"}), 400
@@ -7152,7 +7178,8 @@ ANÁLISE:"""
                 nome_produto=nome_produto,
                 categoria=None,
                 fabricante=None,
-                modelo=None
+                modelo=None,
+                subclasse_id=subclasse_id
             )
 
             if resultado.get("success"):

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Briefcase, Upload, Globe, Search, RefreshCw, Trash2, Eye, Plus, Shield,
-  Sparkles, Radio, AlertCircle, Loader2, FileText, BookOpen, Receipt,
-  ClipboardList, FolderOpen, MonitorSmartphone, ChevronDown, ChevronRight,
-  Filter, Zap, ArrowDown, ArrowRight, CheckCircle, DollarSign, AlertTriangle,
+  Briefcase, Globe, Search, RefreshCw, Trash2, Eye, Shield,
+  Sparkles, Radio, AlertCircle, Loader2, FileText,
+  ClipboardList, FolderOpen, ChevronDown, ChevronRight,
+  Filter, Zap, ArrowDown, CheckCircle, DollarSign, AlertTriangle,
   Edit2, Save, X
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
@@ -11,136 +11,22 @@ import type { Column } from "../components/common";
 import { getProdutos, getProduto, getProdutoCompletude, sendMessage, sendMessageWithFile, createSession } from "../api/client";
 import type { Produto, ProdutoEspecificacao, CompletudeResult } from "../api/client";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface PortfolioPageProps {
   onSendToChat: (message: string, file?: File) => Promise<void>;
 }
 
-// Tipos de upload conforme WORKFLOW pag 3
+// Tipos de upload para cadastro por IA
 const UPLOAD_TYPES = [
-  { id: "manual", label: "Manuais", icon: BookOpen, desc: "Manuais tecnicos dos produtos", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir do manual" },
-  { id: "instrucoes", label: "Instrucoes de Uso", icon: ClipboardList, desc: "Instrucoes de uso e IFUs", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir das instrucoes de uso" },
-  { id: "nfs", label: "NFS", icon: Receipt, desc: "Notas fiscais de servico", accept: ".pdf,.xlsx,.xls,.csv", prompt: "Importe TODOS os produtos/itens desta nota fiscal. Extraia cada item listado e cadastre cada um individualmente", multi: true },
-  { id: "plano_contas", label: "Plano de Contas", icon: FileText, desc: "Plano de contas do ERP", accept: ".pdf,.xlsx,.xls,.csv", prompt: "Importe TODOS os produtos deste plano de contas. Liste e cadastre cada item individualmente", multi: true },
-  { id: "folders", label: "Folders", icon: FolderOpen, desc: "Folders e catalogos comerciais", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir do folder" },
-  { id: "website", label: "Website de Consultas", icon: MonitorSmartphone, desc: "URL do site do fabricante", accept: "", prompt: "Busque produtos no website" },
+  { id: "manual", label: "Manual Tecnico", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir do manual" },
+  { id: "instrucoes", label: "Instrucoes de Uso / IFU", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir das instrucoes de uso" },
+  { id: "nfs", label: "Nota Fiscal (NFS)", accept: ".pdf,.xlsx,.xls,.csv", prompt: "Importe TODOS os produtos/itens desta nota fiscal. Extraia cada item listado e cadastre cada um individualmente" },
+  { id: "plano_contas", label: "Plano de Contas (ERP)", accept: ".pdf,.xlsx,.xls,.csv", prompt: "Importe TODOS os produtos deste plano de contas. Liste e cadastre cada item individualmente" },
+  { id: "folders", label: "Folder / Catalogo", accept: ".pdf,.doc,.docx", prompt: "Cadastre este produto a partir do folder" },
+  { id: "website", label: "Website do Fabricante", accept: "", prompt: "Busque produtos no website" },
 ];
-
-// Classes de produto (hierarquia conforme WORKFLOW)
-const CLASSES_PRODUTO = [
-  {
-    id: "equipamento", label: "Equipamentos",
-    ncm: "9027, 9011, 8419",
-    subclasses: [
-      { id: "laboratorio", label: "Laboratorio", ncm: "9027.30, 9011.10" },
-      { id: "hospitalar", label: "Hospitalar", ncm: "9018.19, 8419.20" },
-      { id: "imagem", label: "Imagem e Diagnostico", ncm: "9022.14" },
-    ]
-  },
-  {
-    id: "reagente", label: "Reagentes",
-    ncm: "3822, 3002",
-    subclasses: [
-      { id: "diagnostico", label: "Diagnostico in vitro", ncm: "3822.00" },
-      { id: "laboratorial", label: "Reagentes laboratoriais", ncm: "3822.19" },
-    ]
-  },
-  {
-    id: "insumo_hospitalar", label: "Insumos Hospitalares",
-    ncm: "3005, 3006, 9018",
-    subclasses: [
-      { id: "descartavel", label: "Descartaveis", ncm: "3005.10" },
-      { id: "esterilizacao", label: "Esterilizacao", ncm: "3006.70" },
-    ]
-  },
-  {
-    id: "informatica", label: "Informatica",
-    ncm: "8471, 8473",
-    subclasses: [
-      { id: "computadores", label: "Computadores", ncm: "8471.30" },
-      { id: "redes", label: "Redes e Infra", ncm: "8517.62" },
-    ]
-  },
-];
-
-const CATEGORIAS_FILTER = [
-  { value: "todas", label: "Todas" },
-  { value: "equipamento", label: "Equipamentos" },
-  { value: "reagente", label: "Reagentes" },
-  { value: "insumo_hospitalar", label: "Insumos Hospitalares" },
-  { value: "insumo_laboratorial", label: "Insumos Laboratoriais" },
-  { value: "informatica", label: "Informatica" },
-  { value: "redes", label: "Redes" },
-  { value: "mobiliario", label: "Mobiliario" },
-  { value: "eletronico", label: "Eletronico" },
-  { value: "comodato", label: "Comodato" },
-  { value: "outro", label: "Outro" },
-];
-
-// Campos de especificacao por classe (mascara parametrizavel)
-const SPECS_POR_CLASSE: Record<string, { campo: string; placeholder: string }[]> = {
-  equipamento: [
-    { campo: "Potencia", placeholder: "Ex: 1500W" },
-    { campo: "Voltagem", placeholder: "Ex: 220V" },
-    { campo: "Resistencia", placeholder: "Ex: 10kΩ" },
-    { campo: "Peso", placeholder: "Ex: 15kg" },
-    { campo: "Dimensoes", placeholder: "Ex: 40x30x20cm" },
-  ],
-  reagente: [
-    { campo: "Metodologia", placeholder: "Ex: Imunocromatografia" },
-    { campo: "Sensibilidade", placeholder: "Ex: 95%" },
-    { campo: "Especificidade", placeholder: "Ex: 98%" },
-    { campo: "Validade", placeholder: "Ex: 18 meses" },
-    { campo: "Armazenamento", placeholder: "Ex: 2-8°C" },
-  ],
-  insumo_hospitalar: [
-    { campo: "Material", placeholder: "Ex: Latex" },
-    { campo: "Tamanho", placeholder: "Ex: M" },
-    { campo: "Esterilidade", placeholder: "Ex: Esteril" },
-    { campo: "Quantidade por Caixa", placeholder: "Ex: 100 unidades" },
-  ],
-  informatica: [
-    { campo: "Processador", placeholder: "Ex: Intel i7" },
-    { campo: "Memoria RAM", placeholder: "Ex: 16GB" },
-    { campo: "Armazenamento", placeholder: "Ex: 512GB SSD" },
-    { campo: "Sistema Operacional", placeholder: "Ex: Windows 11" },
-  ],
-  insumo_laboratorial: [
-    { campo: "Tipo de Insumo", placeholder: "Ex: Ponteira, Tubo, Lamina" },
-    { campo: "Volume/Quantidade", placeholder: "Ex: 1000uL" },
-    { campo: "Validade", placeholder: "Ex: 24 meses" },
-    { campo: "Condicoes de Armazenamento", placeholder: "Ex: Temperatura ambiente" },
-    { campo: "Fabricante", placeholder: "Ex: Eppendorf" },
-  ],
-  redes: [
-    { campo: "Tipo de Equipamento", placeholder: "Ex: Switch, Roteador, Access Point" },
-    { campo: "Velocidade/Throughput", placeholder: "Ex: 1Gbps" },
-    { campo: "Numero de Portas", placeholder: "Ex: 24 portas" },
-    { campo: "Protocolos Suportados", placeholder: "Ex: TCP/IP, SNMP" },
-    { campo: "Alimentacao", placeholder: "Ex: PoE, 110/220V" },
-  ],
-  mobiliario: [
-    { campo: "Tipo de Movel", placeholder: "Ex: Mesa, Cadeira, Armario" },
-    { campo: "Material", placeholder: "Ex: MDP, Aco, Madeira" },
-    { campo: "Dimensoes (LxAxP)", placeholder: "Ex: 120x75x60cm" },
-    { campo: "Capacidade de Peso", placeholder: "Ex: 150kg" },
-    { campo: "Cor/Acabamento", placeholder: "Ex: Cinza, Amadeirado" },
-  ],
-  eletronico: [
-    { campo: "Tipo de Dispositivo", placeholder: "Ex: Monitor, Impressora, Tablet" },
-    { campo: "Processador", placeholder: "Ex: Intel i5" },
-    { campo: "Memoria RAM", placeholder: "Ex: 8GB" },
-    { campo: "Armazenamento", placeholder: "Ex: 256GB SSD" },
-    { campo: "Conectividade", placeholder: "Ex: Wi-Fi 6, Bluetooth 5.0" },
-  ],
-  comodato: [
-    { campo: "Equipamento Principal", placeholder: "Ex: Analisador Bioquimico" },
-    { campo: "Reagentes Vinculados", placeholder: "Ex: Kit Glicose, Kit Colesterol" },
-    { campo: "Producao Mensal Estimada", placeholder: "Ex: 5000 testes/mes" },
-    { campo: "Prazo do Contrato", placeholder: "Ex: 48 meses" },
-    { campo: "Manutencao Incluida", placeholder: "Ex: Preventiva e Corretiva" },
-  ],
-};
 
 interface SpecCampoTop {
   campo: string;
@@ -169,7 +55,7 @@ function parseMascaraTop(raw: unknown): SpecCampoTop[] {
 
 export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // Aba ativa
-  const [activeTab, setActiveTab] = useState<"produtos" | "uploads" | "cadastro" | "classificacao">("produtos");
+  const [activeTab, setActiveTab] = useState<"produtos" | "cadastroIA" | "classificacao">("produtos");
 
   // === PRODUTOS (tabela) ===
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -185,22 +71,15 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const detalheRef = useRef<HTMLDivElement>(null);
 
-  // === UPLOADS ===
-  const [uploadingType, setUploadingType] = useState<string | null>(null);
+  // === CADASTRO POR IA (upload) ===
+  const [tipoDocumento, setTipoDocumento] = useState("manual");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadNomeProduto, setUploadNomeProduto] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [uploadArea, setUploadArea] = useState("");
+  const [uploadClasse, setUploadClasse] = useState("");
+  const [uploadSubclasse, setUploadSubclasse] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // === CADASTRO MANUAL ===
-  const [cadastroNome, setCadastroNome] = useState("");
-  const [cadastroArea, setCadastroArea] = useState("");
-  const [cadastroClasse, setCadastroClasse] = useState("");
-  const [cadastroSubclasse, setCadastroSubclasse] = useState("");
-  const [cadastroFabricante, setCadastroFabricante] = useState("");
-  const [cadastroModelo, setCadastroModelo] = useState("");
-  const [cadastroNcm, setCadastroNcm] = useState("");
-  const [cadastroSpecs, setCadastroSpecs] = useState<Record<string, string>>({});
 
   // === CLASSIFICACAO ===
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
@@ -272,8 +151,8 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         setAreasBackend(areasRes.items || []);
         setClassesV2Backend(classesRes.items || []);
         setSubclassesBackend(subsRes.items || []);
-      } catch {
-        // Fallback: mantém vazio, usará CLASSES_PRODUTO hardcoded
+      } catch (e) {
+        console.error("[Portfolio] Erro ao carregar hierarquia:", e);
       }
     })();
     // Carregar monitoramentos
@@ -335,162 +214,62 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   });
 
   // ============================================================
-  // HANDLERS - UPLOAD
+  // HANDLERS - CADASTRO POR IA (upload)
   // ============================================================
-
-  const handleUploadClick = (typeId: string) => {
-    if (typeId === "website") {
-      setUploadingType("website");
-      return;
-    }
-    setUploadingType(typeId);
-    setUploadFile(null);
-    setUploadNomeProduto("");
-  };
 
   const handleUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadFile(e.target.files?.[0] || null);
   };
 
   const handleUploadConfirm = async () => {
-    if (!uploadingType) return;
-
+    console.log("[CadastroIA] Iniciando upload. tipo:", tipoDocumento, "arquivo:", uploadFile?.name, "subclasse:", uploadSubclasse);
     setProcessingMessage("Processando via IA...");
     setIaResponse(null);
 
     try {
       const session = await createSession("cadastro-produto");
+      console.log("[CadastroIA] Sessao criada:", session.session_id);
 
-      if (uploadingType === "website") {
-        if (!websiteUrl) return;
-        const resp = await sendMessage(session.id, `Busque produtos no website ${websiteUrl} e cadastre`);
+      if (tipoDocumento === "website") {
+        if (!websiteUrl) { setProcessingMessage(null); return; }
+        const resp = await sendMessage(session.session_id, `Busque produtos no website ${websiteUrl} e cadastre`);
         setProcessingMessage(null);
         setIaResponse(resp.response || "Processado pela IA.");
         setWebsiteUrl("");
-        setUploadingType(null);
         fetchProdutos();
         return;
       }
 
-      if (!uploadFile) return;
-      const typeConfig = UPLOAD_TYPES.find(t => t.id === uploadingType);
+      if (!uploadFile) { setProcessingMessage(null); return; }
+      const typeConfig = UPLOAD_TYPES.find(t => t.id === tipoDocumento);
       const prompt = typeConfig?.prompt || "Cadastre este produto";
       const msg = uploadNomeProduto ? `${prompt}: ${uploadNomeProduto}` : prompt;
-      const resp = await sendMessageWithFile(session.id, msg, uploadFile);
+      console.log("[CadastroIA] Enviando arquivo. msg:", msg);
+      const resp = await sendMessageWithFile(session.session_id, msg, uploadFile, uploadSubclasse || undefined);
+      console.log("[CadastroIA] Resposta recebida:", resp);
       setProcessingMessage(null);
       setIaResponse(resp.response || "Produto processado pela IA.");
       setUploadFile(null);
       setUploadNomeProduto("");
-      setUploadingType(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       fetchProdutos();
     } catch (err) {
+      console.error("[CadastroIA] Erro:", err);
       setProcessingMessage(null);
       setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha ao processar"}`);
     }
   };
 
-  const handleUploadCancel = () => {
-    setUploadingType(null);
-    setUploadFile(null);
-    setUploadNomeProduto("");
-    setWebsiteUrl("");
+  // Cascata para upload: Área → Classe → Subclasse (opcional, melhora extração)
+  const handleUploadAreaChange = (areaId: string) => {
+    setUploadArea(areaId);
+    setUploadClasse("");
+    setUploadSubclasse("");
   };
 
-  // ============================================================
-  // HANDLERS - CADASTRO MANUAL
-  // ============================================================
-
-  const handleCadastroSubmit = async () => {
-    if (!cadastroNome) return;
-
-    let msg = `Cadastre manualmente o produto: Nome="${cadastroNome}"`;
-    if (cadastroFabricante) msg += `, Fabricante="${cadastroFabricante}"`;
-    if (cadastroModelo) msg += `, Modelo="${cadastroModelo}"`;
-    if (cadastroSubclasse) msg += `, SubclasseId="${cadastroSubclasse}"`;
-    if (cadastroClasse) {
-      const cls = useBackendClasses
-        ? classesV2Backend.find(c => String(c.id) === cadastroClasse)
-        : null;
-      msg += `, Categoria="${cls ? String(cls.nome) : cadastroClasse}"`;
-    }
-    if (cadastroNcm) msg += `, NCM="${cadastroNcm}"`;
-
-    // Adicionar specs preenchidas com tipo e unidade da máscara
-    const specsPreenchidas = Object.entries(cadastroSpecs).filter(([, v]) => v.trim());
-    if (specsPreenchidas.length > 0) {
-      const specsDetalhadas = specsPreenchidas.map(([campo, valor]) => {
-        const specDef = specsClasse.find(s => s.campo === campo);
-        let entry = `${campo}=${valor}`;
-        if (specDef?.unidade) entry += `[${specDef.unidade}]`;
-        if (specDef?.tipo && specDef.tipo !== "texto") entry += `{${specDef.tipo}}`;
-        return entry;
-      });
-      msg += `. Especificacoes: ${specsDetalhadas.join(", ")}`;
-    }
-
-    setProcessingMessage("Processando via IA...");
-    setIaResponse(null);
-
-    try {
-      // Chamar /api/chat diretamente (mesmo endpoint do chat)
-      const session = await createSession("cadastro-produto");
-      const response = await sendMessage(session.id, msg);
-
-      setProcessingMessage(null);
-      setIaResponse(response.response || "Produto processado pela IA.");
-
-      // Limpar form
-      setCadastroNome("");
-      setCadastroArea("");
-      setCadastroClasse("");
-      setCadastroSubclasse("");
-      setCadastroFabricante("");
-      setCadastroModelo("");
-      setCadastroNcm("");
-      setCadastroSpecs({});
-
-      // Atualizar lista de produtos
-      fetchProdutos();
-    } catch (err) {
-      setProcessingMessage(null);
-      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha ao cadastrar"}`);
-    }
-  };
-
-  const handleSpecChange = (campo: string, valor: string) => {
-    setCadastroSpecs(prev => ({ ...prev, [campo]: valor }));
-  };
-
-  // Handlers de seleção cascata: Área → Classe → Subclasse
-  const handleAreaChange = (areaId: string) => {
-    setCadastroArea(areaId);
-    setCadastroClasse("");
-    setCadastroSubclasse("");
-    setCadastroNcm("");
-    setCadastroSpecs({});
-  };
-
-  const handleClasseChange = (classeId: string) => {
-    setCadastroClasse(classeId);
-    setCadastroSubclasse("");
-    setCadastroSpecs({});
-    setCadastroNcm("");
-  };
-
-  const handleSubclasseChange = (subId: string) => {
-    setCadastroSubclasse(subId);
-    setCadastroSpecs({});
-    if (useBackendClasses) {
-      const sub = subclassesBackend.find(s => String(s.id) === subId);
-      if (sub && sub.ncms) {
-        const ncms = Array.isArray(sub.ncms) ? sub.ncms : [sub.ncms];
-        setCadastroNcm(String(ncms[0] || ""));
-      }
-    } else {
-      const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-      const sub = cls?.subclasses.find(s => s.id === subId);
-      if (sub) setCadastroNcm(sub.ncm);
-    }
+  const handleUploadClasseChange = (classeId: string) => {
+    setUploadClasse(classeId);
+    setUploadSubclasse("");
   };
 
   // ============================================================
@@ -627,89 +406,63 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     }
   };
 
-  // ANVISA
+  // ANVISA — chama API direto e mostra resposta inline
   const handleAnvisaConfirm = async () => {
     let msg = "";
     if (anvisaRegistro) msg = `Busque o registro ANVISA numero ${anvisaRegistro}`;
     else if (anvisaNomeProduto) msg = `Busque registros ANVISA para o produto ${anvisaNomeProduto}`;
     else return;
     setShowAnvisaModal(false);
-    await onSendToChat(msg);
-    setAnvisaRegistro("");
-    setAnvisaNomeProduto("");
-    setTimeout(() => fetchProdutos(), 3000);
+    setProcessingMessage("Buscando registros ANVISA...");
+    setIaResponse(null);
+    try {
+      const session = await createSession("busca-anvisa");
+      const resp = await sendMessage(session.session_id, msg);
+      setProcessingMessage(null);
+      setIaResponse(resp.response || "Busca ANVISA concluida.");
+      setAnvisaRegistro("");
+      setAnvisaNomeProduto("");
+      fetchProdutos();
+    } catch (err) {
+      console.error("[ANVISA] Erro:", err);
+      setProcessingMessage(null);
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca ANVISA"}`);
+    }
   };
 
-  // Busca Web
+  // Busca Web — chama API direto e mostra resposta inline
   const handleBuscaWebConfirm = async () => {
     if (!buscaNomeProduto) return;
     const msg = buscaFabricante
       ? `Busque o manual do produto ${buscaNomeProduto} do fabricante ${buscaFabricante} na web e cadastre`
       : `Busque o manual do produto ${buscaNomeProduto} na web e cadastre`;
     setShowBuscaWebModal(false);
-    await onSendToChat(msg);
-    setBuscaNomeProduto("");
-    setBuscaFabricante("");
-    setTimeout(() => fetchProdutos(), 5000);
+    setProcessingMessage("Buscando na web...");
+    setIaResponse(null);
+    try {
+      const session = await createSession("busca-web");
+      const resp = await sendMessage(session.session_id, msg);
+      setProcessingMessage(null);
+      setIaResponse(resp.response || "Busca web concluida.");
+      setBuscaNomeProduto("");
+      setBuscaFabricante("");
+      fetchProdutos();
+    } catch (err) {
+      console.error("[BuscaWeb] Erro:", err);
+      setProcessingMessage(null);
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca web"}`);
+    }
   };
 
-  // Completude calc
-  const calcCompletude = (produto: Produto): number => {
-    if (!produto.especificacoes || produto.especificacoes.length === 0) return 0;
-    const preenchidos = produto.especificacoes.filter(e => e.valor && e.valor !== "-" && e.valor !== "").length;
-    return Math.round((preenchidos / produto.especificacoes.length) * 100);
-  };
-
-  // === Dados derivados da hierarquia v2 (Area → Classe → Subclasse) ===
-  const useBackendClasses = areasBackend.length > 0;
-
-  // Options para dropdown de area
-  const areaOptions = useBackendClasses
-    ? [{ value: "", label: "Selecione a area..." }, ...areasBackend.map(a => ({ value: String(a.id), label: String(a.nome || a.id) }))]
-    : [{ value: "", label: "Selecione a area..." }];
-
-  // Options para dropdown de classe (filtradas por area)
-  const classeOptions = (() => {
-    const base = [{ value: "", label: "Selecione a classe..." }];
-    if (useBackendClasses) {
-      if (!cadastroArea) return base;
-      const filtered = classesV2Backend.filter(c => String(c.area_id) === cadastroArea);
-      return [...base, ...filtered.map(c => ({ value: String(c.id), label: String(c.nome || c.id) }))];
-    }
-    return [...base, ...CLASSES_PRODUTO.map(c => ({ value: c.id, label: c.label }))];
-  })();
-
-  // Options para dropdown de subclasse (filtradas por classe)
-  const subclasseOptions = (() => {
-    const base = [{ value: "", label: "Selecione a subclasse..." }];
-    if (!cadastroClasse) return base;
-    if (useBackendClasses) {
-      const subs = subclassesBackend.filter(s => String(s.classe_id) === cadastroClasse);
-      return [...base, ...subs.map(s => ({ value: String(s.id), label: String(s.nome || s.id) }))];
-    }
-    const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-    return [...base, ...(cls?.subclasses.map(s => ({ value: s.id, label: s.label })) || [])];
-  })();
-
-  // Specs da subclasse selecionada (campos_mascara enriquecida)
-  interface SpecCampo {
-    campo: string;
-    tipo: "texto" | "numero" | "decimal" | "select" | "boolean";
-    unidade?: string;
-    placeholder?: string;
-    opcoes?: string[];
-    obrigatorio?: boolean;
-  }
-
-  const parseMascara = (raw: unknown): SpecCampo[] => {
+  // Parse campos_mascara JSON (used by classificacao tab and edit modal)
+  const parseMascara = (raw: unknown): SpecCampoTop[] => {
     try {
       let mascara = typeof raw === "string" ? JSON.parse(raw) : raw;
-      // Handle double-encoded JSON
       if (typeof mascara === "string") mascara = JSON.parse(mascara);
       if (!Array.isArray(mascara) || mascara.length === 0) return [];
       return mascara.map((m: Record<string, unknown>) => ({
         campo: String(m.campo || m.nome || ""),
-        tipo: (m.tipo as SpecCampo["tipo"]) || "texto",
+        tipo: (m.tipo as SpecCampoTop["tipo"]) || "texto",
         unidade: m.unidade ? String(m.unidade) : undefined,
         placeholder: m.placeholder ? String(m.placeholder) : undefined,
         opcoes: Array.isArray(m.opcoes) ? m.opcoes.map(String) : undefined,
@@ -717,38 +470,6 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       }));
     } catch { return []; }
   };
-
-  const specsClasse: SpecCampo[] = (() => {
-    // Specs só aparecem quando uma subclasse é selecionada
-    if (!cadastroSubclasse) return [];
-    if (useBackendClasses) {
-      const sub = subclassesBackend.find(s => String(s.id) === cadastroSubclasse);
-      if (sub && sub.campos_mascara) return parseMascara(sub.campos_mascara);
-      return [];
-    }
-    // Fallback hardcoded
-    return (SPECS_POR_CLASSE[cadastroClasse] || SPECS_POR_CLASSE["equipamento"] || []).map(s => ({
-      ...s, tipo: "texto" as const,
-    }));
-  })();
-
-  const classeAtualLabel = (() => {
-    if (useBackendClasses) {
-      if (cadastroSubclasse) {
-        const sub = subclassesBackend.find(s => String(s.id) === cadastroSubclasse);
-        if (sub) return String(sub.nome);
-      }
-      const cls = classesV2Backend.find(c => String(c.id) === cadastroClasse);
-      return cls ? String(cls.nome) : "";
-    }
-    if (cadastroSubclasse) {
-      const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-      const sub = cls?.subclasses.find(s => s.id === cadastroSubclasse);
-      if (sub) return sub.label;
-    }
-    const cls = CLASSES_PRODUTO.find(c => c.id === cadastroClasse);
-    return cls?.label || "";
-  })();
 
   // Pipeline status badge colors
   const pipelineStatusConfig: Record<string, { color: string; bg: string; label: string }> = {
@@ -841,11 +562,8 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         <button className={`ptab ${activeTab === "produtos" ? "active" : ""}`} onClick={() => setActiveTab("produtos")}>
           <Eye size={16} /> Meus Produtos ({produtos.length})
         </button>
-        <button className={`ptab ${activeTab === "uploads" ? "active" : ""}`} onClick={() => setActiveTab("uploads")}>
-          <Upload size={16} /> Uploads
-        </button>
-        <button className={`ptab ${activeTab === "cadastro" ? "active" : ""}`} onClick={() => setActiveTab("cadastro")}>
-          <Plus size={16} /> Cadastro Manual
+        <button className={`ptab ${activeTab === "cadastroIA" ? "active" : ""}`} onClick={() => setActiveTab("cadastroIA")}>
+          <Sparkles size={16} /> Cadastro por IA
         </button>
         <button className={`ptab ${activeTab === "classificacao" ? "active" : ""}`} onClick={() => setActiveTab("classificacao")}>
           <ClipboardList size={16} /> Classificacao
@@ -877,7 +595,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
               >&times;</button>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
                 <Sparkles size={20} style={{ color: "var(--accent-primary)", flexShrink: 0, marginTop: 2 }} />
-                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{iaResponse}</div>
+                <div className="markdown-response"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> }}>{iaResponse}</ReactMarkdown></div>
               </div>
             </div>
           </Card>
@@ -1013,7 +731,15 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                       <div className="info-group"><label>Nome</label><span>{detalhe.nome}</span></div>
                       <div className="info-group"><label>Fabricante</label><span>{detalhe.fabricante || "-"}</span></div>
                       <div className="info-group"><label>Modelo</label><span>{detalhe.modelo || "-"}</span></div>
-                      <div className="info-group"><label>Classe</label><span>{detalhe.categoria || "-"}</span></div>
+                      <div className="info-group"><label>Categoria</label><span>{detalhe.categoria || "-"}</span></div>
+                      <div className="info-group"><label>Classificacao</label><span>{(() => {
+                        if (!detalhe.subclasse_id) return "-";
+                        const sub = subclassesBackend.find(s => String(s.id) === String(detalhe.subclasse_id));
+                        if (!sub) return "-";
+                        const classe = classesV2Backend.find(c => String(c.id) === String(sub.classe_id));
+                        const area = classe ? areasBackend.find(a => String(a.id) === String(classe.area_id)) : null;
+                        return `${area ? String(area.nome) : "?"} → ${classe ? String(classe.nome) : "?"} → ${String(sub.nome)}`;
+                      })()}</span></div>
                       <div className="info-group"><label>NCM</label><span>{detalhe.ncm || "-"}</span></div>
                       <div className="info-group"><label>Preco Referencia</label><span>{detalhe.preco_referencia ? `R$ ${detalhe.preco_referencia.toLocaleString("pt-BR")}` : "-"}</span></div>
                       <div className="info-group"><label>Status Pipeline</label><span>{(() => {
@@ -1069,274 +795,146 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         )}
 
         {/* ====================================================
-            TAB: UPLOADS
+            TAB: CADASTRO POR IA
             ==================================================== */}
-        {activeTab === "uploads" && (
+        {activeTab === "cadastroIA" && (
           <>
-            {/* Header explicativo */}
-            <div className="uploads-header-info">
-              <h3>Varias fontes de obtencao do portfolio</h3>
-              <p>Uploads (manuais, folders, instrucoes de uso, etc.); Acesso a ANVISA; Acesso ao plano de contas do ERP; Acesso ao website do fabricante.</p>
-            </div>
+            <Card title="Cadastro por IA" subtitle="Faca upload de documentos e a IA extrai automaticamente os dados do produto e suas especificacoes tecnicas.">
+              <div className="cadastro-form">
+                {/* Linha 1: Tipo de documento */}
+                <div className="cadastro-row">
+                  <FormField label="Tipo de Documento">
+                    <SelectInput
+                      value={tipoDocumento}
+                      onChange={(v) => { setTipoDocumento(v); setUploadFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      options={UPLOAD_TYPES.map(t => ({ value: t.id, label: t.label }))}
+                    />
+                  </FormField>
+                </div>
 
-            {/* Grid de 6 tipos de upload */}
-            <div className="uploads-grid">
-              {UPLOAD_TYPES.map((type) => {
-                const Icon = type.icon;
-                const isActive = uploadingType === type.id;
-                return (
-                  <div key={type.id} className={`upload-card ${isActive ? "active" : ""}`}>
-                    <div className="upload-card-header" onClick={() => handleUploadClick(type.id)}>
-                      <div className="upload-card-icon">
-                        <Icon size={24} />
-                      </div>
-                      <div className="upload-card-info">
-                        <h4>{type.label}</h4>
-                        <p>{type.desc}</p>
-                      </div>
-                      <Upload size={18} className="upload-card-arrow" />
+                {/* Linha 2: Arquivo ou URL */}
+                {tipoDocumento === "website" ? (
+                  <div className="cadastro-row">
+                    <FormField label="URL do Website" required>
+                      <TextInput
+                        value={websiteUrl}
+                        onChange={setWebsiteUrl}
+                        placeholder="https://www.fabricante.com.br/produto"
+                      />
+                    </FormField>
+                  </div>
+                ) : (
+                  <>
+                    <div className="cadastro-row">
+                      <FormField label="Arquivo" required>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept={UPLOAD_TYPES.find(t => t.id === tipoDocumento)?.accept || ".pdf"}
+                          onChange={handleUploadFileChange}
+                          className="upload-file-input"
+                        />
+                      </FormField>
                     </div>
-
-                    {/* Area expandida de upload */}
-                    {isActive && (
-                      <div className="upload-card-body">
-                        {type.id === "website" ? (
-                          <>
-                            <FormField label="URL do Website">
-                              <TextInput
-                                value={websiteUrl}
-                                onChange={setWebsiteUrl}
-                                placeholder="https://www.fabricante.com.br/produto"
-                              />
-                            </FormField>
-                          </>
-                        ) : (
-                          <>
-                            <FormField label="Arquivo" required>
-                              <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept={type.accept}
-                                onChange={handleUploadFileChange}
-                                className="upload-file-input"
-                              />
-                            </FormField>
-                            {uploadFile && (
-                              <div className="upload-file-info">
-                                <FileText size={14} />
-                                <span>{uploadFile.name} ({(uploadFile.size / 1024).toFixed(0)} KB)</span>
-                              </div>
-                            )}
-                            <FormField label="Nome do Produto (opcional)">
-                              <TextInput
-                                value={uploadNomeProduto}
-                                onChange={setUploadNomeProduto}
-                                placeholder="Sera extraido automaticamente pela IA"
-                              />
-                            </FormField>
-                          </>
-                        )}
-                        {"multi" in type && (type as Record<string, unknown>).multi && (
-                          <p style={{ fontSize: 11, color: "var(--accent-primary)", margin: "4px 0 8px", display: "flex", alignItems: "center", gap: 4 }}>
-                            <AlertCircle size={12} /> Multiplos produtos serao importados automaticamente
-                          </p>
-                        )}
-                        {!("multi" in type && (type as Record<string, unknown>).multi) && type.id !== "website" && (
-                          <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "4px 0 8px" }}>
-                            Um produto sera identificado e cadastrado
-                          </p>
-                        )}
-                        <div className="upload-card-actions">
-                          <button className="btn btn-secondary btn-sm" onClick={handleUploadCancel}>Cancelar</button>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={handleUploadConfirm}
-                            disabled={type.id === "website" ? !websiteUrl : !uploadFile}
-                          >
-                            <Sparkles size={14} /> Processar com IA
-                          </button>
-                        </div>
+                    {uploadFile && (
+                      <div className="upload-file-info" style={{ marginBottom: 12 }}>
+                        <FileText size={14} />
+                        <span>{uploadFile.name} ({(uploadFile.size / 1024).toFixed(0)} KB)</span>
                       </div>
                     )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Info "Deixe a IA trabalhar por voce" */}
-            <Card>
-              <div className="ia-trabalhar">
-                <div className="ia-trabalhar-icon">
-                  <Sparkles size={32} />
-                </div>
-                <div className="ia-trabalhar-content">
-                  <h3>Deixe a IA trabalhar por voce</h3>
-                  <p>
-                    A IA realiza a leitura dos manuais tecnicos dos seus produtos e sugere novos campos
-                    ou preenche requisitos faltantes, garantindo um cadastro rico e completo para maximizar
-                    a compatibilidade.
-                  </p>
-                  <div className="ia-trabalhar-flow">
-                    <div className="ia-flow-step">
-                      <FileText size={20} />
-                      <span>Manual Tecnico.pdf</span>
+                    <div className="cadastro-row">
+                      <FormField label="Nome do Produto (opcional)" hint="A IA extrai automaticamente do documento">
+                        <TextInput
+                          value={uploadNomeProduto}
+                          onChange={setUploadNomeProduto}
+                          placeholder="Sera extraido automaticamente pela IA"
+                        />
+                      </FormField>
                     </div>
-                    <ArrowRight size={20} className="ia-flow-arrow" />
-                    <div className="ia-flow-step">
-                      <Sparkles size={20} />
-                      <span>IA Extrai Specs</span>
+                  </>
+                )}
+
+                {/* Classificacao opcional (melhora extração com máscara) */}
+                {tipoDocumento !== "website" && (
+                  <div style={{ border: "1px solid var(--border-primary)", borderRadius: 8, padding: 12, marginTop: 8, marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <Filter size={14} style={{ color: "var(--accent-primary)" }} />
+                      <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                        Classificacao (opcional — melhora a extracao com a mascara da subclasse)
+                      </span>
                     </div>
-                    <ArrowRight size={20} className="ia-flow-arrow" />
-                    <div className="ia-flow-step">
-                      <CheckCircle size={20} />
-                      <span>Produto Cadastrado</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </>
-        )}
-
-        {/* ====================================================
-            TAB: CADASTRO MANUAL
-            ==================================================== */}
-        {activeTab === "cadastro" && (
-          <>
-            <Card title="Crie uma base de conhecimento estruturada" subtitle="Utilize uma mascara de entrada totalmente parametrizavel para cadastrar as caracteristicas tecnicas de seus produtos por classe, seguindo os criterios normalmente avaliados nos certames.">
-              <div className="cadastro-form">
-                {/* Linha 1: Nome + Area */}
-                <div className="cadastro-row">
-                  <FormField label="Nome do Produto" required>
-                    <TextInput
-                      value={cadastroNome}
-                      onChange={setCadastroNome}
-                      placeholder="Ex: Centrifuga Refrigerada"
-                    />
-                  </FormField>
-                  {useBackendClasses ? (
-                    <FormField label="Area">
-                      <SelectInput
-                        value={cadastroArea}
-                        onChange={handleAreaChange}
-                        options={areaOptions}
-                      />
-                    </FormField>
-                  ) : (
-                    <FormField label="Classe">
-                      <SelectInput
-                        value={cadastroClasse}
-                        onChange={handleClasseChange}
-                        options={classeOptions}
-                      />
-                    </FormField>
-                  )}
-                </div>
-
-                {/* Linha 2: Classe + Subclasse (cascata) */}
-                <div className="cadastro-row">
-                  {useBackendClasses && (
-                    <FormField label="Classe">
-                      <SelectInput
-                        value={cadastroClasse}
-                        onChange={handleClasseChange}
-                        options={classeOptions}
-                      />
-                    </FormField>
-                  )}
-                  <FormField label="Subclasse">
-                    <SelectInput
-                      value={cadastroSubclasse}
-                      onChange={handleSubclasseChange}
-                      options={subclasseOptions}
-                    />
-                  </FormField>
-                  {!useBackendClasses && (
-                    <FormField label="NCM">
-                      <TextInput value={cadastroNcm} onChange={setCadastroNcm} placeholder="Ex: 9027.30.11" />
-                    </FormField>
-                  )}
-                </div>
-
-                {/* Linha 3: NCM (auto) + Fabricante + Modelo */}
-                <div className="cadastro-row">
-                  {useBackendClasses && (
-                    <FormField label="NCM" hint="Preenchido automaticamente pela subclasse">
-                      <TextInput value={cadastroNcm} onChange={setCadastroNcm} placeholder="Selecione a subclasse..." />
-                    </FormField>
-                  )}
-                  <FormField label="Fabricante">
-                    <TextInput value={cadastroFabricante} onChange={setCadastroFabricante} placeholder="Ex: Shimadzu" />
-                  </FormField>
-                  <FormField label="Modelo">
-                    <TextInput value={cadastroModelo} onChange={setCadastroModelo} placeholder="Ex: UV-2600i" />
-                  </FormField>
-                </div>
-
-                {/* Specs dinamicas da subclasse selecionada */}
-                {cadastroSubclasse && specsClasse.length > 0 && (
-                  <div className="cadastro-specs-section">
-                    <div className="cadastro-specs-header">
-                      <h4>
-                        <Sparkles size={16} style={{ color: "#8b5cf6" }} />
-                        Especificacoes Tecnicas — {classeAtualLabel}
-                      </h4>
-                      <span className="ia-hint">A IA pode preencher estes campos automaticamente via upload</span>
-                    </div>
-                    <div className="cadastro-specs-grid">
-                      {specsClasse.map((spec) => (
-                        <FormField key={spec.campo} label={`${spec.campo}${spec.unidade ? ` (${spec.unidade})` : ""}${spec.obrigatorio ? " *" : ""}`}>
-                          {spec.tipo === "select" && spec.opcoes ? (
-                            <SelectInput
-                              value={cadastroSpecs[spec.campo] || ""}
-                              onChange={(v) => handleSpecChange(spec.campo, v)}
-                              options={[{ value: "", label: "Selecione..." }, ...spec.opcoes.map(o => ({ value: o, label: o }))]}
-                            />
-                          ) : spec.tipo === "boolean" ? (
-                            <SelectInput
-                              value={cadastroSpecs[spec.campo] || ""}
-                              onChange={(v) => handleSpecChange(spec.campo, v)}
-                              options={[{ value: "", label: "Selecione..." }, { value: "Sim", label: "Sim" }, { value: "Não", label: "Não" }]}
-                            />
-                          ) : spec.tipo === "numero" || spec.tipo === "decimal" ? (
-                            <TextInput
-                              value={cadastroSpecs[spec.campo] || ""}
-                              onChange={(v) => handleSpecChange(spec.campo, v)}
-                              placeholder={spec.placeholder || `Ex: ${spec.tipo === "decimal" ? "12.5" : "100"}`}
-                            />
-                          ) : (
-                            <TextInput
-                              value={cadastroSpecs[spec.campo] || ""}
-                              onChange={(v) => handleSpecChange(spec.campo, v)}
-                              placeholder={spec.placeholder || ""}
-                            />
-                          )}
-                        </FormField>
-                      ))}
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <label style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Area</label>
+                        <select className="form-input" value={uploadArea} onChange={(e) => handleUploadAreaChange(e.target.value)}>
+                          <option value="">Todas</option>
+                          {areasBackend.map(a => <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <label style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Classe</label>
+                        <select className="form-input" value={uploadClasse} disabled={!uploadArea} onChange={(e) => handleUploadClasseChange(e.target.value)}>
+                          <option value="">Todas</option>
+                          {classesV2Backend.filter(c => !uploadArea || String(c.area_id) === uploadArea).map(c => (
+                            <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <label style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Subclasse</label>
+                        <select className="form-input" value={uploadSubclasse} disabled={!uploadClasse} onChange={(e) => setUploadSubclasse(e.target.value)}>
+                          <option value="">Todas</option>
+                          {subclassesBackend.filter(s => !uploadClasse || String(s.classe_id) === uploadClasse).map(s => (
+                            <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Botoes */}
+                {/* Botao */}
                 <div className="cadastro-actions">
-                  <button className="btn btn-secondary" onClick={() => {
-                    setCadastroNome(""); setCadastroArea(""); setCadastroClasse(""); setCadastroSubclasse("");
-                    setCadastroFabricante(""); setCadastroModelo(""); setCadastroNcm("");
-                    setCadastroSpecs({});
-                  }}>Limpar</button>
-                  <button className="btn btn-primary" onClick={handleCadastroSubmit} disabled={!cadastroNome}>
-                    <Sparkles size={14} /> Cadastrar via IA
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleUploadConfirm}
+                    disabled={(tipoDocumento === "website" ? !websiteUrl : !uploadFile) || !!processingMessage}
+                  >
+                    {processingMessage ? (
+                      <><Loader2 size={14} className="spin" /> Processando...</>
+                    ) : (
+                      <><Sparkles size={14} /> Processar com IA</>
+                    )}
                   </button>
                 </div>
+
+                {/* Feedback inline */}
+                {processingMessage && (
+                  <div className="portfolio-processing-toast" style={{ marginTop: 16 }}>
+                    <Loader2 size={16} className="spin" />
+                    <span>{processingMessage}</span>
+                  </div>
+                )}
+                {iaResponse && (
+                  <div style={{ marginTop: 16, padding: "16px", background: "var(--bg-secondary)", borderRadius: 8, position: "relative" }}>
+                    <button
+                      onClick={() => setIaResponse(null)}
+                      style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: "18px" }}
+                    >&times;</button>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                      <Sparkles size={20} style={{ color: "var(--accent-primary)", flexShrink: 0, marginTop: 2 }} />
+                      <div className="markdown-response"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({href, children}) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> }}>{iaResponse}</ReactMarkdown></div>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
-            {/* Dica IA */}
+            {/* Dica cadastro manual */}
             <div className="ia-dica-card">
-              <Sparkles size={18} />
+              <Edit2 size={18} />
               <div>
-                <strong>Dica:</strong> Voce pode cadastrar produtos mais rapidamente fazendo upload de manuais na aba Uploads.
-                A IA preenche todos os campos automaticamente.
+                Para cadastro manual (sem IA), use o botao <strong>editar</strong> na aba "Meus Produtos" ou acesse <strong>Cadastros &gt; Produtos</strong> no menu lateral.
               </div>
             </div>
           </>
@@ -1349,8 +947,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
           <>
             <Card title="Estrutura de Classificacao" subtitle="Area → Classe → Subclasse (com mascaras de especificacao)">
               <div className="classificacao-tree">
-                {useBackendClasses ? (
-                  areasBackend.length > 0 ? (
+                {areasBackend.length > 0 ? (
                     areasBackend.map((area) => {
                       const aId = String(area.id);
                       const classesInArea = classesV2Backend.filter(c => String(c.area_id) === aId);
@@ -1415,37 +1012,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                       <AlertCircle size={16} />
                       <span>Nenhuma area cadastrada. Configure nos CRUDs de Areas, Classes e Subclasses.</span>
                     </div>
-                  )
-                ) : (
-                  CLASSES_PRODUTO.map((classe) => (
-                    <div key={classe.id} className="classificacao-classe">
-                      <div
-                        className="classificacao-classe-header"
-                        onClick={() => setExpandedClasse(expandedClasse === classe.id ? null : classe.id)}
-                      >
-                        {expandedClasse === classe.id ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        <span className="classificacao-classe-nome">{classe.label}</span>
-                        <span className="classificacao-ncm-badge">NCM: {classe.ncm}</span>
-                        <span className="classificacao-count">
-                          {produtos.filter(p => p.categoria === classe.id).length} produtos
-                        </span>
-                      </div>
-                      {expandedClasse === classe.id && (
-                        <div className="classificacao-subclasses">
-                          {classe.subclasses.map((sub) => (
-                            <div key={sub.id} className="classificacao-subclasse">
-                              <span className="classificacao-sub-nome">{sub.label}</span>
-                              <span className="classificacao-ncm-badge small">NCM: {sub.ncm}</span>
-                              <span className="classificacao-count">
-                                {produtos.filter(p => p.categoria === sub.id).length} produtos
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
+                  )}
               </div>
 
               <div className="classificacao-ia-note">
@@ -1515,7 +1082,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                       </div>
                       <div className="funil-step-content">
                         <h4>Classificacao Automatica</h4>
-                        <p>Classificacao parametrizada em {classesV2Backend.length > 0 ? classesV2Backend.length : CLASSES_PRODUTO.length} classes</p>
+                        <p>Classificacao parametrizada em {classesV2Backend.length} classes</p>
                       </div>
                     </div>
                   </div>

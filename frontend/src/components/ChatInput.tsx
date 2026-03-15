@@ -21,6 +21,9 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   // -- BUSCA NA WEB --
   { id: "buscar_produto_web", nome: "✅ 🌐 Buscar manual na web", prompt: "Busque o manual do produto [NOME] na web" },
   { id: "buscar_datasheet_web", nome: "✅ 🌐 Buscar datasheet na web", prompt: "Busque o datasheet do [NOME] na web" },
+  // -- ANVISA --
+  { id: "buscar_anvisa", nome: "✅ 🛡️ Buscar registro ANVISA", prompt: "Busque registros ANVISA para o produto [NOME_PRODUTO]" },
+  { id: "buscar_anvisa_numero", nome: "✅ 🛡️ Buscar ANVISA por número", prompt: "Busque o registro ANVISA numero [NUMERO_REGISTRO]" },
   // -- BUSCA NO BANCO --
   { id: "listar_produtos", nome: "✅ 💾 Listar meus produtos", prompt: "Liste todos os meus produtos cadastrados" },
   { id: "buscar_produto_banco", nome: "✅ 💾 Buscar produto no banco", prompt: "Busque o produto [NOME] no banco" },

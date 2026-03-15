@@ -135,7 +135,8 @@ export async function sendMessage(
 export async function sendMessageWithFile(
   sessionId: string,
   message: string,
-  file: File
+  file: File,
+  subclasseId?: string
 ): Promise<SendMessageResponse> {
   const token = getAccessTokenFn ? await getAccessTokenFn() : null;
 
@@ -143,6 +144,7 @@ export async function sendMessageWithFile(
   formData.append("file", file);
   formData.append("session_id", sessionId);
   formData.append("message", message);
+  if (subclasseId) formData.append("subclasse_id", subclasseId);
 
   const res = await fetch(`${API_BASE}/api/chat-upload`, {
     method: "POST",

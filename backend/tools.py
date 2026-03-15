@@ -1207,9 +1207,91 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
             else:
                 subclasse_id = None  # ID inválido
 
-        # 5. Criar produto no banco
+        # 4.1 Auto-detectar subclasse se não informada
+        if not subclasse_id and nome_produto:
+            print(f"[TOOLS] Auto-detectando subclasse para '{nome_produto}'...")
+            import unicodedata as _ud
+            def _norm(t):
+                return _ud.normalize('NFKD', (t or '').lower()).encode('ASCII', 'ignore').decode('ASCII')
+
+            # Sinônimos e palavras-chave extras por subclasse (nome normalizado → keywords)
+            _KEYWORDS_EXTRA = {
+                "desktops e notebooks": ["desktop", "notebook", "laptop", "optiplex", "thinkpad", "thinkcentre", "latitude", "inspiron", "vostro", "computador", "pc"],
+                "impressoras": ["impressora", "laserjet", "deskjet", "multifuncional", "mfp", "printer"],
+                "desfibriladores": ["desfibrilador", "cardioversor", "dea", "aed"],
+                "monitores": ["monitor"],
+                "monitores de sinais vitais": ["multiparametro", "multiparametros", "sinais vitais", "umec", "beneview"],
+                "oximetros": ["oximetro", "oximeto", "oximetria", "spo2"],
+                "bombas de infusao": ["bomba de infusao", "bomba infusao", "infusao volumetrica"],
+                "cadeiras de rodas": ["cadeira de rodas", "cadeira rodas"],
+                "autoclaves": ["autoclave"],
+                "switches": ["switch", "sg350", "sg300", "catalyst"],
+                "roteadores": ["roteador", "router", "archer", "wireless"],
+                "nobreaks": ["nobreak", "no-break", "ups"],
+                "analisadores hematologicos": ["analisador hematologia", "hematologia", "bc-5150", "bc-5000", "xn-1000", "xn-550"],
+                "eletrocardiografos": ["eletrocardiografo", "ecg"],
+                "camas hospitalares": ["cama hospitalar", "cama hospital"],
+            }
+
+            todas_subclasses = db.query(SubclasseProduto).all()
+            nome_norm = _norm(nome_produto)
+            palavras_nome = nome_norm.split()
+            melhor_sub = None
+            melhor_score = 0
+
+            for s in todas_subclasses:
+                sub_norm = _norm(s.nome)
+                score = 0
+
+                # 1) Match por keywords extras (prioridade alta)
+                keywords = _KEYWORDS_EXTRA.get(sub_norm, [])
+                for kw in keywords:
+                    kw_n = _norm(kw)
+                    if kw_n in nome_norm:
+                        # Multi-word keyword vale mais
+                        score = max(score, len(kw_n.split()) * 100 + len(kw_n))
+
+                # 2) Match por palavras da subclasse no nome do produto
+                sub_palavras = [p for p in sub_norm.split() if len(p) >= 3 and p not in ('de', 'do', 'da', 'dos', 'das', 'e')]
+                if sub_palavras:
+                    matches = 0
+                    for sp in sub_palavras:
+                        sp_base = sp.rstrip('s').rstrip('es') if len(sp) > 4 else sp
+                        for pn in palavras_nome:
+                            pn_base = pn.rstrip('s').rstrip('es') if len(pn) > 4 else pn
+                            if sp_base == pn_base or (len(sp_base) >= 5 and (sp_base in pn_base or pn_base in sp_base)):
+                                matches += 1
+                                break
+                    if matches > 0:
+                        # Proporção de palavras da subclasse que deram match
+                        ratio = matches / len(sub_palavras)
+                        word_score = int(ratio * 50) + matches * 10
+                        score = max(score, word_score)
+
+                if score > melhor_score:
+                    melhor_score = score
+                    melhor_sub = s
+
+            if melhor_sub and melhor_score >= 10:
+                subclasse_id = melhor_sub.id
+                print(f"[TOOLS] Subclasse auto-detectada: '{melhor_sub.nome}' (score={melhor_score})")
+                if melhor_sub.campos_mascara and not campos_mascara:
+                    try:
+                        campos_mascara = json.loads(melhor_sub.campos_mascara) if isinstance(melhor_sub.campos_mascara, str) else melhor_sub.campos_mascara
+                        print(f"[TOOLS] Usando campos_mascara auto-detectada: {len(campos_mascara)} campos")
+                    except Exception:
+                        pass
+            else:
+                print(f"[TOOLS] Nenhuma subclasse encontrada para '{nome_produto}'")
+
+        # 5. Buscar empresa_id do usuário
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = empresa.id if empresa else None
+
+        # 5.1 Criar produto no banco
         produto = Produto(
             user_id=user_id,
+            empresa_id=empresa_id,
             nome=nome_produto,
             categoria=categoria,
             fabricante=fabricante,

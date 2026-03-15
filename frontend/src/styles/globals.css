@@ -349,6 +349,18 @@ body {
   padding: 0;
 }
 
+/* Markdown response (Portfolio IA responses) */
+.markdown-response { line-height: 1.7; font-size: 14px; }
+.markdown-response a { color: #60a5fa; text-decoration: underline; word-break: break-all; }
+.markdown-response a:hover { color: #93c5fd; }
+.markdown-response h2 { font-size: 16px; margin: 8px 0; }
+.markdown-response h3 { font-size: 14px; margin: 6px 0; }
+.markdown-response p { margin: 4px 0; }
+.markdown-response ol, .markdown-response ul { padding-left: 20px; margin: 4px 0; }
+.markdown-response li { margin: 4px 0; }
+.markdown-response hr { border: none; border-top: 1px solid var(--border-color); margin: 12px 0; }
+.markdown-response strong { color: var(--text-primary); }
+
 /* Tabelas Markdown */
 .assistant-bubble table {
   width: 100%;
