@@ -1927,6 +1927,13 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
 
         for ed in editais_scraper:
             if ed.get('link') not in links_pncp and ed.get('link'):
+                # Filtrar resultados gov.br/pncp.gov.br/compras.gov.br do scraper
+                # quando já temos busca PNCP API (são duplicatas em formato inferior)
+                ed_link = (ed.get('link', '') or '').lower()
+                ed_fonte = (ed.get('fonte', '') or '').lower()
+                if buscar_pncp and any(d in ed_link or d in ed_fonte for d in ['pncp.gov.br', 'compras.gov.br', 'www.gov.br']):
+                    continue
+
                 # Filtrar por fonte específica se solicitado
                 if fonte_lower and 'pncp' not in fonte_lower:
                     ed_fonte = (ed.get('fonte', '') or '').lower()
@@ -8974,19 +8981,21 @@ def buscar_editais_rest():
             resultado_score = tool_calcular_score_aderencia(editais=editais, user_id=user_id, empresa_id=empresa_id)
             if resultado_score.get("success"):
                 editais = resultado_score.get("editais_com_score", editais)
-            # Passo 2: Ordenar por score desc, pegar os N melhores
+            # Passo 2: Ordenar por score desc, pegar os N melhores para profundo
             editais.sort(key=lambda x: x.get("score_tecnico", 0), reverse=True)
             top_n = editais[:limite_score_profundo]
             rest = editais[limite_score_profundo:]
             # Passo 3: Score profundo nos N melhores
             top_n = _calcular_score_profundo(top_n, user_id, empresa_id)
-            editais = top_n
+            # Retornar TODOS: top N enriquecidos + restantes com score rápido
+            editais = top_n + rest
 
         elif tipo_score == "profundo" and editais:
             # Score profundo direto nos N primeiros (sem triagem rápida)
             target = editais[:limite_score_profundo]
+            rest = editais[limite_score_profundo:]
             target = _calcular_score_profundo(target, user_id, empresa_id)
-            editais = target
+            editais = target + rest
 
         # Ordenar: se tem score, por score desc; senão abertos primeiro por data
         from datetime import datetime as _dt

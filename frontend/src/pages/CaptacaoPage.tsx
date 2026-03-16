@@ -632,7 +632,7 @@ export function CaptacaoPage(props?: PageProps) {
 
       // Cruzar com editais já salvos para indicar "Já salvo"
       try {
-        const resSalvos = await fetch("/api/editais/salvos?per_page=500", {
+        const resSalvos = await fetch("/api/editais/salvos?per_page=500&com_estrategia=true", {
           headers: { Authorization: token ? `Bearer ${token}` : "" },
         });
         if (resSalvos.ok) {
@@ -644,6 +644,34 @@ export function CaptacaoPage(props?: PageProps) {
             );
             if (match) {
               ed.editalSalvoId = String(match.id);
+              // Restaurar estratégia salva
+              if (match.estrategia_id) {
+                ed.estrategiaId = String(match.estrategia_id);
+              }
+              // Recuperar intenção original da justificativa (formato: "Intenção: estrategico")
+              const justif = String(match.justificativa_estrategia || "");
+              const intMatch = justif.match(/Inten[çc][aã]o:\s*(\w+)/i);
+              if (intMatch) {
+                const intVal = intMatch[1].toLowerCase();
+                if (["estrategico", "defensivo", "acompanhamento", "aprendizado"].includes(intVal)) {
+                  ed.intencaoEstrategica = intVal as typeof ed.intencaoEstrategica;
+                }
+              } else {
+                // Fallback: mapeamento inverso decisao → intenção
+                const decisao = String(match.decisao || "");
+                const prioridade = String(match.prioridade || "");
+                const inversoMap: Record<string, typeof ed.intencaoEstrategica> = {
+                  go: "estrategico",
+                  acompanhar: prioridade === "media" ? "defensivo" : "acompanhamento",
+                  nogo: "aprendizado",
+                };
+                if (decisao && inversoMap[decisao]) {
+                  ed.intencaoEstrategica = inversoMap[decisao];
+                }
+              }
+              if (match.margem_desejada != null && Number(match.margem_desejada) > 0) {
+                ed.margemExpectativa = Number(match.margem_desejada);
+              }
             }
           }
         }
@@ -1162,7 +1190,7 @@ export function CaptacaoPage(props?: PageProps) {
                   onBlur={() => setTimeout(() => setTermoDropdownAberto(false), 150)}
                   placeholder={classificacaoTipo !== "todos" ? `Tipo Produto: ${classificacaoTipo}` : "Digite ou selecione um produto..."}
                   className="form-input"
-                  style={{ width: "100%" }}
+                  style={{ width: "100%", minHeight: "42px", backgroundColor: "#0f172a", color: "#e2e8f0" }}
                   disabled={classificacaoTipo !== "todos"}
                 />
                 {termoDropdownAberto && classificacaoTipo === "todos" && produtosPortfolio.length > 0 && (
@@ -1209,15 +1237,6 @@ export function CaptacaoPage(props?: PageProps) {
                 ]}
               />
             </FormField>
-            <div className="form-field-actions">
-              <ActionButton
-                icon={<Search size={16} />}
-                label="Buscar Editais"
-                variant="primary"
-                onClick={handleBuscar}
-                loading={loading}
-              />
-            </div>
           </div>
 
           <div className="form-grid form-grid-3" style={{ marginTop: "12px" }}>
@@ -1353,6 +1372,16 @@ export function CaptacaoPage(props?: PageProps) {
             />
           </div>
 
+          <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
+            <ActionButton
+              icon={<Search size={16} />}
+              label="Buscar Editais"
+              variant="primary"
+              onClick={handleBuscar}
+              loading={loading}
+            />
+          </div>
+
           {erro && (
             <div className="alert alert-error" style={{ marginTop: "12px" }}>
               {erro}
@@ -1461,7 +1490,7 @@ export function CaptacaoPage(props?: PageProps) {
                           {painelEdital.objeto}
                         </div>
                       </div>
-                      {painelEdital.justificativa && (
+                      {tipoScore !== "nenhum" && painelEdital.justificativa && (
                         <div style={{ marginTop: "8px" }}>
                           <span style={{ color: "#64748b", display: "block", marginBottom: "4px" }}>Justificativa IA:</span>
                           <div style={{ color: "#94a3b8", backgroundColor: "#0f172a", padding: "8px", borderRadius: "6px", fontSize: "12px", lineHeight: "1.5", fontStyle: "italic" }}>
@@ -1469,7 +1498,7 @@ export function CaptacaoPage(props?: PageProps) {
                           </div>
                         </div>
                       )}
-                      {painelEdital.recomendacaoTexto && painelEdital.recomendacaoTexto !== "0" && painelEdital.recomendacaoTexto !== "NaN" && (
+                      {tipoScore !== "nenhum" && painelEdital.recomendacaoTexto && painelEdital.recomendacaoTexto !== "0" && painelEdital.recomendacaoTexto !== "NaN" && (
                         <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
                           <span style={{ color: "#64748b", minWidth: "80px", flexShrink: 0 }}>Recomendacao:</span>
                           <StatusBadge
@@ -1489,7 +1518,7 @@ export function CaptacaoPage(props?: PageProps) {
                   </div>
                   )}
 
-                  {painelEdital.scoreProfundo ? (
+                  {tipoScore !== "nenhum" && painelEdital.scoreProfundo ? (
                     /* 6 sub-scores do score profundo */
                     <div className="panel-section">
                       <h4>6 Dimensoes de Score</h4>
@@ -1566,7 +1595,8 @@ export function CaptacaoPage(props?: PageProps) {
                     </div>
                   ) : null}
 
-                  {/* Produto correspondente */}
+                  {/* Produto correspondente — só com score */}
+                  {tipoScore !== "nenhum" && (
                   <div className="panel-section">
                     <h4>Produto Correspondente</h4>
                     {painelEdital.produtoCorrespondente ? (
@@ -1578,8 +1608,10 @@ export function CaptacaoPage(props?: PageProps) {
                       <p className="text-muted">Nenhum produto correspondente encontrado</p>
                     )}
                   </div>
+                  )}
 
-                  {/* Potencial de Ganho */}
+                  {/* Potencial de Ganho — só com score */}
+                  {tipoScore !== "nenhum" && (
                   <div className="panel-section">
                     <h4>Potencial de Ganho</h4>
                     <StatusBadge
@@ -1590,6 +1622,7 @@ export function CaptacaoPage(props?: PageProps) {
                       label={painelEdital.potencialGanho.charAt(0).toUpperCase() + painelEdital.potencialGanho.slice(1)}
                     />
                   </div>
+                  )}
 
                   {/* Itens do Edital */}
                   {painelEdital.itens && painelEdital.itens.length > 0 && (
@@ -1712,8 +1745,8 @@ export function CaptacaoPage(props?: PageProps) {
                     )}
                   </div>
 
-                  {/* Analise de Gaps - C2: Dados reais do endpoint scores-validacao (somente se nao tem scoreProfundo inline) */}
-                  {!painelEdital.scoreProfundo && (
+                  {/* Analise de Gaps - C2: Dados reais do endpoint scores-validacao (somente se nao tem scoreProfundo inline e usou score) */}
+                  {tipoScore !== "nenhum" && !painelEdital.scoreProfundo && (
                   <div className="panel-section">
                     <h4>Analise de Gaps / Validacao</h4>
                     {loadingScores ? (
