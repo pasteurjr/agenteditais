@@ -51,6 +51,12 @@ class User(Base):
     parametro_score = relationship("ParametroScore", back_populates="user", cascade="all, delete-orphan", uselist=False)
     dispensas = relationship("Dispensa", back_populates="user", cascade="all, delete-orphan")
     estrategias = relationship("EstrategiaEdital", back_populates="user", cascade="all, delete-orphan")
+    # FASE 1 Precificação
+    lotes = relationship("Lote", back_populates="user", cascade="all, delete-orphan")
+    vinculos_item_produto = relationship("EditalItemProduto", back_populates="user", cascade="all, delete-orphan")
+    preco_camadas = relationship("PrecoCamada", back_populates="user", cascade="all, delete-orphan")
+    lances = relationship("Lance", back_populates="user", cascade="all, delete-orphan")
+    comodatos = relationship("Comodato", back_populates="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -155,6 +161,8 @@ class Produto(Base):
     documentos = relationship("ProdutoDocumento", back_populates="produto", cascade="all, delete-orphan")
     analises = relationship("Analise", back_populates="produto", cascade="all, delete-orphan")
     propostas = relationship("Proposta", back_populates="produto", cascade="all, delete-orphan")
+    # FASE 1 Precificação
+    vinculos_editais = relationship("EditalItemProduto", back_populates="produto", cascade="all, delete-orphan")
 
     def to_dict(self, include_specs=False):
         result = {
@@ -457,6 +465,9 @@ class Edital(Base):
     acoes_pos_perda = relationship("AcaoPosPerda", back_populates="edital")
     dispensas = relationship("Dispensa", back_populates="edital", cascade="all, delete-orphan")
     estrategias = relationship("EstrategiaEdital", back_populates="edital", cascade="all, delete-orphan")
+    # FASE 1 Precificação
+    lotes = relationship("Lote", back_populates="edital", cascade="all, delete-orphan")
+    comodatos = relationship("Comodato", back_populates="edital", cascade="all, delete-orphan")
 
     def to_dict(self, include_requisitos=False):
         result = {
@@ -572,6 +583,9 @@ class EditalItem(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     edital = relationship("Edital", back_populates="itens")
+    # FASE 1 Precificação
+    lote_itens = relationship("LoteItem", back_populates="edital_item", cascade="all, delete-orphan")
+    produto_vinculado = relationship("EditalItemProduto", back_populates="edital_item", cascade="all, delete-orphan", uselist=False)
 
     def to_dict(self):
         return {
@@ -1763,6 +1777,13 @@ class ParametroScore(Base):
     markup_padrao = Column(Float, default=0.0)           # Markup % padrao
     custos_fixos = Column(Float, default=0.0)            # Custos operacionais fixos mensais
     frete_base = Column(Float, default=0.0)              # Custo base de frete
+    # FASE 1 Precificação: Alíquotas tributárias padrão
+    icms_padrao = Column(DECIMAL(5, 2), default=18.0)    # ICMS padrão (%)
+    pis_cofins = Column(DECIMAL(5, 2), default=9.25)     # PIS + COFINS (%)
+    ipi_padrao = Column(DECIMAL(5, 2), default=0.0)      # IPI padrão (%)
+    custo_logistica_percentual = Column(DECIMAL(5, 2), default=5.0)  # Logística sobre custo (%)
+    margem_contribuicao_min = Column(DECIMAL(5, 2), default=15.0)    # Margem contribuição mínima (%)
+    ncm_isencao_icms = Column(JSON, nullable=True)       # NCMs com isenção ICMS ["3822"]
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1795,6 +1816,12 @@ class ParametroScore(Base):
             "markup_padrao": self.markup_padrao,
             "custos_fixos": self.custos_fixos,
             "frete_base": self.frete_base,
+            "icms_padrao": float(self.icms_padrao) if self.icms_padrao else None,
+            "pis_cofins": float(self.pis_cofins) if self.pis_cofins else None,
+            "ipi_padrao": float(self.ipi_padrao) if self.ipi_padrao else None,
+            "custo_logistica_percentual": float(self.custo_logistica_percentual) if self.custo_logistica_percentual else None,
+            "margem_contribuicao_min": float(self.margem_contribuicao_min) if self.margem_contribuicao_min else None,
+            "ncm_isencao_icms": self.ncm_isencao_icms,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1884,6 +1911,14 @@ class EstrategiaEdital(Base):
     justificativa = Column(Text, nullable=True)
     data_decisao = Column(DateTime, nullable=True)
     decidido_por = Column(String(255), nullable=True)
+    # FASE 1 Precificação: Estratégia competitiva (UC-P08)
+    perfil_competitivo = Column(Enum('quero_ganhar', 'nao_ganhei_minimo'), nullable=True)
+    margem_minima = Column(DECIMAL(5, 2), nullable=True)      # % margem mínima aceitável
+    margem_maxima = Column(DECIMAL(5, 2), nullable=True)      # % margem máxima desejada
+    desconto_maximo = Column(DECIMAL(5, 2), nullable=True)    # % desconto máximo sobre referência
+    priorizar_volume = Column(Boolean, default=False)          # Prioriza volume sobre margem
+    notas_estrategia = Column(Text, nullable=True)             # Notas livres
+    cenarios_simulados = Column(JSON, nullable=True)           # [{cenario, valor, margem}]
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1902,6 +1937,298 @@ class EstrategiaEdital(Base):
             "justificativa": self.justificativa,
             "data_decisao": self.data_decisao.isoformat() if self.data_decisao else None,
             "decidido_por": self.decidido_por,
+            "perfil_competitivo": self.perfil_competitivo,
+            "margem_minima": float(self.margem_minima) if self.margem_minima else None,
+            "margem_maxima": float(self.margem_maxima) if self.margem_maxima else None,
+            "desconto_maximo": float(self.desconto_maximo) if self.desconto_maximo else None,
+            "priorizar_volume": self.priorizar_volume,
+            "notas_estrategia": self.notas_estrategia,
+            "cenarios_simulados": self.cenarios_simulados,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== PRECIFICAÇÃO — FASE 1 ====================
+
+class Lote(Base):
+    """Lotes do edital agrupando itens por especialidade (UC-P01)"""
+    __tablename__ = 'lotes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    numero_lote = Column(Integer, nullable=False)
+    nome = Column(String(255), nullable=True)            # "Lote 01 - Hematologia"
+    especialidade = Column(String(255), nullable=True)   # Hematologia, Bioquímica, etc
+    volume_exigido = Column(DECIMAL(15, 2), nullable=True)  # Volume total exigido no edital
+    valor_estimado = Column(DECIMAL(15, 2), nullable=True)
+    status = Column(Enum('rascunho', 'configurado', 'selecionado', 'precificado', 'finalizado'), default='rascunho')
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", back_populates="lotes")
+    user = relationship("User", back_populates="lotes")
+    itens = relationship("LoteItem", back_populates="lote", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "numero_lote": self.numero_lote,
+            "nome": self.nome,
+            "especialidade": self.especialidade,
+            "volume_exigido": float(self.volume_exigido) if self.volume_exigido else None,
+            "valor_estimado": float(self.valor_estimado) if self.valor_estimado else None,
+            "status": self.status,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class LoteItem(Base):
+    """Associação M:N entre Lote e EditalItem (UC-P01)"""
+    __tablename__ = 'lote_itens'
+    __table_args__ = (UniqueConstraint('lote_id', 'edital_item_id', name='uq_lote_item'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lote_id = Column(String(36), ForeignKey('lotes.id', ondelete='CASCADE'), nullable=False)
+    edital_item_id = Column(String(36), ForeignKey('editais_itens.id', ondelete='CASCADE'), nullable=False)
+    ordem = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    lote = relationship("Lote", back_populates="itens")
+    edital_item = relationship("EditalItem", back_populates="lote_itens")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "lote_id": self.lote_id,
+            "edital_item_id": self.edital_item_id,
+            "ordem": self.ordem,
+        }
+
+
+class EditalItemProduto(Base):
+    """Vínculo item do edital ↔ produto do portfolio + volumetria (UC-P02, UC-P03)"""
+    __tablename__ = 'edital_item_produto'
+    __table_args__ = (UniqueConstraint('edital_item_id', 'produto_id', name='uq_item_produto'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_item_id = Column(String(36), ForeignKey('editais_itens.id', ondelete='CASCADE'), nullable=False)
+    produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    # UC-P02: Match/seleção
+    match_score = Column(DECIMAL(5, 2), nullable=True)   # 0-100% match IA
+    match_detalhes = Column(JSON, nullable=True)          # {campo: status, ...}
+    confirmado = Column(Boolean, default=False)           # Confirmado pelo analista
+    # UC-P03: Volumetria
+    volume_edital = Column(DECIMAL(15, 2), nullable=True)
+    rendimento_produto = Column(DECIMAL(15, 4), nullable=True)  # testes/kit, unidades/caixa
+    repeticoes_amostras = Column(Integer, default=0)
+    repeticoes_calibradores = Column(Integer, default=0)
+    repeticoes_controles = Column(Integer, default=0)
+    volume_real_ajustado = Column(DECIMAL(15, 2), nullable=True)
+    quantidade_kits = Column(Integer, nullable=True)      # ceil(ajustado/rendimento)
+    formula_calculo = Column(String(500), nullable=True)  # Fórmula legível
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital_item = relationship("EditalItem", back_populates="produto_vinculado")
+    produto = relationship("Produto", back_populates="vinculos_editais")
+    user = relationship("User", back_populates="vinculos_item_produto")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_item_id": self.edital_item_id,
+            "produto_id": self.produto_id,
+            "user_id": self.user_id,
+            "match_score": float(self.match_score) if self.match_score else None,
+            "match_detalhes": self.match_detalhes,
+            "confirmado": self.confirmado,
+            "volume_edital": float(self.volume_edital) if self.volume_edital else None,
+            "rendimento_produto": float(self.rendimento_produto) if self.rendimento_produto else None,
+            "repeticoes_amostras": self.repeticoes_amostras,
+            "repeticoes_calibradores": self.repeticoes_calibradores,
+            "repeticoes_controles": self.repeticoes_controles,
+            "volume_real_ajustado": float(self.volume_real_ajustado) if self.volume_real_ajustado else None,
+            "quantidade_kits": self.quantidade_kits,
+            "formula_calculo": self.formula_calculo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PrecoCamada(Base):
+    """Camadas de preço A-F por item (UC-P04 a UC-P07, UC-P09)"""
+    __tablename__ = 'preco_camadas'
+    __table_args__ = (UniqueConstraint('edital_item_produto_id', name='uq_preco_camada_vinculo'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_item_produto_id = Column(String(36), ForeignKey('edital_item_produto.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    # Camada A — Base de Custos (UC-P04)
+    custo_unitario = Column(DECIMAL(15, 4), nullable=True)    # Custo unitário do ERP/manual
+    custo_fonte = Column(Enum('erp', 'manual', 'media_mercado'), nullable=True)
+    ncm = Column(String(20), nullable=True)
+    icms = Column(DECIMAL(5, 2), default=0.0)
+    ipi = Column(DECIMAL(5, 2), default=0.0)
+    pis_cofins = Column(DECIMAL(5, 2), default=0.0)
+    isencao_icms = Column(Boolean, default=False)
+    custo_base_final = Column(DECIMAL(15, 4), nullable=True)  # Custo com impostos
+    # Camada B — Preço Base (UC-P05)
+    modo_preco_base = Column(Enum('manual', 'markup', 'upload'), nullable=True)
+    markup_percentual = Column(DECIMAL(5, 2), nullable=True)
+    preco_base = Column(DECIMAL(15, 4), nullable=True)
+    reutilizar_preco_base = Column(Boolean, default=False)
+    # Camada C — Valor de Referência (UC-P06)
+    valor_referencia_edital = Column(DECIMAL(15, 4), nullable=True)  # Importado do edital
+    valor_referencia_disponivel = Column(Boolean, default=False)
+    percentual_sobre_base = Column(DECIMAL(5, 2), nullable=True)     # % sobre preço base
+    target_referencia = Column(DECIMAL(15, 4), nullable=True)
+    margem_sobre_custo = Column(DECIMAL(5, 2), nullable=True)  # (target - custo) / custo * 100
+    # Camada D — Valor Inicial do Lance (UC-P07)
+    modo_lance_inicial = Column(Enum('absoluto', 'percentual_referencia'), nullable=True)
+    lance_inicial = Column(DECIMAL(15, 4), nullable=True)
+    # Camada E — Valor Mínimo do Lance (UC-P07)
+    modo_lance_minimo = Column(Enum('absoluto', 'percentual_desconto'), nullable=True)
+    desconto_maximo_percentual = Column(DECIMAL(5, 2), nullable=True)
+    lance_minimo = Column(DECIMAL(15, 4), nullable=True)
+    margem_minima = Column(DECIMAL(5, 2), nullable=True)  # (mínimo - custo) / custo * 100
+    # Camada F — Histórico (UC-P09) — referência consultiva
+    preco_medio_historico = Column(DECIMAL(15, 4), nullable=True)
+    preco_min_historico = Column(DECIMAL(15, 4), nullable=True)
+    preco_max_historico = Column(DECIMAL(15, 4), nullable=True)
+    qtd_registros_historico = Column(Integer, default=0)
+    # Status geral
+    status = Column(Enum('rascunho', 'parcial', 'completo', 'aprovado'), default='rascunho')
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital_item_produto = relationship("EditalItemProduto", backref="preco_camada")
+    user = relationship("User", back_populates="preco_camadas")
+
+    def to_dict(self):
+        def _f(v):
+            return float(v) if v is not None else None
+        return {
+            "id": self.id,
+            "edital_item_produto_id": self.edital_item_produto_id,
+            "user_id": self.user_id,
+            # Camada A
+            "custo_unitario": _f(self.custo_unitario),
+            "custo_fonte": self.custo_fonte,
+            "ncm": self.ncm,
+            "icms": _f(self.icms),
+            "ipi": _f(self.ipi),
+            "pis_cofins": _f(self.pis_cofins),
+            "isencao_icms": self.isencao_icms,
+            "custo_base_final": _f(self.custo_base_final),
+            # Camada B
+            "modo_preco_base": self.modo_preco_base,
+            "markup_percentual": _f(self.markup_percentual),
+            "preco_base": _f(self.preco_base),
+            "reutilizar_preco_base": self.reutilizar_preco_base,
+            # Camada C
+            "valor_referencia_edital": _f(self.valor_referencia_edital),
+            "valor_referencia_disponivel": self.valor_referencia_disponivel,
+            "percentual_sobre_base": _f(self.percentual_sobre_base),
+            "target_referencia": _f(self.target_referencia),
+            "margem_sobre_custo": _f(self.margem_sobre_custo),
+            # Camada D
+            "modo_lance_inicial": self.modo_lance_inicial,
+            "lance_inicial": _f(self.lance_inicial),
+            # Camada E
+            "modo_lance_minimo": self.modo_lance_minimo,
+            "desconto_maximo_percentual": _f(self.desconto_maximo_percentual),
+            "lance_minimo": _f(self.lance_minimo),
+            "margem_minima": _f(self.margem_minima),
+            # Camada F
+            "preco_medio_historico": _f(self.preco_medio_historico),
+            "preco_min_historico": _f(self.preco_min_historico),
+            "preco_max_historico": _f(self.preco_max_historico),
+            "qtd_registros_historico": self.qtd_registros_historico,
+            # Status
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Lance(Base):
+    """Registro de lances em disputa/simulação (UC-P07, UC-P08)"""
+    __tablename__ = 'lances'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_item_produto_id = Column(String(36), ForeignKey('edital_item_produto.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    rodada = Column(Integer, default=1)
+    valor_lance = Column(DECIMAL(15, 4), nullable=False)
+    tipo = Column(Enum('inicial', 'decremento', 'minimo', 'simulacao'), default='simulacao')
+    margem_sobre_custo = Column(DECIMAL(5, 2), nullable=True)
+    status = Column(Enum('planejado', 'enviado', 'aceito', 'recusado'), default='planejado')
+    observacao = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    edital_item_produto = relationship("EditalItemProduto", backref="lances")
+    user = relationship("User", back_populates="lances")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_item_produto_id": self.edital_item_produto_id,
+            "rodada": self.rodada,
+            "valor_lance": float(self.valor_lance) if self.valor_lance else None,
+            "tipo": self.tipo,
+            "margem_sobre_custo": float(self.margem_sobre_custo) if self.margem_sobre_custo else None,
+            "status": self.status,
+            "observacao": self.observacao,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Comodato(Base):
+    """Gestão de equipamentos em comodato (UC-P10)"""
+    __tablename__ = 'comodatos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    produto_equipamento_id = Column(String(36), ForeignKey('produtos.id', ondelete='SET NULL'), nullable=True)
+    nome_equipamento = Column(String(255), nullable=False)
+    valor_equipamento = Column(DECIMAL(15, 2), nullable=True)
+    duracao_meses = Column(Integer, nullable=True)
+    valor_mensal_amortizacao = Column(DECIMAL(15, 2), nullable=True)
+    custo_manutencao_mensal = Column(DECIMAL(15, 2), nullable=True)
+    custo_instalacao = Column(DECIMAL(15, 2), nullable=True)
+    condicoes_especiais = Column(Text, nullable=True)
+    status = Column(Enum('planejado', 'negociando', 'ativo', 'encerrado'), default='planejado')
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", back_populates="comodatos")
+    user = relationship("User", back_populates="comodatos")
+    produto_equipamento = relationship("Produto", foreign_keys=[produto_equipamento_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "produto_equipamento_id": self.produto_equipamento_id,
+            "nome_equipamento": self.nome_equipamento,
+            "valor_equipamento": float(self.valor_equipamento) if self.valor_equipamento else None,
+            "duracao_meses": self.duracao_meses,
+            "valor_mensal_amortizacao": float(self.valor_mensal_amortizacao) if self.valor_mensal_amortizacao else None,
+            "custo_manutencao_mensal": float(self.custo_manutencao_mensal) if self.custo_manutencao_mensal else None,
+            "custo_instalacao": float(self.custo_instalacao) if self.custo_instalacao else None,
+            "condicoes_especiais": self.condicoes_especiais,
+            "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

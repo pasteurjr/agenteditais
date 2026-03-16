@@ -257,6 +257,47 @@ Analise a mensagem do usuário e classifique em UMA das categorias abaixo:
     Exemplos: "cancele alertas do PE-001", "remova meus alertas", "desative alertas"
     Palavras-chave: cancelar alerta, remover alerta, desativar alerta
 
+### FASE 1 — PRECIFICAÇÃO:
+41b. **precif_organizar_lotes**: Organizar itens do edital em lotes
+    Exemplos: "organize os lotes do edital PE-001", "importe itens do PNCP e crie lotes", "crie lotes para o edital"
+    Palavras-chave: organizar lotes, criar lotes, importar itens, lotes do edital
+
+42b. **precif_selecao_portfolio**: Seleção inteligente de produto do portfolio para item do edital
+    Exemplos: "selecione produto para o item 1", "qual produto atende o item?", "seleção inteligente de portfolio"
+    Palavras-chave: selecionar produto, seleção portfolio, match produto item, vincular produto
+
+43b. **precif_calcular_volumetria**: Calcular volumetria técnica (kits necessários)
+    Exemplos: "calcule a volumetria", "quantos kits preciso?", "calcule kits para 50000 testes"
+    Palavras-chave: calcular volumetria, quantos kits, volume ajustado, rendimento
+
+44b. **precif_configurar_custos**: Configurar base de custos (Camada A)
+    Exemplos: "configure os custos do item", "custo base do produto", "configure camada A de custos"
+    Palavras-chave: configurar custos, custo base, camada A, base de custos, NCM, ICMS
+
+45b. **precif_preco_base**: Montar preço base (Camada B)
+    Exemplos: "defina preço base com markup 76%", "preço base manual R$ 150", "configure camada B"
+    Palavras-chave: preço base, markup, camada B, montar preço
+
+46b. **precif_valor_referencia**: Definir valor de referência/target (Camada C)
+    Exemplos: "defina valor de referência", "target de preço", "configure camada C", "referência do edital"
+    Palavras-chave: valor referência, target, camada C, referência edital
+
+47b. **precif_estruturar_lances**: Estruturar lances — valor inicial e mínimo (Camadas D e E)
+    Exemplos: "configure lances: inicial R$ 145, mínimo R$ 95", "estruture os lances", "defina faixa de disputa"
+    Palavras-chave: estruturar lances, lance inicial, lance mínimo, faixa de disputa, camada D, camada E
+
+48b. **precif_estrategia**: Definir estratégia competitiva e simular cenários
+    Exemplos: "quero ganhar este edital", "simule estratégia competitiva", "estratégia agressiva"
+    Palavras-chave: estratégia competitiva, quero ganhar, simular disputa, cenários
+
+49b. **precif_historico_camada_f**: Consultar histórico de preços para Camada F
+    Exemplos: "busque histórico de preços do produto", "consulte preços históricos", "camada F do item"
+    Palavras-chave: histórico preços camada, camada F, preços passados
+
+50b. **precif_comodato**: Gestão de comodato
+    Exemplos: "cadastre comodato para o edital", "configure equipamento em comodato", "amortização do equipamento"
+    Palavras-chave: comodato, amortização, equipamento comodato, gestão comodato
+
 41. **chat_livre**: Dúvidas gerais, conversas
     Exemplos: "o que é pregão?", "olá", "obrigado"
 
@@ -1238,6 +1279,39 @@ def chat():
 
         elif action_type == "buscar_links_editais":
             response_text, resultado = processar_buscar_links_editais(message, user_id)
+
+        # =============================================================================
+        # FASE 1: PRECIFICAÇÃO (UC-P01 a UC-P10)
+        # =============================================================================
+        elif action_type == "precif_organizar_lotes":
+            response_text, resultado = processar_precif_organizar_lotes(message, user_id, empresa_id)
+
+        elif action_type == "precif_selecao_portfolio":
+            response_text, resultado = processar_precif_selecao_portfolio(message, user_id, empresa_id)
+
+        elif action_type == "precif_calcular_volumetria":
+            response_text, resultado = processar_precif_calcular_volumetria(message, user_id)
+
+        elif action_type == "precif_configurar_custos":
+            response_text, resultado = processar_precif_configurar_custos(message, user_id, empresa_id)
+
+        elif action_type == "precif_preco_base":
+            response_text, resultado = processar_precif_preco_base(message, user_id)
+
+        elif action_type == "precif_valor_referencia":
+            response_text, resultado = processar_precif_valor_referencia(message, user_id)
+
+        elif action_type == "precif_estruturar_lances":
+            response_text, resultado = processar_precif_estruturar_lances(message, user_id)
+
+        elif action_type == "precif_estrategia":
+            response_text, resultado = processar_precif_estrategia(message, user_id, empresa_id)
+
+        elif action_type == "precif_historico_camada_f":
+            response_text, resultado = processar_precif_historico_camada_f(message, user_id)
+
+        elif action_type == "precif_comodato":
+            response_text, resultado = processar_precif_comodato(message, user_id, empresa_id)
 
         else:  # chat_livre
             response_text = processar_chat_livre(message, user_id, session_id, db)
@@ -6890,6 +6964,371 @@ def processar_atualizar_url_edital(message: str, user_id: str, intencao_resultad
         db.close()
 
 
+# =============================================================================
+# FASE 1: PRECIFICAÇÃO — Handlers (UC-P01 a UC-P10)
+# =============================================================================
+
+def _extrair_id_da_mensagem(message: str, prefixo: str = "edital") -> str:
+    """Extrai UUID ou referência de ID de uma mensagem de chat."""
+    import re
+    # UUID
+    m = re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', message, re.I)
+    if m:
+        return m.group(0)
+    return None
+
+
+def processar_precif_organizar_lotes(message: str, user_id: str, empresa_id: str = None):
+    """UC-P01: Organizar edital por lotes"""
+    from tools import tool_organizar_lotes
+    from models import get_db, Edital
+    db = get_db()
+    try:
+        edital_id = _extrair_id_da_mensagem(message)
+        if not edital_id:
+            # Pegar último edital do usuário
+            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital_id = edital.id if edital else None
+        if not edital_id:
+            return "❌ Nenhum edital encontrado. Salve um edital primeiro.", None
+
+        resultado = tool_organizar_lotes(edital_id=edital_id, user_id=user_id, empresa_id=empresa_id, importar_pncp=True)
+        if not resultado.get("success"):
+            return f"❌ {resultado.get('error')}", resultado
+
+        lotes = resultado.get("lotes", [])
+        total = resultado.get("total_itens", 0)
+        txt = f"## ✅ Lotes Organizados\n\n{resultado.get('mensagem')}\n\n"
+        txt += f"**Total de itens:** {total}\n\n"
+        for l in lotes:
+            txt += f"- **Lote {l['numero_lote']}** — {l.get('nome', 'N/A')} | Status: {l.get('status')} | Valor est.: R$ {l.get('valor_estimado', 0):,.2f}\n"
+
+        return txt, resultado
+    finally:
+        db.close()
+
+
+def processar_precif_selecao_portfolio(message: str, user_id: str, empresa_id: str = None):
+    """UC-P02: Seleção inteligente de portfolio"""
+    from tools import tool_selecao_portfolio
+    edital_item_id = _extrair_id_da_mensagem(message)
+    if not edital_item_id:
+        return "❌ Informe o ID do item do edital para seleção de portfolio.", None
+
+    resultado = tool_selecao_portfolio(edital_item_id=edital_item_id, user_id=user_id, empresa_id=empresa_id)
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    sugestoes = resultado.get("sugestoes", [])
+    txt = f"## 🎯 Seleção de Portfolio\n\n{resultado.get('mensagem')}\n\n"
+    if sugestoes:
+        txt += "| # | Produto | Fabricante | Match | Preço Ref. |\n|---|---------|-----------|-------|------------|\n"
+        for i, s in enumerate(sugestoes[:10], 1):
+            txt += f"| {i} | {s['nome'][:30]} | {s.get('fabricante', '-')[:20]} | {s['match_score']}% | R$ {s.get('preco_referencia', 0) or 0:,.2f} |\n"
+    else:
+        txt += "Nenhum produto com match encontrado. Cadastre produtos no portfolio.\n"
+
+    return txt, resultado
+
+
+def processar_precif_calcular_volumetria(message: str, user_id: str):
+    """UC-P03: Cálculo técnico de volumetria"""
+    from tools import tool_calcular_volumetria
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    if not vinculo_id:
+        return "❌ Informe o ID do vínculo item-produto para calcular volumetria.", None
+
+    # Extrair números da mensagem
+    nums = re.findall(r'[\d.]+', message)
+    volume = float(nums[0]) if len(nums) > 0 else None
+    rendimento = float(nums[1]) if len(nums) > 1 else None
+
+    resultado = tool_calcular_volumetria(
+        edital_item_produto_id=vinculo_id, user_id=user_id,
+        volume_edital=volume, rendimento_produto=rendimento
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## 📊 Volumetria Calculada\n\n"
+    txt += f"**Fórmula:** {resultado.get('formula')}\n\n"
+    txt += f"- Volume do edital: {resultado.get('volume_edital'):,.0f}\n"
+    txt += f"- Rendimento: {resultado.get('rendimento_produto'):,.0f} por kit\n"
+    txt += f"- Volume real ajustado: {resultado.get('volume_real_ajustado'):,.0f}\n"
+    txt += f"- **Quantidade de kits: {resultado.get('quantidade_kits')}**\n"
+
+    return txt, resultado
+
+
+def processar_precif_configurar_custos(message: str, user_id: str, empresa_id: str = None):
+    """UC-P04: Configurar base de custos (Camada A)"""
+    from tools import tool_configurar_custos
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    if not vinculo_id:
+        return "❌ Informe o ID do vínculo item-produto para configurar custos.", None
+
+    # Extrair custo da mensagem
+    m = re.search(r'R\$\s*([\d.,]+)', message)
+    custo = float(m.group(1).replace('.', '').replace(',', '.')) if m else None
+
+    resultado = tool_configurar_custos(
+        edital_item_produto_id=vinculo_id, user_id=user_id,
+        custo_unitario=custo, empresa_id=empresa_id
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## 💰 Base de Custos (Camada A)\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"- Custo unitário: R$ {resultado.get('custo_unitario', 0):,.2f}\n"
+    txt += f"- NCM: {resultado.get('ncm', 'N/A')}\n"
+    txt += f"- ICMS: {resultado.get('icms', 0)}%" + (" (ISENTO)" if resultado.get('isencao_icms') else "") + "\n"
+    txt += f"- IPI: {resultado.get('ipi', 0)}% | PIS+COFINS: {resultado.get('pis_cofins', 0)}%\n"
+    txt += f"- **Custo base final: R$ {resultado.get('custo_base_final', 0):,.2f}**\n"
+
+    return txt, resultado
+
+
+def processar_precif_preco_base(message: str, user_id: str):
+    """UC-P05: Montar preço base (Camada B)"""
+    from tools import tool_montar_preco_base
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    if not vinculo_id:
+        return "❌ Informe o ID do vínculo item-produto.", None
+
+    # Detectar modo
+    modo = 'manual'
+    if 'markup' in message.lower():
+        modo = 'markup'
+    elif 'upload' in message.lower():
+        modo = 'upload'
+
+    preco = None
+    markup = None
+    m = re.search(r'R\$\s*([\d.,]+)', message)
+    if m:
+        preco = float(m.group(1).replace('.', '').replace(',', '.'))
+    m2 = re.search(r'(\d+[.,]?\d*)\s*%', message)
+    if m2 and modo == 'markup':
+        markup = float(m2.group(1).replace(',', '.'))
+
+    resultado = tool_montar_preco_base(
+        edital_item_produto_id=vinculo_id, user_id=user_id,
+        modo=modo, preco_base=preco, markup_percentual=markup
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## 📈 Preço Base (Camada B)\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"- Custo base (A): R$ {resultado.get('custo_base', 0):,.2f}\n"
+    txt += f"- **Preço base (B): R$ {resultado.get('preco_base', 0):,.2f}**\n"
+    if resultado.get('markup_percentual'):
+        txt += f"- Markup: {resultado.get('markup_percentual'):.1f}%\n"
+
+    return txt, resultado
+
+
+def processar_precif_valor_referencia(message: str, user_id: str):
+    """UC-P06: Definir valor de referência (Camada C)"""
+    from tools import tool_definir_referencia
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    if not vinculo_id:
+        return "❌ Informe o ID do vínculo item-produto.", None
+
+    valor_ref = None
+    pct = None
+    m = re.search(r'R\$\s*([\d.,]+)', message)
+    if m:
+        valor_ref = float(m.group(1).replace('.', '').replace(',', '.'))
+    m2 = re.search(r'(\d+[.,]?\d*)\s*%', message)
+    if m2:
+        pct = float(m2.group(1).replace(',', '.'))
+
+    resultado = tool_definir_referencia(
+        edital_item_produto_id=vinculo_id, user_id=user_id,
+        valor_referencia=valor_ref, percentual_sobre_base=pct
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    comp = resultado.get("comparativo", {})
+    txt = f"## 🎯 Valor de Referência (Camada C)\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"**Comparativo:**\n"
+    txt += f"- Custo (A): R$ {comp.get('custo_base_A', 0):,.2f}\n"
+    txt += f"- Preço Base (B): R$ {comp.get('preco_base_B', 0):,.2f}\n"
+    txt += f"- **Target (C): R$ {comp.get('target_C', 0):,.2f}**\n"
+    if resultado.get('margem_sobre_custo'):
+        txt += f"- Margem sobre custo: {resultado['margem_sobre_custo']:.1f}%\n"
+
+    return txt, resultado
+
+
+def processar_precif_estruturar_lances(message: str, user_id: str):
+    """UC-P07: Estruturar lances (Camadas D e E)"""
+    from tools import tool_estruturar_lances
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    if not vinculo_id:
+        return "❌ Informe o ID do vínculo item-produto.", None
+
+    # Extrair valores
+    valores = re.findall(r'R\$\s*([\d.,]+)', message)
+    lance_ini = float(valores[0].replace('.', '').replace(',', '.')) if len(valores) > 0 else None
+    lance_min = float(valores[1].replace('.', '').replace(',', '.')) if len(valores) > 1 else None
+
+    resultado = tool_estruturar_lances(
+        edital_item_produto_id=vinculo_id, user_id=user_id,
+        lance_inicial=lance_ini, lance_minimo=lance_min
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## ⚡ Estrutura de Lances (Camadas D+E)\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"- Custo base: R$ {resultado.get('custo_base', 0):,.2f}\n"
+    txt += f"- Lance inicial (D): R$ {resultado.get('lance_inicial', 0):,.2f}\n"
+    txt += f"- Lance mínimo (E): R$ {resultado.get('lance_minimo', 0):,.2f}\n"
+    txt += f"- **Faixa de disputa:** {resultado.get('faixa_disputa')}\n"
+    if resultado.get('margem_minima') is not None:
+        txt += f"- Margem mínima: {resultado['margem_minima']:.1f}%\n"
+    for w in resultado.get('warnings', []):
+        txt += f"\n{w}\n"
+
+    return txt, resultado
+
+
+def processar_precif_estrategia(message: str, user_id: str, empresa_id: str = None):
+    """UC-P08: Estratégia competitiva"""
+    from tools import tool_estrategia_competitiva
+    from models import get_db, Edital
+
+    edital_id = _extrair_id_da_mensagem(message)
+    if not edital_id:
+        db = get_db()
+        try:
+            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital_id = edital.id if edital else None
+        finally:
+            db.close()
+    if not edital_id:
+        return "❌ Nenhum edital encontrado.", None
+
+    perfil = 'quero_ganhar'
+    msg_lower = message.lower()
+    if 'não ganhei' in msg_lower or 'nao ganhei' in msg_lower or 'mínimo' in msg_lower or 'minimo' in msg_lower:
+        perfil = 'nao_ganhei_minimo'
+
+    resultado = tool_estrategia_competitiva(edital_id=edital_id, user_id=user_id, perfil=perfil, empresa_id=empresa_id)
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## 🏆 Estratégia Competitiva\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"**Perfil:** {'QUERO GANHAR' if perfil == 'quero_ganhar' else 'NÃO GANHEI NO MÍNIMO'}\n\n"
+    for c in resultado.get("cenarios", []):
+        txt += f"**Item {c.get('item', '?')}:**\n"
+        for key in ['cenario_1', 'cenario_2', 'cenario_3']:
+            cen = c.get(key, {})
+            txt += f"  - {cen.get('label')}: R$ {cen.get('valor', 0):,.2f} (margem: {cen.get('margem', 0):.1f}%)\n"
+        txt += "\n"
+
+    return txt, resultado
+
+
+def processar_precif_historico_camada_f(message: str, user_id: str):
+    """UC-P09: Histórico de preços (Camada F)"""
+    from tools import tool_historico_precos_camada_f
+    import re
+
+    vinculo_id = _extrair_id_da_mensagem(message)
+    # Extrair termo de busca
+    termo = None
+    m = re.search(r'(?:de|para|termo:?)\s+["\']?([^"\']+)["\']?', message, re.I)
+    if m:
+        termo = m.group(1).strip()
+
+    if not vinculo_id and not termo:
+        return "❌ Informe o ID do vínculo item-produto ou um termo de busca.", None
+
+    resultado = tool_historico_precos_camada_f(
+        edital_item_produto_id=vinculo_id or "", user_id=user_id, termo=termo
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    txt = f"## 📜 Histórico de Preços (Camada F)\n\n{resultado.get('mensagem')}\n\n"
+    if resultado.get('preco_medio'):
+        txt += f"- Preço médio: R$ {resultado['preco_medio']:,.2f}\n"
+        txt += f"- Faixa: R$ {resultado.get('preco_min', 0):,.2f} — R$ {resultado.get('preco_max', 0):,.2f}\n"
+        txt += f"- Registros: {resultado.get('qtd_registros', 0)}\n"
+    else:
+        txt += "Nenhum registro de preço encontrado.\n"
+
+    return txt, resultado
+
+
+def processar_precif_comodato(message: str, user_id: str, empresa_id: str = None):
+    """UC-P10: Gestão de comodato"""
+    from tools import tool_gestao_comodato
+    from models import get_db, Edital
+    import re
+
+    edital_id = _extrair_id_da_mensagem(message)
+    if not edital_id:
+        db = get_db()
+        try:
+            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital_id = edital.id if edital else None
+        finally:
+            db.close()
+    if not edital_id:
+        return "❌ Nenhum edital encontrado.", None
+
+    # Extrair nome e valor da mensagem
+    nome = None
+    valor = None
+    meses = None
+
+    m_nome = re.search(r'equipamento[:\s]+["\']?([^"\',$]+)', message, re.I)
+    if m_nome:
+        nome = m_nome.group(1).strip()
+
+    m_valor = re.search(r'R\$\s*([\d.,]+)', message)
+    if m_valor:
+        valor = float(m_valor.group(1).replace('.', '').replace(',', '.'))
+
+    m_meses = re.search(r'(\d+)\s*meses', message, re.I)
+    if m_meses:
+        meses = int(m_meses.group(1))
+
+    resultado = tool_gestao_comodato(
+        edital_id=edital_id, user_id=user_id, empresa_id=empresa_id,
+        nome_equipamento=nome or "Equipamento",
+        valor_equipamento=valor,
+        duracao_meses=meses,
+    )
+    if not resultado.get("success"):
+        return f"❌ {resultado.get('error')}", resultado
+
+    com = resultado.get('comodato', {})
+    txt = f"## 🔧 Comodato\n\n{resultado.get('mensagem')}\n\n"
+    txt += f"- Equipamento: {com.get('nome_equipamento')}\n"
+    if com.get('valor_equipamento'):
+        txt += f"- Valor: R$ {com['valor_equipamento']:,.2f}\n"
+    if com.get('duracao_meses'):
+        txt += f"- Prazo: {com['duracao_meses']} meses\n"
+    if resultado.get('amortizacao_mensal'):
+        txt += f"- **Amortização mensal: R$ {resultado['amortizacao_mensal']:,.2f}**\n"
+
+    return txt, resultado
+
+
 def processar_chat_livre(message: str, user_id: str, session_id: str, db):
     """Processa chat livre sobre licitações"""
     # Buscar histórico
@@ -7779,6 +8218,58 @@ def view_edital_pdf(edital_id):
         return resp
     finally:
         db.close()
+
+
+# ─── Endpoint: Extrair/Listar Lotes do Edital ────────────────────────────────
+
+@app.route("/api/editais/<edital_id>/lotes", methods=["GET"])
+@require_auth
+def listar_lotes_edital(edital_id):
+    """Lista lotes do edital. Se não existem, retorna lista vazia."""
+    from models import Lote, LoteItem, EditalItem
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        lotes = db.query(Lote).filter(
+            Lote.edital_id == edital_id,
+            Lote.user_id == user_id
+        ).order_by(Lote.numero_lote).all()
+
+        lotes_resp = []
+        for l in lotes:
+            ld = l.to_dict()
+            lote_itens = db.query(LoteItem).filter(LoteItem.lote_id == l.id).order_by(LoteItem.ordem).all()
+            ld["itens"] = []
+            for li in lote_itens:
+                ei = db.query(EditalItem).filter(EditalItem.id == li.edital_item_id).first()
+                if ei:
+                    ld["itens"].append(ei.to_dict())
+            lotes_resp.append(ld)
+
+        return jsonify({"success": True, "lotes": lotes_resp, "total": len(lotes_resp)})
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/lotes/extrair", methods=["POST"])
+@require_auth
+def extrair_lotes_edital(edital_id):
+    """Extrai lotes do edital via IA (lê PDF) e cria no banco."""
+    from tools import tool_organizar_lotes
+    user_id = get_current_user_id()
+    empresa_id = getattr(request, 'empresa_id', None)
+    forcar = request.json.get("forcar", False) if request.is_json else False
+
+    result = tool_organizar_lotes(
+        edital_id=edital_id,
+        user_id=user_id,
+        empresa_id=empresa_id,
+        importar_pncp=True,
+        forcar=forcar
+    )
+
+    status_code = 200 if result.get("success") else 400
+    return jsonify(result), status_code
 
 
 @app.route("/api/editais/numero/<numero>/pdf", methods=["GET"])

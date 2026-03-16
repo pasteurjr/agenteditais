@@ -17,7 +17,10 @@ from models import (
     FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital,
-    ParametroScore, Empresa, SubclasseProduto
+    ParametroScore, Empresa, SubclasseProduto,
+    # FASE 1 Precificação
+    Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
+    EstrategiaEdital,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -1877,8 +1880,10 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     texto_completo = f"{titulo} {descricao}"
                     texto_norm = _sem_acento(texto_completo)
 
-                    # FILTRO 1: ALL-words match
-                    if palavras_termo and not all(p in texto_norm for p in palavras_termo):
+                    # FILTRO 1: ANY-words match (basta 1 palavra do termo aparecer)
+                    # A Search API do PNCP já faz busca por relevância; filtro local
+                    # só garante que ao menos 1 palavra-chave esteja no texto.
+                    if palavras_termo and not any(p in texto_norm for p in palavras_termo):
                         continue
 
                     # FILTRO 2: Janela de datas
@@ -7639,4 +7644,936 @@ def tool_atualizar_status_proposta(proposta_id: str, user_id: str, novo_status: 
 # Registrar novas tools Onda 2 no TOOLS_MAP
 TOOLS_MAP["calcular_scores_validacao"] = tool_calcular_scores_validacao
 TOOLS_MAP["atualizar_status_proposta"] = tool_atualizar_status_proposta
+
+
+# =============================================================================
+# FASE 1 — PRECIFICAÇÃO (UC-P01 a UC-P10)
+# =============================================================================
+
+import math
+
+
+# ─── Prompt para extração de lotes via IA ─────────────────────────────────────
+
+PROMPT_EXTRAIR_LOTES = """Analise o texto do edital de licitação abaixo e extraia a estrutura de LOTES e ITENS.
+
+REGRAS:
+1. Se o edital organiza itens em lotes (Lote 01, Lote 02...), identifique cada lote e quais itens (numero_item) pertencem a ele.
+2. Se o edital é "item a item" (sem agrupamento em lotes), crie um lote para cada item.
+3. Se todos os itens formam um lote único, retorne um único lote.
+4. Identifique o tipo de julgamento: "por_lote" (menor preço global do lote) ou "por_item" (menor preço por item).
+5. Para cada lote, tente identificar a especialidade (ex: "Hematologia", "Bioquímica", "Informática").
+
+Os itens do edital já importados do PNCP são:
+{itens_json}
+
+Responda EXCLUSIVAMENTE com JSON válido, sem texto adicional:
+{{
+  "tipo_julgamento": "por_lote" ou "por_item",
+  "lotes": [
+    {{
+      "numero_lote": 1,
+      "nome": "Lote 01 — Reagentes Hematologia",
+      "especialidade": "Hematologia",
+      "itens_numeros": [1, 2, 3, 4, 5, 6, 7]
+    }}
+  ]
+}}
+
+TEXTO DO EDITAL:
+{texto_edital}
+"""
+
+
+def _extrair_lotes_ia(texto_edital: str, itens_db: list) -> Dict[str, Any]:
+    """Usa IA para extrair estrutura de lotes do texto do edital."""
+    # Montar JSON dos itens para contexto
+    itens_info = []
+    for item in itens_db:
+        itens_info.append({
+            "numero_item": item.numero_item,
+            "descricao": (item.descricao or "")[:200],
+            "quantidade": float(item.quantidade or 0),
+            "valor_total": float(item.valor_total_estimado or 0),
+        })
+
+    # Limitar texto do edital para não estourar contexto
+    texto_limitado = texto_edital[:30000] if texto_edital else ""
+
+    prompt = PROMPT_EXTRAIR_LOTES.format(
+        itens_json=json.dumps(itens_info, ensure_ascii=False, indent=2),
+        texto_edital=texto_limitado
+    )
+
+    try:
+        messages = [{"role": "user", "content": prompt}]
+        resposta = call_deepseek(messages, max_tokens=2000, model_override="deepseek-chat")
+        # Limpar resposta — extrair JSON
+        texto_resp = resposta.strip()
+        # Remover markdown code blocks se presentes
+        if texto_resp.startswith("```"):
+            texto_resp = texto_resp.split("```")[1]
+            if texto_resp.startswith("json"):
+                texto_resp = texto_resp[4:]
+            texto_resp = texto_resp.strip()
+
+        resultado = json.loads(texto_resp)
+        return resultado
+    except json.JSONDecodeError as e:
+        print(f"[LOTES] Erro ao parsear resposta da IA: {e}")
+        print(f"[LOTES] Resposta: {resposta[:500] if resposta else 'vazia'}")
+        return None
+    except Exception as e:
+        print(f"[LOTES] Erro na chamada IA: {e}")
+        return None
+
+
+def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
+                         importar_pncp: bool = False, forcar: bool = False) -> Dict[str, Any]:
+    """UC-P01: Organiza itens do edital em lotes.
+    1. Importa itens do PNCP se necessário
+    2. Lê o texto do PDF do edital (EditalDocumento)
+    3. Usa IA para identificar lotes no texto
+    4. Cria Lote + LoteItem no banco
+    Se não há PDF ou a IA não consegue, cria lote único com todos os itens."""
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # 1. Importar itens do PNCP se não existem
+        itens_db = db.query(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+        if not itens_db and importar_pncp and edital.cnpj_orgao and edital.ano_compra and edital.seq_compra:
+            result_itens = tool_buscar_itens_edital_pncp(
+                edital_id=edital_id,
+                cnpj=edital.cnpj_orgao,
+                ano=edital.ano_compra,
+                seq=edital.seq_compra,
+                user_id=user_id
+            )
+            if not result_itens.get("success"):
+                return {"success": False, "error": f"Erro ao importar itens PNCP: {result_itens.get('error')}"}
+            itens_db = db.query(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+
+        if not itens_db:
+            return {"success": False, "error": "Nenhum item encontrado no edital. Importe itens do PNCP primeiro."}
+
+        # 2. Verificar se já existem lotes
+        lotes_existentes = db.query(Lote).filter(Lote.edital_id == edital_id, Lote.user_id == user_id).all()
+        if lotes_existentes and not forcar:
+            # Retornar lotes existentes com seus itens
+            lotes_resp = []
+            for l in lotes_existentes:
+                ld = l.to_dict()
+                lote_itens = db.query(LoteItem).filter(LoteItem.lote_id == l.id).order_by(LoteItem.ordem).all()
+                ld["itens"] = []
+                for li in lote_itens:
+                    ei = db.query(EditalItem).filter(EditalItem.id == li.edital_item_id).first()
+                    if ei:
+                        ld["itens"].append(ei.to_dict())
+                lotes_resp.append(ld)
+            return {
+                "success": True,
+                "mensagem": f"Edital já possui {len(lotes_existentes)} lote(s)",
+                "lotes": lotes_resp,
+                "total_itens": len(itens_db),
+            }
+
+        # Se forçar, deletar lotes existentes
+        if forcar and lotes_existentes:
+            for l in lotes_existentes:
+                db.query(LoteItem).filter(LoteItem.lote_id == l.id).delete()
+                db.delete(l)
+            db.flush()
+
+        # 3. Buscar texto do PDF do edital
+        from models import EditalDocumento
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.tipo == 'edital_principal'
+        ).first()
+
+        texto_edital = doc.texto_extraido if doc and doc.texto_extraido else None
+
+        # 4. Extrair lotes via IA (se tem texto do PDF)
+        lotes_ia = None
+        tipo_julgamento = "por_item"
+        if texto_edital and len(texto_edital) > 500:
+            print(f"[LOTES] Extraindo lotes via IA do edital {edital.numero} ({len(texto_edital)} chars)...")
+            lotes_ia = _extrair_lotes_ia(texto_edital, itens_db)
+            if lotes_ia:
+                tipo_julgamento = lotes_ia.get("tipo_julgamento", "por_item")
+                print(f"[LOTES] IA detectou: tipo={tipo_julgamento}, {len(lotes_ia.get('lotes', []))} lote(s)")
+        else:
+            print(f"[LOTES] Sem texto do PDF — criando lotes por item")
+
+        # Mapa numero_item → EditalItem
+        itens_por_numero = {i.numero_item: i for i in itens_db}
+
+        # 5. Criar lotes no banco
+        lotes_criados = []
+
+        if lotes_ia and lotes_ia.get("lotes"):
+            # Criar lotes conforme a IA detectou
+            itens_alocados = set()
+            for lote_info in lotes_ia["lotes"]:
+                num = lote_info.get("numero_lote", len(lotes_criados) + 1)
+                nome = lote_info.get("nome", f"Lote {num:02d}")
+                especialidade = lote_info.get("especialidade")
+                itens_numeros = lote_info.get("itens_numeros", [])
+
+                # Calcular valor estimado do lote
+                itens_do_lote = [itens_por_numero[n] for n in itens_numeros if n in itens_por_numero]
+                valor_est = sum(float(i.valor_total_estimado or 0) for i in itens_do_lote)
+
+                lote = Lote(
+                    edital_id=edital_id,
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    numero_lote=num,
+                    nome=nome,
+                    especialidade=especialidade,
+                    valor_estimado=valor_est,
+                    status='rascunho'
+                )
+                db.add(lote)
+                db.flush()
+
+                # Vincular itens ao lote
+                for ordem, item_num in enumerate(itens_numeros, 1):
+                    item = itens_por_numero.get(item_num)
+                    if item:
+                        li = LoteItem(lote_id=lote.id, edital_item_id=item.id, ordem=ordem)
+                        db.add(li)
+                        itens_alocados.add(item_num)
+
+                ld = lote.to_dict()
+                ld["itens"] = [i.to_dict() for i in itens_do_lote]
+                lotes_criados.append(ld)
+
+            # Itens não alocados pela IA → criar lote "Avulsos"
+            nao_alocados = [i for i in itens_db if i.numero_item not in itens_alocados]
+            if nao_alocados:
+                lote_avulso = Lote(
+                    edital_id=edital_id,
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    numero_lote=len(lotes_criados) + 1,
+                    nome=f"Lote {len(lotes_criados) + 1:02d} — Itens Avulsos",
+                    valor_estimado=sum(float(i.valor_total_estimado or 0) for i in nao_alocados),
+                    status='rascunho'
+                )
+                db.add(lote_avulso)
+                db.flush()
+                for ordem, item in enumerate(nao_alocados, 1):
+                    li = LoteItem(lote_id=lote_avulso.id, edital_item_id=item.id, ordem=ordem)
+                    db.add(li)
+                ld = lote_avulso.to_dict()
+                ld["itens"] = [i.to_dict() for i in nao_alocados]
+                lotes_criados.append(ld)
+        else:
+            # Fallback: sem IA ou sem texto — lote único com todos os itens
+            lote = Lote(
+                edital_id=edital_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+                numero_lote=1,
+                nome=f"Lote 01 — {edital.objeto[:60] if edital.objeto else 'Geral'}",
+                valor_estimado=sum(float(i.valor_total_estimado or 0) for i in itens_db),
+                status='rascunho'
+            )
+            db.add(lote)
+            db.flush()
+            for idx, item in enumerate(itens_db):
+                li = LoteItem(lote_id=lote.id, edital_item_id=item.id, ordem=idx + 1)
+                db.add(li)
+            ld = lote.to_dict()
+            ld["itens"] = [i.to_dict() for i in itens_db]
+            lotes_criados.append(ld)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "tipo_julgamento": tipo_julgamento,
+            "mensagem": f"{len(lotes_criados)} lote(s) criado(s) com {len(itens_db)} itens",
+            "lotes": lotes_criados,
+            "total_itens": len(itens_db),
+            "fonte": "ia" if lotes_ia else "fallback",
+        }
+
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = None,
+                           produto_id: str = None) -> Dict[str, Any]:
+    """UC-P02: Seleção inteligente de produto do portfolio para um item do edital.
+    Se produto_id fornecido, confirma a seleção. Senão, busca sugestões via IA."""
+    db = get_db()
+    try:
+        item = db.query(EditalItem).filter(EditalItem.id == edital_item_id).first()
+        if not item:
+            return {"success": False, "error": "Item do edital não encontrado"}
+
+        # Se produto_id fornecido, vincular diretamente
+        if produto_id:
+            produto = db.query(Produto).filter(Produto.id == produto_id, Produto.user_id == user_id).first()
+            if not produto:
+                return {"success": False, "error": "Produto não encontrado"}
+
+            # Verificar vínculo existente
+            vinculo = db.query(EditalItemProduto).filter(
+                EditalItemProduto.edital_item_id == edital_item_id,
+                EditalItemProduto.user_id == user_id
+            ).first()
+
+            if vinculo:
+                vinculo.produto_id = produto_id
+                vinculo.confirmado = True
+                vinculo.updated_at = datetime.now()
+            else:
+                vinculo = EditalItemProduto(
+                    edital_item_id=edital_item_id,
+                    produto_id=produto_id,
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    confirmado=True
+                )
+                db.add(vinculo)
+
+            db.commit()
+            return {
+                "success": True,
+                "mensagem": f"Produto '{produto.nome}' vinculado ao item {item.numero_item}",
+                "vinculo": vinculo.to_dict(),
+            }
+
+        # Buscar sugestões: produtos do portfolio que podem atender o item
+        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        if not produtos:
+            return {"success": False, "error": "Nenhum produto cadastrado no portfolio"}
+
+        # Matching simples por palavras-chave na descrição do item
+        desc_item = (item.descricao or "").lower()
+        sugestoes = []
+        for p in produtos:
+            score = 0
+            nome_p = (p.nome or "").lower()
+            desc_p = (p.descricao or "").lower()
+            fab_p = (p.fabricante or "").lower()
+            modelo_p = (p.modelo or "").lower()
+
+            # Score por palavras comuns
+            palavras_item = set(desc_item.split()) - STOPWORDS_PT
+            palavras_produto = set(nome_p.split()) | set(desc_p.split())
+            palavras_produto -= STOPWORDS_PT
+
+            if palavras_item and palavras_produto:
+                intersecao = palavras_item & palavras_produto
+                score = len(intersecao) / max(len(palavras_item), 1) * 100
+
+            # Bonus se fabricante ou modelo aparece na descrição do item
+            if fab_p and fab_p in desc_item:
+                score += 20
+            if modelo_p and modelo_p in desc_item:
+                score += 20
+
+            if score > 10:
+                sugestoes.append({
+                    "produto_id": p.id,
+                    "nome": p.nome,
+                    "fabricante": p.fabricante,
+                    "modelo": p.modelo,
+                    "ncm": p.ncm,
+                    "match_score": min(round(score, 1), 100),
+                    "preco_referencia": float(p.preco_referencia) if p.preco_referencia else None,
+                })
+
+        sugestoes.sort(key=lambda x: x["match_score"], reverse=True)
+
+        return {
+            "success": True,
+            "item": item.to_dict(),
+            "sugestoes": sugestoes[:10],
+            "total_produtos": len(produtos),
+            "mensagem": f"{len(sugestoes)} produto(s) encontrado(s) com match para o item",
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_calcular_volumetria(edital_item_produto_id: str, user_id: str,
+                              volume_edital: float = None,
+                              rendimento_produto: float = None,
+                              repeticoes_amostras: int = 0,
+                              repeticoes_calibradores: int = 0,
+                              repeticoes_controles: int = 0) -> Dict[str, Any]:
+    """UC-P03: Calcula volumetria técnica (kits necessários)."""
+    db = get_db()
+    try:
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.id == edital_item_produto_id,
+            EditalItemProduto.user_id == user_id
+        ).first()
+        if not vinculo:
+            return {"success": False, "error": "Vínculo item-produto não encontrado"}
+
+        # Usar valores fornecidos ou existentes
+        vol = volume_edital or float(vinculo.volume_edital or 0)
+        rend = rendimento_produto or float(vinculo.rendimento_produto or 0)
+        rep_a = repeticoes_amostras or vinculo.repeticoes_amostras or 0
+        rep_c = repeticoes_calibradores or vinculo.repeticoes_calibradores or 0
+        rep_ctrl = repeticoes_controles or vinculo.repeticoes_controles or 0
+
+        if rend <= 0:
+            return {"success": False, "error": "Rendimento do produto deve ser > 0"}
+
+        # Cálculo: Volume Real Ajustado = Volume + repetições
+        volume_ajustado = vol + rep_a + rep_c + rep_ctrl
+        quantidade_kits = math.ceil(volume_ajustado / rend)
+        formula = f"({vol} + {rep_a} + {rep_c} + {rep_ctrl}) / {rend} = {volume_ajustado/rend:.3f} → {quantidade_kits}"
+
+        # Atualizar no banco
+        vinculo.volume_edital = vol
+        vinculo.rendimento_produto = rend
+        vinculo.repeticoes_amostras = rep_a
+        vinculo.repeticoes_calibradores = rep_c
+        vinculo.repeticoes_controles = rep_ctrl
+        vinculo.volume_real_ajustado = volume_ajustado
+        vinculo.quantidade_kits = quantidade_kits
+        vinculo.formula_calculo = formula
+        vinculo.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Volumetria calculada: {quantidade_kits} kits necessários",
+            "volume_edital": vol,
+            "rendimento_produto": rend,
+            "repeticoes": {"amostras": rep_a, "calibradores": rep_c, "controles": rep_ctrl},
+            "volume_real_ajustado": volume_ajustado,
+            "quantidade_kits": quantidade_kits,
+            "formula": formula,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
+                            custo_unitario: float = None,
+                            custo_fonte: str = 'manual',
+                            icms: float = None, ipi: float = None,
+                            pis_cofins: float = None,
+                            empresa_id: str = None) -> Dict[str, Any]:
+    """UC-P04: Configura base de custos (Camada A) com inteligência tributária NCM."""
+    db = get_db()
+    try:
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.id == edital_item_produto_id,
+            EditalItemProduto.user_id == user_id
+        ).first()
+        if not vinculo:
+            return {"success": False, "error": "Vínculo item-produto não encontrado"}
+
+        produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first()
+        ncm = produto.ncm if produto else None
+
+        # Carregar parâmetros da empresa
+        params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
+        ncm_isencoes = (params.ncm_isencao_icms or ["3822"]) if params else ["3822"]
+
+        # Detectar isenção ICMS por NCM
+        isencao_icms = False
+        if ncm:
+            for prefixo in ncm_isencoes:
+                if ncm.replace(".", "").startswith(prefixo.replace(".", "")):
+                    isencao_icms = True
+                    break
+
+        # Usar valores fornecidos ou defaults da empresa
+        _icms = 0.0 if isencao_icms else (icms if icms is not None else float(params.icms_padrao or 18) if params else 18.0)
+        _ipi = ipi if ipi is not None else float(params.ipi_padrao or 0) if params else 0.0
+        _pis = pis_cofins if pis_cofins is not None else float(params.pis_cofins or 9.25) if params else 9.25
+        _custo = custo_unitario or float(produto.preco_referencia or 0) if produto else 0
+
+        # Custo base final = custo * (1 + impostos/100) — simplificado
+        custo_base_final = _custo  # Impostos são informacionais, não somam ao custo base
+
+        # Buscar ou criar PrecoCamada
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == edital_item_produto_id,
+            PrecoCamada.user_id == user_id
+        ).first()
+
+        if not camada:
+            camada = PrecoCamada(
+                edital_item_produto_id=edital_item_produto_id,
+                user_id=user_id,
+                empresa_id=empresa_id
+            )
+            db.add(camada)
+
+        camada.custo_unitario = _custo
+        camada.custo_fonte = custo_fonte
+        camada.ncm = ncm
+        camada.icms = _icms
+        camada.ipi = _ipi
+        camada.pis_cofins = _pis
+        camada.isencao_icms = isencao_icms
+        camada.custo_base_final = custo_base_final
+        camada.status = 'parcial'
+        camada.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Base de custos configurada: R$ {custo_base_final:.2f}" +
+                        (f" (ICMS isento — NCM {ncm})" if isencao_icms else ""),
+            "camada_id": camada.id,
+            "custo_unitario": _custo,
+            "ncm": ncm,
+            "isencao_icms": isencao_icms,
+            "icms": _icms,
+            "ipi": _ipi,
+            "pis_cofins": _pis,
+            "custo_base_final": custo_base_final,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_montar_preco_base(edital_item_produto_id: str, user_id: str,
+                            modo: str = 'manual',
+                            preco_base: float = None,
+                            markup_percentual: float = None,
+                            reutilizar: bool = False) -> Dict[str, Any]:
+    """UC-P05: Monta preço base (Camada B) — Manual, Markup sobre custo, ou Upload."""
+    db = get_db()
+    try:
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == edital_item_produto_id,
+            PrecoCamada.user_id == user_id
+        ).first()
+        if not camada:
+            return {"success": False, "error": "Configure a base de custos (Camada A) primeiro"}
+
+        custo = float(camada.custo_base_final or 0)
+
+        if modo == 'markup':
+            if markup_percentual is None:
+                return {"success": False, "error": "Informe o markup percentual"}
+            preco_calc = custo * (1 + markup_percentual / 100)
+            camada.modo_preco_base = 'markup'
+            camada.markup_percentual = markup_percentual
+            camada.preco_base = preco_calc
+        elif modo == 'manual':
+            if preco_base is None:
+                return {"success": False, "error": "Informe o preço base manualmente"}
+            camada.modo_preco_base = 'manual'
+            camada.preco_base = preco_base
+            if custo > 0:
+                camada.markup_percentual = ((preco_base - custo) / custo) * 100
+        elif modo == 'upload':
+            camada.modo_preco_base = 'upload'
+            if preco_base:
+                camada.preco_base = preco_base
+        else:
+            return {"success": False, "error": f"Modo inválido: {modo}"}
+
+        camada.reutilizar_preco_base = reutilizar
+        camada.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Preço base definido: R$ {float(camada.preco_base):.2f} (modo: {modo})",
+            "preco_base": float(camada.preco_base),
+            "custo_base": custo,
+            "markup_percentual": float(camada.markup_percentual) if camada.markup_percentual else None,
+            "reutilizar": reutilizar,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_definir_referencia(edital_item_produto_id: str, user_id: str,
+                             valor_referencia: float = None,
+                             percentual_sobre_base: float = None) -> Dict[str, Any]:
+    """UC-P06: Define valor de referência/target (Camada C)."""
+    db = get_db()
+    try:
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == edital_item_produto_id,
+            PrecoCamada.user_id == user_id
+        ).first()
+        if not camada:
+            return {"success": False, "error": "Configure preço base (Camada B) primeiro"}
+
+        custo = float(camada.custo_base_final or 0)
+        preco_base = float(camada.preco_base or 0)
+
+        # Tentar importar valor referência do edital
+        vinculo = db.query(EditalItemProduto).filter(EditalItemProduto.id == edital_item_produto_id).first()
+        if vinculo:
+            item = db.query(EditalItem).filter(EditalItem.id == vinculo.edital_item_id).first()
+            if item and item.valor_unitario_estimado and not valor_referencia:
+                valor_referencia = float(item.valor_unitario_estimado)
+                camada.valor_referencia_disponivel = True
+
+        if valor_referencia:
+            camada.valor_referencia_edital = valor_referencia
+            camada.target_referencia = valor_referencia
+            camada.valor_referencia_disponivel = True
+        elif percentual_sobre_base and preco_base > 0:
+            target = preco_base * (percentual_sobre_base / 100)
+            camada.percentual_sobre_base = percentual_sobre_base
+            camada.target_referencia = target
+            camada.valor_referencia_disponivel = False
+        else:
+            return {"success": False, "error": "Informe valor_referencia ou percentual_sobre_base"}
+
+        target = float(camada.target_referencia or 0)
+        if custo > 0:
+            camada.margem_sobre_custo = ((target - custo) / custo) * 100
+
+        camada.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Target definido: R$ {target:.2f}",
+            "comparativo": {
+                "custo_base_A": custo,
+                "preco_base_B": preco_base,
+                "target_C": target,
+            },
+            "margem_sobre_custo": float(camada.margem_sobre_custo) if camada.margem_sobre_custo else None,
+            "valor_referencia_disponivel": camada.valor_referencia_disponivel,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_estruturar_lances(edital_item_produto_id: str, user_id: str,
+                            lance_inicial: float = None,
+                            lance_minimo: float = None,
+                            modo_inicial: str = 'absoluto',
+                            modo_minimo: str = 'absoluto',
+                            desconto_maximo_pct: float = None) -> Dict[str, Any]:
+    """UC-P07: Estrutura lances — Camadas D (inicial) e E (mínimo) com validações."""
+    db = get_db()
+    try:
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == edital_item_produto_id,
+            PrecoCamada.user_id == user_id
+        ).first()
+        if not camada:
+            return {"success": False, "error": "Configure camadas A-C primeiro"}
+
+        custo = float(camada.custo_base_final or 0)
+        target = float(camada.target_referencia or camada.preco_base or 0)
+        warnings = []
+
+        # Camada D — Valor Inicial
+        if modo_inicial == 'absoluto' and lance_inicial:
+            camada.lance_inicial = lance_inicial
+        elif modo_inicial == 'percentual_referencia' and target > 0:
+            camada.lance_inicial = target  # Usar target como inicial
+        camada.modo_lance_inicial = modo_inicial
+
+        # Camada E — Valor Mínimo
+        if modo_minimo == 'absoluto' and lance_minimo:
+            camada.lance_minimo = lance_minimo
+        elif modo_minimo == 'percentual_desconto' and desconto_maximo_pct and target > 0:
+            lance_minimo = target * (1 - desconto_maximo_pct / 100)
+            camada.lance_minimo = lance_minimo
+            camada.desconto_maximo_percentual = desconto_maximo_pct
+        camada.modo_lance_minimo = modo_minimo
+
+        val_inicial = float(camada.lance_inicial or 0)
+        val_minimo = float(camada.lance_minimo or 0)
+
+        # Validações
+        if val_minimo > val_inicial and val_inicial > 0:
+            warnings.append("⚠️ Valor mínimo deve ser menor que o valor inicial")
+        if val_minimo < custo and custo > 0:
+            warnings.append("⚠️ Lance mínimo está abaixo do custo!")
+        if custo > 0:
+            camada.margem_minima = ((val_minimo - custo) / custo) * 100
+
+        camada.status = 'parcial' if warnings else 'completo'
+        camada.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Lances estruturados: Inicial R$ {val_inicial:.2f} → Mínimo R$ {val_minimo:.2f}",
+            "lance_inicial": val_inicial,
+            "lance_minimo": val_minimo,
+            "custo_base": custo,
+            "target": target,
+            "margem_minima": float(camada.margem_minima) if camada.margem_minima else None,
+            "faixa_disputa": f"R$ {val_minimo:.2f} — R$ {val_inicial:.2f}",
+            "warnings": warnings,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_estrategia_competitiva(edital_id: str, user_id: str,
+                                 perfil: str = 'quero_ganhar',
+                                 empresa_id: str = None) -> Dict[str, Any]:
+    """UC-P08: Define e simula estratégia competitiva."""
+    db = get_db()
+    try:
+        # Buscar ou criar estratégia
+        estrategia = db.query(EstrategiaEdital).filter(
+            EstrategiaEdital.edital_id == edital_id,
+            EstrategiaEdital.user_id == user_id
+        ).first()
+
+        if not estrategia:
+            estrategia = EstrategiaEdital(
+                edital_id=edital_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+            )
+            db.add(estrategia)
+
+        estrategia.perfil_competitivo = perfil
+        estrategia.updated_at = datetime.now()
+
+        # Buscar camadas do edital para simulação
+        vinculos = db.query(EditalItemProduto).filter(
+            EditalItemProduto.user_id == user_id
+        ).join(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+
+        cenarios = []
+        for v in vinculos:
+            camada = db.query(PrecoCamada).filter(
+                PrecoCamada.edital_item_produto_id == v.id
+            ).first()
+            if not camada:
+                continue
+
+            custo = float(camada.custo_base_final or 0)
+            target = float(camada.target_referencia or camada.preco_base or 0)
+            minimo = float(camada.lance_minimo or custo)
+
+            if perfil == 'quero_ganhar':
+                # 3 cenários agressivos
+                cenarios.append({
+                    "item": v.edital_item_id,
+                    "cenario_1": {"valor": target, "margem": ((target - custo) / custo * 100) if custo else 0, "label": "Target"},
+                    "cenario_2": {"valor": (target + minimo) / 2, "margem": (((target + minimo) / 2 - custo) / custo * 100) if custo else 0, "label": "Médio"},
+                    "cenario_3": {"valor": minimo * 1.05, "margem": ((minimo * 1.05 - custo) / custo * 100) if custo else 0, "label": "Agressivo"},
+                })
+            else:
+                # "não ganhei no mínimo" — reposicionar
+                cenarios.append({
+                    "item": v.edital_item_id,
+                    "cenario_1": {"valor": minimo, "margem": ((minimo - custo) / custo * 100) if custo else 0, "label": "Mínimo"},
+                    "cenario_2": {"valor": custo * 1.05, "margem": 5.0, "label": "Custo + 5%"},
+                    "cenario_3": {"valor": custo, "margem": 0.0, "label": "Break-even"},
+                })
+
+        estrategia.cenarios_simulados = cenarios
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Estratégia '{perfil}' simulada com {len(cenarios)} item(ns)",
+            "perfil": perfil,
+            "cenarios": cenarios,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str,
+                                    termo: str = None) -> Dict[str, Any]:
+    """UC-P09: Consulta histórico de preços e preenche Camada F."""
+    db = get_db()
+    try:
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.id == edital_item_produto_id,
+            EditalItemProduto.user_id == user_id
+        ).first()
+
+        produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first() if vinculo else None
+        termo_busca = termo or (produto.nome if produto else None)
+
+        if not termo_busca:
+            return {"success": False, "error": "Informe um termo de busca"}
+
+        # Buscar no PNCP
+        resultado_pncp = tool_buscar_precos_pncp(termo=termo_busca, meses=24, user_id=user_id)
+
+        # Buscar histórico interno
+        historico_db = db.query(PrecoHistorico).filter(
+            PrecoHistorico.user_id == user_id
+        ).order_by(PrecoHistorico.created_at.desc()).limit(50).all()
+
+        # Calcular estatísticas
+        precos = []
+        if resultado_pncp.get("success") and resultado_pncp.get("resultados"):
+            for r in resultado_pncp["resultados"]:
+                val = r.get("valor_unitario") or r.get("preco_unitario")
+                if val:
+                    precos.append(float(val))
+
+        for h in historico_db:
+            if h.valor_unitario:
+                precos.append(float(h.valor_unitario))
+
+        preco_medio = sum(precos) / len(precos) if precos else None
+        preco_min = min(precos) if precos else None
+        preco_max = max(precos) if precos else None
+
+        # Atualizar Camada F na PrecoCamada
+        if vinculo:
+            camada = db.query(PrecoCamada).filter(
+                PrecoCamada.edital_item_produto_id == edital_item_produto_id,
+                PrecoCamada.user_id == user_id
+            ).first()
+
+            if camada:
+                camada.preco_medio_historico = preco_medio
+                camada.preco_min_historico = preco_min
+                camada.preco_max_historico = preco_max
+                camada.qtd_registros_historico = len(precos)
+                camada.updated_at = datetime.now()
+                db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Histórico: {len(precos)} registros encontrados",
+            "termo": termo_busca,
+            "preco_medio": round(preco_medio, 2) if preco_medio else None,
+            "preco_min": round(preco_min, 2) if preco_min else None,
+            "preco_max": round(preco_max, 2) if preco_max else None,
+            "qtd_registros": len(precos),
+            "resultados_pncp": resultado_pncp.get("resultados", [])[:20],
+            "historico_interno": [h.to_dict() for h in historico_db[:20]] if historico_db else [],
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_gestao_comodato(edital_id: str, user_id: str,
+                          nome_equipamento: str = None,
+                          valor_equipamento: float = None,
+                          duracao_meses: int = None,
+                          custo_manutencao_mensal: float = None,
+                          custo_instalacao: float = None,
+                          condicoes_especiais: str = None,
+                          produto_equipamento_id: str = None,
+                          empresa_id: str = None,
+                          comodato_id: str = None) -> Dict[str, Any]:
+    """UC-P10: Gestão de comodato — cadastra/atualiza equipamento em comodato."""
+    db = get_db()
+    try:
+        if comodato_id:
+            comodato = db.query(Comodato).filter(
+                Comodato.id == comodato_id, Comodato.user_id == user_id
+            ).first()
+            if not comodato:
+                return {"success": False, "error": "Comodato não encontrado"}
+        else:
+            comodato = Comodato(
+                edital_id=edital_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+                nome_equipamento=nome_equipamento or "Equipamento",
+            )
+            db.add(comodato)
+
+        if nome_equipamento:
+            comodato.nome_equipamento = nome_equipamento
+        if valor_equipamento is not None:
+            comodato.valor_equipamento = valor_equipamento
+        if duracao_meses is not None:
+            comodato.duracao_meses = duracao_meses
+        if custo_manutencao_mensal is not None:
+            comodato.custo_manutencao_mensal = custo_manutencao_mensal
+        if custo_instalacao is not None:
+            comodato.custo_instalacao = custo_instalacao
+        if condicoes_especiais is not None:
+            comodato.condicoes_especiais = condicoes_especiais
+        if produto_equipamento_id:
+            comodato.produto_equipamento_id = produto_equipamento_id
+
+        # Calcular amortização
+        valor = float(comodato.valor_equipamento or 0)
+        meses = comodato.duracao_meses or 0
+        if valor > 0 and meses > 0:
+            comodato.valor_mensal_amortizacao = valor / meses
+
+        comodato.updated_at = datetime.now()
+        db.commit()
+
+        return {
+            "success": True,
+            "mensagem": f"Comodato '{comodato.nome_equipamento}' salvo",
+            "comodato": comodato.to_dict(),
+            "amortizacao_mensal": float(comodato.valor_mensal_amortizacao) if comodato.valor_mensal_amortizacao else None,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# Registrar tools FASE 1 no TOOLS_MAP
+TOOLS_MAP["organizar_lotes"] = tool_organizar_lotes
+TOOLS_MAP["selecao_portfolio"] = tool_selecao_portfolio
+TOOLS_MAP["calcular_volumetria"] = tool_calcular_volumetria
+TOOLS_MAP["configurar_custos"] = tool_configurar_custos
+TOOLS_MAP["montar_preco_base"] = tool_montar_preco_base
+TOOLS_MAP["definir_referencia"] = tool_definir_referencia
+TOOLS_MAP["estruturar_lances"] = tool_estruturar_lances
+TOOLS_MAP["estrategia_competitiva"] = tool_estrategia_competitiva
+TOOLS_MAP["historico_precos_camada_f"] = tool_historico_precos_camada_f
+TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
 

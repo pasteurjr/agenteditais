@@ -630,7 +630,24 @@ export function CaptacaoPage(props?: PageProps) {
 
       const editais = (data.editais ?? []).map(e => normalizarEditalDaBusca(e, estadosAtuacao));
 
-      // Filtros aplicados server-side via query params (modalidade, tipoProduto, origem)
+      // Cruzar com editais já salvos para indicar "Já salvo"
+      try {
+        const resSalvos = await fetch("/api/editais/salvos?per_page=500", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (resSalvos.ok) {
+          const dataSalvos = await resSalvos.json();
+          const salvos = (dataSalvos.editais || []) as Record<string, unknown>[];
+          for (const ed of editais) {
+            const match = salvos.find((s) =>
+              String(s.numero) === ed.numero && String(s.orgao) === ed.orgao
+            );
+            if (match) {
+              ed.editalSalvoId = String(match.id);
+            }
+          }
+        }
+      } catch { /* silencioso */ }
 
       setResultados(editais);
     } catch (e) {
@@ -715,18 +732,19 @@ export function CaptacaoPage(props?: PageProps) {
   };
 
   const handleSalvarTodos = async () => {
-    for (const edital of resultados) {
+    const naoSalvos = resultados.filter(e => !e.editalSalvoId);
+    for (const edital of naoSalvos) {
       await salvarEditalNoBanco(edital);
     }
-    alert(`${resultados.length} edital(is) salvo(s)`);
+    alert(naoSalvos.length > 0 ? `${naoSalvos.length} edital(is) salvo(s)` : "Todos os editais ja estao salvos");
   };
 
   const handleSalvarRecomendados = async () => {
-    const recomendados = resultados.filter(e => e.score >= 70);
+    const recomendados = resultados.filter(e => e.score >= 70 && !e.editalSalvoId);
     for (const edital of recomendados) {
       await salvarEditalNoBanco(edital);
     }
-    alert(`${recomendados.length} edital(is) recomendado(s) salvo(s)`);
+    alert(recomendados.length > 0 ? `${recomendados.length} edital(is) recomendado(s) salvo(s)` : "Todos os recomendados ja estao salvos");
   };
 
   // T15: Persistir intenção estratégica e margem
@@ -913,8 +931,17 @@ export function CaptacaoPage(props?: PageProps) {
     {
       key: "selected",
       header: "",
-      width: "40px",
-      render: (e) => (
+      width: "70px",
+      render: (e) => e.editalSalvoId ? (
+        <span title="Edital ja salvo" style={{
+          display: "inline-flex", alignItems: "center", gap: "3px",
+          backgroundColor: "#052e16", color: "#22c55e", border: "1px solid #16a34a",
+          borderRadius: "4px", padding: "2px 6px", fontSize: "10px", fontWeight: 700,
+          whiteSpace: "nowrap",
+        }}>
+          <CheckCircle size={12} /> SALVO
+        </span>
+      ) : (
         <input
           type="checkbox"
           checked={e.selected || false}
@@ -1069,7 +1096,11 @@ export function CaptacaoPage(props?: PageProps) {
       render: (e) => (
         <div className="table-actions">
           <button title="Ver detalhes" onClick={() => handleAbrirPainel(e)}><Eye size={16} /></button>
-          <button title="Salvar edital" onClick={() => handleSalvarEdital(e)}><Save size={16} /></button>
+          {e.editalSalvoId ? (
+            <button title="Ja salvo" disabled style={{ color: "#22c55e", opacity: 0.7, cursor: "default" }}><CheckCircle size={16} /></button>
+          ) : (
+            <button title="Salvar edital" onClick={() => handleSalvarEdital(e)}><Save size={16} /></button>
+          )}
         </div>
       ),
     },
@@ -1351,11 +1382,11 @@ export function CaptacaoPage(props?: PageProps) {
                     <ActionButton
                       label="Salvar Selecionados"
                       onClick={async () => {
-                        const selecionados = resultados.filter(e => e.selected);
+                        const selecionados = resultados.filter(e => e.selected && !e.editalSalvoId);
                         for (const edital of selecionados) {
                           await salvarEditalNoBanco(edital);
                         }
-                        alert(`${selecionados.length} edital(is) salvo(s)`);
+                        alert(selecionados.length > 0 ? `${selecionados.length} edital(is) salvo(s)` : "Todos os selecionados ja estao salvos");
                       }}
                       variant="primary"
                     />
@@ -1451,10 +1482,12 @@ export function CaptacaoPage(props?: PageProps) {
                     </div>
                   </div>
 
-                  {/* Score principal */}
+                  {/* Score principal — só mostra se busca usou score */}
+                  {tipoScore !== "nenhum" && (
                   <div className="panel-score-section">
                     <ScoreCircle score={painelEdital.scoreProfundo ? painelEdital.scoreProfundo.score_geral : painelEdital.score} size={100} label="Score Geral" />
                   </div>
+                  )}
 
                   {painelEdital.scoreProfundo ? (
                     /* 6 sub-scores do score profundo */
@@ -1515,7 +1548,7 @@ export function CaptacaoPage(props?: PageProps) {
                         </div>
                       )}
                     </div>
-                  ) : (
+                  ) : tipoScore !== "nenhum" ? (
                     /* 3 sub-scores: Técnico e Comercial em gauge circular, Recomendação em estrelas */
                     <div className="panel-subscores" style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
                       <div style={{ textAlign: "center" }}>
@@ -1531,7 +1564,7 @@ export function CaptacaoPage(props?: PageProps) {
                         <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Recomendacao</div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Produto correspondente */}
                   <div className="panel-section">
@@ -1801,9 +1834,10 @@ export function CaptacaoPage(props?: PageProps) {
                       loading={salvandoEstrategia}
                     />
                     <ActionButton
-                      icon={<Save size={14} />}
-                      label="Salvar Edital"
+                      icon={painelEdital.editalSalvoId ? <CheckCircle size={14} /> : <Save size={14} />}
+                      label={painelEdital.editalSalvoId ? "Ja Salvo" : "Salvar Edital"}
                       onClick={() => handleSalvarEdital(painelEdital)}
+                      disabled={!!painelEdital.editalSalvoId}
                     />
                     <ActionButton
                       icon={<ExternalLink size={14} />}

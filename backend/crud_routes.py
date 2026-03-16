@@ -22,7 +22,9 @@ from models import (
     ParametroScore, Dispensa, EstrategiaEdital, ClasseProduto,
     AreaProduto, ClasseProdutoV2, SubclasseProduto,
     ModalidadeLicitacao, OrigemOrgao,
-    CategoriaDocumento, DocumentoNecessario
+    CategoriaDocumento, DocumentoNecessario,
+    # FASE 1 Precificação
+    Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -439,6 +441,60 @@ CRUD_TABLES = {
         "search_fields": ["nome", "tipo_chave", "base_legal"],
         "label": "Documento Necessário",
         "required": ["nome", "tipo_chave"],
+    },
+    # === FASE 1 — Precificação ===
+    "lotes": {
+        "model": Lote,
+        "user_scoped": True,
+        "empresa_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["nome", "especialidade"],
+        "label": "Lote",
+        "required": ["edital_id", "numero_lote"],
+    },
+    "lote-itens": {
+        "model": LoteItem,
+        "user_scoped": False,
+        "parent_fk": "lote_id",
+        "parent_model": Lote,
+        "search_fields": [],
+        "label": "Item do Lote",
+        "required": ["lote_id", "edital_item_id"],
+    },
+    "edital-item-produto": {
+        "model": EditalItemProduto,
+        "user_scoped": True,
+        "empresa_scoped": True,
+        "search_fields": [],
+        "label": "Vínculo Item-Produto",
+        "required": ["edital_item_id", "produto_id"],
+    },
+    "preco-camadas": {
+        "model": PrecoCamada,
+        "user_scoped": True,
+        "empresa_scoped": True,
+        "search_fields": [],
+        "label": "Camada de Preço",
+        "required": ["edital_item_produto_id"],
+    },
+    "lances": {
+        "model": Lance,
+        "user_scoped": True,
+        "empresa_scoped": True,
+        "search_fields": ["observacao"],
+        "label": "Lance",
+        "required": ["edital_item_produto_id", "valor_lance"],
+    },
+    "comodatos": {
+        "model": Comodato,
+        "user_scoped": True,
+        "empresa_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["nome_equipamento"],
+        "label": "Comodato",
+        "required": ["edital_id", "nome_equipamento"],
     },
 }
 

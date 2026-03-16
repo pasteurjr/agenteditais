@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import {
   ClipboardCheck, Eye, Download, MessageSquare, FileText, CheckCircle, XCircle, Clock,
   AlertTriangle, Shield, TrendingUp, Target, ThumbsUp, X, Sparkles, Building,
-  AlertCircle, Scale, FolderOpen, Search, RefreshCw
+  AlertCircle, Scale, FolderOpen, Search, RefreshCw, Layers
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, TextArea,
@@ -99,6 +99,16 @@ interface EditalItemData {
   valor_unitario_estimado: number;
   valor_total_estimado: number;
   tipo_beneficio?: string;
+}
+
+interface LoteData {
+  id: string;
+  numero_lote: number;
+  nome: string;
+  especialidade?: string;
+  valor_estimado?: number;
+  status: string;
+  itens: EditalItemData[];
 }
 
 // Sem dados mock — tabela alimentada 100% pelo backend (T18)
@@ -266,6 +276,11 @@ export function ValidacaoPage(props?: PageProps) {
   const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
   const [itensLoading, setItensLoading] = useState(false);
 
+  // Lotes do edital
+  const [lotesEdital, setLotesEdital] = useState<LoteData[]>([]);
+  const [lotesLoading, setLotesLoading] = useState(false);
+  const [lotesExtraindo, setLotesExtraindo] = useState(false);
+
   // PdfViewer modal
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
 
@@ -317,14 +332,60 @@ export function ValidacaoPage(props?: PageProps) {
   useEffect(() => {
     if (!selectedEdital) {
       setItensEdital([]);
+      setLotesEdital([]);
       return;
     }
     setItensLoading(true);
-    crudList("editais-itens", { edital_id: selectedEdital.id, per_page: 200 })
+    crudList("editais-itens", { parent_id: selectedEdital.id, limit: 200 })
       .then(res => setItensEdital((res.items || []) as EditalItemData[]))
       .catch(() => setItensEdital([]))
       .finally(() => setItensLoading(false));
+
+    // Carregar lotes
+    setLotesLoading(true);
+    (async () => {
+      try {
+        const token = localStorage.getItem("editais_ia_access_token") || "";
+        const res = await fetch(`/api/editais/${selectedEdital.id}/lotes`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLotesEdital(data.lotes || []);
+        } else {
+          setLotesEdital([]);
+        }
+      } catch {
+        setLotesEdital([]);
+      } finally {
+        setLotesLoading(false);
+      }
+    })();
   }, [selectedEdital?.id]);
+
+  // Extrair lotes via IA
+  const handleExtrairLotes = async (forcar = false) => {
+    if (!selectedEdital) return;
+    setLotesExtraindo(true);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token") || "";
+      const res = await fetch(`/api/editais/${selectedEdital.id}/lotes/extrair`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ forcar }),
+      });
+      const data = await res.json();
+      if (data.success && data.lotes) {
+        setLotesEdital(data.lotes);
+      } else {
+        alert(data.error || "Erro ao extrair lotes");
+      }
+    } catch (err) {
+      alert("Erro ao extrair lotes: " + (err instanceof Error ? err.message : "desconhecido"));
+    } finally {
+      setLotesExtraindo(false);
+    }
+  };
 
   // V1: Carregar documentação necessária quando edital é selecionado
   useEffect(() => {
@@ -891,9 +952,10 @@ export function ValidacaoPage(props?: PageProps) {
   );
 
   // Aba 2: Documentos (Itens + Documentação Necessária + Checklist Documental + botão IA)
-  const renderAbaDocumentos = (edital: Edital) => (
+  // Aba Lotes: Itens do edital + Lotes extraídos via IA
+  const renderAbaLotes = (edital: Edital) => (
     <div className="aba-content">
-      {/* Itens/Lotes do Edital */}
+      {/* Itens do Edital */}
       <div className="section-block">
         <h4><FileText size={16} /> Itens do Edital ({itensEdital.length})</h4>
         {itensLoading ? (
@@ -926,6 +988,101 @@ export function ValidacaoPage(props?: PageProps) {
         )}
       </div>
 
+      {/* Lotes do Edital */}
+      <div className="section-block">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+          <h4 style={{ margin: 0 }}><Target size={16} /> Lotes ({lotesEdital.length})</h4>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {lotesEdital.length === 0 && itensEdital.length > 0 && (
+              <ActionButton
+                icon={lotesExtraindo ? <RefreshCw size={14} className="spin" /> : <Sparkles size={14} />}
+                label={lotesExtraindo ? "Extraindo..." : "Extrair Lotes via IA"}
+                variant="primary"
+                onClick={() => handleExtrairLotes(false)}
+                disabled={lotesExtraindo}
+              />
+            )}
+            {lotesEdital.length > 0 && (
+              <ActionButton
+                icon={lotesExtraindo ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
+                label={lotesExtraindo ? "Reprocessando..." : "Reprocessar"}
+                variant="neutral"
+                onClick={() => handleExtrairLotes(true)}
+                disabled={lotesExtraindo}
+              />
+            )}
+          </div>
+        </div>
+
+        {lotesLoading ? (
+          <p className="empty-message">Carregando lotes...</p>
+        ) : lotesEdital.length === 0 ? (
+          <div style={{ padding: "16px", textAlign: "center" }}>
+            <p style={{ color: "#94a3b8", fontSize: "14px" }}>
+              {itensEdital.length === 0
+                ? "Importe os itens do PNCP primeiro."
+                : "Nenhum lote definido. Clique em \"Extrair Lotes via IA\" para analisar o PDF do edital."}
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            {lotesEdital.map(lote => (
+              <div key={lote.id} style={{
+                border: "1px solid #334155", borderRadius: "8px", padding: "12px",
+                backgroundColor: "#0f172a",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0" }}>
+                      Lote {String(lote.numero_lote).padStart(2, "0")}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>— {lote.nome}</span>
+                    {lote.especialidade && (
+                      <span style={{
+                        fontSize: "11px", padding: "2px 8px", borderRadius: "4px",
+                        backgroundColor: "rgba(59,130,246,0.15)", color: "#60a5fa",
+                      }}>
+                        {lote.especialidade}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>
+                      {lote.itens.length} {lote.itens.length === 1 ? "item" : "itens"}
+                    </span>
+                    {lote.valor_estimado && (
+                      <span style={{ fontSize: "13px", color: "#22c55e", fontWeight: 500 }}>
+                        {formatCurrency(lote.valor_estimado)}
+                      </span>
+                    )}
+                    <StatusBadge status={lote.status === "rascunho" ? "warning" : lote.status === "configurado" ? "info" : "success"} label={lote.status} />
+                  </div>
+                </div>
+
+                {/* Tabela de itens do lote */}
+                <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                  <DataTable
+                    columns={[
+                      { key: "numero_item", header: "#", width: "50px" },
+                      { key: "descricao", header: "Descricao" },
+                      { key: "quantidade", header: "Qtd", width: "70px" },
+                      { key: "unidade_medida", header: "Unid", width: "80px" },
+                      { key: "valor_total_estimado", header: "Vlr Total", width: "100px", render: (item) => formatCurrency(Number(item.valor_total_estimado) || 0) },
+                    ]}
+                    data={lote.itens}
+                    emptyMessage="Sem itens"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderAbaDocumentos = (edital: Edital) => (
+    <div className="aba-content">
       {/* Documentação Necessária — 3 pastas (empresa/fiscal/técnica) */}
       <div className="section-block">
         <h4><FolderOpen size={16} /> Documentacao Necessaria</h4>
@@ -1416,6 +1573,7 @@ export function ValidacaoPage(props?: PageProps) {
 
   const analysisTabs = [
     { id: "aderencia", label: "Aderencia", icon: <Target size={16} /> },
+    { id: "lotes", label: `Lotes (${lotesEdital.length})`, icon: <Layers size={16} /> },
     { id: "documentos", label: "Documentos", icon: <FolderOpen size={16} /> },
     { id: "riscos", label: "Riscos", icon: <AlertTriangle size={16} /> },
     { id: "mercado", label: "Mercado", icon: <Building size={16} /> },
@@ -1655,6 +1813,7 @@ export function ValidacaoPage(props?: PageProps) {
                 {(activeTab) => {
                   switch (activeTab) {
                     case "aderencia": return renderAbaAderencia(selectedEdital);
+                    case "lotes": return renderAbaLotes(selectedEdital);
                     case "documentos": return renderAbaDocumentos(selectedEdital);
                     case "riscos": return renderAbaRiscos(selectedEdital);
                     case "mercado": return renderAbaMercado(selectedEdital);
