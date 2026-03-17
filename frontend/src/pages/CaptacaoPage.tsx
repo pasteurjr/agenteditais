@@ -955,6 +955,273 @@ export function CaptacaoPage(props?: PageProps) {
     ));
   };
 
+  // Relatório Completo em Markdown — abre em nova aba com HTML renderizado
+  const handleRelatorioCompleto = () => {
+    if (!filteredResultados.length) return;
+    const now = new Date();
+    const dataHora = now.toLocaleString("pt-BR");
+    const fmtVal = (v: number) => v ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "—";
+    const esc = (s: string) => (s || "—").replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const prazoLabel = (e: EditalBusca) => {
+      if (e.status === "encerrado") return "Encerrado";
+      if (e.diasRestantes <= 2) return `🔴 ${e.diasRestantes}d`;
+      if (e.diasRestantes <= 5) return `🟡 ${e.diasRestantes}d`;
+      return `${e.diasRestantes}d`;
+    };
+
+    let md = `# Relatório Completo de Busca de Editais\n\n`;
+    md += `**Data/Hora:** ${dataHora}  \n`;
+    md += `**Termo de busca:** ${termo || "—"}  \n`;
+    md += `**Fonte:** ${fonte || "—"}  \n`;
+    md += `**Modo Score:** ${tipoScore}  \n`;
+    md += `**Total de resultados:** ${filteredResultados.length}  \n\n`;
+    md += `---\n\n`;
+
+    // Tabela resumo
+    md += `## Tabela Resumo\n\n`;
+    md += `| # | Fonte | Numero | Orgao | UF | Modalidade | Valor | Produto | Prazo | Score |\n`;
+    md += `|---|---|---|---|---|---|---|---|---|---|\n`;
+    filteredResultados.forEach((e, i) => {
+      const fonte = (e.fonte || "—").includes("PNCP") ? "PNCP" : (e.fonte || "—");
+      md += `| ${i + 1} | ${fonte} | ${esc(e.numero)} | ${esc(e.orgao.length > 40 ? e.orgao.substring(0, 40) + "..." : e.orgao)} | ${e.uf} | ${esc(e.modalidade || "—")} | ${fmtVal(e.valor)} | ${esc(e.produtoCorrespondente || "Nenhum")} | ${prazoLabel(e)} | **${e.score}/100** |\n`;
+    });
+    md += `\n---\n\n`;
+
+    // Detalhe de cada edital
+    md += `## Detalhes por Edital\n\n`;
+    filteredResultados.forEach((e, i) => {
+      md += `### ${i + 1}. ${e.numero} — ${e.orgao}\n\n`;
+
+      // Dados do edital (replica o painel)
+      md += `| Campo | Valor |\n`;
+      md += `|---|---|\n`;
+      md += `| **Numero** | ${esc(e.numero)} |\n`;
+      md += `| **Orgao** | ${esc(e.orgao)} |\n`;
+      md += `| **UF** | ${e.uf} |\n`;
+      md += `| **Modalidade** | ${esc(e.modalidade || "—")} |\n`;
+      md += `| **Fonte** | ${esc(e.fonte || "—")} |\n`;
+      md += `| **Valor** | ${fmtVal(e.valor)} |\n`;
+      md += `| **Abertura** | ${e.dataAbertura || "—"} |\n`;
+      md += `| **Status** | ${e.status === "aberto" ? `🟢 Aberto (${e.diasRestantes}d)` : "⚫ Encerrado"} |\n`;
+      md += `| **Produto Correspondente** | ${esc(e.produtoCorrespondente || "Nenhum")} |\n`;
+      md += `| **Potencial de Ganho** | ${e.potencialGanho.charAt(0).toUpperCase() + e.potencialGanho.slice(1)} |\n`;
+      md += `\n`;
+
+      // Objeto completo
+      md += `**Objeto:**\n> ${esc(e.objeto)}\n\n`;
+
+      // Justificativa IA
+      if (e.justificativa) {
+        md += `**Justificativa IA:**\n> ${esc(e.justificativa)}\n\n`;
+      }
+
+      // Recomendação
+      if (e.recomendacaoTexto && e.recomendacaoTexto !== "0" && e.recomendacaoTexto !== "NaN") {
+        const emoji = e.recomendacaoTexto === "PARTICIPAR" ? "🟢" : e.recomendacaoTexto === "AVALIAR" ? "🟡" : "🔴";
+        md += `**Recomendação:** ${emoji} ${e.recomendacaoTexto}\n\n`;
+      }
+
+      // Score
+      if (tipoScore !== "nenhum") {
+        md += `**Score Geral: ${e.score}/100**\n\n`;
+
+        if (e.scoreProfundo) {
+          // 6 dimensões
+          const s = e.scoreProfundo.scores;
+          const icon = (v: number) => v >= 70 ? "🟢" : v >= 40 ? "🟡" : "🔴";
+          md += `#### 6 Dimensões de Score\n\n`;
+          md += `| Dimensão | Score | Status |\n`;
+          md += `|---|---|---|\n`;
+          md += `| Técnico | ${s.tecnico}% | ${icon(s.tecnico)} |\n`;
+          md += `| Documental | ${s.documental}% | ${icon(s.documental)} |\n`;
+          md += `| Complexidade | ${s.complexidade}% | ${icon(s.complexidade)} |\n`;
+          md += `| Jurídico | ${s.juridico}% | ${icon(s.juridico)} |\n`;
+          md += `| Logístico | ${s.logistico}% | ${icon(s.logistico)} |\n`;
+          md += `| Comercial | ${s.comercial}% | ${icon(s.comercial)} |\n`;
+          md += `\n`;
+
+          // Decisão
+          const dEmoji = e.scoreProfundo.decisao === "GO" ? "🟢" : e.scoreProfundo.decisao === "NO-GO" ? "🔴" : "🟡";
+          md += `**Decisão: ${dEmoji} ${e.scoreProfundo.decisao}**\n`;
+          if (e.scoreProfundo.justificativa) {
+            md += `> ${esc(e.scoreProfundo.justificativa)}\n`;
+          }
+          md += `\n`;
+
+          // Pontos positivos
+          if (e.scoreProfundo.pontos_positivos.length > 0) {
+            md += `**Pontos Positivos:**\n`;
+            e.scoreProfundo.pontos_positivos.forEach(p => { md += `- ✅ ${esc(p)}\n`; });
+            md += `\n`;
+          }
+
+          // Pontos de atenção
+          if (e.scoreProfundo.pontos_atencao.length > 0) {
+            md += `**Pontos de Atenção:**\n`;
+            e.scoreProfundo.pontos_atencao.forEach(p => { md += `- ⚠️ ${esc(p)}\n`; });
+            md += `\n`;
+          }
+        } else {
+          // Score rápido
+          md += `| Métrica | Valor |\n`;
+          md += `|---|---|\n`;
+          md += `| Aderência Técnica | ${e.scores.tecnico}/100 |\n`;
+          md += `| Aderência Comercial | ${e.scores.comercial}/100 |\n`;
+          md += `\n`;
+        }
+      }
+
+      // Itens do edital
+      if (e.itens && e.itens.length > 0) {
+        md += `#### Itens do Edital (${e.itens.length})\n\n`;
+        md += `| # | Descrição | Qtd | Valor Total |\n`;
+        md += `|---|---|---|---|\n`;
+        e.itens.forEach((item, idx) => {
+          md += `| ${item.numero_item ?? idx + 1} | ${esc(item.descricao || "—")} | ${item.quantidade ?? "—"} | ${item.valor_total_estimado ? fmtVal(item.valor_total_estimado) : "—"} |\n`;
+        });
+        md += `\n`;
+      }
+
+      // Gaps
+      if (e.gaps && e.gaps.length > 0) {
+        md += `#### Análise de Gaps\n\n`;
+        e.gaps.forEach(g => {
+          const gIcon = g.tipo === "atendido" ? "🟢" : g.tipo === "parcial" ? "🟡" : "🔴";
+          md += `- ${gIcon} **${g.tipo.replace("_", " ")}**: ${esc(g.item)}\n`;
+        });
+        md += `\n`;
+      }
+
+      md += `---\n\n`;
+    });
+
+    // Renderizar MD como HTML e abrir em nova aba
+    // Converter markdown para HTML simples
+    let html = md
+      // Headers
+      .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Blockquotes
+      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+      // Unordered lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      // HR
+      .replace(/^---$/gm, '<hr/>')
+      // Line breaks
+      .replace(/  \n/g, '<br/>')
+      // Tables
+      .replace(/\n\n/g, '\n</p><p>\n');
+
+    // Parse tables properly
+    const tableRegex = /(\|.+\|\n)+/g;
+    html = md.replace(tableRegex, (tableBlock) => {
+      const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+      if (rows.length < 2) return tableBlock;
+      let t = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#334155;margin:8px 0;width:100%;font-size:13px;">\n';
+      rows.forEach((row, ri) => {
+        if (ri === 1 && row.match(/^\|[\s-|]+\|$/)) return; // skip separator
+        const cells = row.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => c.trim());
+        const tag = ri === 0 ? 'th' : 'td';
+        const bg = ri === 0 ? ' style="background:#1e293b;color:#94a3b8;text-align:left;"' : '';
+        t += '<tr>' + cells.map(c => `<${tag}${bg}>${c}</${tag}>`).join('') + '</tr>\n';
+      });
+      t += '</table>\n';
+      return t;
+    });
+
+    // Now convert remaining markdown
+    html = html
+      .replace(/^#### (.+)$/gm, '<h4 style="color:#60a5fa;margin:16px 0 8px;">$1</h4>')
+      .replace(/^### (.+)$/gm, '<h3 style="color:#818cf8;margin:24px 0 12px;padding-bottom:6px;border-bottom:1px solid #334155;">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 style="color:#a78bfa;margin:32px 0 16px;">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 style="color:#e2e8f0;margin:0 0 24px;">$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #475569;padding:4px 12px;margin:4px 0;color:#94a3b8;font-style:italic;">$1</blockquote>')
+      .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 16px;">$1</div>')
+      .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;"/>')
+      .replace(/  \n/g, '<br/>');
+
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Relatório Completo — ${dataHora}</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 64px 24px 32px;
+      line-height: 1.6;
+    }
+    table { font-size: 13px; }
+    th { font-weight: 600; }
+    td, th { padding: 6px 10px; border: 1px solid #334155; }
+    tr:nth-child(even) { background: #1e293b; }
+    blockquote { border-left: 3px solid #475569; padding: 4px 12px; margin: 4px 0; color: #94a3b8; font-style: italic; }
+    h1 { color: #e2e8f0; font-size: 24px; margin-bottom: 24px; }
+    h2 { color: #a78bfa; font-size: 20px; margin: 32px 0 16px; }
+    h3 { color: #818cf8; font-size: 16px; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #334155; }
+    h4 { color: #60a5fa; font-size: 14px; margin: 16px 0 8px; }
+    hr { border: none; border-top: 1px solid #334155; margin: 24px 0; }
+    strong { color: #f1f5f9; }
+    @media print {
+      body { background: white; color: #1e293b; padding-top: 0; }
+      h1, h2, h3, h4, strong { color: #1e293b; }
+      td, th { border-color: #cbd5e1; }
+      tr:nth-child(even) { background: #f1f5f9; }
+      blockquote { color: #64748b; border-color: #94a3b8; }
+      .toolbar-relatorio { display: none !important; }
+    }
+    .toolbar-relatorio {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: #1e293b; border-bottom: 2px solid #334155;
+      padding: 10px 24px; display: flex; gap: 12px; align-items: center;
+    }
+    .toolbar-relatorio button {
+      padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer;
+      font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+    }
+    .btn-md { background: #3b82f6; color: white; }
+    .btn-md:hover { background: #2563eb; }
+    .btn-pdf { background: #8b5cf6; color: white; }
+    .btn-pdf:hover { background: #7c3aed; }
+    .toolbar-relatorio span { color: #94a3b8; font-size: 13px; margin-left: auto; }
+  </style>
+</head>
+<body>
+<div class="toolbar-relatorio">
+  <button class="btn-md" onclick="baixarMD()">&#x1F4E5; Baixar MD</button>
+  <button class="btn-pdf" onclick="window.print()">&#x1F4C4; Baixar PDF</button>
+  <span>Relatório gerado em ${dataHora}</span>
+</div>
+${html}
+<script>
+var mdContent = ${JSON.stringify(md)};
+function baixarMD() {
+  var blob = new Blob(['\\uFEFF' + mdContent], { type: 'text/markdown;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'relatorio_editais_${now.toISOString().slice(0, 10)}.md';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+  };
+
   // C1: Exportar CSV
   const handleExportarCSV = () => {
     if (!resultados.length) return;
@@ -1455,6 +1722,7 @@ export function CaptacaoPage(props?: PageProps) {
                 icon={<FileText size={18} />}
                 actions={
                   <div className="card-actions">
+                    <ActionButton icon={<FileText size={14} />} label="Relatório Completo" onClick={handleRelatorioCompleto} />
                     <ActionButton icon={<Save size={14} />} label="Salvar Todos" onClick={handleSalvarTodos} />
                     <ActionButton icon={<Save size={14} />} label="Salvar Score >= 70%" onClick={handleSalvarRecomendados} />
                     <ActionButton icon={<Download size={14} />} label="Exportar CSV" onClick={handleExportarCSV} />
