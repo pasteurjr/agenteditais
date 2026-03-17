@@ -204,7 +204,13 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     scoreComercial = calcularScoreComercial(String(e.uf ?? ""), estadosAtuacao);
   }
 
-  const scoreGeral = Math.round((scoreTecnico + scoreComercial) / 2);
+  // Se score profundo existe, usar ele; senao, media rapida
+  const scoreProfundoGeral = e.score_profundo
+    ? Number((e.score_profundo as Record<string, unknown>).score_geral ?? 0)
+    : 0;
+  const scoreGeral = scoreProfundoGeral > 0
+    ? Math.round(scoreProfundoGeral)
+    : Math.round((scoreTecnico + scoreComercial) / 2);
 
   // Extrair produto correspondente da lista de produtos aderentes
   const produtos = e.produtos_aderentes as (string | { produto_nome?: string; aderencia?: number })[] | undefined;
@@ -878,15 +884,65 @@ export function CaptacaoPage(props?: PageProps) {
     }
   };
 
+  // Score profundo sob demanda: salva edital temp no backend e calcula
+  const fetchScoreProfundoSobDemanda = async (edital: EditalBusca) => {
+    setLoadingScores(true);
+    setScoresValidacao(null);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch("/api/editais/score-profundo-sob-demanda", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({
+          numero: edital.numero,
+          orgao: edital.orgao,
+          objeto: edital.objeto,
+          uf: edital.uf,
+          modalidade: edital.modalidade,
+          valor_estimado: edital.valor || undefined,
+          fonte: edital.fonte,
+          url: edital.url,
+          data_abertura: edital.dataAbertura || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setScoresValidacao(data);
+          // Atualizar o edital com o ID temporário para futuras chamadas
+          if (data.edital_id_temp) {
+            edital.editalSalvoId = data.edital_id_temp;
+          }
+        }
+      }
+    } catch {
+      // Silencioso
+    } finally {
+      setLoadingScores(false);
+    }
+  };
+
   const handleAbrirPainel = (edital: EditalBusca) => {
     setPainelEdital(edital);
     setIntencaoLocal(edital.intencaoEstrategica);
     setMargemLocal(edital.margemExpectativa);
     setEstrategiaSalva(false);
+    // Se já tem score profundo do híbrido, não precisa buscar
+    if (edital.scoreProfundo) {
+      setScoresValidacao(null);
+      setLoadingScores(false);
+      return;
+    }
     // C2: Lazy-load scores de validacao ao abrir o painel
     const editalId = edital.editalSalvoId || (edital.id.length === 36 ? edital.id : null);
     if (editalId) {
       fetchScoresValidacao(editalId);
+    } else if (tipoScore !== "nenhum") {
+      // Edital sem UUID e sem score profundo: calcular sob demanda
+      fetchScoreProfundoSobDemanda(edital);
     } else {
       setScoresValidacao(null);
       setLoadingScores(false);

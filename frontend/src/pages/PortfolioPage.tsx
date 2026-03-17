@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
-import { getProdutos, getProduto, getProdutoCompletude, sendMessage, sendMessageWithFile, createSession } from "../api/client";
+import { getProdutos, getProduto, getProdutoCompletude, reprocessarMetadados, sendMessage, sendMessageWithFile, createSession } from "../api/client";
 import type { Produto, ProdutoEspecificacao, CompletudeResult } from "../api/client";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 import ReactMarkdown from "react-markdown";
@@ -69,6 +69,8 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
   const [selectedProdutoFull, setSelectedProdutoFull] = useState<Produto | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [reprocessandoMeta, setReprocessandoMeta] = useState(false);
+  const [showMetadados, setShowMetadados] = useState(false);
   const detalheRef = useRef<HTMLDivElement>(null);
 
   // === CADASTRO POR IA (upload) ===
@@ -279,6 +281,20 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const handleReprocessar = async (produto: Produto) => {
     await onSendToChat(`Reprocesse as especificacoes do produto ${produto.nome}`);
     setTimeout(() => fetchProdutos(), 3000);
+  };
+
+  const handleReprocessarMetadados = async (produtoId: string) => {
+    setReprocessandoMeta(true);
+    try {
+      await reprocessarMetadados(produtoId);
+      // Reload product detail
+      const updated = await getProduto(produtoId);
+      setSelectedProdutoFull(updated);
+    } catch (err: unknown) {
+      console.error("Erro ao reprocessar metadados:", err);
+    } finally {
+      setReprocessandoMeta(false);
+    }
   };
 
   const handleExcluir = async (produto: Produto) => {
@@ -786,6 +802,100 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                         <span>Nenhuma especificacao extraida. Use "Reprocessar IA" para extrair.</span>
                       </div>
                     )}
+
+                    {/* Metadados de Captação */}
+                    <div className="metadados-captacao">
+                      <h4
+                        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginTop: 16 }}
+                        onClick={() => setShowMetadados(!showMetadados)}
+                      >
+                        {showMetadados ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        Metadados de Captacao
+                        <span className="ia-badge" title="Gerado pela IA">IA</span>
+                      </h4>
+                      {showMetadados && (
+                        <div className="metadados-content" style={{ marginTop: 8 }}>
+                          {/* CATMAT */}
+                          <div className="info-group">
+                            <label>Codigos CATMAT</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {(detalhe.catmat_codigos && detalhe.catmat_codigos.length > 0)
+                                ? detalhe.catmat_codigos.map((c: string, i: number) => (
+                                    <span key={i} className="ia-badge" style={{ fontSize: 11 }} title={detalhe.catmat_descricoes?.[i] || ""}>{c}</span>
+                                  ))
+                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATMAT</span>
+                              }
+                            </div>
+                          </div>
+
+                          {/* Descrições CATMAT */}
+                          {detalhe.catmat_descricoes && detalhe.catmat_descricoes.length > 0 && (
+                            <div className="info-group" style={{ marginTop: 8 }}>
+                              <label>Descricoes CATMAT</label>
+                              <div style={{ fontSize: 12, color: "#666" }}>
+                                {detalhe.catmat_descricoes.map((d: string, i: number) => (
+                                  <div key={i}>• {d}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* CATSER */}
+                          <div className="info-group" style={{ marginTop: 8 }}>
+                            <label>Codigos CATSER</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {(detalhe.catser_codigos && detalhe.catser_codigos.length > 0)
+                                ? detalhe.catser_codigos.map((c: string, i: number) => (
+                                    <span key={i} className="ia-badge" style={{ fontSize: 11 }}>{c}</span>
+                                  ))
+                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATSER</span>
+                              }
+                            </div>
+                          </div>
+
+                          {/* Termos de Busca */}
+                          <div className="info-group" style={{ marginTop: 8 }}>
+                            <label>Termos de Busca Semanticos</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {(detalhe.termos_busca && detalhe.termos_busca.length > 0)
+                                ? detalhe.termos_busca.map((t: string, i: number) => (
+                                    <span key={i} style={{
+                                      background: "#e8f5e9", color: "#2e7d32", padding: "2px 8px",
+                                      borderRadius: 12, fontSize: 11, border: "1px solid #c8e6c9"
+                                    }}>{t}</span>
+                                  ))
+                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum termo gerado</span>
+                              }
+                            </div>
+                          </div>
+
+                          {/* Última atualização */}
+                          <div className="info-group" style={{ marginTop: 8 }}>
+                            <label>Ultima Atualizacao</label>
+                            <span style={{ fontSize: 12, color: "#999" }}>
+                              {detalhe.catmat_updated_at
+                                ? new Date(detalhe.catmat_updated_at).toLocaleString("pt-BR")
+                                : "Nunca processado"}
+                            </span>
+                          </div>
+
+                          {/* Botão Reprocessar */}
+                          <button
+                            style={{
+                              marginTop: 10, padding: "6px 14px", fontSize: 12,
+                              background: "#7c3aed", color: "#fff", border: "none",
+                              borderRadius: 6, cursor: "pointer", display: "flex",
+                              alignItems: "center", gap: 6
+                            }}
+                            disabled={reprocessandoMeta}
+                            onClick={() => handleReprocessarMetadados(detalhe.id)}
+                          >
+                            {reprocessandoMeta ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+                            {reprocessandoMeta ? "Reprocessando..." : "Reprocessar Metadados"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </Card>

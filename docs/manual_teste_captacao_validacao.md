@@ -1,5 +1,5 @@
 # MANUAL DE TESTE — CAPTACAO + VALIDACAO
-**Data:** 15/03/2026
+**Data:** 16/03/2026 (atualizado Sprint 3)
 **Objetivo:** Guia completo e didatico para testar as fases de Captacao e Validacao do sistema de editais, usando 3 editais reais de reagentes laboratoriais do PNCP.
 
 ---
@@ -12,8 +12,10 @@ Antes de comecar, garanta que:
 2. **Frontend rodando** na porta 5175: `cd frontend && npm run dev`
 3. **Empresa cadastrada** no sistema (menu lateral → Cadastros → Empresas)
 4. **Pelo menos 1 produto** cadastrado no Portfolio (pode ser via upload de PDF ou manual)
-5. **Fontes configuradas** (menu lateral → Cadastros → Fontes) — pelo menos "PNCP" ativa
-6. Estar logado no sistema
+5. **Metadados de captacao gerados** — ao cadastrar um produto, o sistema gera automaticamente codigos CATMAT e termos de busca semanticos em background. Voce pode verificar/reprocessar na secao "Metadados de Captacao" no detalhe do produto (Portfolio → clique no produto → secao colapsavel no final)
+6. **Fontes configuradas** (menu lateral → Cadastros → Fontes) — pelo menos "PNCP" ativa
+7. **Pesos e limiares configurados** — em Parametrizacoes → aba **Score**, verifique que os 6 pesos das dimensoes somam 1.00 e que os limiares GO/NO-GO estao adequados (defaults: GO >= 70, NO-GO < 40)
+8. Estar logado no sistema
 
 ---
 
@@ -36,14 +38,14 @@ Preencha os campos do formulario:
 
 | Campo | Valor para digitar | Por que |
 |---|---|---|
-| **Termo** | `reagentes laboratorio hematologia` | Busca editais de reagentes de hematologia |
+| **Termo** | `microscopio` | Busca editais de microscopios (produto do portfolio) |
 | **UF** | `Todas` (padrao) | Para nao restringir geograficamente |
 | **Fonte** | `PNCP` | Fonte principal do governo federal |
 | **Modalidade** | (deixe vazio) | Qualquer modalidade |
-| **Periodo** | `365 dias` | Amplia a janela de busca |
+| **Periodo** | `30 dias` | Janela curta para encontrar editais abertos |
 | **Incluir Encerrados** | **Desmarque** | Queremos apenas editais abertos |
 
-> **DICA:** O campo "Termo" aceita palavras-chave. Use termos especificos como "reagentes hematologia", "reagentes bioquimica", "kits imunologia" para resultados mais relevantes.
+> **DICA:** Use termos curtos e genericos que correspondam aos nomes dos seus produtos no portfolio. Termos muito especificos (ex: "reagentes hematologia hemominas") podem nao retornar resultados porque a API PNCP busca no texto do objeto. Bons exemplos: `microscopio`, `seringa descartavel`, `analisador bioquimico`, `luva nitrilo`.
 
 ---
 
@@ -57,6 +59,8 @@ Abaixo do formulario, ha 4 opcoes de analise:
 | **Score Rapido** | Analise rapida (Tecnico + Comercial) | Triagem inicial, resultado em segundos |
 | **Score Hibrido** | Rapido para todos + Profundo para os top N | **RECOMENDADO para teste** — equilibrio velocidade/qualidade |
 | **Score Profundo** | Analise completa de 6 dimensoes para todos | Demorado, usar so com poucos editais |
+
+> **NOVIDADE Sprint 3:** Quando o score esta ativado (Rapido, Hibrido ou Profundo), o sistema faz **buscas paralelas extras** no PNCP usando os termos semanticos e descricoes CATMAT dos seus produtos. Isso amplia a cobertura de editais encontrados automaticamente — voce nao precisa digitar todos os termos relevantes.
 
 **Para este teste, selecione: "Score Hibrido"**
 
@@ -88,6 +92,7 @@ A tabela mostra as colunas:
 | **Produto** | Se o sistema encontrou um produto do seu portfolio que combina |
 | **Prazo** | Dias restantes (verde = ok, laranja = urgente, vermelho = critico) |
 | **Score** | Circulo com nota 0-100 (clique para ver detalhes) |
+| **Nivel Match** | Qualidade do matching com seu portfolio: exato, subclasse, classe ou generico |
 
 ---
 
@@ -112,46 +117,73 @@ A tabela mostra as colunas:
 
 ---
 
-### PASSO 7: Salvar os 3 editais recomendados
+### PASSO 7: Salvar os 4 editais recomendados
 
-Voce deve buscar e salvar **estes 3 editais** (ou similares que encontrar):
+Voce deve buscar e salvar **estes 4 editais** (ou similares que encontrar):
 
-#### Edital 1: Hemominas — Reagentes Hematologia Sysmex XN-1000
-
-| Campo | Valor |
-|---|---|
-| **Buscar por** | `reagentes hematologia sysmex` |
-| **Orgao** | FUNDACAO HEMOMINAS |
-| **CNPJ** | 26.388.330/0001-90 |
-| **Numero** | 24/2026 |
-| **Objeto** | Reagentes e insumos para analisador hematologico Sysmex XN-1000 |
-| **Valor estimado** | ~R$ 2.000.000+ |
-| **Por que salvar** | Edital tipico de hematologia com lotes bem definidos, 7 itens especificos, ideal para testar lotes e aderencia |
-
-#### Edital 2: HC-USP — Kits Reagentes Imunologicos
+#### Edital 1: MCTI — Microscopio
 
 | Campo | Valor |
 |---|---|
-| **Buscar por** | `reagentes imunologia` |
-| **Orgao** | HOSPITAL DAS CLINICAS DA FAC. MEDICINA DA USP |
-| **CNPJ** | 60.448.040/0001-22 |
-| **Numero** | 90192/2026 |
-| **Objeto** | Kits/reagentes para exames imunologicos/sorologicos |
-| **Encerramento** | 18/03/2026 09:00 |
-| **Por que salvar** | Hospital de referencia, editais de grande porte, area de imunologia |
+| **Buscar por** | `microscopio` |
+| **Fonte** | PNCP |
+| **Score** | Hibrido |
+| **Dias** | 30 |
+| **Orgao** | MINISTERIO DA CIENCIA, TECNOLOGIA E INOVACAO |
+| **Numero** | 90002/2026 |
+| **UF** | MT |
+| **Objeto** | Aquisicao de microscopio para laboratorio |
+| **Valor estimado** | ~R$ 105.000 |
+| **Encerramento** | 30/03/2026 |
+| **Por que salvar** | Produto do portfolio (Microscopio Olympus CX23), match direto, valor medio, prazo aberto |
 
-#### Edital 3: UFBA — Reagentes com Equipamentos Imunologia
+#### Edital 2: UNIOESTE — Seringa Descartavel
 
 | Campo | Valor |
 |---|---|
-| **Buscar por** | `reagentes imunologia` |
-| **Orgao** | UNIVERSIDADE FEDERAL DA BAHIA |
-| **CNPJ** | 15.180.714/0001-04 |
-| **Numero** | 90003/2026 |
-| **Objeto** | Reagentes com equipamentos para laboratorio de imunologia e biologia molecular (LABIMUNO ICS-UFBA) |
-| **Valor estimado** | R$ 2.107.090,00 |
-| **Encerramento** | 26/03/2026 09:00 |
-| **Por que salvar** | Valor alto, universidade federal, comodato de equipamentos + reagentes |
+| **Buscar por** | `seringa descartavel` |
+| **Fonte** | PNCP |
+| **Score** | Hibrido |
+| **Dias** | 30 |
+| **Orgao** | UNIVERSIDADE ESTADUAL DO OESTE DO PARANA |
+| **Numero** | 166/2026 |
+| **UF** | PR |
+| **Objeto** | Aquisicao de seringas descartaveis |
+| **Valor estimado** | ~R$ 636.000 |
+| **Encerramento** | 31/03/2026 |
+| **Por que salvar** | Produto do portfolio (Seringa Descartavel BD), alto valor, universidade estadual |
+
+#### Edital 3: Pres. Bernardes — Analisador Bioquimico
+
+| Campo | Valor |
+|---|---|
+| **Buscar por** | `analisador bioquimico` |
+| **Fonte** | PNCP |
+| **Score** | Hibrido |
+| **Dias** | 30 |
+| **Orgao** | PREFEITURA MUNICIPAL DE PRESIDENTE BERNARDES |
+| **Numero** | 28/2026 |
+| **UF** | MG |
+| **Objeto** | Aquisicao de analisador bioquimico para laboratorio municipal |
+| **Valor estimado** | ~R$ 110.000 |
+| **Encerramento** | 26/03/2026 |
+| **Por que salvar** | Produto do portfolio (Analisador Bioquimico Mindray BS-230), match direto, prazo curto — bom para testar urgencia |
+
+#### Edital 4: USP — Luva Nitrilo
+
+| Campo | Valor |
+|---|---|
+| **Buscar por** | `luva nitrilo` |
+| **Fonte** | PNCP |
+| **Score** | Hibrido |
+| **Dias** | 30 |
+| **Orgao** | UNIVERSIDADE DE SAO PAULO |
+| **Numero** | 267/2026 |
+| **UF** | SP |
+| **Objeto** | Aquisicao de luvas de procedimento nitrilo |
+| **Valor estimado** | ~R$ 8.000 |
+| **Encerramento** | 23/03/2026 |
+| **Por que salvar** | Produto do portfolio (Luva Procedimento Nitrilo Supermax), valor baixo mas match exato, USP e referencia |
 
 **Como salvar cada edital:**
 
@@ -199,7 +231,7 @@ A Validacao e onde voce analisa em profundidade cada edital salvo, decidindo se 
 
 ### PASSO 11: Selecionar um edital para validar
 
-1. Clique na linha do edital que deseja validar (ex: Hemominas 24/2026)
+1. Clique na linha do edital que deseja validar (ex: MCTI Microscopio 90002/2026)
 2. O **dashboard de validacao** aparece abaixo da tabela, com:
    - Score geral (circulo grande)
    - Decisao da IA (badge GO/NO-GO/CONDICIONAL)
@@ -215,21 +247,31 @@ A Validacao e onde voce analisa em profundidade cada edital salvo, decidindo se 
 
 1. Clique no botao **"Calcular Scores IA"** (no dashboard)
 2. Aguarde ~10-20 segundos
-3. O sistema analisa o edital em 6 dimensoes:
+3. O sistema analisa o edital em 6 dimensoes, usando **pesos parametrizaveis** (configurados em Parametrizacoes → aba Score):
 
-| Dimensao | O que avalia | Exemplo |
-|---|---|---|
-| **Tecnico** | Seus produtos atendem as especificacoes? | "Portfolio tem reagentes Sysmex compativeis" |
-| **Documental** | Voce tem toda a documentacao exigida? | "Falta ART do responsavel tecnico" |
-| **Complexidade** | Quao dificil e participar/executar? | "Entrega em 30 dias uteis — viavel" |
-| **Juridico** | Ha riscos legais ou clausulas problematicas? | "Clausula de penalidade excessiva" |
-| **Logistico** | Logistica de entrega e viavel? | "Entrega em MG — dentro da area de atuacao" |
-| **Comercial** | O preco e competitivo? Margem e viavel? | "Valor referencia compativel com mercado" |
+| Dimensao | Peso default | O que avalia | Exemplo |
+|---|---|---|---|
+| **Tecnico** | 35% | Seus produtos atendem as especificacoes? | "Portfolio tem Microscopio Olympus CX23 compativel" |
+| **Documental** | 15% | Voce tem toda a documentacao exigida? | "Falta ART do responsavel tecnico" |
+| **Complexidade** | 15% | Quao dificil e participar/executar? | "Entrega em 30 dias uteis — viavel" |
+| **Juridico** | 20% | Ha riscos legais ou clausulas problematicas? | "Clausula de penalidade excessiva" |
+| **Logistico** | 5% | Logistica de entrega e viavel? | "Entrega em MG — dentro da area de atuacao" |
+| **Comercial** | 10% | O preco e competitivo? Margem e viavel? | "Valor referencia compativel com mercado" |
 
-4. Apos o calculo, observe:
-   - **Score >= 70**: Bom candidato (barra verde)
-   - **Score 30-70**: Avaliar com cuidado (barra amarela)
-   - **Score < 30**: Provavelmente nao vale (barra vermelha)
+4. O **score_final** e **recalculado no backend** (nao confia no valor da IA) usando a formula:
+   `score_final = Σ (score_dimensao × peso_dimensao)`
+
+5. A **decisao GO/NO-GO** tambem e calculada no backend usando os limiares do banco:
+   - **GO**: score_final >= limiar_go **E** score_tecnico >= limiar_tecnico_go **E** score_juridico >= limiar_juridico_go
+   - **NO-GO**: score_final < limiar_nogo **OU** score_tecnico < limiar_tecnico_nogo **OU** score_juridico < limiar_juridico_nogo
+   - **AVALIAR**: nos demais casos
+
+6. Apos o calculo, observe:
+   - **Score >= limiar_go (default 70)**: Bom candidato (barra verde)
+   - **Score entre limiar_nogo e limiar_go**: Avaliar com cuidado (barra amarela)
+   - **Score < limiar_nogo (default 40)**: Provavelmente nao vale (barra vermelha)
+
+> **NOVIDADE Sprint 3:** O matching de produto usa 4 niveis hierarquicos: **exato** (nome/fabricante/modelo direto), **subclasse** (produto irmao na mesma subclasse), **classe** (produto primo na mesma classe), **generico** (fallback por termos). O nivel de match afeta a confianca do score tecnico.
 
 ---
 
@@ -290,13 +332,13 @@ Os lotes agrupam os itens do edital por especialidade (ex: todos os reagentes de
 
 > **IMPORTANTE:** Para que a extracao funcione, o PDF do edital precisa ter sido salvo. Volte a Captacao, abra o edital no painel lateral, clique em "Abrir no Portal" → na pagina do PNCP, clique em "Ver edital" ou "Baixar Edital" para que o sistema salve o texto do PDF.
 
-**Exemplo pratico com o Edital Hemominas 24/2026:**
+**Exemplo pratico com o Edital MCTI Microscopio 90002/2026:**
 
 | Lote | Especialidade | Itens | Descricao |
 |---|---|---|---|
-| Lote 01 | Hematologia | 7 itens | Reagentes e insumos Sysmex XN-1000 |
+| Lote 01 | Equipamento Laboratorial | 1+ itens | Microscopio para laboratorio |
 
-Os 7 itens deste lote incluem reagentes como: CELLPACK DCL, STROMATOLYSER-4DL, SULFOLYSER SLS, CELLCLEAN, CELLSHEATH, LYSERCELL WNR, FLUOROCELL WNR.
+Os itens deste lote incluem microscopio(s) e acessorios conforme especificado no edital.
 
 ---
 
@@ -440,38 +482,44 @@ Esta e a etapa mais importante da Validacao. Voce decide se vai participar do ed
 
 | Criterio | GO | CONDICIONAL | NO-GO |
 |---|---|---|---|
-| Score Geral | >= 70 | 40-69 | < 40 |
+| Score Geral | >= limiar_go (default 70) | entre limiar_nogo e limiar_go | < limiar_nogo (default 40) |
+| Score Tecnico | >= limiar_tecnico_go (default 60) | entre os limiares | < limiar_tecnico_nogo (default 30) |
+| Score Juridico | >= limiar_juridico_go (default 60) | entre os limiares | < limiar_juridico_nogo (default 30) |
 | Fatal Flaws | Nenhum | 0-1 contornaveis | 2+ ou 1 critico |
 | Documentacao | >= 80% ok | 60-79% ok | < 60% ok |
 | Aderencia Tecnica | >= 70% | 50-69% | < 50% |
 | Margem esperada | >= 15% | 10-14% | < 10% |
 | Prazo | > 5 dias | 3-5 dias | < 3 dias |
 
+> **NOTA:** Todos os limiares acima sao **parametrizaveis** em Parametrizacoes → aba Score → card "Limiares de Decisao GO/NO-GO". Os valores default podem ser ajustados conforme a estrategia da empresa.
+
 ---
 
-## PARTE 3 — FLUXO COMPLETO PASSO A PASSO (Exemplo com Hemominas 24/2026)
+## PARTE 3 — FLUXO COMPLETO PASSO A PASSO (Exemplo com Microscopio MCTI 90002/2026)
 
 Vamos fazer o fluxo completo com um edital real:
 
 ### 3.1 Captacao
 
 1. Menu lateral → **Captacao**
-2. Campo Termo: `reagentes hematologia hemominas`
+2. Campo Termo: `microscopio`
 3. Fonte: `PNCP`
 4. Score: **Hibrido** (top 5)
-5. Clique **Buscar**
-6. Localize o edital "24/2026 — FUNDACAO HEMOMINAS"
-7. Clique na linha → painel lateral abre
-8. Observe:
-   - Objeto: Reagentes Sysmex XN-1000
-   - Valor: ~R$ 2.000.000+
-   - 7 itens na secao "Itens do Edital"
-   - Score da IA (provavelmente >= 60 se voce tem reagentes de hematologia no portfolio)
-9. Selecione Intencao: **Estrategico**
-10. Margem: **15%**
-11. Clique **"Salvar Edital"**
-12. Clique **"Salvar Estrategia"**
-13. Clique **"Ir para Validacao"**
+5. Dias: **30**
+6. Clique **Buscar**
+7. Localize o edital "90002/2026 — MINISTERIO DA CIENCIA, TECNOLOGIA E INOVACAO"
+8. Clique na linha → painel lateral abre
+9. Observe:
+   - Objeto: Aquisicao de microscopio para laboratorio
+   - Valor: ~R$ 105.000
+   - UF: MT
+   - Score da IA (provavelmente >= 60 se voce tem Microscopio Olympus CX23 no portfolio)
+   - Nivel Match: exato (match direto com produto do portfolio)
+10. Selecione Intencao: **Estrategico**
+11. Margem: **15%**
+12. Clique **"Salvar Edital"**
+13. Clique **"Salvar Estrategia"**
+14. Clique **"Ir para Validacao"**
 
 ### 3.2 Validacao — Aderencia
 
@@ -479,20 +527,20 @@ Vamos fazer o fluxo completo com um edital real:
 2. Clique **"Calcular Scores IA"**
 3. Aguarde o calculo (~15s)
 4. Analise os 6 scores:
-   - Tecnico >= 70? → Bom sinal
+   - Tecnico >= 70? → Bom sinal (microscopio e match direto)
    - Documental >= 50? → Verificar documentos faltantes
    - Complexidade: medio e normal
    - Juridico >= 60? → Sem grandes riscos
-   - Logistico >= 50? → Entrega viavel
+   - Logistico >= 50? → Entrega viavel (verificar UF MT)
    - Comercial >= 60? → Preco competitivo
 
 ### 3.3 Validacao — Lotes
 
 1. Clique na aba **"Lotes"**
-2. Verifique se os itens aparecem na tabela (7 itens do Hemominas)
+2. Verifique se os itens aparecem na tabela
 3. Clique **"Extrair Lotes via IA"**
 4. Aguarde ~15-30s
-5. Resultado esperado: 1 lote "Hematologia" com 7 itens
+5. Resultado esperado: 1 lote com microscopio(s)
 6. Verifique que cada item aparece dentro do card do lote
 
 ### 3.4 Validacao — Documentos
@@ -516,16 +564,16 @@ Vamos fazer o fluxo completo com um edital real:
 ### 3.6 Validacao — Mercado
 
 1. Clique na aba **"Mercado"**
-2. Verifique a reputacao do orgao (Hemominas)
-3. Veja o historico: ja participou de editais do Hemominas antes?
-4. Clique **"Buscar Precos"** → IA retorna precos praticados
-5. Clique **"Analisar Concorrentes"** → IA lista concorrentes do segmento
+2. Verifique a reputacao do orgao (MCTI)
+3. Veja o historico: ja participou de editais do MCTI antes?
+4. Clique **"Buscar Precos"** → IA retorna precos praticados para microscopios
+5. Clique **"Analisar Concorrentes"** → IA lista concorrentes (Nikon, Zeiss, Leica, etc.)
 
 ### 3.7 Validacao — IA
 
 1. Clique na aba **"IA"**
 2. Clique **"Gerar Resumo"** → IA faz resumo executivo
-3. Pergunte: "Quais reagentes Sysmex sao exigidos neste edital?"
+3. Pergunte: "Quais especificacoes tecnicas de microscopio sao exigidas?"
 4. Pergunte: "Qual o prazo de entrega e as condicoes de pagamento?"
 5. Use as acoes rapidas conforme necessidade
 
@@ -536,31 +584,40 @@ Com base em tudo que analisou:
 1. Score geral >= 70? ✅
 2. Sem fatal flaws? ✅
 3. Documentacao >= 80%? (Verificar)
-4. Aderencia tecnica alta? ✅ (se tem reagentes Sysmex)
+4. Aderencia tecnica alta? ✅ (Microscopio Olympus CX23 no portfolio)
 5. Margem >= 15%? (Verificar na Precificacao)
 
-**Se tudo OK:** Clique **"Participar"** → Motivo: `portfolio_aderente` → Detalhes: "Portfolio possui reagentes compativeis com Sysmex XN-1000, documentacao em dia, margem viavel"
+**Se tudo OK:** Clique **"Participar"** → Motivo: `portfolio_aderente` → Detalhes: "Portfolio possui Microscopio Olympus CX23 compativel, documentacao em dia, margem viavel"
 
-**Se falta algo:** Clique **"Acompanhar"** → Motivo: `falta_documentacao` → Detalhes: "Falta ART do responsavel tecnico, resolver antes da data limite"
+**Se falta algo:** Clique **"Acompanhar"** → Motivo: `falta_documentacao` → Detalhes: "Falta registro ANVISA atualizado, resolver antes de 30/03"
 
 **Se nao vale:** Clique **"Ignorar"** → Motivo: `margem_insuficiente` → Detalhes: "Valor referencia muito baixo, margem ficaria abaixo de 10%"
 
 ---
 
-## PARTE 4 — REPETIR PARA OS OUTROS 2 EDITAIS
+## PARTE 4 — REPETIR PARA OS OUTROS 3 EDITAIS
 
 Repita os passos 10-19 para:
 
-### Edital HC-USP (90192/2026)
-- **Busca na Captacao:** Termo = `reagentes imunologia`
-- **Particularidade:** Hospital de referencia, alto volume, pode ter multiplos lotes (imunologia, sorologia, bioquimica)
-- **Na aba Lotes:** A IA deve identificar lotes separados por especialidade
+### Edital UNIOESTE — Seringa Descartavel (166/2026)
+- **Busca na Captacao:** Termo = `seringa descartavel`, 30 dias
+- **Particularidade:** Universidade estadual, alto valor (~R$ 636k), produto de consumo
+- **Na aba Lotes:** Pode ter multiplos lotes por tipo/tamanho de seringa
+- **Match esperado:** Seringa Descartavel BD do portfolio
 
-### Edital UFBA (90003/2026)
-- **Busca na Captacao:** Termo = `reagentes imunologia`
-- **Particularidade:** Inclui comodato de equipamentos + reagentes, valor R$ 2.1M
-- **Na aba Lotes:** Verificar se ha separacao por tipo de equipamento
-- **Atencao:** Comodato requer analise adicional na fase de Precificacao (aba Comodato)
+### Edital Pres. Bernardes — Analisador Bioquimico (28/2026)
+- **Busca na Captacao:** Termo = `analisador bioquimico`, 30 dias
+- **Particularidade:** Prefeitura municipal em MG, valor ~R$ 110k, prazo curto (26/03)
+- **Na aba Lotes:** Provavelmente lote unico com equipamento
+- **Match esperado:** Analisador Bioquimico Mindray BS-230 do portfolio
+- **Atencao:** Prazo curto — verificar viabilidade logistica
+
+### Edital USP — Luva Nitrilo (267/2026)
+- **Busca na Captacao:** Termo = `luva nitrilo`, 30 dias
+- **Particularidade:** USP, valor baixo (~R$ 8k), produto de consumo
+- **Na aba Lotes:** Verificar se ha separacao por tamanho (P/M/G)
+- **Match esperado:** Luva Procedimento Nitrilo Supermax do portfolio
+- **Atencao:** Valor baixo — margem pode ser insuficiente
 
 ---
 
@@ -571,38 +628,46 @@ Repita os passos 10-19 para:
 | **Captacao** | Fase de busca e identificacao de editais relevantes |
 | **Validacao** | Fase de analise aprofundada para decidir GO/NO-GO |
 | **Score** | Nota de 0-100 atribuida pela IA com base em multiplos criterios |
+| **Score Final** | Media ponderada dos 6 scores dimensionais, calculada no backend com pesos do banco |
 | **Aderencia** | Grau de compatibilidade entre seus produtos e o que o edital pede |
 | **Lote** | Agrupamento de itens do edital por especialidade ou categoria |
 | **Fatal Flaw** | Problema critico que impede a participacao (ex: falta registro ANVISA) |
 | **GO** | Decisao de participar do edital |
 | **NO-GO** | Decisao de nao participar |
+| **AVALIAR** | Caso intermediario — nao atende criterios de GO nem de NO-GO |
 | **CONDICIONAL** | Monitorar, mas nao decidir ainda (falta informacao) |
 | **Intencao Estrategica** | Como voce classifica o edital no seu portfolio de oportunidades |
 | **PNCP** | Portal Nacional de Contratacoes Publicas — fonte oficial de editais |
 | **Pregao Eletronico** | Modalidade de licitacao mais comum, feita online |
 | **Comodato** | Emprestimo de equipamento em troca de compra de reagentes |
 | **NCM** | Nomenclatura Comum do Mercosul — codigo do produto para tributacao |
+| **CATMAT** | Catalogo de Materiais do governo federal — codigos padrao para materiais em licitacoes. Buscados automaticamente na API dadosabertos.compras.gov.br |
+| **CATSER** | Catalogo de Servicos do governo federal — codigos padrao para servicos em licitacoes |
+| **Termos Semanticos** | Termos de busca gerados pela IA (DeepSeek) para cada produto, usados para ampliar a cobertura de editais encontrados |
+| **Matching Hierarquico** | Algoritmo de 4 niveis para encontrar o melhor produto para um edital: exato → subclasse → classe → generico |
+| **ParametroScore** | Tabela do banco com pesos das 6 dimensoes e limiares GO/NO-GO, editavel em Parametrizacoes → aba Score |
 
 ---
 
 ## RESUMO DO FLUXO
 
 ```
-CAPTACAO                          VALIDACAO
-─────────                         ──────────
-1. Buscar editais (termo, UF)     6. Selecionar edital salvo
-2. Escolher modo de score         7. Calcular scores IA
-3. Analisar resultados            8. Analisar aderencia
-4. Abrir painel lateral           9. Extrair lotes via IA
-5. Salvar editais relevantes     10. Verificar documentacao
-         │                       11. Avaliar riscos
-         └──→ Ir para Validacao  12. Consultar mercado
-                                 13. Usar chat IA
-                                 14. Decidir GO / NO-GO
-                                          │
-                                          ↓
-                                    PRECIFICACAO
-                                    (proxima fase)
+SETUP                             CAPTACAO                          VALIDACAO
+─────                             ─────────                         ──────────
+A. Cadastrar produtos             1. Buscar editais (termo, UF)     7. Selecionar edital salvo
+B. Metadados gerados (CATMAT +    2. Escolher modo de score         8. Calcular scores IA
+   termos semanticos) automatico  3. Buscas extras automaticas         (pesos/limiares do banco)
+C. Configurar pesos/limiares         (termos CATMAT/semanticos)     9. Analisar aderencia
+   em Parametrizacoes → Score     4. Analisar resultados           10. Extrair lotes via IA
+                                  5. Abrir painel lateral          11. Verificar documentacao
+                                  6. Salvar editais relevantes     12. Avaliar riscos
+                                           │                       13. Consultar mercado
+                                           └──→ Ir para Validacao  14. Usar chat IA
+                                                                   15. Decidir GO / NO-GO
+                                                                            │
+                                                                            ↓
+                                                                      PRECIFICACAO
+                                                                      (proxima fase)
 ```
 
 ---
@@ -613,9 +678,12 @@ CAPTACAO                          VALIDACAO
 - [ ] Frontend rodando (porta 5175)
 - [ ] Empresa cadastrada
 - [ ] Pelo menos 1 produto no portfolio
+- [ ] Metadados de captacao gerados (CATMAT + termos semanticos) — verificar no detalhe do produto
+- [ ] Pesos e limiares configurados (Parametrizacoes → aba Score, soma dos pesos = 1.00)
 - [ ] Buscar com Score Hibrido
 - [ ] Salvar 3 editais de reagentes
 - [ ] Calcular scores de validacao para cada um
+- [ ] Verificar que score_final e decisao vem do backend (nao da IA)
 - [ ] Extrair lotes via IA para cada um
 - [ ] Verificar documentacao
 - [ ] Analisar riscos e fatal flaws
@@ -623,3 +691,4 @@ CAPTACAO                          VALIDACAO
 - [ ] Gerar resumo via IA
 - [ ] Decidir GO/NO-GO para cada edital
 - [ ] Justificar cada decisao com motivo + detalhes
+- [ ] (Opcional) Alterar pesos/limiares em Parametrizacoes e verificar que os scores mudam

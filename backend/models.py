@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM models for the Editais IA system.
 """
-from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, Float, create_engine, UniqueConstraint
+from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey, Integer, JSON, Boolean, DECIMAL, Date, Float, create_engine, UniqueConstraint, text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -153,6 +153,13 @@ class Produto(Base):
     status_pipeline = Column(String(20), default="cadastrado")  # cadastrado, qualificado, ofertado, vencedor
     registro_anvisa = Column(String(30), nullable=True)
     anvisa_status = Column(String(20), nullable=True)  # ativo, em_analise, cancelado, null
+    # Metadados de captação (populados em background após cadastro)
+    catmat_codigos = Column(JSON, nullable=True)          # ["495268", "495269"]
+    catser_codigos = Column(JSON, nullable=True)          # ["27502", "27510"]
+    catmat_descricoes = Column(JSON, nullable=True)       # ["Reagente para diagnóstico...", ...]
+    termos_busca = Column(JSON, nullable=True)            # ["hemograma", "hematologia", "CBC", ...]
+    termos_busca_updated_at = Column(DateTime, nullable=True)
+    catmat_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -179,6 +186,12 @@ class Produto(Base):
             "status_pipeline": self.status_pipeline or "cadastrado",
             "registro_anvisa": self.registro_anvisa,
             "anvisa_status": self.anvisa_status,
+            "catmat_codigos": self.catmat_codigos,
+            "catser_codigos": self.catser_codigos,
+            "catmat_descricoes": self.catmat_descricoes,
+            "termos_busca": self.termos_busca,
+            "termos_busca_updated_at": self.termos_busca_updated_at.isoformat() if self.termos_busca_updated_at else None,
+            "catmat_updated_at": self.catmat_updated_at.isoformat() if self.catmat_updated_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_specs:
@@ -1752,16 +1765,20 @@ class ParametroScore(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
     empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False, unique=True)
-    peso_tecnico = Column(DECIMAL(5, 2), default=0.25)
-    peso_comercial = Column(DECIMAL(5, 2), default=0.15)
-    peso_participacao = Column(DECIMAL(5, 2), default=0.05)
-    peso_ganho = Column(DECIMAL(5, 2), default=0.10)
+    # Pesos das 6 dimensões do score profundo (devem somar 1.0)
+    peso_tecnico = Column(DECIMAL(5, 2), default=0.35)
+    peso_comercial = Column(DECIMAL(5, 2), default=0.10)
     peso_documental = Column(DECIMAL(5, 2), default=0.15)
-    peso_complexidade = Column(DECIMAL(5, 2), default=0.10)
-    peso_juridico = Column(DECIMAL(5, 2), default=0.10)
-    peso_logistico = Column(DECIMAL(5, 2), default=0.10)
+    peso_complexidade = Column(DECIMAL(5, 2), default=0.15)
+    peso_juridico = Column(DECIMAL(5, 2), default=0.20)
+    peso_logistico = Column(DECIMAL(5, 2), default=0.05)
+    # Limiares de decisão GO/NO-GO
     limiar_go = Column(DECIMAL(5, 2), default=70.0)
     limiar_nogo = Column(DECIMAL(5, 2), default=40.0)
+    limiar_tecnico_go = Column(DECIMAL(5, 2), default=60.0)      # score_tecnico >= X para GO
+    limiar_tecnico_nogo = Column(DECIMAL(5, 2), default=30.0)    # score_tecnico < X para NO-GO
+    limiar_juridico_go = Column(DECIMAL(5, 2), default=60.0)     # score_juridico >= X para GO
+    limiar_juridico_nogo = Column(DECIMAL(5, 2), default=30.0)   # score_juridico < X para NO-GO
     margem_minima = Column(DECIMAL(5, 2), nullable=True)
     # Campos comerciais (Parametrizações)
     estados_atuacao = Column(JSON, nullable=True)       # ["SP", "RJ", "MG"]
@@ -1795,14 +1812,16 @@ class ParametroScore(Base):
             "user_id": self.user_id,
             "peso_tecnico": float(self.peso_tecnico) if self.peso_tecnico else None,
             "peso_comercial": float(self.peso_comercial) if self.peso_comercial else None,
-            "peso_participacao": float(self.peso_participacao) if self.peso_participacao else None,
-            "peso_ganho": float(self.peso_ganho) if self.peso_ganho else None,
             "peso_documental": float(self.peso_documental) if self.peso_documental else None,
             "peso_complexidade": float(self.peso_complexidade) if self.peso_complexidade else None,
             "peso_juridico": float(self.peso_juridico) if self.peso_juridico else None,
             "peso_logistico": float(self.peso_logistico) if self.peso_logistico else None,
             "limiar_go": float(self.limiar_go) if self.limiar_go else None,
             "limiar_nogo": float(self.limiar_nogo) if self.limiar_nogo else None,
+            "limiar_tecnico_go": float(self.limiar_tecnico_go) if self.limiar_tecnico_go else None,
+            "limiar_tecnico_nogo": float(self.limiar_tecnico_nogo) if self.limiar_tecnico_nogo else None,
+            "limiar_juridico_go": float(self.limiar_juridico_go) if self.limiar_juridico_go else None,
+            "limiar_juridico_nogo": float(self.limiar_juridico_nogo) if self.limiar_juridico_nogo else None,
             "margem_minima": float(self.margem_minima) if self.margem_minima else None,
             "estados_atuacao": self.estados_atuacao,
             "prazo_maximo": self.prazo_maximo,
@@ -2242,6 +2261,57 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     """Cria todas as tabelas e insere dados iniciais."""
     Base.metadata.create_all(bind=engine)
+
+    # Migrations: novos campos
+    db_mig = SessionLocal()
+    try:
+        alter_stmts = [
+            # Produto: campos catmat/termos_busca
+            "ALTER TABLE produtos ADD COLUMN catmat_codigos JSON NULL",
+            "ALTER TABLE produtos ADD COLUMN catser_codigos JSON NULL",
+            "ALTER TABLE produtos ADD COLUMN catmat_descricoes JSON NULL",
+            "ALTER TABLE produtos ADD COLUMN termos_busca JSON NULL",
+            "ALTER TABLE produtos ADD COLUMN termos_busca_updated_at DATETIME NULL",
+            "ALTER TABLE produtos ADD COLUMN catmat_updated_at DATETIME NULL",
+            # ParametroScore: limiares por dimensão
+            "ALTER TABLE parametros_score ADD COLUMN limiar_tecnico_go DECIMAL(5,2) DEFAULT 60.0",
+            "ALTER TABLE parametros_score ADD COLUMN limiar_tecnico_nogo DECIMAL(5,2) DEFAULT 30.0",
+            "ALTER TABLE parametros_score ADD COLUMN limiar_juridico_go DECIMAL(5,2) DEFAULT 60.0",
+            "ALTER TABLE parametros_score ADD COLUMN limiar_juridico_nogo DECIMAL(5,2) DEFAULT 30.0",
+        ]
+        for stmt in alter_stmts:
+            try:
+                db_mig.execute(text(stmt))
+                db_mig.commit()
+            except Exception:
+                db_mig.rollback()  # coluna já existe
+
+        # Alinhar defaults antigos dos pesos
+        try:
+            db_mig.execute(text("""
+                UPDATE parametros_score SET
+                    peso_tecnico = 0.35, peso_comercial = 0.10,
+                    peso_complexidade = 0.15, peso_juridico = 0.20,
+                    peso_logistico = 0.05
+                WHERE peso_tecnico = 0.25
+            """))
+            db_mig.commit()
+        except Exception:
+            db_mig.rollback()
+
+        # Drop campos fantasma (peso_participacao, peso_ganho)
+        for col in ["peso_participacao", "peso_ganho"]:
+            try:
+                db_mig.execute(text(f"ALTER TABLE parametros_score DROP COLUMN {col}"))
+                db_mig.commit()
+            except Exception:
+                db_mig.rollback()
+
+        print("[DB] Migrations executadas (catmat/termos_busca/limiares)")
+    except Exception as e:
+        print(f"[DB] Erro nas migrations: {e}")
+    finally:
+        db_mig.close()
 
     # Inserir fontes de editais iniciais
     db = SessionLocal()

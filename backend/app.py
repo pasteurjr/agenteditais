@@ -8969,6 +8969,60 @@ def buscar_editais_rest():
 
         editais = resultado_busca.get("editais", [])
 
+        # Buscas paralelas extras com termos CATMAT/semânticos dos produtos
+        if tipo_score != "nenhum":
+            try:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                db_termos = get_db()
+                produtos_user = db_termos.query(Produto).filter(Produto.user_id == user_id).all()
+                termos_busca_extras = set()
+                for p in produtos_user:
+                    for desc in (p.catmat_descricoes or [])[:2]:
+                        palavras = [w for w in desc.split() if len(w) > 3][:4]
+                        if palavras:
+                            termos_busca_extras.add(" ".join(palavras))
+                    for t in (p.termos_busca or [])[:3]:
+                        termos_busca_extras.add(t)
+                db_termos.close()
+
+                termos_extras = list(termos_busca_extras)[:5]
+                if termos_extras:
+                    print(f"[BUSCA] Buscas extras com {len(termos_extras)} termos CATMAT/semânticos")
+                    with ThreadPoolExecutor(max_workers=3) as executor:
+                        futures = {}
+                        for t_extra in termos_extras:
+                            f = executor.submit(
+                                _buscar_editais_multifonte,
+                                termo=t_extra, user_id=user_id, uf=uf,
+                                incluir_encerrados=incluir_encerrados,
+                                buscar_detalhes=True, dias_busca=dias_busca,
+                                fonte=fonte,
+                            )
+                            futures[f] = t_extra
+
+                        for f in as_completed(futures, timeout=30):
+                            try:
+                                res = f.result()
+                                extras = res.get("editais", [])
+                                if extras:
+                                    editais.extend(extras)
+                                    print(f"[BUSCA] Termo extra '{futures[f]}': +{len(extras)} editais")
+                            except Exception:
+                                pass
+
+                    # Deduplicar
+                    seen = set()
+                    dedup = []
+                    for e in editais:
+                        chave = f"{e.get('numero', '')}-{e.get('orgao', '')}"
+                        if chave not in seen:
+                            seen.add(chave)
+                            dedup.append(e)
+                    editais = dedup
+                    print(f"[BUSCA] Total após dedup: {len(editais)} editais")
+            except Exception as e:
+                print(f"[BUSCA] Erro buscas extras: {e}")
+
         # Calcular score ANTES de aplicar limite (para pegar os melhores)
         empresa_id = get_current_empresa_id()
         if tipo_score == "rapido" and editais:
@@ -9182,6 +9236,48 @@ def calcular_scores_validacao_rest(edital_id):
             user_id=user_id,
             produto_id=produto_id
         )
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Endpoint para calcular score profundo sob demanda (edital não salvo)
+@app.route("/api/editais/score-profundo-sob-demanda", methods=["POST"])
+@require_auth
+def score_profundo_sob_demanda():
+    """
+    Recebe dados de um edital não salvo, salva temporariamente,
+    calcula score profundo e retorna resultado.
+    """
+    user_id = get_current_user_id()
+    data = request.json or {}
+
+    if not data.get("objeto"):
+        return jsonify({"success": False, "error": "Campo 'objeto' obrigatório"}), 400
+
+    try:
+        # Buscar empresa_id do usuário
+        db = get_db()
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = str(empresa.id) if empresa else user_id
+        db.close()
+
+        # Salvar edital temporário
+        edital_id = _salvar_edital_temp_para_score(data, user_id, empresa_id)
+        if not edital_id:
+            return jsonify({"success": False, "error": "Erro ao salvar edital temporário"}), 500
+
+        # Calcular score profundo
+        resultado = tool_calcular_scores_validacao(
+            edital_id=edital_id,
+            user_id=user_id,
+            produto_id=data.get("produto_id")
+        )
+
+        # Retornar o edital_id para que o frontend possa usá-lo depois
+        if resultado.get("success"):
+            resultado["edital_id_temp"] = edital_id
+
         return jsonify(resultado)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -11457,6 +11553,50 @@ def marcar_todas_notificacoes_lidas():
     db.commit()
 
     return jsonify({"success": True, "atualizadas": atualizadas})
+
+
+# =============================================================================
+# Endpoints: Reprocessar metadados de produto (CATMAT + termos_busca)
+# =============================================================================
+
+@app.route("/api/produtos/<produto_id>/reprocessar-metadados", methods=["POST"])
+@require_auth
+def reprocessar_metadados(produto_id):
+    """Reprocessa CATMAT/CATSER e termos de busca para um produto."""
+    from tools import processar_metadados_produto
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        produto = db.query(Produto).filter(
+            Produto.id == produto_id,
+            Produto.user_id == user_id
+        ).first()
+        if not produto:
+            return jsonify({"success": False, "error": "Produto não encontrado"}), 404
+    finally:
+        db.close()
+
+    processar_metadados_produto(produto_id)
+    return jsonify({"success": True, "message": f"Metadados reprocessados para {produto_id}"})
+
+
+@app.route("/api/admin/reprocessar-todos-metadados", methods=["POST"])
+@require_auth
+def reprocessar_todos_metadados():
+    """Reprocessa CATMAT/CATSER e termos de busca para todos os produtos do usuário."""
+    from tools import processar_metadados_produto
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        ids = [p.id for p in produtos]
+    finally:
+        db.close()
+
+    for pid in ids:
+        processar_metadados_produto(pid)
+
+    return jsonify({"success": True, "total": len(ids)})
 
 
 # =============================================================================

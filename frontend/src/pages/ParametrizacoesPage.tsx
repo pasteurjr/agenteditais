@@ -129,15 +129,21 @@ export function ParametrizacoesPage(_props: PageProps) {
   const [custosFixos, setCustosFixos] = useState("");
   const [freteBase, setFreteBase] = useState("");
 
-  // Pesos de Score (8 dimensoes)
-  const [pesoTecnico, setPesoTecnico] = useState("0.25");
-  const [pesoComercial, setPesoComercial] = useState("0.15");
-  const [pesoParticipacao, setPesoParticipacao] = useState("0.05");
-  const [pesoGanho, setPesoGanho] = useState("0.10");
+  // Pesos de Score (6 dimensoes)
+  const [pesoTecnico, setPesoTecnico] = useState("0.35");
+  const [pesoComercial, setPesoComercial] = useState("0.10");
   const [pesoDocumental, setPesoDocumental] = useState("0.15");
-  const [pesoComplexidade, setPesoComplexidade] = useState("0.10");
-  const [pesoJuridico, setPesoJuridico] = useState("0.10");
-  const [pesoLogistico, setPesoLogistico] = useState("0.10");
+  const [pesoComplexidade, setPesoComplexidade] = useState("0.15");
+  const [pesoJuridico, setPesoJuridico] = useState("0.20");
+  const [pesoLogistico, setPesoLogistico] = useState("0.05");
+
+  // Limiares de decisao GO/NO-GO
+  const [limiarGo, setLimiarGo] = useState("70");
+  const [limiarNogo, setLimiarNogo] = useState("40");
+  const [limiarTecnicoGo, setLimiarTecnicoGo] = useState("60");
+  const [limiarTecnicoNogo, setLimiarTecnicoNogo] = useState("30");
+  const [limiarJuridicoGo, setLimiarJuridicoGo] = useState("60");
+  const [limiarJuridicoNogo, setLimiarJuridicoNogo] = useState("30");
 
 
   // R1: Feedback salvar notificacoes
@@ -259,12 +265,17 @@ export function ParametrizacoesPage(_props: PageProps) {
         // Populate score weights
         if (p.peso_tecnico != null) setPesoTecnico(String(p.peso_tecnico));
         if (p.peso_comercial != null) setPesoComercial(String(p.peso_comercial));
-        if (p.peso_participacao != null) setPesoParticipacao(String(p.peso_participacao));
-        if (p.peso_ganho != null) setPesoGanho(String(p.peso_ganho));
         if (p.peso_documental != null) setPesoDocumental(String(p.peso_documental));
         if (p.peso_complexidade != null) setPesoComplexidade(String(p.peso_complexidade));
         if (p.peso_juridico != null) setPesoJuridico(String(p.peso_juridico));
         if (p.peso_logistico != null) setPesoLogistico(String(p.peso_logistico));
+        // Limiares GO/NO-GO
+        if (p.limiar_go != null) setLimiarGo(String(p.limiar_go));
+        if (p.limiar_nogo != null) setLimiarNogo(String(p.limiar_nogo));
+        if (p.limiar_tecnico_go != null) setLimiarTecnicoGo(String(p.limiar_tecnico_go));
+        if (p.limiar_tecnico_nogo != null) setLimiarTecnicoNogo(String(p.limiar_tecnico_nogo));
+        if (p.limiar_juridico_go != null) setLimiarJuridicoGo(String(p.limiar_juridico_go));
+        if (p.limiar_juridico_nogo != null) setLimiarJuridicoNogo(String(p.limiar_juridico_nogo));
       }
     } catch {
       // May not exist yet
@@ -390,15 +401,30 @@ export function ParametrizacoesPage(_props: PageProps) {
   };
 
   const handleSalvarPesosScore = async () => {
-    await saveParamScore({
+    const pesos = {
       peso_tecnico: parseFloat(pesoTecnico) || 0,
       peso_comercial: parseFloat(pesoComercial) || 0,
-      peso_participacao: parseFloat(pesoParticipacao) || 0,
-      peso_ganho: parseFloat(pesoGanho) || 0,
       peso_documental: parseFloat(pesoDocumental) || 0,
       peso_complexidade: parseFloat(pesoComplexidade) || 0,
       peso_juridico: parseFloat(pesoJuridico) || 0,
       peso_logistico: parseFloat(pesoLogistico) || 0,
+    };
+    const soma = Object.values(pesos).reduce((a, b) => a + b, 0);
+    if (Math.abs(soma - 1.0) > 0.01) {
+      alert(`A soma dos pesos deve ser 1.00 (atual: ${soma.toFixed(2)}). Ajuste os valores antes de salvar.`);
+      return;
+    }
+    await saveParamScore(pesos);
+  };
+
+  const handleSalvarLimiares = async () => {
+    await saveParamScore({
+      limiar_go: parseFloat(limiarGo) || 70,
+      limiar_nogo: parseFloat(limiarNogo) || 40,
+      limiar_tecnico_go: parseFloat(limiarTecnicoGo) || 60,
+      limiar_tecnico_nogo: parseFloat(limiarTecnicoNogo) || 30,
+      limiar_juridico_go: parseFloat(limiarJuridicoGo) || 60,
+      limiar_juridico_nogo: parseFloat(limiarJuridicoNogo) || 30,
     });
   };
 
@@ -475,7 +501,13 @@ export function ParametrizacoesPage(_props: PageProps) {
     }
   };
 
+  // Soma dos pesos para validacao
+  const somaPesos = parseFloat(pesoTecnico || "0") + parseFloat(pesoComercial || "0") +
+    parseFloat(pesoDocumental || "0") + parseFloat(pesoComplexidade || "0") +
+    parseFloat(pesoJuridico || "0") + parseFloat(pesoLogistico || "0");
+
   const tabs = [
+    { id: "score", label: "Score", icon: <Settings size={16} /> },
     { id: "comercial", label: "Comercial", icon: <Globe size={16} /> },
     { id: "fontes", label: "Fontes de Busca", icon: <Globe size={16} /> },
     { id: "notificacoes", label: "Notificacoes", icon: <Bell size={16} /> },
@@ -498,6 +530,93 @@ export function ParametrizacoesPage(_props: PageProps) {
         <TabPanel tabs={tabs}>
           {(activeTab) => {
             switch (activeTab) {
+              case "score":
+                return (
+                  <>
+                    {loadingParamScore ? (
+                      <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando parametros de score...</span></div>
+                    ) : (
+                    <>
+                    <Card title="Pesos das Dimensoes" subtitle="Pesos que ponderam cada dimensao no calculo do score final (devem somar 1.00)">
+                      <div className="form-grid form-grid-2">
+                        <FormField label="Peso Tecnico" hint="Aderencia tecnica do produto">
+                          <TextInput value={pesoTecnico} onChange={(v) => setPesoTecnico(v)} type="number" placeholder="0.35" />
+                        </FormField>
+                        <FormField label="Peso Documental" hint="Regularidade documental e certidoes">
+                          <TextInput value={pesoDocumental} onChange={(v) => setPesoDocumental(v)} type="number" placeholder="0.15" />
+                        </FormField>
+                        <FormField label="Peso Complexidade" hint="Complexidade tecnica do edital">
+                          <TextInput value={pesoComplexidade} onChange={(v) => setPesoComplexidade(v)} type="number" placeholder="0.15" />
+                        </FormField>
+                        <FormField label="Peso Juridico" hint="Risco juridico e clausulas restritivas">
+                          <TextInput value={pesoJuridico} onChange={(v) => setPesoJuridico(v)} type="number" placeholder="0.20" />
+                        </FormField>
+                        <FormField label="Peso Logistico" hint="Viabilidade logistica e prazo de entrega">
+                          <TextInput value={pesoLogistico} onChange={(v) => setPesoLogistico(v)} type="number" placeholder="0.05" />
+                        </FormField>
+                        <FormField label="Peso Comercial" hint="Viabilidade comercial e preco">
+                          <TextInput value={pesoComercial} onChange={(v) => setPesoComercial(v)} type="number" placeholder="0.10" />
+                        </FormField>
+                      </div>
+                      <div style={{ marginTop: "8px", fontSize: "13px", color: somaPesos >= 0.99 && somaPesos <= 1.01 ? "#22c55e" : "#ef4444" }}>
+                        Soma atual: {somaPesos.toFixed(2)} {somaPesos >= 0.99 && somaPesos <= 1.01 ? "" : "(deve ser 1.00)"}
+                      </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Pesos"} variant="primary" onClick={handleSalvarPesosScore} disabled={savingParamScore} />
+                      </div>
+                    </Card>
+
+                    <Card title="Limiares de Decisao GO / NO-GO" subtitle="Defina os limiares para classificacao automatica dos editais">
+                      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                          <h4 style={{ margin: "0 0 8px", fontSize: "14px", color: "var(--text-secondary)" }}>Score Final</h4>
+                          <div className="form-grid form-grid-2">
+                            <FormField label="Minimo para GO" hint="Score final >= este valor para GO">
+                              <TextInput value={limiarGo} onChange={(v) => setLimiarGo(v)} type="number" placeholder="70" />
+                            </FormField>
+                            <FormField label="Maximo para NO-GO" hint="Score final < este valor para NO-GO">
+                              <TextInput value={limiarNogo} onChange={(v) => setLimiarNogo(v)} type="number" placeholder="40" />
+                            </FormField>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 style={{ margin: "0 0 8px", fontSize: "14px", color: "var(--text-secondary)" }}>Score Tecnico</h4>
+                          <div className="form-grid form-grid-2">
+                            <FormField label="Minimo para GO" hint="Score tecnico >= este valor para GO">
+                              <TextInput value={limiarTecnicoGo} onChange={(v) => setLimiarTecnicoGo(v)} type="number" placeholder="60" />
+                            </FormField>
+                            <FormField label="Maximo para NO-GO" hint="Score tecnico < este valor para NO-GO">
+                              <TextInput value={limiarTecnicoNogo} onChange={(v) => setLimiarTecnicoNogo(v)} type="number" placeholder="30" />
+                            </FormField>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 style={{ margin: "0 0 8px", fontSize: "14px", color: "var(--text-secondary)" }}>Score Juridico</h4>
+                          <div className="form-grid form-grid-2">
+                            <FormField label="Minimo para GO" hint="Score juridico >= este valor para GO">
+                              <TextInput value={limiarJuridicoGo} onChange={(v) => setLimiarJuridicoGo(v)} type="number" placeholder="60" />
+                            </FormField>
+                            <FormField label="Maximo para NO-GO" hint="Score juridico < este valor para NO-GO">
+                              <TextInput value={limiarJuridicoNogo} onChange={(v) => setLimiarJuridicoNogo(v)} type="number" placeholder="30" />
+                            </FormField>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "16px", padding: "12px", background: "var(--bg-secondary)", borderRadius: "8px", fontSize: "13px", lineHeight: "1.6" }}>
+                        <strong>Regra atual:</strong><br />
+                        GO: score_final &gt;= {limiarGo} E tecnico &gt;= {limiarTecnicoGo} E juridico &gt;= {limiarJuridicoGo}<br />
+                        NO-GO: score_final &lt; {limiarNogo} OU tecnico &lt; {limiarTecnicoNogo} OU juridico &lt; {limiarJuridicoNogo}<br />
+                        AVALIAR: demais casos
+                      </div>
+                      <div className="form-actions" style={{ marginTop: "12px" }}>
+                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Limiares"} variant="primary" onClick={handleSalvarLimiares} disabled={savingParamScore} />
+                      </div>
+                    </Card>
+                    </>
+                    )}
+                  </>
+                );
+
               case "comercial":
                 return (
                   <>
@@ -620,156 +739,7 @@ export function ParametrizacoesPage(_props: PageProps) {
                       </div>
                     </Card>
 
-                    <Card title="Pesos de Score (6 Dimensoes + Operacionais)" subtitle="Pesos que ponderam cada dimensao no calculo do score final. As 6 dimensoes do workflow: Tecnico, Documental, Complexidade, Juridico, Logistico, Comercial, mais pesos operacionais Participacao e Ganho.">
-                      <div className="form-grid form-grid-2">
-                        <FormField label="Peso Tecnico" hint="Aderencia tecnica do produto">
-                          <TextInput value={pesoTecnico} onChange={(v) => setPesoTecnico(v)} type="number" placeholder="0.25" />
-                        </FormField>
-                        <FormField label="Peso Documental" hint="Regularidade documental e certidoes">
-                          <TextInput value={pesoDocumental} onChange={(v) => setPesoDocumental(v)} type="number" placeholder="0.15" />
-                        </FormField>
-                        <FormField label="Peso Complexidade" hint="Complexidade tecnica do edital">
-                          <TextInput value={pesoComplexidade} onChange={(v) => setPesoComplexidade(v)} type="number" placeholder="0.10" />
-                        </FormField>
-                        <FormField label="Peso Juridico" hint="Risco juridico e clausulas restritivas">
-                          <TextInput value={pesoJuridico} onChange={(v) => setPesoJuridico(v)} type="number" placeholder="0.10" />
-                        </FormField>
-                        <FormField label="Peso Logistico" hint="Viabilidade logistica e prazo de entrega">
-                          <TextInput value={pesoLogistico} onChange={(v) => setPesoLogistico(v)} type="number" placeholder="0.10" />
-                        </FormField>
-                        <FormField label="Peso Comercial" hint="Viabilidade comercial e preco">
-                          <TextInput value={pesoComercial} onChange={(v) => setPesoComercial(v)} type="number" placeholder="0.15" />
-                        </FormField>
-                        <FormField label="Peso Participacao" hint="Historico de participacao em editais">
-                          <TextInput value={pesoParticipacao} onChange={(v) => setPesoParticipacao(v)} type="number" placeholder="0.05" />
-                        </FormField>
-                        <FormField label="Peso Ganho" hint="Taxa de vitoria historica">
-                          <TextInput value={pesoGanho} onChange={(v) => setPesoGanho(v)} type="number" placeholder="0.10" />
-                        </FormField>
-                      </div>
-                      <div style={{ marginTop: "8px", fontSize: "13px", color: "#64748b" }}>
-                        Soma atual: {(
-                          parseFloat(pesoTecnico || "0") + parseFloat(pesoComercial || "0") +
-                          parseFloat(pesoParticipacao || "0") + parseFloat(pesoGanho || "0") +
-                          parseFloat(pesoDocumental || "0") + parseFloat(pesoComplexidade || "0") +
-                          parseFloat(pesoJuridico || "0") + parseFloat(pesoLogistico || "0")
-                        ).toFixed(2)}
-                      </div>
-                      <div className="form-actions" style={{ marginTop: "12px" }}>
-                        <ActionButton label={savingParamScore ? "Salvando..." : "Salvar Pesos"} variant="primary" onClick={handleSalvarPesosScore} disabled={savingParamScore} />
-                      </div>
-                    </Card>
-
-                    {/* Norteadores de Score */}
-                    <Card title="Norteadores de Score" subtitle="Configuracoes que alimentam o calculo de scores multi-dimensionais">
-                      <div className="norteadores-grid">
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "crud:classes-produto-v2" } }))}>
-                          <div className="norteador-header">
-                            {classes.length > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(a) Classificacao/Agrupamento</span>
-                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
-                          </div>
-                          <p className="norteador-desc">Arvore de classes e subclasses (aba Produtos)</p>
-                          {classes.length > 0
-                            ? <StatusBadge status="success" label={`${classes.length} classe(s) configurada(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Regiao de Atuacao")}>
-                          <div className="norteador-header">
-                            {estadosSelecionados.size > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(b) Score Comercial</span>
-                            <span className="score-feed-badge feed-comercial">Score Comercial</span>
-                          </div>
-                          <p className="norteador-desc">Regiao de atuacao, prazos e mercado (acima)</p>
-                          {estadosSelecionados.size > 0
-                            ? <StatusBadge status="success" label={`${estadosSelecionados.size} estado(s) selecionado(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Modalidades de Licitacao")}>
-                          <div className="norteador-header">
-                            {tiposEditalSelecionados.size > 0
-                              ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                              : <XCircle size={16} style={{ color: "#ef4444" }} />}
-                            <span className="norteador-label">(c) Modalidades de Licitacao</span>
-                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
-                          </div>
-                          <p className="norteador-desc">Modalidades de licitacao desejadas (acima)</p>
-                          {tiposEditalSelecionados.size > 0
-                            ? <StatusBadge status="success" label={`${tiposEditalSelecionados.size} modalidade(s) selecionada(s)`} size="small" />
-                            : <StatusBadge status="error" label="Nao configurado" size="small" />}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer", position: "relative" }} onClick={() => {
-                          setShowPortfolioHint(true);
-                          setTimeout(() => setShowPortfolioHint(false), 3000);
-                        }}>
-                          <div className="norteador-header">
-                            <CheckCircle size={16} style={{ color: "#22c55e" }} />
-                            <span className="norteador-label">(d) Score Tecnico</span>
-                            <span className="score-feed-badge feed-tecnico">Score Tecnico</span>
-                          </div>
-                          <p className="norteador-desc">Baseado nas especificacoes dos produtos do Portfolio</p>
-                          <StatusBadge status="success" label="Configurar no Portfolio" size="small" />
-                          {showPortfolioHint && (
-                            <div style={{
-                              position: "absolute", bottom: "-32px", left: "50%", transform: "translateX(-50%)",
-                              background: "#1e293b", color: "#fff", padding: "6px 12px", borderRadius: "6px",
-                              fontSize: "12px", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
-                            }}>
-                              <Info size={12} style={{ marginRight: "4px", verticalAlign: "middle" }} />
-                              Configure na pagina Portfolio
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="norteador-item" style={{ cursor: "pointer" }} onClick={() => scrollToCard("Custos e Margens")}>
-                          <div className="norteador-header">
-                            <AlertTriangle size={16} style={{ color: "#eab308" }} />
-                            <span className="norteador-label">(e) Score Participacao</span>
-                            <span className="score-feed-badge feed-recomendacao">Score Recomendacao</span>
-                          </div>
-                          <p className="norteador-desc">Documentos frequentemente solicitados em editais</p>
-                          <StatusBadge status="warning" label="Em configuracao" size="small" />
-                        </div>
-
-                        <div className="norteador-item">
-                          <div className="norteador-header">
-                            <XCircle size={16} style={{ color: "#6b7280" }} />
-                            <span className="norteador-label">(f) Score Aderencia de Ganho</span>
-                            <span className="score-feed-badge feed-ganho">Score Ganho</span>
-                          </div>
-                          <p className="norteador-desc">Historico: taxa de vitoria, margem media praticada</p>
-                          <StatusBadge status="neutral" label="A definir" size="small" />
-                        </div>
-                      </div>
-
-                      {/* Historico para Score Ganho */}
-                      <div className="norteador-config-section">
-                        <h4>Configurar Score Aderencia de Ganho (f)</h4>
-                        {loadingParametros ? (
-                          <div className="loading-center"><Loader2 size={16} className="spin" /><span>Carregando...</span></div>
-                        ) : (
-                          <div className="form-grid form-grid-3">
-                            <FormField label="Taxa de Vitoria Historica (%)">
-                              <TextInput value={getParamPeso("taxa_vitoria")} onChange={(v) => updateParamPeso("taxa_vitoria", v)} placeholder="Ex: 35" type="number" />
-                            </FormField>
-                            <FormField label="Margem Media Praticada (%)">
-                              <TextInput value={getParamPeso("margem_media")} onChange={(v) => updateParamPeso("margem_media", v)} placeholder="Ex: 15" type="number" />
-                            </FormField>
-                            <FormField label="Total de Licitacoes Participadas">
-                              <TextInput value={getParamPeso("total_licitacoes")} onChange={(v) => updateParamPeso("total_licitacoes", v)} placeholder="Ex: 120" type="number" />
-                            </FormField>
-                          </div>
-                        )}
-                        <ActionButton icon={<Lock size={14} />} label="Calcular pesos com IA (Onda 4)" onClick={() => {}} disabled />
-                      </div>
-                    </Card>
+                    {/* Pesos e Norteadores movidos para aba Score */}
                     </>
                     )}
                   </>

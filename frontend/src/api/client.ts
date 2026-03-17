@@ -259,6 +259,12 @@ export interface Produto {
   status_pipeline?: string;
   registro_anvisa?: string;
   anvisa_status?: string;
+  catmat_codigos?: string[];
+  catser_codigos?: string[];
+  catmat_descricoes?: string[];
+  termos_busca?: string[];
+  termos_busca_updated_at?: string;
+  catmat_updated_at?: string;
   created_at: string;
   especificacoes?: ProdutoEspecificacao[];
 }
@@ -301,6 +307,17 @@ export interface CompletudeResult {
   mascara_check: { campo: string; preenchido: boolean; valor: string; unidade?: string }[];
   completude: { percentual_geral: number; percentual_basicos: number; percentual_mascara: number; status: string };
   recomendacoes: string[];
+}
+
+export async function reprocessarMetadados(produtoId: string): Promise<{ success: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/produtos/${produtoId}/reprocessar-metadados`, {
+    method: "POST",
+    headers,
+  });
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) throw new Error("Erro ao reprocessar metadados");
+  return res.json();
 }
 
 export async function getProdutoCompletude(produtoId: string): Promise<CompletudeResult> {

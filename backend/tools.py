@@ -17,7 +17,7 @@ from models import (
     FonteEdital, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
     Concorrente, PrecoHistorico, ParticipacaoEdital,
-    ParametroScore, Empresa, SubclasseProduto,
+    ParametroScore, Empresa, SubclasseProduto, ClasseProdutoV2,
     # FASE 1 Precificação
     Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
     EstrategiaEdital,
@@ -1332,6 +1332,15 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
         # 7. Marcar documento como processado
         doc_registro.processado = True
         db.commit()
+
+        # Background: buscar CATMAT e gerar termos de busca semânticos
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            _bg = ThreadPoolExecutor(max_workers=1)
+            _bg.submit(processar_metadados_produto, produto.id)
+            print(f"[TOOLS] Metadados em background para produto {produto.id}")
+        except Exception as e:
+            print(f"[TOOLS] Erro ao iniciar metadados background: {e}")
 
         return {
             "success": True,
@@ -3114,6 +3123,281 @@ def execute_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 # ── Pré-filtro por keywords (sem LLM) ────────────────────────────────────────
 
+# ==================== METADADOS DE CAPTAÇÃO (CATMAT/TERMOS) ====================
+
+def _buscar_catmat_produto(produto_id: str, db=None) -> Dict:
+    """Busca códigos CATMAT/CATSER na API de dados abertos do governo.
+    Estratégia em 2 passos:
+      1. Buscar PDMs (tipos de produto) nos grupos relevantes, filtrar por nome
+      2. Buscar itens do PDM encontrado
+    """
+    from difflib import SequenceMatcher
+
+    CATMAT_BASE = "https://dadosabertos.compras.gov.br"
+    # Grupos relevantes para saúde/laboratório
+    GRUPOS_RELEVANTES = [
+        64,  # Medicamentos, Drogas e Produtos Biológicos
+        65,  # Equipamentos e Artigos para Uso Médico, Dentário e Veterinário
+        66,  # Instrumentos e Equipamentos de Laboratório
+    ]
+    # Palavras genéricas que não devem ser usadas para matching (causam falsos positivos)
+    STOP_WORDS_CATMAT = {
+        "azul", "azuis", "branco", "branca", "preto", "preta", "verde", "vermelho",
+        "amarelo", "rosa", "cinza", "para", "para", "tipo", "modelo", "manual",
+        "descartável", "descartavel", "esteril", "estéril", "esterilizado",
+        "esterilizada", "automático", "automatico", "digital", "elétrico",
+        "eletrico", "horizontal", "vertical", "portátil", "portatil",
+        "ultra", "mini", "micro", "maxi", "grande", "pequeno", "médio",
+        "litros", "litro", "unidade", "caixa", "pacote", "frasco",
+    }
+
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+
+    try:
+        produto = db.query(Produto).filter(Produto.id == produto_id).first()
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        nome = produto.nome or ""
+        palavras_nome = [w for w in nome.split() if len(w) > 3 and w.lower() not in STOP_WORDS_CATMAT]
+        nome_lower = nome.lower()
+
+        catmat_codigos = []
+        catmat_descricoes = []
+        catser_codigos = []
+
+        # === PASSO 1: Buscar PDMs nos grupos relevantes, filtrar por nome ===
+        pdms_match = []
+        for grupo_id in GRUPOS_RELEVANTES:
+            try:
+                resp = requests.get(
+                    f"{CATMAT_BASE}/modulo-material/3_consultarPdmMaterial",
+                    params={"codigoGrupo": grupo_id, "tamanhoPagina": 500},
+                    timeout=15
+                )
+                if resp.status_code != 200:
+                    print(f"[CATMAT] Grupo {grupo_id}: HTTP {resp.status_code}")
+                    continue
+                data = resp.json()
+                pdms = data.get("resultado", [])
+                for pdm in pdms:
+                    pdm_nome = (pdm.get("nomePdm") or "").lower()
+                    if not pdm_nome:
+                        continue
+                    # Match: palavras significativas (>3 chars) do produto no nome do PDM
+                    score = 0
+                    matched_words = []
+                    for p in palavras_nome:
+                        if len(p) > 3 and p.lower() in pdm_nome:
+                            score += 2  # Match de palavra é sinal forte
+                            matched_words.append(p)
+                    if pdm_nome in nome_lower or nome_lower in pdm_nome:
+                        score += 3
+                    # Similarity check (threshold alto para evitar falsos positivos)
+                    ratio = SequenceMatcher(None, nome_lower, pdm_nome).ratio()
+                    if ratio >= 0.55:
+                        score += 1
+                    if score > 0:
+                        pdms_match.append((pdm, score, ratio))
+                print(f"[CATMAT] Grupo {grupo_id}: {len(pdms)} PDMs, {len([x for x in pdms_match if x[0] in pdms])} matches")
+            except Exception as e:
+                print(f"[CATMAT] Erro grupo {grupo_id}: {e}")
+
+        # Ordenar por melhor match e pegar top 3
+        pdms_match.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        top_pdms = pdms_match[:3]
+
+        # === PASSO 2: Buscar itens dos PDMs encontrados ===
+        for pdm_info, pdm_score, _ in top_pdms:
+            cod_pdm = pdm_info.get("codigoPdm")
+            if not cod_pdm:
+                continue
+            try:
+                resp = requests.get(
+                    f"{CATMAT_BASE}/modulo-material/4_consultarItemMaterial",
+                    params={"codigoPdm": cod_pdm, "tamanhoPagina": 50},
+                    timeout=15
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                itens = data.get("resultado", [])
+                for item in itens:
+                    desc = item.get("descricaoItem", "")
+                    codigo = str(item.get("codigoItem", ""))
+                    if not desc or not codigo:
+                        continue
+                    # Filtrar por similaridade com nome do produto
+                    desc_lower = desc.lower()
+                    ratio = SequenceMatcher(None, nome_lower, desc_lower).ratio()
+                    # Palavras significativas (>3 chars) do produto na descrição do item
+                    palavras_match = sum(1 for p in palavras_nome[:5] if p.lower() in desc_lower and len(p) > 3)
+                    # PDM com score forte (>=2): aceitar itens com 1+ palavra match
+                    # PDM com score fraco: exigir ratio alta ou 2+ palavras
+                    if pdm_score >= 2:
+                        aceitar = ratio >= 0.30 or palavras_match >= 1
+                    else:
+                        aceitar = ratio >= 0.35 or palavras_match >= 2
+                    if aceitar:
+                        if codigo not in catmat_codigos:
+                            catmat_codigos.append(codigo)
+                            catmat_descricoes.append(desc)
+                print(f"[CATMAT] PDM {cod_pdm} ({pdm_info.get('nomePdm')}): {len(itens)} itens, {len(catmat_codigos)} matches acum.")
+            except Exception as e:
+                print(f"[CATMAT] Erro PDM {cod_pdm}: {e}")
+
+        # Limitar a top 5
+        catmat_codigos = catmat_codigos[:5]
+        catmat_descricoes = catmat_descricoes[:5]
+
+        # === CATSER: Buscar Serviço se categoria sugere serviço ===
+        categorias_servico = {"comodato", "aluguel"}
+        if produto.categoria in categorias_servico or any(w in nome_lower for w in ["comodato", "locação", "aluguel", "serviço"]):
+            try:
+                resp = requests.get(
+                    f"{CATMAT_BASE}/modulo-servico/6_consultarItemServico",
+                    params={"tamanhoPagina": 50},
+                    timeout=15
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    itens = data.get("resultado", [])
+                    for item in itens:
+                        desc = (item.get("descricaoItem") or "").lower()
+                        codigo = str(item.get("codigoItem", ""))
+                        if codigo and any(p.lower() in desc for p in palavras_nome[:2]):
+                            if codigo not in catser_codigos:
+                                catser_codigos.append(codigo)
+            except Exception as e:
+                print(f"[CATSER] Erro: {e}")
+
+        catser_codigos = catser_codigos[:5]
+
+        # Gravar no banco
+        produto.catmat_codigos = catmat_codigos or []
+        produto.catmat_descricoes = catmat_descricoes or []
+        produto.catser_codigos = catser_codigos or []
+        produto.catmat_updated_at = datetime.now()
+        db.commit()
+
+        print(f"[CATMAT] Produto '{produto.nome}': {len(catmat_codigos)} CATMAT, {len(catser_codigos)} CATSER")
+        return {"success": True, "catmat": catmat_codigos, "catser": catser_codigos, "descricoes": catmat_descricoes}
+
+    except Exception as e:
+        print(f"[CATMAT] Erro geral: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if close_db:
+            db.close()
+
+
+PROMPT_GERAR_TERMOS_BUSCA = """Você é um especialista em licitações públicas brasileiras.
+Dado o produto abaixo, gere termos de busca para encontrar editais que demandem este produto.
+
+Produto: {nome}
+Categoria: {categoria}
+Fabricante: {fabricante}
+Modelo: {modelo}
+Especificações: {specs_texto}
+Códigos CATMAT: {catmat_codigos}
+Descrições CATMAT: {catmat_descricoes}
+
+Gere termos que cubram:
+- Sinônimos e variações de nomenclatura
+- Termos técnicos das especificações
+- Termos que órgãos públicos usam para descrever este produto
+- Abreviações e siglas comuns
+- Termos relacionados que indicam necessidade
+
+Retorne APENAS JSON: {{"termos": ["termo1", "termo2", ...]}}
+Mínimo 8, máximo 25 termos. Sem repetições."""
+
+
+def _gerar_termos_busca_produto(produto_id: str, db=None) -> Dict:
+    """Gera termos de busca semânticos via IA para um produto."""
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+
+    try:
+        produto = db.query(Produto).filter(Produto.id == produto_id).first()
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        # Carregar specs
+        specs = db.query(ProdutoEspecificacao).filter(
+            ProdutoEspecificacao.produto_id == produto.id
+        ).limit(10).all()
+        specs_texto = "; ".join([f"{s.nome_especificacao}: {s.valor}" for s in specs]) or "Não disponível"
+
+        prompt = PROMPT_GERAR_TERMOS_BUSCA.format(
+            nome=produto.nome or "",
+            categoria=produto.categoria or "",
+            fabricante=produto.fabricante or "N/A",
+            modelo=produto.modelo or "N/A",
+            specs_texto=specs_texto,
+            catmat_codigos=json.dumps(produto.catmat_codigos or [], ensure_ascii=False),
+            catmat_descricoes=json.dumps(produto.catmat_descricoes or [], ensure_ascii=False),
+        )
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=800,
+            temperature=0.3,
+            model_override="deepseek-chat"
+        )
+
+        if not resposta:
+            return {"success": False, "error": "Resposta vazia da IA"}
+
+        # Parsear JSON
+        json_match = re.search(r'\{[\s\S]*\}', resposta)
+        if json_match:
+            data = json.loads(json_match.group())
+            termos = data.get("termos", [])
+            if isinstance(termos, list):
+                # Validar: apenas strings, sem duplicatas
+                termos = list(dict.fromkeys([t for t in termos if isinstance(t, str) and len(t.strip()) > 1]))[:25]
+                produto.termos_busca = termos
+                produto.termos_busca_updated_at = datetime.now()
+                db.commit()
+                print(f"[TERMOS] Produto '{produto.nome}': {len(termos)} termos gerados")
+                return {"success": True, "termos": termos}
+
+        return {"success": False, "error": "IA não retornou JSON válido"}
+
+    except Exception as e:
+        print(f"[TERMOS] Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if close_db:
+            db.close()
+
+
+def processar_metadados_produto(produto_id: str):
+    """Busca CATMAT + gera termos. Chamado após cadastro/update do produto."""
+    db = get_db()
+    try:
+        print(f"[METADADOS] Processando metadados para produto {produto_id}...")
+        _buscar_catmat_produto(produto_id, db)
+        _gerar_termos_busca_produto(produto_id, db)
+        print(f"[METADADOS] Concluído para produto {produto_id}")
+    except Exception as e:
+        print(f"[METADADOS] Erro: {e}")
+    finally:
+        db.close()
+
+
+# ==================== PRE-FILTRO E SCORE RÁPIDO ====================
+
 STOPWORDS_PT = {
     "de", "da", "do", "das", "dos", "em", "no", "na", "para", "por", "com",
     "sem", "como", "que", "uma", "um", "os", "as", "ou", "ao", "aos",
@@ -3185,6 +3469,21 @@ def _build_product_keyword_index(produtos_data, db):
             for word in spec_norm.split():
                 if len(word) > 2 and word not in STOPWORDS_PT:
                     specs_keywords.add(word)
+
+        # Termos semânticos gerados pela IA (sinal forte)
+        termos = p.get("termos_busca") or []
+        for t in termos:
+            t_norm = _norm(t)
+            if len(t_norm) > 2:
+                keywords.add(t_norm)
+
+        # Descrições CATMAT (vocabulário governamental)
+        catmat_descs = p.get("catmat_descricoes") or []
+        for desc in catmat_descs:
+            desc_norm = _norm(desc)
+            for word in desc_norm.split():
+                if len(word) > 3 and word not in STOPWORDS_PT:
+                    keywords.add(word)
 
     print(f"[TOOLS] Keyword index: {len(keywords)} keywords, {len(categorias_expandidas)} cat-synonyms, "
           f"{len(fabricantes)} fabricantes, {len(modelos)} modelos, {len(specs_keywords)} spec-words")
@@ -3426,6 +3725,8 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
                 "fabricante": p.fabricante,
                 "modelo": p.modelo,
                 "specs": specs_resumo,
+                "termos_busca": p.termos_busca or [],
+                "catmat_descricoes": p.catmat_descricoes or [],
             })
 
         # JSON compacto para o prompt batch (sem IDs, sem specs detalhadas)
@@ -7297,8 +7598,8 @@ Analise o edital abaixo e calcule 6 scores de validação (0 a 100) e dê uma de
 
 ## DECISÃO:
 Com base nos scores:
-- **GO**: score_final >= 70 E score_tecnico >= 60 E score_juridico >= 60
-- **NO-GO**: score_final < 40 OU score_tecnico < 30 OU score_juridico < 30 OU incompatibilidade de porte
+- **GO**: score_final >= {limiar_go} E score_tecnico >= {limiar_tecnico_go} E score_juridico >= {limiar_juridico_go}
+- **NO-GO**: score_final < {limiar_nogo} OU score_tecnico < {limiar_tecnico_nogo} OU score_juridico < {limiar_juridico_nogo} OU incompatibilidade de porte
 - **AVALIAR**: demais casos
 
 ## RESPONDA APENAS EM JSON:
@@ -7319,20 +7620,169 @@ Com base nos scores:
 }}
 
 O score_final deve ser calculado com os pesos:
-- técnico: 35%, documental: 15%, complexidade: 15%, jurídico: 20%, logístico: 5%, comercial: 10%
+- técnico: {peso_tecnico_pct}%, documental: {peso_documental_pct}%, complexidade: {peso_complexidade_pct}%, jurídico: {peso_juridico_pct}%, logístico: {peso_logistico_pct}%, comercial: {peso_comercial_pct}%
 """
+
+
+def _match_produto_edital(produtos, edital_objeto, db):
+    """
+    Matching hierárquico: produto exato → subclasse → classe → genérico.
+    Retorna (melhor_produto, nivel_match, score_match).
+    """
+    import unicodedata
+
+    def _norm(txt):
+        if not txt:
+            return ""
+        txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+        # Remover pontuação para evitar tokens como "(compressas)" ou "equipamentos,"
+        import re as _re
+        txt = _re.sub(r'[^\w\s]', ' ', txt)
+        return txt.lower().strip()
+
+    def _stem_pt(word):
+        """Stemming simplificado para português — remove sufixos comuns de plural/gênero."""
+        if len(word) <= 4:
+            return word
+        # Plurais: seringas→seringa, luvas→luva, materiais→material, equipamentos→equipamento
+        if word.endswith('ais'):
+            return word[:-3] + 'al'
+        if word.endswith('eis'):
+            return word[:-3] + 'el'
+        if word.endswith('oes'):
+            return word[:-3] + 'ao'
+        if word.endswith('es') and not word.endswith('sse') and len(word) > 5:
+            return word[:-2]
+        if word.endswith('s') and not word.endswith('ss'):
+            return word[:-1]
+        return word
+
+    objeto_norm = _norm(edital_objeto)
+    objeto_tokens = set(_stem_pt(w) for w in objeto_norm.split() if len(w) > 2)
+
+    if not objeto_tokens or not produtos:
+        return None, "nenhum", 0
+
+    candidatos = []  # (produto, nivel, score)
+
+    # Tokens genéricos do objeto a ignorar na cobertura reversa
+    STOP_OBJETO = {"aquisicao", "contratacao", "registro", "preco",
+                    "futura", "eventual", "fornecimento", "servico",
+                    "material", "equipamento", "compra", "pregao",
+                    "eletronico", "para", "dos", "das", "com", "lote"}
+
+    def _tokenize(campos):
+        """Extrai tokens stemados de uma lista de campos."""
+        tokens = set()
+        for campo in campos:
+            if campo:
+                for w in _norm(campo).split():
+                    if len(w) > 2:
+                        tokens.add(_stem_pt(w))
+        return tokens
+
+    def _score_bidirecional(tokens_prod, intersecao):
+        """Score bidirecional: max(cobertura_produto, cobertura_objeto_relevante)."""
+        cob_prod = len(intersecao) / max(len(tokens_prod), 1)
+        obj_rel = objeto_tokens - {_stem_pt(w) for w in STOP_OBJETO}
+        cob_obj = len(intersecao) / max(len(obj_rel), 1) if obj_rel else cob_prod
+        return max(cob_prod, cob_obj)
+
+    for p in produtos:
+        # Nível 1: Match exato (nome + fabricante/modelo)
+        tokens_exato = _tokenize([p.nome, p.fabricante, p.modelo])
+
+        if tokens_exato:
+            intersecao = tokens_exato & objeto_tokens
+            score_exato = _score_bidirecional(tokens_exato, intersecao)
+            # Bonus: substring match do nome inteiro
+            nome_norm = _norm(p.nome or "")
+            if nome_norm and len(nome_norm) > 5 and nome_norm in objeto_norm:
+                score_exato = max(score_exato, 0.7)
+            # Bonus: fabricante exato no objeto
+            fab_norm = _norm(p.fabricante or "")
+            if fab_norm and len(fab_norm) > 2 and fab_norm in objeto_norm:
+                score_exato += 0.15
+            # Bonus: primeira palavra significativa do nome do produto no objeto
+            nome_palavras = [_stem_pt(w) for w in _norm(p.nome or "").split() if len(w) > 3]
+            if nome_palavras and nome_palavras[0] in objeto_tokens:
+                score_exato = max(score_exato, 0.5)
+
+            if score_exato >= 0.4:
+                candidatos.append((p, "exato", score_exato))
+                continue
+
+        # Nível 2: Match por subclasse
+        matched_subclasse = False
+        if p.subclasse_id:
+            irmaos = db.query(Produto).filter(
+                Produto.subclasse_id == p.subclasse_id,
+                Produto.user_id == p.user_id
+            ).all()
+            for irmao in irmaos:
+                if irmao.id == p.id:
+                    continue
+                tokens_irmao = _tokenize([irmao.nome, irmao.fabricante, irmao.modelo])
+                if tokens_irmao:
+                    intersecao = tokens_irmao & objeto_tokens
+                    score_irmao = _score_bidirecional(tokens_irmao, intersecao)
+                    if score_irmao >= 0.3:
+                        candidatos.append((p, "subclasse", score_irmao * 0.8))
+                        matched_subclasse = True
+                        break
+
+            # Nível 3: Match por classe (via subclasse.classe)
+            if not matched_subclasse:
+                subclasse = db.query(SubclasseProduto).filter(
+                    SubclasseProduto.id == p.subclasse_id
+                ).first()
+                if subclasse and subclasse.classe_id:
+                    subs_classe = db.query(SubclasseProduto).filter(
+                        SubclasseProduto.classe_id == subclasse.classe_id
+                    ).all()
+                    sub_ids = [s.id for s in subs_classe]
+                    primos = db.query(Produto).filter(
+                        Produto.subclasse_id.in_(sub_ids),
+                        Produto.user_id == p.user_id,
+                        Produto.id != p.id
+                    ).all()
+                    for primo in primos:
+                        tokens_primo = _tokenize([primo.nome, primo.fabricante, primo.modelo])
+                        if tokens_primo:
+                            intersecao = tokens_primo & objeto_tokens
+                            score_primo = _score_bidirecional(tokens_primo, intersecao)
+                            if score_primo >= 0.3:
+                                candidatos.append((p, "classe", score_primo * 0.6))
+                                break
+
+        # Nível 4: Match genérico (fallback por tokens incluindo termos_busca)
+        termos_list = [t for t in (p.termos_busca or [])]
+        tokens_all = _tokenize([p.nome, p.categoria, p.fabricante, p.modelo] + termos_list)
+
+        if tokens_all:
+            intersecao = tokens_all & objeto_tokens
+            score_gen = _score_bidirecional(tokens_all, intersecao)
+            if score_gen > 0.1:
+                candidatos.append((p, "generico", score_gen * 0.4))
+
+    if not candidatos:
+        return None, "nenhum", 0
+
+    candidatos.sort(key=lambda x: x[2], reverse=True)
+    return candidatos[0]
 
 
 def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str = None) -> Dict[str, Any]:
     """
     Calcula 6 dimensões de score de validação para um edital:
     técnico, documental, complexidade, jurídico, logístico, comercial.
+    Usa pesos e limiares de ParametroScore do banco.
     Retorna também decisão GO/NO-GO.
 
     Args:
         edital_id: ID do edital a analisar
         user_id: ID do usuário
-        produto_id: (opcional) ID do produto específico para análise. Se None, usa o primeiro produto.
+        produto_id: (opcional) ID do produto específico para análise. Se None, matching hierárquico.
 
     Returns:
         Dict com scores, decisão GO/NO-GO e justificativa
@@ -7348,90 +7798,67 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
 
+        # Carregar pesos e limiares do banco
+        params = db.query(ParametroScore).filter(
+            ParametroScore.user_id == user_id
+        ).first()
+        if not params:
+            class _Defaults:
+                peso_tecnico = Decimal('0.35'); peso_documental = Decimal('0.15')
+                peso_complexidade = Decimal('0.15'); peso_juridico = Decimal('0.20')
+                peso_logistico = Decimal('0.05'); peso_comercial = Decimal('0.10')
+                limiar_go = Decimal('70.0'); limiar_nogo = Decimal('40.0')
+                limiar_tecnico_go = Decimal('60.0'); limiar_tecnico_nogo = Decimal('30.0')
+                limiar_juridico_go = Decimal('60.0'); limiar_juridico_nogo = Decimal('30.0')
+                estados_atuacao = []
+            params = _Defaults()
+
         # Buscar produto
         produto = None
+        nivel_match = "nenhum"
         if produto_id:
             produto = db.query(Produto).filter(
                 Produto.id == produto_id,
                 Produto.user_id == user_id
             ).first()
+            if produto:
+                nivel_match = "exato"
 
         if not produto:
-            # Matching inteligente: comparar objeto do edital com todos os produtos
-            import unicodedata
-            def _norm_text(txt):
-                if not txt:
-                    return ""
-                txt = unicodedata.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
-                return txt.lower().strip()
-
+            # Matching hierárquico: exato → subclasse → classe → genérico
             todos_produtos = db.query(Produto).filter(
                 Produto.user_id == user_id
             ).all()
 
             if todos_produtos:
-                objeto_norm = _norm_text(edital.objeto or "")
-                objeto_tokens = set(w for w in objeto_norm.split() if len(w) > 2)
-                melhor_score = -1
-                melhor_produto = None
-
-                for p in todos_produtos:
-                    score = 0
-                    # Match por nome do produto
-                    nome_norm = _norm_text(p.nome or "")
-                    nome_tokens = set(w for w in nome_norm.split() if len(w) > 2)
-                    # Tokens em comum entre nome do produto e objeto do edital
-                    tokens_comuns = nome_tokens & objeto_tokens
-                    score += len(tokens_comuns) * 3
-
-                    # Match por fabricante (peso alto - nome exato no objeto)
-                    fab_norm = _norm_text(p.fabricante or "")
-                    if fab_norm and len(fab_norm) > 2 and fab_norm in objeto_norm:
-                        score += 10
-
-                    # Match por modelo (peso alto - número de modelo exato)
-                    mod_norm = _norm_text(p.modelo or "")
-                    if mod_norm and len(mod_norm) > 2 and mod_norm in objeto_norm:
-                        score += 10
-
-                    # Match por categoria
-                    cat_norm = _norm_text(p.categoria or "")
-                    if cat_norm and len(cat_norm) > 2 and cat_norm in objeto_norm:
-                        score += 5
-
-                    # Substring match: nome inteiro do produto aparece no objeto
-                    if nome_norm and len(nome_norm) > 5 and nome_norm in objeto_norm:
-                        score += 15
-
-                    if score > melhor_score:
-                        melhor_score = score
-                        melhor_produto = p
-
-                if melhor_produto and melhor_score > 0:
-                    produto = melhor_produto
-                    print(f"[SCORES_VALIDACAO] Produto matched: '{produto.nome}' (score={melhor_score}) para edital '{(edital.objeto or '')[:60]}'")
+                produto, nivel_match, match_score = _match_produto_edital(
+                    todos_produtos, edital.objeto or "", db
+                )
+                if produto:
+                    print(f"[SCORES_VALIDACAO] Match: '{produto.nome}' nivel={nivel_match} score={match_score:.2f} para '{(edital.objeto or '')[:60]}'")
                 else:
-                    # Nenhum match — usar primeiro como fallback
                     produto = todos_produtos[0]
+                    nivel_match = "generico"
                     print(f"[SCORES_VALIDACAO] Nenhum match — fallback para '{produto.nome}'")
 
         # Montar informação do produto para o prompt
         if produto:
             specs = db.query(ProdutoEspecificacao).filter(
                 ProdutoEspecificacao.produto_id == produto.id
-            ).limit(5).all()
+            ).limit(15).all()
             specs_texto = "; ".join([f"{s.nome_especificacao}: {s.valor}" for s in specs])
             produto_info = (
                 f"Nome: {produto.nome}\n"
                 f"Categoria: {produto.categoria}\n"
                 f"Fabricante: {produto.fabricante or 'N/A'}\n"
                 f"Modelo: {produto.modelo or 'N/A'}\n"
+                f"Nível de Match: {nivel_match} (exato|subclasse|classe|generico)\n"
                 f"Especificações: {specs_texto or 'Não disponível'}"
             )
         else:
             produto_info = "Produto não informado. Analise considerando um produto genérico da categoria do edital."
 
-        # B4: Carregar dados da empresa (porte, regime tributário)
+        # Carregar dados da empresa (porte, regime tributário)
         empresa_info = "Dados da empresa não disponíveis."
         try:
             empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
@@ -7440,13 +7867,15 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
                              'medio': 'Médio Porte', 'grande': 'Grande Empresa'}
                 regime_map = {'simples': 'Simples Nacional', 'lucro_presumido': 'Lucro Presumido',
                               'lucro_real': 'Lucro Real'}
+                estados_atuacao_str = ", ".join(getattr(params, 'estados_atuacao', None) or []) or "Não configurados"
                 empresa_info = (
                     f"Razão Social: {empresa.razao_social}\n"
                     f"CNPJ: {empresa.cnpj}\n"
                     f"Porte: {porte_map.get(empresa.porte, empresa.porte or 'Não informado')}\n"
                     f"Regime Tributário: {regime_map.get(empresa.regime_tributario, empresa.regime_tributario or 'Não informado')}\n"
                     f"UF: {empresa.uf or 'N/A'}\n"
-                    f"Cidade: {empresa.cidade or 'N/A'}"
+                    f"Cidade: {empresa.cidade or 'N/A'}\n"
+                    f"Estados de Atuação: {estados_atuacao_str}"
                 )
         except Exception as e:
             print(f"[SCORES_VALIDACAO] Erro ao carregar empresa: {e}")
@@ -7456,19 +7885,46 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             v = float(edital.valor_referencia)
             valor_str = f"R$ {v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
+        # Calcular percentuais dos pesos para o prompt
+        peso_tec = float(params.peso_tecnico or Decimal('0.35'))
+        peso_doc = float(params.peso_documental or Decimal('0.15'))
+        peso_com = float(params.peso_complexidade or Decimal('0.15'))
+        peso_jur = float(params.peso_juridico or Decimal('0.20'))
+        peso_log = float(params.peso_logistico or Decimal('0.05'))
+        peso_cml = float(params.peso_comercial or Decimal('0.10'))
+
+        lim_go = float(params.limiar_go or Decimal('70'))
+        lim_nogo = float(params.limiar_nogo or Decimal('40'))
+        lim_tec_go = float(params.limiar_tecnico_go or Decimal('60'))
+        lim_tec_nogo = float(params.limiar_tecnico_nogo or Decimal('30'))
+        lim_jur_go = float(params.limiar_juridico_go or Decimal('60'))
+        lim_jur_nogo = float(params.limiar_juridico_nogo or Decimal('30'))
+
         prompt = PROMPT_SCORES_VALIDACAO.format(
             numero=edital.numero,
             orgao=edital.orgao,
-            objeto=(edital.objeto or "")[:600],
+            objeto=(edital.objeto or "")[:1000],
             valor=valor_str,
             modalidade=edital.modalidade or "pregao_eletronico",
             uf=edital.uf or "N/A",
             data_abertura=edital.data_abertura.strftime('%d/%m/%Y %H:%M') if edital.data_abertura else "N/A",
             produto_info=produto_info,
-            empresa_info=empresa_info
+            empresa_info=empresa_info,
+            peso_tecnico_pct=round(peso_tec * 100),
+            peso_documental_pct=round(peso_doc * 100),
+            peso_complexidade_pct=round(peso_com * 100),
+            peso_juridico_pct=round(peso_jur * 100),
+            peso_logistico_pct=round(peso_log * 100),
+            peso_comercial_pct=round(peso_cml * 100),
+            limiar_go=round(lim_go),
+            limiar_nogo=round(lim_nogo),
+            limiar_tecnico_go=round(lim_tec_go),
+            limiar_tecnico_nogo=round(lim_tec_nogo),
+            limiar_juridico_go=round(lim_jur_go),
+            limiar_juridico_nogo=round(lim_jur_nogo),
         )
 
-        print(f"[SCORES_VALIDACAO] Calculando para edital {edital.numero}...")
+        print(f"[SCORES_VALIDACAO] Calculando para edital {edital.numero} (pesos: T={peso_tec} D={peso_doc} C={peso_com} J={peso_jur} L={peso_log} CM={peso_cml})...")
         resposta = call_deepseek(
             [{"role": "user", "content": prompt}],
             max_tokens=1500,
@@ -7489,6 +7945,28 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
 
         scores_data = json.loads(raw_json)
 
+        # Recalcular score_final com pesos do banco (não confiar na IA)
+        score_final_calc = round(
+            (scores_data.get('score_tecnico', 0) or 0) * peso_tec +
+            (scores_data.get('score_documental', 0) or 0) * peso_doc +
+            (scores_data.get('score_complexidade', 0) or 0) * peso_com +
+            (scores_data.get('score_juridico', 0) or 0) * peso_jur +
+            (scores_data.get('score_logistico', 0) or 0) * peso_log +
+            (scores_data.get('score_comercial', 0) or 0) * peso_cml,
+            1
+        )
+        scores_data['score_final'] = score_final_calc
+
+        # Decisão GO/NO-GO no backend com limiares do banco
+        st = scores_data.get('score_tecnico', 0) or 0
+        sj = scores_data.get('score_juridico', 0) or 0
+        if score_final_calc < lim_nogo or st < lim_tec_nogo or sj < lim_jur_nogo:
+            scores_data['decisao'] = 'NO-GO'
+        elif score_final_calc >= lim_go and st >= lim_tec_go and sj >= lim_jur_go:
+            scores_data['decisao'] = 'GO'
+        else:
+            scores_data['decisao'] = 'AVALIAR'
+
         # Salvar na análise existente ou criar nova
         analise = db.query(Analise).filter(
             Analise.edital_id == edital_id,
@@ -7498,7 +7976,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         if analise:
             analise.score_tecnico = scores_data.get('score_tecnico')
             analise.score_comercial = scores_data.get('score_comercial')
-            analise.score_final = scores_data.get('score_final')
+            analise.score_final = score_final_calc
             analise.recomendacao = (
                 f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
             )
@@ -7509,14 +7987,14 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
                 user_id=user_id,
                 score_tecnico=scores_data.get('score_tecnico'),
                 score_comercial=scores_data.get('score_comercial'),
-                score_final=scores_data.get('score_final'),
+                score_final=score_final_calc,
                 recomendacao=f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
             )
             db.add(analise)
 
         db.commit()
 
-        print(f"[SCORES_VALIDACAO] {edital.numero}: score_final={scores_data.get('score_final')}, decisao={scores_data.get('decisao')}")
+        print(f"[SCORES_VALIDACAO] {edital.numero}: score_final={score_final_calc} (recalc), decisao={scores_data.get('decisao')}, match={nivel_match}")
 
         scores_out = {
             "tecnico": scores_data.get('score_tecnico') or 0,
@@ -7526,7 +8004,6 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             "logistico": scores_data.get('score_logistico') or 0,
             "comercial": scores_data.get('score_comercial') or 0,
         }
-        score_final = scores_data.get('score_final') or round(sum(scores_out.values()) / 6)
 
         return {
             "success": True,
@@ -7534,13 +8011,16 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             "edital_numero": edital.numero,
             "analise_id": analise.id,
             "scores": scores_out,
-            "score_geral": score_final,
+            "score_geral": score_final_calc,
             "decisao": scores_data.get('decisao', 'AVALIAR'),
             "decisao_ia": scores_data.get('decisao', 'AVALIAR').upper().replace("NOGO", "NO-GO"),
             "justificativa": scores_data.get('justificativa', ''),
             "justificativa_ia": scores_data.get('justificativa', ''),
             "pontos_positivos": scores_data.get('pontos_positivos', []),
             "pontos_atencao": scores_data.get('pontos_atencao', []),
+            "nivel_match": nivel_match,
+            "produto_match_id": produto.id if produto else None,
+            "produto_match_nome": produto.nome if produto else None,
             "sub_scores_tecnicos": [
                 {"label": "Aderencia Tecnica", "score": scores_out["tecnico"]},
                 {"label": "Aderencia Documental", "score": scores_out["documental"]},
@@ -7550,8 +8030,8 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
                 {"label": "Atratividade Comercial", "score": scores_out["comercial"]},
             ],
             "potencial_ganho": (
-                "elevado" if score_final >= 70 else
-                "medio" if score_final >= 40 else
+                "elevado" if score_final_calc >= lim_go else
+                "medio" if score_final_calc >= lim_nogo else
                 "baixo"
             ),
         }

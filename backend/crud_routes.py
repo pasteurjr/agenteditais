@@ -808,6 +808,16 @@ def crud_create(table_slug):
         db.commit()
         db.refresh(instance)
 
+        # Background: processar metadados (CATMAT + termos) para produtos
+        if table_slug == "produtos":
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                from tools import processar_metadados_produto
+                _bg = ThreadPoolExecutor(max_workers=1)
+                _bg.submit(processar_metadados_produto, instance.id)
+            except Exception as e:
+                print(f"[CRUD] Erro ao iniciar metadados background: {e}")
+
         result = instance.to_dict()
         # Add password info for users
         if password_field and hasattr(instance, "password_hash"):
