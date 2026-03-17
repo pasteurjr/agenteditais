@@ -2067,15 +2067,26 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
             for err in resultado_scraper.get('erros', []):
                 erros_fontes.append(f"{err.get('fonte')}: {err.get('erro')}")
 
-    # 3. Deduplicar por número de edital (priorizar PNCP)
+    # 3. Deduplicar por número de edital + fallback orgão+valor (priorizar PNCP)
     editais_unicos = []
     numeros_vistos = set()
+    orgao_valor_vistos = set()
     for ed in editais:
         numero = ed.get('numero', '')
         chave = numero if numero and numero not in ['N/A', 'None', ''] else ed.get('url', '')
-        if chave and chave not in numeros_vistos:
+        # Chave secundária: orgão + valor (pega duplicatas com números diferentes)
+        orgao = (ed.get('orgao') or '').strip().lower()
+        valor = ed.get('valor_estimado') or ed.get('valor_referencia') or 0
+        chave2 = f"{orgao}|{valor}" if orgao and valor else ""
+        if chave and chave in numeros_vistos:
+            continue
+        if chave2 and chave2 in orgao_valor_vistos:
+            continue
+        if chave:
             numeros_vistos.add(chave)
-            editais_unicos.append(ed)
+        if chave2:
+            orgao_valor_vistos.add(chave2)
+        editais_unicos.append(ed)
 
     if len(editais) != len(editais_unicos):
         print(f"[BUSCA-MULTI] Removidas {len(editais) - len(editais_unicos)} duplicatas")
@@ -9010,14 +9021,23 @@ def buscar_editais_rest():
                             except Exception:
                                 pass
 
-                    # Deduplicar
+                    # Deduplicar por número+órgão e fallback órgão+valor
                     seen = set()
+                    seen2 = set()
                     dedup = []
                     for e in editais:
                         chave = f"{e.get('numero', '')}-{e.get('orgao', '')}"
-                        if chave not in seen:
-                            seen.add(chave)
-                            dedup.append(e)
+                        orgao = (e.get('orgao') or '').strip().lower()
+                        valor = e.get('valor_estimado') or e.get('valor_referencia') or 0
+                        chave2 = f"{orgao}|{valor}" if orgao and valor else ""
+                        if chave in seen:
+                            continue
+                        if chave2 and chave2 in seen2:
+                            continue
+                        seen.add(chave)
+                        if chave2:
+                            seen2.add(chave2)
+                        dedup.append(e)
                     editais = dedup
                     print(f"[BUSCA] Total após dedup: {len(editais)} editais")
             except Exception as e:

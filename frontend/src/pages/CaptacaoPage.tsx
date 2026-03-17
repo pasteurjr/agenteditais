@@ -971,8 +971,9 @@ export function CaptacaoPage(props?: PageProps) {
 
     let md = `# Relatório Completo de Busca de Editais\n\n`;
     md += `**Data/Hora:** ${dataHora}  \n`;
+    const fonteLabel = fontesDisponiveis.find(f => f.value === fonte)?.label || fonte || "—";
     md += `**Termo de busca:** ${termo || "—"}  \n`;
-    md += `**Fonte:** ${fonte || "—"}  \n`;
+    md += `**Fonte:** ${fonteLabel}  \n`;
     md += `**Modo Score:** ${tipoScore}  \n`;
     md += `**Total de resultados:** ${filteredResultados.length}  \n\n`;
     md += `---\n\n`;
