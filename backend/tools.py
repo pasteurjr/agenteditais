@@ -5916,8 +5916,6 @@ def tool_baixar_pdf_pncp(cnpj: str, ano: int, seq: int, sequencial_arquivo: int 
 
         # Sanitizar nome do arquivo
         filename = re.sub(r'[^\w\-_\.]', '_', filename)
-        if not filename.endswith('.pdf'):
-            filename += '.pdf'
 
         # Criar diretório de destino
         if user_id:
@@ -5926,13 +5924,97 @@ def tool_baixar_pdf_pncp(cnpj: str, ano: int, seq: int, sequencial_arquivo: int 
             upload_dir = os.path.join(UPLOAD_FOLDER, 'editais')
         os.makedirs(upload_dir, exist_ok=True)
 
-        filepath = os.path.join(upload_dir, filename)
-
-        # Salvar arquivo
-        with open(filepath, 'wb') as f:
+        # Salvar arquivo bruto temporariamente
+        import zipfile, tempfile
+        raw_path = os.path.join(upload_dir, filename)
+        with open(raw_path, 'wb') as f:
             f.write(response.content)
 
-        filesize = len(response.content)
+        # Detectar se é ZIP e extrair PDF do edital de dentro
+        if zipfile.is_zipfile(raw_path):
+            print(f"[PNCP-DOWNLOAD] Arquivo é ZIP, extraindo PDF do edital...")
+            all_pdfs = []  # lista de (path, size, name)
+
+            with zipfile.ZipFile(raw_path, 'r') as zf:
+                # Extrair PDFs diretos
+                for name in zf.namelist():
+                    if name.lower().endswith('.pdf'):
+                        zf.extract(name, upload_dir)
+                        fpath = os.path.join(upload_dir, name)
+                        all_pdfs.append((fpath, os.path.getsize(fpath), os.path.basename(name).lower()))
+
+                # Extrair ZIPs aninhados e buscar PDFs dentro
+                for name in zf.namelist():
+                    if name.lower().endswith('.zip'):
+                        zf.extract(name, upload_dir)
+                        nested_zip = os.path.join(upload_dir, name)
+                        if zipfile.is_zipfile(nested_zip):
+                            with zipfile.ZipFile(nested_zip, 'r') as zf2:
+                                for name2 in zf2.namelist():
+                                    if name2.lower().endswith('.pdf'):
+                                        zf2.extract(name2, upload_dir)
+                                        fpath2 = os.path.join(upload_dir, name2)
+                                        all_pdfs.append((fpath2, os.path.getsize(fpath2), os.path.basename(name2).lower()))
+                        try:
+                            os.remove(nested_zip)
+                        except OSError:
+                            pass
+
+            if all_pdfs:
+                # Priorizar: arquivo com "edital" no nome > maior PDF
+                edital_pdfs = [p for p in all_pdfs if 'edital' in p[2] and 'anexo' not in p[2] and 'termo' not in p[2] and 'minuta' not in p[2]]
+                if edital_pdfs:
+                    best = max(edital_pdfs, key=lambda x: x[1])
+                else:
+                    best = max(all_pdfs, key=lambda x: x[1])
+
+                # Remover os outros PDFs extraídos
+                for p in all_pdfs:
+                    if p[0] != best[0]:
+                        try:
+                            os.remove(p[0])
+                        except OSError:
+                            pass
+
+                # Mover para upload_dir raiz com nome limpo
+                pdf_filename = re.sub(r'[^\w\-_\.]', '_', os.path.basename(best[0]))
+                final_path = os.path.join(upload_dir, pdf_filename)
+                if best[0] != final_path:
+                    if os.path.exists(final_path):
+                        os.remove(final_path)
+                    os.rename(best[0], final_path)
+                filepath = final_path
+                filename = pdf_filename
+
+                # Limpar subpastas criadas pela extração
+                for p in all_pdfs:
+                    parent = os.path.dirname(p[0])
+                    if parent != upload_dir:
+                        try:
+                            os.removedirs(parent)
+                        except OSError:
+                            pass
+
+                # Remover ZIP original
+                try:
+                    os.remove(raw_path)
+                except OSError:
+                    pass
+                print(f"[PNCP-DOWNLOAD] PDF do edital extraído: {filepath} ({best[1]/1024:.1f} KB, de {len(all_pdfs)} PDFs encontrados)")
+            else:
+                filepath = raw_path
+                print(f"[PNCP-DOWNLOAD] ZIP sem PDF dentro, mantendo ZIP: {filepath}")
+        else:
+            # Arquivo já é PDF (ou outro formato)
+            if not filename.lower().endswith('.pdf'):
+                filename += '.pdf'
+                new_path = os.path.join(upload_dir, filename)
+                os.rename(raw_path, new_path)
+                filepath = new_path
+            else:
+                filepath = raw_path
+
+        filesize = os.path.getsize(filepath)
         print(f"[PNCP-DOWNLOAD] Salvo: {filepath} ({filesize/1024:.1f} KB)")
 
         return {

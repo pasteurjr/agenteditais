@@ -64,6 +64,10 @@ interface EditalBusca {
   // RF-013: Vinculo com classe/subclasse de produto
   classe_produto_id?: string;
   subclasse_produto_id?: string;
+  // Dados PNCP para download de PDF e URL do portal
+  cnpj_orgao?: string;
+  ano_compra?: number;
+  seq_compra?: number;
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
@@ -297,6 +301,9 @@ function normalizarEditalDaBusca(e: Record<string, unknown>, estadosAtuacao: str
     } : null,
     classe_produto_id: e.classe_produto_id ? String(e.classe_produto_id) : undefined,
     subclasse_produto_id: e.subclasse_produto_id ? String(e.subclasse_produto_id) : undefined,
+    cnpj_orgao: e.cnpj_orgao ? String(e.cnpj_orgao) : undefined,
+    ano_compra: e.ano_compra ? Number(e.ano_compra) : undefined,
+    seq_compra: e.seq_compra ? Number(e.seq_compra) : undefined,
   };
 }
 
@@ -724,7 +731,15 @@ export function CaptacaoPage(props?: PageProps) {
         })(),
         status: "novo",
         fonte: edital.fonte || "pncp",
-        url: edital.url || null,
+        url: edital.url || (edital.cnpj_orgao && edital.ano_compra && edital.seq_compra
+          ? `https://pncp.gov.br/app/editais/${edital.cnpj_orgao}/${edital.ano_compra}/${edital.seq_compra}`
+          : null),
+        cnpj_orgao: edital.cnpj_orgao || null,
+        ano_compra: edital.ano_compra || null,
+        seq_compra: edital.seq_compra || null,
+        pdf_url: edital.cnpj_orgao && edital.ano_compra && edital.seq_compra
+          ? `https://pncp.gov.br/pncp-api/v1/orgaos/${edital.cnpj_orgao}/compras/${edital.ano_compra}/${edital.seq_compra}/arquivos/1`
+          : null,
       };
       // Se já tem ID do backend (UUID), reutiliza (não duplica)
       if (edital.id && edital.id.length === 36) {
@@ -751,6 +766,30 @@ export function CaptacaoPage(props?: PageProps) {
     }
   };
 
+  const handleBaixarPdfEdital = async (editalId: string, nomeEdital: string) => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const resp = await fetch(`/api/editais/${editalId}/pdf?download=true`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `edital_${nomeEdital.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert("PDF não disponível para download neste edital.");
+      }
+    } catch {
+      alert("Erro ao baixar PDF do edital.");
+    }
+  };
+
   const handleSalvarEdital = async (edital: EditalBusca) => {
     const editalId = await salvarEditalNoBanco(edital);
     if (!editalId) {
@@ -763,6 +802,12 @@ export function CaptacaoPage(props?: PageProps) {
     ));
     if (painelEdital?.id === edital.id) {
       setPainelEdital(prev => prev ? { ...prev, editalSalvoId: editalId } : prev);
+    }
+
+    // Perguntar se deseja baixar o PDF do edital
+    const hasPncpData = edital.cnpj_orgao && edital.ano_compra && edital.seq_compra;
+    if (hasPncpData && window.confirm("Edital salvo! Deseja baixar o PDF do edital?")) {
+      await handleBaixarPdfEdital(editalId, edital.numero);
     }
   };
 
@@ -2240,6 +2285,13 @@ function baixarMD() {
                         icon={<ExternalLink size={14} />}
                         label="Abrir no Portal"
                         onClick={() => window.open(painelEdital.url, "_blank")}
+                      />
+                    )}
+                    {painelEdital.editalSalvoId && painelEdital.cnpj_orgao && (
+                      <ActionButton
+                        icon={<Download size={14} />}
+                        label="Baixar PDF"
+                        onClick={() => handleBaixarPdfEdital(painelEdital.editalSalvoId!, painelEdital.numero)}
                       />
                     )}
                   </div>
