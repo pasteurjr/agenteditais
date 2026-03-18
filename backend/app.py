@@ -8984,10 +8984,30 @@ def buscar_editais_rest():
         if tipo_score != "nenhum":
             try:
                 from concurrent.futures import ThreadPoolExecutor, as_completed
+                import unicodedata as _ud
+
+                def _norm_termo(txt):
+                    if not txt:
+                        return ""
+                    txt = _ud.normalize('NFKD', txt).encode('ascii', 'ignore').decode('ascii')
+                    return txt.lower().strip()
+
+                # Normalizar termo de busca para matching
+                termo_norm = _norm_termo(termo) if termo else ""
+                termo_words = {w for w in termo_norm.split() if len(w) > 3}
+
                 db_termos = get_db()
                 produtos_user = db_termos.query(Produto).filter(Produto.user_id == user_id).all()
                 termos_busca_extras = set()
+
+                # Só extrair termos de produtos relevantes ao termo buscado
                 for p in produtos_user:
+                    p_nome_norm = _norm_termo(p.nome or "")
+                    p_cat_norm = _norm_termo(p.categoria or "")
+                    p_words = set(p_nome_norm.split()) | set(p_cat_norm.split())
+                    overlap = termo_words & {w for w in p_words if len(w) > 3}
+                    if not overlap:
+                        continue
                     for desc in (p.catmat_descricoes or [])[:2]:
                         palavras = [w for w in desc.split() if len(w) > 3][:4]
                         if palavras:
@@ -8996,9 +9016,22 @@ def buscar_editais_rest():
                         termos_busca_extras.add(t)
                 db_termos.close()
 
+                # Remover termos genéricos demais que trazem ruído
+                TERMOS_GENERICOS_NORM = {
+                    "material hospitalar", "material medico", "equipamento hospitalar",
+                    "insumo hospitalar", "insumo laboratorial", "material laboratorio",
+                    "reagente bioquimico", "equipamento medico", "material odontologico",
+                    "servico geral", "material consumo", "material permanente",
+                    "material medico hospitalar", "equipamento laboratorio",
+                }
+                termos_busca_extras = {
+                    t for t in termos_busca_extras
+                    if _norm_termo(t) not in TERMOS_GENERICOS_NORM and len(t.split()) >= 2
+                }
+
                 termos_extras = list(termos_busca_extras)[:5]
                 if termos_extras:
-                    print(f"[BUSCA] Buscas extras com {len(termos_extras)} termos CATMAT/semânticos")
+                    print(f"[BUSCA] Buscas extras com {len(termos_extras)} termos CATMAT/semânticos: {termos_extras}")
                     with ThreadPoolExecutor(max_workers=3) as executor:
                         futures = {}
                         for t_extra in termos_extras:
@@ -9016,8 +9049,14 @@ def buscar_editais_rest():
                                 res = f.result()
                                 extras = res.get("editais", [])
                                 if extras:
-                                    editais.extend(extras)
-                                    print(f"[BUSCA] Termo extra '{futures[f]}': +{len(extras)} editais")
+                                    # Filtrar: objeto deve ter pelo menos 1 palavra do termo original
+                                    filtered = []
+                                    for e in extras:
+                                        obj_norm = _norm_termo(e.get("objeto", ""))
+                                        if any(w in obj_norm for w in termo_words):
+                                            filtered.append(e)
+                                    editais.extend(filtered)
+                                    print(f"[BUSCA] Termo extra '{futures[f]}': {len(filtered)}/{len(extras)} editais após filtro")
                             except Exception:
                                 pass
 

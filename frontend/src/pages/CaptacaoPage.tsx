@@ -337,6 +337,7 @@ export function CaptacaoPage(props?: PageProps) {
   const [classesV2, setClassesV2] = useState<{ value: string; label: string }[]>([]);
 
   const [resultados, setResultados] = useState<EditalBusca[]>([]);
+  const [relatorioMD, setRelatorioMD] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [painelEdital, setPainelEdital] = useState<EditalBusca | null>(null);
@@ -916,6 +917,41 @@ export function CaptacaoPage(props?: PageProps) {
           if (data.edital_id_temp) {
             edital.editalSalvoId = data.edital_id_temp;
           }
+          // Propagar score profundo de volta ao array de resultados
+          // para que o relatório MD/PDF use dados atualizados
+          const sp = data.scores || data;
+          const scoreProfundoObj = {
+            scores: {
+              tecnico: Number(sp.score_tecnico ?? 0),
+              documental: Number(sp.score_documental ?? 0),
+              complexidade: Number(sp.score_complexidade ?? 0),
+              juridico: Number(sp.score_juridico ?? 0),
+              logistico: Number(sp.score_logistico ?? 0),
+              comercial: Number(sp.score_comercial ?? 0),
+            },
+            score_geral: Number(sp.score_final ?? sp.score_geral ?? 0),
+            decisao: String(sp.decisao ?? "AVALIAR"),
+            justificativa: String(sp.justificativa ?? ""),
+            pontos_positivos: (sp.pontos_positivos as string[]) || [],
+            pontos_atencao: (sp.pontos_atencao as string[]) || [],
+          };
+          const scoreGeralAtualizado = Math.round(scoreProfundoObj.score_geral);
+          setResultados(prev => prev.map(e =>
+            e.id === edital.id ? {
+              ...e,
+              scoreProfundo: scoreProfundoObj,
+              score: scoreGeralAtualizado > 0 ? scoreGeralAtualizado : e.score,
+              editalSalvoId: data.edital_id_temp || e.editalSalvoId,
+            } : e
+          ));
+          if (painelEdital?.id === edital.id) {
+            setPainelEdital(prev => prev ? {
+              ...prev,
+              scoreProfundo: scoreProfundoObj,
+              score: scoreGeralAtualizado > 0 ? scoreGeralAtualizado : prev.score,
+              editalSalvoId: data.edital_id_temp || prev.editalSalvoId,
+            } : prev);
+          }
         }
       }
     } catch {
@@ -955,9 +991,8 @@ export function CaptacaoPage(props?: PageProps) {
     ));
   };
 
-  // Relatório Completo em Markdown — abre em nova aba com HTML renderizado
-  const handleRelatorioCompleto = () => {
-    if (!filteredResultados.length) return;
+  // Gerar MD do relatório a partir dos dados já processados (mesma fonte da tabela)
+  const gerarRelatorioMD = (editais: EditalBusca[], termoB: string, fonteB: string, tipoScoreB: string): string => {
     const now = new Date();
     const dataHora = now.toLocaleString("pt-BR");
     const fmtVal = (v: number) => v ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "—";
@@ -968,32 +1003,35 @@ export function CaptacaoPage(props?: PageProps) {
       if (e.diasRestantes <= 5) return `🟡 ${e.diasRestantes}d`;
       return `${e.diasRestantes}d`;
     };
+    const fonteLabel = fontesDisponiveis.find(f => f.value === fonteB)?.label || fonteB || "—";
 
     let md = `# Relatório Completo de Busca de Editais\n\n`;
     md += `**Data/Hora:** ${dataHora}  \n`;
-    const fonteLabel = fontesDisponiveis.find(f => f.value === fonte)?.label || fonte || "—";
-    md += `**Termo de busca:** ${termo || "—"}  \n`;
+    md += `**Termo de busca:** ${termoB || "—"}  \n`;
     md += `**Fonte:** ${fonteLabel}  \n`;
-    md += `**Modo Score:** ${tipoScore}  \n`;
-    md += `**Total de resultados:** ${filteredResultados.length}  \n\n`;
+    md += `**Modo Score:** ${tipoScoreB}  \n`;
+    md += `**Total de resultados:** ${editais.length}  \n\n`;
     md += `---\n\n`;
 
-    // Tabela resumo
+    // Ordenar por score decrescente (mesma ordem da tabela UI)
+    const editaisOrdenados = [...editais].sort((a, b) => b.score - a.score);
+
+    // Tabela resumo — mesmas colunas da tabela na UI
     md += `## Tabela Resumo\n\n`;
-    md += `| # | Fonte | Numero | Orgao | UF | Modalidade | Valor | Produto | Prazo | Score |\n`;
-    md += `|---|---|---|---|---|---|---|---|---|---|\n`;
-    filteredResultados.forEach((e, i) => {
-      const fonte = (e.fonte || "—").includes("PNCP") ? "PNCP" : (e.fonte || "—");
-      md += `| ${i + 1} | ${fonte} | ${esc(e.numero)} | ${esc(e.orgao.length > 40 ? e.orgao.substring(0, 40) + "..." : e.orgao)} | ${e.uf} | ${esc(e.modalidade || "—")} | ${fmtVal(e.valor)} | ${esc(e.produtoCorrespondente || "Nenhum")} | ${prazoLabel(e)} | **${e.score}/100** |\n`;
+    md += `| # | Fonte | Numero | Orgao | UF | Modalidade | Objeto | Valor | Produto | Prazo | Score |\n`;
+    md += `|---|---|---|---|---|---|---|---|---|---|---|\n`;
+    editaisOrdenados.forEach((e, i) => {
+      const fonteR = (e.fonte || "—").includes("PNCP") ? "PNCP" : (e.fonte || "—");
+      const objetoResumo = e.objeto.length > 50 ? e.objeto.substring(0, 50) + "..." : e.objeto;
+      md += `| ${i + 1} | ${fonteR} | ${esc(e.numero)} | ${esc(e.orgao.length > 40 ? e.orgao.substring(0, 40) + "..." : e.orgao)} | ${e.uf} | ${esc(e.modalidade || "—")} | ${esc(objetoResumo)} | ${fmtVal(e.valor)} | ${esc(e.produtoCorrespondente || "Nenhum")} | ${prazoLabel(e)} | **${e.score}/100** |\n`;
     });
     md += `\n---\n\n`;
 
-    // Detalhe de cada edital
+    // Detalhe de cada edital (mesma ordem da tabela)
     md += `## Detalhes por Edital\n\n`;
-    filteredResultados.forEach((e, i) => {
+    editaisOrdenados.forEach((e, i) => {
       md += `### ${i + 1}. ${e.numero} — ${e.orgao}\n\n`;
 
-      // Dados do edital (replica o painel)
       md += `| Campo | Valor |\n`;
       md += `|---|---|\n`;
       md += `| **Numero** | ${esc(e.numero)} |\n`;
@@ -1006,28 +1044,26 @@ export function CaptacaoPage(props?: PageProps) {
       md += `| **Status** | ${e.status === "aberto" ? `🟢 Aberto (${e.diasRestantes}d)` : "⚫ Encerrado"} |\n`;
       md += `| **Produto Correspondente** | ${esc(e.produtoCorrespondente || "Nenhum")} |\n`;
       md += `| **Potencial de Ganho** | ${e.potencialGanho.charAt(0).toUpperCase() + e.potencialGanho.slice(1)} |\n`;
+      if (e.url) {
+        md += `| **Link Portal** | [Abrir no PNCP](${e.url}) |\n`;
+      }
       md += `\n`;
 
-      // Objeto completo
       md += `**Objeto:**\n> ${esc(e.objeto)}\n\n`;
 
-      // Justificativa IA
       if (e.justificativa) {
         md += `**Justificativa IA:**\n> ${esc(e.justificativa)}\n\n`;
       }
 
-      // Recomendação
       if (e.recomendacaoTexto && e.recomendacaoTexto !== "0" && e.recomendacaoTexto !== "NaN") {
         const emoji = e.recomendacaoTexto === "PARTICIPAR" ? "🟢" : e.recomendacaoTexto === "AVALIAR" ? "🟡" : "🔴";
         md += `**Recomendação:** ${emoji} ${e.recomendacaoTexto}\n\n`;
       }
 
-      // Score
-      if (tipoScore !== "nenhum") {
+      if (tipoScoreB !== "nenhum") {
         md += `**Score Geral: ${e.score}/100**\n\n`;
 
         if (e.scoreProfundo) {
-          // 6 dimensões
           const s = e.scoreProfundo.scores;
           const icon = (v: number) => v >= 70 ? "🟢" : v >= 40 ? "🟡" : "🔴";
           md += `#### 6 Dimensões de Score\n\n`;
@@ -1041,7 +1077,6 @@ export function CaptacaoPage(props?: PageProps) {
           md += `| Comercial | ${s.comercial}% | ${icon(s.comercial)} |\n`;
           md += `\n`;
 
-          // Decisão
           const dEmoji = e.scoreProfundo.decisao === "GO" ? "🟢" : e.scoreProfundo.decisao === "NO-GO" ? "🔴" : "🟡";
           md += `**Decisão: ${dEmoji} ${e.scoreProfundo.decisao}**\n`;
           if (e.scoreProfundo.justificativa) {
@@ -1049,21 +1084,18 @@ export function CaptacaoPage(props?: PageProps) {
           }
           md += `\n`;
 
-          // Pontos positivos
           if (e.scoreProfundo.pontos_positivos.length > 0) {
             md += `**Pontos Positivos:**\n`;
             e.scoreProfundo.pontos_positivos.forEach(p => { md += `- ✅ ${esc(p)}\n`; });
             md += `\n`;
           }
 
-          // Pontos de atenção
           if (e.scoreProfundo.pontos_atencao.length > 0) {
             md += `**Pontos de Atenção:**\n`;
             e.scoreProfundo.pontos_atencao.forEach(p => { md += `- ⚠️ ${esc(p)}\n`; });
             md += `\n`;
           }
         } else {
-          // Score rápido
           md += `| Métrica | Valor |\n`;
           md += `|---|---|\n`;
           md += `| Aderência Técnica | ${e.scores.tecnico}/100 |\n`;
@@ -1072,7 +1104,6 @@ export function CaptacaoPage(props?: PageProps) {
         }
       }
 
-      // Itens do edital
       if (e.itens && e.itens.length > 0) {
         md += `#### Itens do Edital (${e.itens.length})\n\n`;
         md += `| # | Descrição | Qtd | Valor Total |\n`;
@@ -1083,7 +1114,6 @@ export function CaptacaoPage(props?: PageProps) {
         md += `\n`;
       }
 
-      // Gaps
       if (e.gaps && e.gaps.length > 0) {
         md += `#### Análise de Gaps\n\n`;
         e.gaps.forEach(g => {
@@ -1096,30 +1126,30 @@ export function CaptacaoPage(props?: PageProps) {
       md += `---\n\n`;
     });
 
-    // Renderizar MD como HTML e abrir em nova aba
-    // Converter markdown para HTML simples
-    let html = md
-      // Headers
-      .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      // Bold
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      // Blockquotes
-      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-      // Unordered lists
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      // HR
-      .replace(/^---$/gm, '<hr/>')
-      // Line breaks
-      .replace(/  \n/g, '<br/>')
-      // Tables
-      .replace(/\n\n/g, '\n</p><p>\n');
+    return md;
+  };
+
+  // Regenerar relatório sempre que resultados mudam
+  useEffect(() => {
+    if (resultados.length > 0) {
+      const editaisParaRelatorio = filtroClasseProduto === "todos" ? resultados : resultados.filter(e => e.classe_produto_id === filtroClasseProduto);
+      setRelatorioMD(gerarRelatorioMD(editaisParaRelatorio, termo, fonte, tipoScore));
+    } else {
+      setRelatorioMD("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultados, filtroClasseProduto]);
+
+  // Exibir relatório já gerado em nova aba
+  const handleRelatorioCompleto = () => {
+    const md = relatorioMD;
+    if (!md) return;
+    const now = new Date();
+    const dataHora = now.toLocaleString("pt-BR");
 
     // Parse tables properly
     const tableRegex = /(\|.+\|\n)+/g;
-    html = md.replace(tableRegex, (tableBlock) => {
+    let html = md.replace(tableRegex, (tableBlock) => {
       const rows = tableBlock.trim().split('\n').filter(r => r.trim());
       if (rows.length < 2) return tableBlock;
       let t = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#334155;margin:8px 0;width:100%;font-size:13px;">\n';
@@ -1141,6 +1171,7 @@ export function CaptacaoPage(props?: PageProps) {
       .replace(/^## (.+)$/gm, '<h2 style="color:#a78bfa;margin:32px 0 16px;">$1</h2>')
       .replace(/^# (.+)$/gm, '<h1 style="color:#e2e8f0;margin:0 0 24px;">$1</h1>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color:#60a5fa;">$1</a>')
       .replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #475569;padding:4px 12px;margin:4px 0;color:#94a3b8;font-style:italic;">$1</blockquote>')
       .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 16px;">$1</div>')
       .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;"/>')
@@ -1173,9 +1204,11 @@ export function CaptacaoPage(props?: PageProps) {
     hr { border: none; border-top: 1px solid #334155; margin: 24px 0; }
     strong { color: #f1f5f9; }
     @media print {
-      body { background: white; color: #1e293b; padding-top: 0; }
+      @page { size: landscape; margin: 10mm; }
+      body { background: white; color: #1e293b; padding-top: 0; max-width: none; }
       h1, h2, h3, h4, strong { color: #1e293b; }
-      td, th { border-color: #cbd5e1; }
+      table { font-size: 10px; }
+      td, th { border-color: #cbd5e1; padding: 3px 5px; }
       tr:nth-child(even) { background: #f1f5f9; }
       blockquote { color: #64748b; border-color: #94a3b8; }
       .toolbar-relatorio { display: none !important; }

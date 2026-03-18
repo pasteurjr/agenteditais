@@ -801,14 +801,20 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
             cnpj = (item.get('orgao_cnpj', '') or '').replace('.', '').replace('/', '').replace('-', '')
             item_url = item.get('item_url', '')
 
-            # Construir URL
-            if item_url:
+            # Construir URL (item_url /compras/... é formato API, não portal)
+            if item_url and not item_url.startswith('/compras/'):
                 url_edital = f"https://pncp.gov.br{item_url}"
             elif cnpj and ano and seq:
-                url_edital = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
+                url_edital = f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
             else:
                 numero_pncp = item.get('numero_controle_pncp', '')
-                url_edital = f"https://pncp.gov.br/app/editais/{numero_pncp}" if numero_pncp else 'URL não disponível'
+                if numero_pncp:
+                    # numero_pncp formato: 01263896000164-1-000142/2026 → cnpj/ano/seq
+                    import re as _re
+                    _m = _re.match(r'(\d{14})-\d+-(\d+)/(\d{4})', numero_pncp)
+                    url_edital = f"https://pncp.gov.br/app/editais/{_m.group(1)}/{_m.group(3)}/{int(_m.group(2))}" if _m else 'URL não disponível'
+                else:
+                    url_edital = 'URL não disponível'
 
             # Formatar número
             if numero and ano:
@@ -1943,12 +1949,14 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                     numero_pncp = item.get('numero_controle_pncp', '')
                     item_url = item.get('item_url', '')
 
-                    if item_url:
+                    if item_url and not item_url.startswith('/compras/'):
                         link = f"https://pncp.gov.br{item_url}"
                     elif cnpj and ano and seq:
-                        link = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano}"
+                        link = f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
                     elif numero_pncp:
-                        link = f"https://pncp.gov.br/app/editais/{numero_pncp}"
+                        # numero_pncp formato: cnpj-1-seq/ano → cnpj/ano/seq
+                        _m_pncp = re.match(r'(\d{14})-\d+-(\d+)/(\d{4})', numero_pncp)
+                        link = f"https://pncp.gov.br/app/editais/{_m_pncp.group(1)}/{_m_pncp.group(3)}/{int(_m_pncp.group(2))}" if _m_pncp else None
                     else:
                         link = None
 
@@ -2027,10 +2035,11 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                             resp = requests.get(url, headers={"Accept": "application/json"}, timeout=10)
                             if resp.status_code == 200:
                                 dados = resp.json()
-                                return idx, dados.get('valorTotalEstimado'), dados.get('valorTotalHomologado')
-                            return idx, None, None
+                                link_origem = dados.get('linkSistemaOrigem')
+                                return idx, dados.get('valorTotalEstimado'), dados.get('valorTotalHomologado'), link_origem
+                            return idx, None, None, None
                         except Exception:
-                            return idx, None, None
+                            return idx, None, None, None
 
                     n_buscar = len(editais_sem_valor)
                     max_w = min(n_buscar, 10)
@@ -2040,11 +2049,14 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
                         futures = {executor.submit(_buscar_valor, args): args for args in editais_sem_valor}
                         for future in as_completed(futures, timeout=max(30, n_buscar * 2)):
                             try:
-                                idx, valor_est, valor_hom = future.result(timeout=10)
+                                idx, valor_est, valor_hom, link_origem = future.result(timeout=10)
                                 valor_final = valor_est or valor_hom
                                 if valor_final:
                                     editais_encontrados[idx]['valor_referencia'] = valor_final
                                     valores_encontrados += 1
+                                # Salvar linkSistemaOrigem como campo extra (site do órgão)
+                                if link_origem:
+                                    editais_encontrados[idx]['link_sistema_origem'] = link_origem
                             except Exception:
                                 pass
                     print(f"[TOOLS] Valores obtidos: {valores_encontrados}/{n_buscar}")
@@ -3573,9 +3585,14 @@ PROMPT_CALCULAR_SCORE_BATCH = """Analise a aderencia entre os PRODUTOS da empres
 {editais_json}
 
 ## REGRAS:
-- 80-100: PARTICIPAR (produtos atendem diretamente ao objeto)
-- 50-79: AVALIAR (podem atender com adaptacoes)
+- 80-100: PARTICIPAR (produto atende DIRETAMENTE ao objeto, specs compativeis)
+- 50-79: AVALIAR (categoria certa mas specs podem nao bater — ex: volume, modelo, tipo diferentes)
 - 0-49: NAO PARTICIPAR (produtos nao correspondem ao objeto)
+
+IMPORTANTE: Diferencie por ESPECIFICACOES tecnicas. Exemplos:
+- Seringa 10mL NAO atende edital de seringa insulina 1mL (volume e tipo diferentes)
+- Microscopio optico NAO atende edital de microscopio eletronico
+- Edital de SERVICO (manutencao, reinstalacao, profissional) NAO e atendido por PRODUTO
 
 Responda APENAS com um JSON array, um item por edital, NA MESMA ORDEM:
 [{{"idx":0,"score_tecnico":85,"recomendacao":"PARTICIPAR","produto_principal":"Nome do produto","justificativa":"Frase curta explicando"}}]
@@ -3715,8 +3732,8 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
         for p in produtos:
             specs = db.query(ProdutoEspecificacao).filter(
                 ProdutoEspecificacao.produto_id == p.id
-            ).limit(3).all()
-            specs_resumo = [s.nome_especificacao for s in specs]
+            ).limit(5).all()
+            specs_resumo = [f"{s.nome_especificacao}: {s.valor}" for s in specs]
 
             produtos_data.append({
                 "id": p.id,
@@ -3729,14 +3746,19 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
                 "catmat_descricoes": p.catmat_descricoes or [],
             })
 
-        # JSON compacto para o prompt batch (sem IDs, sem specs detalhadas)
+        # JSON compacto para o prompt batch (com specs para diferenciação)
         produtos_for_prompt = []
         for p in produtos_data:
-            produtos_for_prompt.append({
+            entry = {
                 "nome": p["nome"],
                 "categoria": p.get("categoria", ""),
                 "fabricante": p.get("fabricante", ""),
-            })
+            }
+            if p.get("modelo"):
+                entry["modelo"] = p["modelo"]
+            if p.get("specs"):
+                entry["specs"] = p["specs"][:5]
+            produtos_for_prompt.append(entry)
         produtos_json = json.dumps(produtos_for_prompt, ensure_ascii=False)
         print(f"[TOOLS] Portfolio: {len(produtos)} produtos, JSON prompt: {len(produtos_json)} chars")
 
@@ -3909,7 +3931,7 @@ def _buscar_edital_pncp_por_numero(numero_edital: str, orgao: str = None) -> Dic
                 ano_compra = item.get('anoCompra')
                 seq = item.get('sequencialCompra')
                 if cnpj and ano_compra and seq:
-                    url_pncp = f"https://pncp.gov.br/app/editais/{cnpj}-1-{str(seq).zfill(6)}/{ano_compra}"
+                    url_pncp = f"https://pncp.gov.br/app/editais/{cnpj}/{ano_compra}/{seq}"
                 else:
                     url_pncp = item.get('linkSistemaOrigem', '')
 
@@ -7559,6 +7581,7 @@ Analise o edital abaixo e calcule 6 scores de validação (0 a 100) e dê uma de
    - 70-89: Atende requisitos principais, pequenas adaptações
    - 50-69: Atende parcialmente, requer ajustes
    - 0-49: Baixa aderência técnica
+   REGRA CRITICA: score_tecnico avalia se o PRODUTO da empresa atende ao OBJETO do edital. Se o edital solicita SERVIÇO (manutenção, reinstalação, calibração, locação, consultoria, profissional) e a empresa oferece PRODUTO (equipamento, insumo), o score_tecnico deve ser 0-20, independente de o nome do equipamento aparecer no texto do objeto. Da mesma forma, se as especificações técnicas (volume, tipo, modelo, tecnologia) do produto não são compatíveis com o que o edital exige, penalize proporcionalmente.
 
 2. **score_documental** (0-100): Facilidade de cumprir os requisitos documentais.
    - 90-100: Documentação padrão, fácil de obter

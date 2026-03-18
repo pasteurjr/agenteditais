@@ -1,6 +1,6 @@
 # MANUAL DE TESTE — CAPTACAO + VALIDACAO
-**Data:** 16/03/2026 (atualizado Sprint 3)
-**Objetivo:** Guia completo e didatico para testar as fases de Captacao e Validacao do sistema de editais, usando 3 editais reais de reagentes laboratoriais do PNCP.
+**Data:** 18/03/2026 (atualizado Sprint 3 — editais corrigidos apos fix de specs/filtros)
+**Objetivo:** Guia completo e didatico para testar as fases de Captacao e Validacao do sistema de editais, usando 4 editais reais do PNCP com match direto aos produtos do portfolio.
 
 ---
 
@@ -137,7 +137,7 @@ Voce deve buscar e salvar **estes 4 editais** (ou similares que encontrar):
 | **Encerramento** | 30/03/2026 |
 | **Por que salvar** | Produto do portfolio (Microscopio Olympus CX23), match direto, valor medio, prazo aberto |
 
-#### Edital 2: UNIOESTE — Seringa Descartavel
+#### Edital 2: SES-ES — Seringa Descartavel
 
 | Campo | Valor |
 |---|---|
@@ -145,29 +145,33 @@ Voce deve buscar e salvar **estes 4 editais** (ou similares que encontrar):
 | **Fonte** | PNCP |
 | **Score** | Hibrido |
 | **Dias** | 30 |
-| **Orgao** | UNIVERSIDADE ESTADUAL DO OESTE DO PARANA |
-| **Numero** | 166/2026 |
-| **UF** | PR |
-| **Objeto** | Aquisicao de seringas descartaveis |
-| **Valor estimado** | ~R$ 636.000 |
-| **Encerramento** | 31/03/2026 |
-| **Por que salvar** | Produto do portfolio (Seringa Descartavel BD), alto valor, universidade estadual |
+| **Orgao** | SECRETARIA DE ESTADO DA SAUDE (ES) |
+| **Numero** | 164/2026 |
+| **UF** | ES |
+| **Objeto** | Seringa descartavel |
+| **Valor estimado** | ~R$ 1.074.834 |
+| **Encerramento** | 07/04/2026 |
+| **Por que salvar** | Produto do portfolio (Seringa Descartavel Luer Lock 10mL), match direto, alto valor, ES esta nos estados de atuacao, score ~90+ |
 
-#### Edital 3: Pres. Bernardes — Analisador Bioquimico
+> **NOTA:** O edital UNIOESTE 166/2026 (PR, R$ 636k) tambem aparece nos resultados mas com score ~60 e recomendacao AVALIAR, pois o objeto e "seringas para bomba de infusao/perfusor" — tipo especializado, nao seringa descartavel generica. Isso e correto: o sistema diferencia por especificacoes tecnicas.
+
+#### Edital 3: Sorocaba — Seringas e Agulhas
 
 | Campo | Valor |
 |---|---|
-| **Buscar por** | `analisador bioquimico` |
+| **Buscar por** | `seringa descartavel` |
 | **Fonte** | PNCP |
 | **Score** | Hibrido |
 | **Dias** | 30 |
-| **Orgao** | PREFEITURA MUNICIPAL DE PRESIDENTE BERNARDES |
-| **Numero** | 28/2026 |
-| **UF** | MG |
-| **Objeto** | Aquisicao de analisador bioquimico para laboratorio municipal |
-| **Valor estimado** | ~R$ 110.000 |
-| **Encerramento** | 26/03/2026 |
-| **Por que salvar** | Produto do portfolio (Analisador Bioquimico Mindray BS-230), match direto, prazo curto — bom para testar urgencia |
+| **Orgao** | MUNICIPIO DE SOROCABA |
+| **Numero** | 00176/2025 |
+| **UF** | SP |
+| **Objeto** | RP de agulhas hipodermicas e seringas descartaveis para rede municipal de saude |
+| **Valor estimado** | ~R$ 386.000 |
+| **Encerramento** | 21/03/2026 |
+| **Por que salvar** | Produto do portfolio (Seringa Descartavel Luer Lock 10mL), match direto, SP nos estados de atuacao, score ~93 |
+
+> **NOTA:** O edital Pres. Bernardes 28/2026 (MG, R$ 110k) aparece na busca por `analisador bioquimico` mas com score ~56 e recomendacao NAO PARTICIPAR. O objeto real e contratacao de servico profissional de bioquimico (plantoes), nao aquisicao de equipamento. O sistema identifica corretamente essa incompatibilidade.
 
 #### Edital 4: USP — Luva Nitrilo
 
@@ -599,18 +603,19 @@ Com base em tudo que analisou:
 
 Repita os passos 10-19 para:
 
-### Edital UNIOESTE — Seringa Descartavel (166/2026)
+### Edital SES-ES — Seringa Descartavel (164/2026)
 - **Busca na Captacao:** Termo = `seringa descartavel`, 30 dias
-- **Particularidade:** Universidade estadual, alto valor (~R$ 636k), produto de consumo
-- **Na aba Lotes:** Pode ter multiplos lotes por tipo/tamanho de seringa
-- **Match esperado:** Seringa Descartavel BD do portfolio
+- **Particularidade:** Secretaria estadual de saude do ES, alto valor (~R$ 1M), match direto
+- **Na aba Lotes:** Pode ter multiplos lotes por tipo/volume de seringa
+- **Match esperado:** Seringa Descartavel Luer Lock 10mL do portfolio
+- **Atencao:** ES esta nos estados de atuacao — score logistico deve ser alto
 
-### Edital Pres. Bernardes — Analisador Bioquimico (28/2026)
-- **Busca na Captacao:** Termo = `analisador bioquimico`, 30 dias
-- **Particularidade:** Prefeitura municipal em MG, valor ~R$ 110k, prazo curto (26/03)
-- **Na aba Lotes:** Provavelmente lote unico com equipamento
-- **Match esperado:** Analisador Bioquimico Mindray BS-230 do portfolio
-- **Atencao:** Prazo curto — verificar viabilidade logistica
+### Edital Sorocaba — Seringas e Agulhas (00176/2025)
+- **Busca na Captacao:** Termo = `seringa descartavel`, 30 dias
+- **Particularidade:** Municipio de SP, valor ~R$ 386k, registro de precos
+- **Na aba Lotes:** Agulhas hipodermicas + seringas descartaveis
+- **Match esperado:** Seringa Descartavel Luer Lock 10mL do portfolio
+- **Atencao:** Prazo curto — verificar viabilidade
 
 ### Edital USP — Luva Nitrilo (267/2026)
 - **Busca na Captacao:** Termo = `luva nitrilo`, 30 dias
