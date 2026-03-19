@@ -796,53 +796,124 @@ export function ValidacaoPage(props?: PageProps) {
   // Aba 1: Aderencia (antigo conteudo da Objetiva + Intencao/Margem do dashboard)
   const renderAbaAderencia = (edital: Edital) => (
     <div className="aba-content">
-      {/* Aderencia Tecnica Detalhada — sub-scores reais do endpoint (T22) */}
+      {/* Score Dashboard + Decisão — tudo junto */}
       <div className="section-block">
-        <h4><Target size={16} /> Aderencia Tecnica Detalhada</h4>
-        {subScoresTecnicos.length > 0 ? (
-          <div className="sub-scores-grid">
-            {subScoresTecnicos.map((s, i) => (
-              <ScoreBar key={i} score={s.score} label={s.label} size="small" />
-            ))}
+        <div style={{ display: "flex", gap: "24px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          {/* Score Circle + Decisão IA + Botão calcular */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", minWidth: "130px" }}>
+            <ScoreCircle score={edital.score} size={100} label="Score Geral" />
+            {decisaoIA && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: "6px",
+                padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 700,
+                backgroundColor: decisaoIA === "GO" ? "#22c55e20" : decisaoIA === "NO-GO" ? "#ef444420" : "#eab30820",
+                color: decisaoIA === "GO" ? "#22c55e" : decisaoIA === "NO-GO" ? "#ef4444" : "#eab308",
+                border: `2px solid ${decisaoIA === "GO" ? "#22c55e60" : decisaoIA === "NO-GO" ? "#ef444460" : "#eab30860"}`,
+              }}>
+                {decisaoIA === "GO" && <CheckCircle size={12} />}
+                {decisaoIA === "NO-GO" && <XCircle size={12} />}
+                {decisaoIA !== "GO" && decisaoIA !== "NO-GO" && <AlertTriangle size={12} />}
+                {decisaoIA === "GO" ? "GO" : decisaoIA === "NO-GO" ? "NO-GO" : "EM AVALIAÇÃO"}
+              </span>
+            )}
+            <ActionButton
+              icon={<TrendingUp size={12} />}
+              label={scoresLoading ? "Calculando..." : (edital.score > 0 ? "Recalcular Scores IA" : "Calcular Scores IA")}
+              onClick={() => handleCalcularScores()}
+              loading={scoresLoading}
+              variant="neutral"
+            />
           </div>
-        ) : edital.scores.tecnico > 0 ? (
-          <div className="sub-scores-grid">
-            <ScoreBar score={edital.scores.tecnico} label="Aderencia Tecnica Geral" size="small" />
-            <ScoreBar score={edital.scores.documental} label="Aderencia Documental" size="small" />
-            <ScoreBar score={edital.scores.complexidade} label="Complexidade" size="small" />
-            <ScoreBar score={edital.scores.juridico} label="Juridico" size="small" />
-            <ScoreBar score={edital.scores.logistico} label="Logistico" size="small" />
-            <ScoreBar score={edital.scores.comercial} label="Comercial" size="small" />
+
+          {/* 6 barras de score */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "5px", minWidth: "250px" }}>
+            {subScoresTecnicos.length > 0 ? (
+              subScoresTecnicos.map((s, i) => (
+                <ScoreBar key={i} score={s.score} label={s.label} size="small" showLevel />
+              ))
+            ) : (
+              <>
+                <ScoreBar score={edital.scores.tecnico} label="Aderencia Tecnica" size="small" showLevel />
+                <ScoreBar score={edital.scores.documental} label="Aderencia Documental" size="small" showLevel />
+                <ScoreBar score={edital.scores.complexidade} label="Complexidade Edital" size="small" showLevel />
+                <ScoreBar score={edital.scores.juridico} label="Risco Juridico" size="small" showLevel />
+                <ScoreBar score={edital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
+                <ScoreBar score={edital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
+              </>
+            )}
           </div>
-        ) : (
-          <div className="scores-placeholder">
-            <ActionButton icon={<TrendingUp size={14} />} label="Calcular Scores" onClick={() => handleCalcularScores(edital)} loading={scoresLoading} variant="primary" />
-            <p className="empty-message">Clique para calcular a analise detalhada deste edital.</p>
+
+          {/* Potencial */}
+          <div style={{ textAlign: "center" }}>
+            <label style={{ fontSize: "11px", color: "#94a3b8" }}>Potencial</label>
+            {getPotencialBadge(edital.potencialGanho)}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Justificativa e Pontos (se disponíveis) */}
+      {/* Justificativa + Pontos da IA */}
       {justificativaIA && (
         <div className="section-block">
-          <h4><FileText size={16} /> Analise da IA</h4>
+          <h4><Sparkles size={16} /> Analise da IA</h4>
           <p style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.6 }}>{justificativaIA}</p>
-          {pontosPositivos.length > 0 && (
-            <div style={{ marginTop: "8px" }}>
-              {pontosPositivos.map((p, i) => (
-                <div key={i} style={{ fontSize: "12px", color: "#22c55e", padding: "2px 0" }}>{"\u2714"} {p}</div>
-              ))}
-            </div>
-          )}
-          {pontosAtencao.length > 0 && (
-            <div style={{ marginTop: "4px" }}>
-              {pontosAtencao.map((p, i) => (
-                <div key={i} style={{ fontSize: "12px", color: "#eab308", padding: "2px 0" }}>{"\u26A0"} {p}</div>
-              ))}
+          {(pontosPositivos.length > 0 || pontosAtencao.length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "8px" }}>
+              {pontosPositivos.length > 0 && (
+                <div>
+                  <h5 style={{ fontSize: "12px", color: "#22c55e", marginBottom: "4px" }}><ThumbsUp size={12} /> Pontos Positivos</h5>
+                  {pontosPositivos.map((p, i) => (
+                    <div key={i} style={{ fontSize: "12px", color: "#22c55e", padding: "2px 0" }}>{"\u2714"} {p}</div>
+                  ))}
+                </div>
+              )}
+              {pontosAtencao.length > 0 && (
+                <div>
+                  <h5 style={{ fontSize: "12px", color: "#eab308", marginBottom: "4px" }}><AlertTriangle size={12} /> Pontos de Atenção</h5>
+                  {pontosAtencao.map((p, i) => (
+                    <div key={i} style={{ fontSize: "12px", color: "#eab308", padding: "2px 0" }}>{"\u26A0"} {p}</div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
+
+      {/* Decisão GO/NO-GO */}
+      <div className="section-block">
+        <h4><ClipboardCheck size={16} /> Decisão</h4>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-success" onClick={() => handleDecisao("participar")}><ThumbsUp size={14} /> Participar (GO)</button>
+          <button className="btn btn-info" onClick={() => handleDecisao("acompanhar")}><Eye size={14} /> Acompanhar (Em Avaliação)</button>
+          <button className="btn btn-neutral" onClick={() => handleDecisao("ignorar")}><X size={14} /> Rejeitar (NO-GO)</button>
+        </div>
+        {showJustificativa && (
+          <div style={{ marginTop: "12px" }}>
+            <p style={{ fontSize: "11px", color: "#64748b", marginBottom: "8px" }}>A justificativa alimenta a inteligência futura do sistema.</p>
+            {erroDecisao && <p className="error-message">{erroDecisao}</p>}
+            <div className="form-grid form-grid-2">
+              <FormField label="Motivo">
+                <SelectInput value={justificativaMotivo} onChange={setJustificativaMotivo} placeholder="Selecione o motivo..."
+                  options={[
+                    { value: "preco_competitivo", label: "Preco competitivo" },
+                    { value: "portfolio_aderente", label: "Portfolio aderente" },
+                    { value: "margem_insuficiente", label: "Margem insuficiente" },
+                    { value: "falta_documentacao", label: "Falta documentacao" },
+                    { value: "concorrente_forte", label: "Concorrente muito forte" },
+                    { value: "risco_juridico", label: "Risco juridico alto" },
+                    { value: "fora_regiao", label: "Fora da regiao de atuacao" },
+                    { value: "outro", label: "Outro" },
+                  ]}
+                />
+              </FormField>
+              <FormField label="Detalhes">
+                <TextArea value={justificativaTexto} onChange={setJustificativaTexto} placeholder="Descreva os motivos da decisao..." rows={2} />
+              </FormField>
+            </div>
+            <ActionButton label="Salvar Justificativa" variant="primary" onClick={handleSalvarJustificativa} loading={salvandoDecisao} />
+          </div>
+        )}
+      </div>
 
       {/* Mapa Logístico */}
       <div className="section-block">
@@ -1597,166 +1668,39 @@ export function ValidacaoPage(props?: PageProps) {
         {/* Painel de analise do edital selecionado */}
         {selectedEdital && (
           <>
-            {/* Sinais de Mercado + Botoes de Decisao */}
-            <div className="validacao-top-bar">
-              <div className="sinais-mercado">
-                {selectedEdital.sinaisMercado.map((sinal, i) => (
-                  <span key={i} className={`badge ${sinal.includes("Direcionada") || sinal.includes("Predatorio") ? "badge-error" : "badge-warning"}`}>
-                    <AlertTriangle size={12} /> {sinal}
-                  </span>
-                ))}
-                {selectedEdital.fatalFlaws.length > 0 && (
-                  <span className="badge badge-error"><XCircle size={12} /> {selectedEdital.fatalFlaws.length} Fatal Flaw(s)</span>
-                )}
-                {decisaoSalva && (
-                  <span className="badge badge-success"><CheckCircle size={12} /> Decisao salva</span>
-                )}
-              </div>
-              <div className="decisao-buttons">
-                <button className="btn btn-success" onClick={() => handleDecisao("participar")}><ThumbsUp size={14} /> Participar (GO)</button>
-                <button className="btn btn-info" onClick={() => handleDecisao("acompanhar")}><Eye size={14} /> Acompanhar (Em Avaliação)</button>
-                <button className="btn btn-neutral" onClick={() => handleDecisao("ignorar")}><X size={14} /> Rejeitar (NO-GO)</button>
-              </div>
-            </div>
-
-            {/* Justificativa (aparece apos clicar decisao) */}
-            {showJustificativa && (
-              <Card title="Justificativa da Decisao" icon={<MessageSquare size={18} />}>
-                <p className="justificativa-hint">A justificativa e o combustivel para a inteligencia futura do sistema.</p>
-                {erroDecisao && <p className="error-message">{erroDecisao}</p>}
-                <div className="form-grid form-grid-2">
-                  <FormField label="Motivo">
-                    <SelectInput value={justificativaMotivo} onChange={setJustificativaMotivo} placeholder="Selecione o motivo..."
-                      options={[
-                        { value: "preco_competitivo", label: "Preco competitivo" },
-                        { value: "portfolio_aderente", label: "Portfolio aderente" },
-                        { value: "margem_insuficiente", label: "Margem insuficiente" },
-                        { value: "falta_documentacao", label: "Falta documentacao" },
-                        { value: "concorrente_forte", label: "Concorrente muito forte" },
-                        { value: "risco_juridico", label: "Risco juridico alto" },
-                        { value: "fora_regiao", label: "Fora da regiao de atuacao" },
-                        { value: "outro", label: "Outro" },
-                      ]}
-                    />
-                  </FormField>
-                  <FormField label="Detalhes">
-                    <TextArea value={justificativaTexto} onChange={setJustificativaTexto} placeholder="Descreva os motivos da decisao..." rows={2} />
-                  </FormField>
+            {/* Barra de info do edital + status + ações */}
+            <Card title={`${selectedEdital.numero} — ${selectedEdital.orgao}`} icon={<ClipboardCheck size={18} />}
+              actions={
+                <div className="card-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <ActionButton icon={<Eye size={14} />} label="Ver Edital" onClick={handleVerPdf} />
+                  <SelectInput value={selectedEdital.status} onChange={(v) => handleMudarStatus(selectedEdital.id, v as Edital["status"])}
+                    options={[
+                      { value: "novo", label: "Novo" },
+                      { value: "go", label: "GO" },
+                      { value: "avaliando", label: "Em Avaliação" },
+                      { value: "nogo", label: "NO-GO" },
+                    ]}
+                  />
+                  {selectedEdital.sinaisMercado.length > 0 && selectedEdital.sinaisMercado.map((sinal, i) => (
+                    <span key={i} className={`badge ${sinal.includes("Direcionada") || sinal.includes("Predatorio") ? "badge-error" : "badge-warning"}`}>
+                      <AlertTriangle size={12} /> {sinal}
+                    </span>
+                  ))}
+                  {decisaoSalva && (
+                    <span className="badge badge-success"><CheckCircle size={12} /> Decisao salva</span>
+                  )}
                 </div>
-                <ActionButton label="Salvar Justificativa" variant="primary" onClick={handleSalvarJustificativa} loading={salvandoDecisao} />
-              </Card>
-            )}
-
-            {/* Layout split: Info + Score Dashboard */}
-            <div className="validacao-split">
-              {/* Esquerda: Info do edital */}
-              <Card title={`${selectedEdital.numero} - ${selectedEdital.orgao}`} icon={<ClipboardCheck size={18} />}
-                actions={
-                  <div className="card-actions">
-                    <ActionButton icon={<Eye size={14} />} label="Ver Edital" onClick={handleVerPdf} />
-                    <SelectInput value={selectedEdital.status} onChange={(v) => handleMudarStatus(selectedEdital.id, v as Edital["status"])}
-                      options={[
-                        { value: "novo", label: "Novo" },
-                        { value: "go", label: "GO" },
-                        { value: "avaliando", label: "Em Avaliação" },
-                        { value: "nogo", label: "NO-GO" },
-                      ]}
-                    />
-                  </div>
-                }
-              >
-                <div className="info-grid">
-                  <div className="info-item"><label>Objeto</label><p>{selectedEdital.objeto}</p></div>
-                  <div className="info-item"><label>Valor Estimado</label><span>{formatCurrency(selectedEdital.valor)}</span></div>
-                  <div className="info-item"><label>Data Abertura</label><span>{selectedEdital.dataAbertura}</span></div>
-                  <div className="info-item"><label>Produto Correspondente</label><span>{selectedEdital.produtoCorrespondente || "-"}</span></div>
-                </div>
-              </Card>
-
-              {/* Direita: Score Dashboard */}
-              <div className="score-dashboard">
-                <div className="score-dashboard-header">
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", minWidth: "130px" }}>
-                    <ScoreCircle score={selectedEdital.score} size={110} label="Score Geral" />
-                    <div style={{ height: "14px" }} /> {/* Espaço para o label absoluto */}
-                    {/* Decisão GO/NO-GO da IA */}
-                    {decisaoIA && (
-                      <span style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "5px 14px",
-                        borderRadius: "20px",
-                        fontSize: "13px",
-                        fontWeight: 700,
-                        letterSpacing: "0.5px",
-                        backgroundColor: decisaoIA === "GO" ? "#22c55e20" : decisaoIA === "NO-GO" ? "#ef444420" : "#eab30820",
-                        color: decisaoIA === "GO" ? "#22c55e" : decisaoIA === "NO-GO" ? "#ef4444" : "#eab308",
-                        border: `2px solid ${decisaoIA === "GO" ? "#22c55e60" : decisaoIA === "NO-GO" ? "#ef444460" : "#eab30860"}`,
-                      }}>
-                        {decisaoIA === "GO" && <CheckCircle size={14} />}
-                        {decisaoIA === "NO-GO" && <XCircle size={14} />}
-                        {decisaoIA === "CONDICIONAL" && <AlertTriangle size={14} />}
-                        {decisaoIA === "GO" ? "GO" : decisaoIA === "NO-GO" ? "NO-GO" : "EM AVALIAÇÃO"}
-                      </span>
-                    )}
-                    {/* Botão calcular */}
-                    <ActionButton
-                      icon={<TrendingUp size={12} />}
-                      label={scoresLoading ? "Calculando..." : (selectedEdital.score > 0 ? "Recalcular Scores IA" : "Calcular Scores IA")}
-                      onClick={() => handleCalcularScores()}
-                      loading={scoresLoading}
-                      variant="neutral"
-                    />
-                  </div>
-
-                  {/* 6 barras de score */}
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <ScoreBar score={selectedEdital.scores.tecnico} label="Aderencia Tecnica" size="small" showLevel />
-                    <ScoreBar score={selectedEdital.scores.documental} label="Aderencia Documental" size="small" showLevel />
-                    <ScoreBar score={selectedEdital.scores.complexidade} label="Complexidade Edital" size="small" showLevel />
-                    <ScoreBar score={selectedEdital.scores.juridico} label="Risco Juridico" size="small" showLevel />
-                    <ScoreBar score={selectedEdital.scores.logistico} label="Viabilidade Logistica" size="small" showLevel />
-                    <ScoreBar score={selectedEdital.scores.comercial} label="Atratividade Comercial" size="small" showLevel />
-                  </div>
-
-                  <div className="potencial-ganho">
-                    <label>Potencial</label>
-                    {getPotencialBadge(selectedEdital.potencialGanho)}
-                  </div>
-                </div>
-
-                {/* Justificativa da IA — aparece apos calcular scores */}
-                {justificativaIA && (
-                  <div className="score-justificativa-panel">
-                    <p className="justificativa-titulo"><Sparkles size={14} /> Analise da IA</p>
-                    <p className="justificativa-texto">{justificativaIA}</p>
-                    {(pontosPositivos.length > 0 || pontosAtencao.length > 0) && (
-                      <div className="score-pontos-grid">
-                        {pontosPositivos.length > 0 && (
-                          <div className="score-pontos-col positivos">
-                            <h5 className="positivos"><ThumbsUp size={12} /> Pontos Positivos</h5>
-                            <ul>
-                              {pontosPositivos.map((p, i) => <li key={i}>{p}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                        {pontosAtencao.length > 0 && (
-                          <div className="score-pontos-col atencao">
-                            <h5 className="atencao"><AlertTriangle size={12} /> Pontos de Atencao</h5>
-                            <ul>
-                              {pontosAtencao.map((p, i) => <li key={i}>{p}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+              }
+            >
+              <div className="info-grid" style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "12px", alignItems: "start" }}>
+                <div className="info-item"><label>Objeto</label><p style={{ fontSize: "13px", margin: 0 }}>{selectedEdital.objeto}</p></div>
+                <div className="info-item"><label>Valor</label><span>{formatCurrency(selectedEdital.valor)}</span></div>
+                <div className="info-item"><label>Abertura</label><span>{selectedEdital.dataAbertura}</span></div>
+                <div className="info-item"><label>Produto</label><span>{selectedEdital.produtoCorrespondente || "-"}</span></div>
               </div>
-            </div>
+            </Card>
 
-            {/* 5 Abas: Aderencia / Documentos / Riscos / Mercado / IA */}
+            {/* Todas as abas */}
             <Card>
               <TabPanel tabs={analysisTabs}>
                 {(activeTab) => {
