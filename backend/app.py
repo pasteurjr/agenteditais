@@ -8329,6 +8329,19 @@ def listar_lotes_edital(edital_id):
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/buscar-itens-pncp", methods=["POST"])
+@require_auth
+def buscar_itens_pncp(edital_id):
+    """Busca itens do edital diretamente na API PNCP e salva no banco."""
+    user_id = get_current_user_id()
+    try:
+        from tools import tool_buscar_itens_edital_pncp
+        resultado = tool_buscar_itens_edital_pncp(edital_id=edital_id, user_id=user_id)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/editais/<edital_id>/lotes/extrair", methods=["POST"])
 @require_auth
 def extrair_lotes_edital(edital_id):

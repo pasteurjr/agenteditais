@@ -983,14 +983,39 @@ export function ValidacaoPage(props?: PageProps) {
         ) : itensEdital.length === 0 ? (
           <div style={{ padding: "16px", textAlign: "center" }}>
             <p style={{ color: "#94a3b8", fontSize: "14px" }}>Nenhum item carregado.</p>
-            {onSendToChat && (
-              <ActionButton
-                icon={<Search size={14} />}
-                label="Buscar Itens no PNCP"
-                variant="neutral"
-                onClick={() => onSendToChat("Busque os itens do edital " + edital.numero)}
-              />
-            )}
+            <ActionButton
+              icon={<Search size={14} />}
+              label={itensLoading ? "Buscando..." : "Buscar Itens no PNCP"}
+              variant="primary"
+              loading={itensLoading}
+              onClick={async () => {
+                setItensLoading(true);
+                try {
+                  const token = localStorage.getItem("editais_ia_access_token");
+                  const res = await fetch(`/api/editais/${edital.id}/buscar-itens-pncp`, {
+                    method: "POST",
+                    headers: { Authorization: token ? `Bearer ${token}` : "" },
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.itens) {
+                      setItensEdital(data.itens.map((it: Record<string, unknown>) => ({
+                        id: String(it.id || ""),
+                        numero_item: Number(it.numero_item || 0),
+                        descricao: String(it.descricao || ""),
+                        quantidade: Number(it.quantidade || 0),
+                        unidade_medida: String(it.unidade_medida || ""),
+                        valor_unitario_estimado: Number(it.valor_unitario_estimado || 0),
+                        valor_total_estimado: Number(it.valor_total_estimado || 0),
+                      })));
+                    } else {
+                      alert(data.error || "Nenhum item encontrado no PNCP para este edital.");
+                    }
+                  }
+                } catch { alert("Erro ao buscar itens no PNCP."); }
+                finally { setItensLoading(false); }
+              }}
+            />
           </div>
         ) : (
           <DataTable

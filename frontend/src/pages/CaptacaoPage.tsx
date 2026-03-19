@@ -768,6 +768,7 @@ export function CaptacaoPage(props?: PageProps) {
 
       // P1: Salvar itens do edital no banco (alimenta aba Lotes na Validação)
       if (editalId && edital.itens && edital.itens.length > 0) {
+        // Itens vieram na busca — salvar via CRUD
         for (const item of edital.itens) {
           try {
             await crudCreate("editais-itens", {
@@ -781,6 +782,15 @@ export function CaptacaoPage(props?: PageProps) {
             });
           } catch { /* ignora duplicatas */ }
         }
+      } else if (editalId && edital.cnpj_orgao && edital.ano_compra && edital.seq_compra) {
+        // Itens não vieram na busca — buscar direto do PNCP
+        try {
+          const token = localStorage.getItem("editais_ia_access_token");
+          await fetch(`/api/editais/${editalId}/buscar-itens-pncp`, {
+            method: "POST",
+            headers: { Authorization: token ? `Bearer ${token}` : "" },
+          });
+        } catch { /* silencioso */ }
       }
 
       // P2: Salvar scores da Captação (evita recálculo na Validação)
