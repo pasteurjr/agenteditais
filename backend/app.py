@@ -9303,7 +9303,8 @@ def listar_editais_salvos():
                     edital_dict["score_final"] = float(melhor_analise.score_final) if melhor_analise.score_final else None
                     edital_dict["score_geral"] = float(melhor_analise.score_final) if melhor_analise.score_final else None
                     edital_dict["analise_id"] = melhor_analise.id
-                    # Parsear recomendacao JSON para extrair scores individuais e decisao
+                    # Parsear recomendacao: pode ser JSON (novo) ou texto puro (antigo)
+                    scores_parsed = False
                     try:
                         rec_data = json.loads(melhor_analise.recomendacao) if melhor_analise.recomendacao else {}
                         if isinstance(rec_data, dict) and "scores" in rec_data:
@@ -9312,10 +9313,29 @@ def listar_editais_salvos():
                             edital_dict["justificativa_ia"] = rec_data.get("justificativa")
                             edital_dict["pontos_positivos"] = rec_data.get("pontos_positivos", [])
                             edital_dict["pontos_atencao"] = rec_data.get("pontos_atencao", [])
-                        else:
-                            edital_dict["recomendacao"] = melhor_analise.recomendacao
+                            scores_parsed = True
                     except (json.JSONDecodeError, TypeError):
-                        edital_dict["recomendacao"] = melhor_analise.recomendacao
+                        pass
+
+                    if not scores_parsed:
+                        # Recomendacao é texto puro (score profundo antigo) — reconstruir scores dos campos
+                        edital_dict["scores"] = {
+                            "tecnico": float(melhor_analise.score_tecnico) if melhor_analise.score_tecnico else 0,
+                            "documental": 0,
+                            "complexidade": 0,
+                            "juridico": 0,
+                            "logistico": 0,
+                            "comercial": float(melhor_analise.score_comercial) if melhor_analise.score_comercial else 0,
+                        }
+                        rec_text = melhor_analise.recomendacao or ""
+                        if rec_text.startswith("GO"):
+                            edital_dict["decisao_ia"] = "GO"
+                        elif rec_text.startswith("NO-GO"):
+                            edital_dict["decisao_ia"] = "NO-GO"
+                        else:
+                            edital_dict["decisao_ia"] = "AVALIAR"
+                        edital_dict["justificativa_ia"] = rec_text.split(": ", 1)[1] if ": " in rec_text else rec_text
+                        edital_dict["recomendacao"] = rec_text
 
             # Incluir estratégia/decisão go-nogo se solicitado
             if com_estrategia:

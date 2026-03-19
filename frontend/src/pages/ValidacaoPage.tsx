@@ -66,7 +66,7 @@ interface Edital {
   objeto: string;
   valor: number;
   dataAbertura: string;
-  status: "novo" | "analisando" | "validado" | "descartado";
+  status: "novo" | "go" | "avaliando" | "nogo";
   score: number;
   scores: EditalScores;
   potencialGanho: "elevado" | "medio" | "baixo";
@@ -182,7 +182,15 @@ async function loadEditaisSalvos(): Promise<Edital[]> {
     objeto: String(e.objeto || ""),
     valor: Number(e.valor_referencia || e.valor || 0),
     dataAbertura: String(e.data_abertura || e.dataAbertura || ""),
-    status: (e.status_validacao || e.status || "novo") as Edital["status"],
+    status: (() => {
+      const s = String(e.status_validacao || e.status || "novo");
+      // Mapear status antigos para novos
+      if (s === "validado" || s === "participando") return "go";
+      if (s === "analisando") return "avaliando";
+      if (s === "descartado") return "nogo";
+      if (s === "go" || s === "avaliando" || s === "nogo") return s;
+      return "novo";
+    })() as Edital["status"],
     score: Number(e.score_geral || e.score || 0),
     scores: (e.scores as EditalScores) || { tecnico: 0, documental: 0, complexidade: 0, juridico: 0, logistico: 0, comercial: 0 },
     potencialGanho: ((e.potencial_ganho || e.potencialGanho || "medio") as Edital["potencialGanho"]),
@@ -575,7 +583,7 @@ export function ValidacaoPage(props?: PageProps) {
 
   const handleDecisao = (decisao: "participar" | "acompanhar" | "ignorar") => {
     if (!selectedEdital) return;
-    const statusMap = { participar: "validado" as const, acompanhar: "analisando" as const, ignorar: "descartado" as const };
+    const statusMap = { participar: "go" as const, acompanhar: "avaliando" as const, ignorar: "nogo" as const };
     handleMudarStatus(selectedEdital.id, statusMap[decisao]);
     setPendingDecisao(decisao);
     setShowJustificativa(true);
@@ -589,7 +597,7 @@ export function ValidacaoPage(props?: PageProps) {
     setSalvandoDecisao(true);
     setErroDecisao("");
     try {
-      const decisaoLabel = pendingDecisao === "participar" ? "Participar" : pendingDecisao === "acompanhar" ? "Acompanhar" : "Ignorar";
+      const decisaoLabel = pendingDecisao === "participar" ? "GO" : pendingDecisao === "acompanhar" ? "Em Avaliação" : "NO-GO";
       const statusAtual = selectedEdital.status;
 
       if (selectedEdital.decisaoId) {
@@ -739,9 +747,9 @@ export function ValidacaoPage(props?: PageProps) {
   const getStatusBadge = (status: Edital["status"]) => {
     switch (status) {
       case "novo": return <span className="status-badge status-badge-info"><Clock size={12} /> Novo</span>;
-      case "analisando": return <span className="status-badge status-badge-warning"><Eye size={12} /> Analisando</span>;
-      case "validado": return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Validado</span>;
-      case "descartado": return <span className="status-badge status-badge-error"><XCircle size={12} /> Descartado</span>;
+      case "go": return <span className="status-badge status-badge-success"><CheckCircle size={12} /> GO</span>;
+      case "avaliando": return <span className="status-badge status-badge-warning"><Eye size={12} /> Em Avaliação</span>;
+      case "nogo": return <span className="status-badge status-badge-error"><XCircle size={12} /> NO-GO</span>;
     }
   };
 
@@ -839,6 +847,7 @@ export function ValidacaoPage(props?: PageProps) {
       {/* Mapa Logístico */}
       <div className="section-block">
         <h4><Target size={16} /> Mapa Logistico</h4>
+        <p style={{ fontSize: "11px", color: "#64748b", marginBottom: "8px" }}>Compara a localização do órgão licitante com a sede da empresa para estimar viabilidade de entrega, custos logísticos e prazos.</p>
         {(() => {
           const scoreLog = edital.scores.logistico;
           const distancia = scoreLog >= 70 ? "Proximo" : scoreLog >= 40 ? "Medio" : "Distante";
@@ -1557,9 +1566,9 @@ export function ValidacaoPage(props?: PageProps) {
               options: [
                 { value: "todos", label: "Todos" },
                 { value: "novo", label: "Novo" },
-                { value: "analisando", label: "Analisando" },
-                { value: "validado", label: "Validado" },
-                { value: "descartado", label: "Descartado" },
+                { value: "go", label: "GO" },
+                { value: "avaliando", label: "Em Avaliação" },
+                { value: "nogo", label: "NO-GO" },
               ],
             }]}
           />
@@ -1604,9 +1613,9 @@ export function ValidacaoPage(props?: PageProps) {
                 )}
               </div>
               <div className="decisao-buttons">
-                <button className="btn btn-success" onClick={() => handleDecisao("participar")}><ThumbsUp size={14} /> Participar</button>
-                <button className="btn btn-info" onClick={() => handleDecisao("acompanhar")}><Eye size={14} /> Acompanhar</button>
-                <button className="btn btn-neutral" onClick={() => handleDecisao("ignorar")}><X size={14} /> Ignorar</button>
+                <button className="btn btn-success" onClick={() => handleDecisao("participar")}><ThumbsUp size={14} /> Participar (GO)</button>
+                <button className="btn btn-info" onClick={() => handleDecisao("acompanhar")}><Eye size={14} /> Acompanhar (Em Avaliação)</button>
+                <button className="btn btn-neutral" onClick={() => handleDecisao("ignorar")}><X size={14} /> Rejeitar (NO-GO)</button>
               </div>
             </div>
 
@@ -1648,9 +1657,9 @@ export function ValidacaoPage(props?: PageProps) {
                     <SelectInput value={selectedEdital.status} onChange={(v) => handleMudarStatus(selectedEdital.id, v as Edital["status"])}
                       options={[
                         { value: "novo", label: "Novo" },
-                        { value: "analisando", label: "Analisando" },
-                        { value: "validado", label: "Validado" },
-                        { value: "descartado", label: "Descartado" },
+                        { value: "go", label: "GO" },
+                        { value: "avaliando", label: "Em Avaliação" },
+                        { value: "nogo", label: "NO-GO" },
                       ]}
                     />
                   </div>
@@ -1688,13 +1697,13 @@ export function ValidacaoPage(props?: PageProps) {
                         {decisaoIA === "GO" && <CheckCircle size={14} />}
                         {decisaoIA === "NO-GO" && <XCircle size={14} />}
                         {decisaoIA === "CONDICIONAL" && <AlertTriangle size={14} />}
-                        {decisaoIA === "GO" ? "GO - Participar" : decisaoIA === "NO-GO" ? "NO-GO" : "ACOMPANHAR"}
+                        {decisaoIA === "GO" ? "GO" : decisaoIA === "NO-GO" ? "NO-GO" : "EM AVALIAÇÃO"}
                       </span>
                     )}
                     {/* Botão calcular */}
                     <ActionButton
                       icon={<TrendingUp size={12} />}
-                      label={scoresLoading ? "Calculando..." : "Calcular Scores IA"}
+                      label={scoresLoading ? "Calculando..." : (selectedEdital.score > 0 ? "Recalcular Scores IA" : "Calcular Scores IA")}
                       onClick={() => handleCalcularScores()}
                       loading={scoresLoading}
                       variant="neutral"

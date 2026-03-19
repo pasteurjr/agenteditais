@@ -8078,13 +8078,27 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
             Analise.user_id == user_id
         ).first()
 
+        import json as _json
+        recomendacao_json = _json.dumps({
+            "decisao": scores_data.get('decisao', 'AVALIAR'),
+            "justificativa": scores_data.get('justificativa', ''),
+            "scores": {
+                "tecnico": scores_data.get('score_tecnico') or 0,
+                "documental": scores_data.get('score_documental') or 0,
+                "complexidade": scores_data.get('score_complexidade') or 0,
+                "juridico": scores_data.get('score_juridico') or 0,
+                "logistico": scores_data.get('score_logistico') or 0,
+                "comercial": scores_data.get('score_comercial') or 0,
+            },
+            "pontos_positivos": scores_data.get('pontos_positivos', []),
+            "pontos_atencao": scores_data.get('pontos_atencao', []),
+        }, ensure_ascii=False)
+
         if analise:
             analise.score_tecnico = scores_data.get('score_tecnico')
             analise.score_comercial = scores_data.get('score_comercial')
             analise.score_final = score_final_calc
-            analise.recomendacao = (
-                f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
-            )
+            analise.recomendacao = recomendacao_json
         else:
             analise = Analise(
                 edital_id=edital_id,
@@ -8093,7 +8107,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
                 score_tecnico=scores_data.get('score_tecnico'),
                 score_comercial=scores_data.get('score_comercial'),
                 score_final=score_final_calc,
-                recomendacao=f"{scores_data.get('decisao', 'AVALIAR')}: {scores_data.get('justificativa', '')}"
+                recomendacao=recomendacao_json,
             )
             db.add(analise)
 
