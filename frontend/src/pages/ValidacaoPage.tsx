@@ -788,18 +788,6 @@ export function ValidacaoPage(props?: PageProps) {
   // Aba 1: Aderencia (antigo conteudo da Objetiva + Intencao/Margem do dashboard)
   const renderAbaAderencia = (edital: Edital) => (
     <div className="aba-content">
-      {/* Decisão GO/NO-GO da IA (T22) */}
-      {decisaoIA && (
-        <div className={`section-block decisao-ia-banner decisao-ia-${decisaoIA.toLowerCase().replace("-", "")}`}>
-          <h4>
-            {decisaoIA === "GO" && <CheckCircle size={16} />}
-            {decisaoIA === "NO-GO" && <XCircle size={16} />}
-            {decisaoIA === "CONDICIONAL" && <AlertTriangle size={16} />}
-            {" "}Recomendacao da IA: {decisaoIA}
-          </h4>
-        </div>
-      )}
-
       {/* Aderencia Tecnica Detalhada — sub-scores reais do endpoint (T22) */}
       <div className="section-block">
         <h4><Target size={16} /> Aderencia Tecnica Detalhada</h4>
@@ -810,10 +798,13 @@ export function ValidacaoPage(props?: PageProps) {
             ))}
           </div>
         ) : edital.scores.tecnico > 0 ? (
-          /* Fallback: usa score técnico geral enquanto sub-scores não chegam */
           <div className="sub-scores-grid">
             <ScoreBar score={edital.scores.tecnico} label="Aderencia Tecnica Geral" size="small" />
             <ScoreBar score={edital.scores.documental} label="Aderencia Documental" size="small" />
+            <ScoreBar score={edital.scores.complexidade} label="Complexidade" size="small" />
+            <ScoreBar score={edital.scores.juridico} label="Juridico" size="small" />
+            <ScoreBar score={edital.scores.logistico} label="Logistico" size="small" />
+            <ScoreBar score={edital.scores.comercial} label="Comercial" size="small" />
           </div>
         ) : (
           <div className="scores-placeholder">
@@ -823,44 +814,29 @@ export function ValidacaoPage(props?: PageProps) {
         )}
       </div>
 
-      {/* Certificacoes */}
-      <div className="section-block">
-        <h4><Shield size={16} /> Certificacoes</h4>
-        <div className="certificacoes-list">
-          {edital.certificacoes.map((cert, i) => (
-            <div key={i} className="certificacao-item">
-              <span className="certificacao-nome">{cert.nome}</span>
-              <StatusBadge
-                status={cert.status === "ok" ? "success" : cert.status === "vencida" ? "error" : "warning"}
-                label={cert.status === "ok" ? "OK" : cert.status === "vencida" ? "Vencida" : "Pendente"}
-                size="small"
-              />
+      {/* Justificativa e Pontos (se disponíveis) */}
+      {justificativaIA && (
+        <div className="section-block">
+          <h4><FileText size={16} /> Analise da IA</h4>
+          <p style={{ color: "#94a3b8", fontSize: "13px", lineHeight: 1.6 }}>{justificativaIA}</p>
+          {pontosPositivos.length > 0 && (
+            <div style={{ marginTop: "8px" }}>
+              {pontosPositivos.map((p, i) => (
+                <div key={i} style={{ fontSize: "12px", color: "#22c55e", padding: "2px 0" }}>{"\u2714"} {p}</div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Analise de Lote */}
-      <div className="section-block">
-        <h4><FileText size={16} /> Analise de Lote ({edital.analiseLote.length} itens)</h4>
-        <div className="lote-bar">
-          {edital.analiseLote.map((item, i) => (
-            <div
-              key={i}
-              className={`lote-segment ${item.tipo}`}
-              title={`${item.item} (${item.tipo})`}
-            >
-              <span className="lote-segment-label">{item.item.length > 12 ? item.item.substring(0, 12) + "..." : item.item}</span>
+          )}
+          {pontosAtencao.length > 0 && (
+            <div style={{ marginTop: "4px" }}>
+              {pontosAtencao.map((p, i) => (
+                <div key={i} style={{ fontSize: "12px", color: "#eab308", padding: "2px 0" }}>{"\u26A0"} {p}</div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-        <div className="lote-legenda">
-          <span className="lote-legenda-item"><span className="lote-dot aderente" /> Aderente ({edital.analiseLote.filter(i => i.tipo === "aderente").length})</span>
-          <span className="lote-legenda-item"><span className="lote-dot intruso" /> Item Intruso ({edital.analiseLote.filter(i => i.tipo === "intruso").length})</span>
-        </div>
-      </div>
+      )}
 
-      {/* Mapa Logístico (F5) — UF empresa carregada dinamicamente */}
+      {/* Mapa Logístico */}
       <div className="section-block">
         <h4><Target size={16} /> Mapa Logistico</h4>
         {(() => {
@@ -911,42 +887,6 @@ export function ValidacaoPage(props?: PageProps) {
             </div>
           );
         })()}
-      </div>
-
-      {/* Intencao Estrategica + Margem Expectativa (movido do score dashboard) */}
-      <div className="section-block">
-        <h4><TrendingUp size={16} /> Intencao Estrategica e Margem</h4>
-        <div className="intencao-margem">
-          <div className="intencao-section">
-            <label>Intencao Estrategica</label>
-            <RadioGroup
-              name="intencao"
-              value={edital.intencaoEstrategica}
-              onChange={handleIntencaoChange}
-              options={[
-                { value: "estrategico", label: "Estrategico" },
-                { value: "defensivo", label: "Defensivo" },
-                { value: "acompanhamento", label: "Acompanhamento" },
-                { value: "aprendizado", label: "Aprendizado" },
-              ]}
-            />
-          </div>
-          <div className="margem-section">
-            <label>Expectativa de Margem: {edital.margemExpectativa}%</label>
-            <input
-              type="range"
-              min="0"
-              max="50"
-              value={edital.margemExpectativa}
-              onChange={(e) => handleMargemChange(Number(e.target.value))}
-              className="margem-slider"
-            />
-            <div className="margem-labels">
-              <span>Varia por Produto</span>
-              <span>Varia por Regiao</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

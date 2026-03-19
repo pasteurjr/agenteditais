@@ -3,6 +3,7 @@ Agente de Editais - Backend Flask
 MVP com 9 ações via Select + Prompt
 """
 import os
+import json
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
@@ -8037,9 +8038,64 @@ def download_edital_pdf(edital_id):
             EditalDocumento.tipo == 'edital_principal'
         ).first()
 
+        # Helper: se arquivo é ZIP, extrair PDF do edital de dentro
+        import zipfile as _zf
+        def _extrair_pdf_de_zip(zip_path):
+            if not _zf.is_zipfile(zip_path):
+                return zip_path  # Não é ZIP, retorna como está
+            print(f"[PDF] Arquivo é ZIP, extraindo PDF: {zip_path}")
+            upload_dir = os.path.dirname(zip_path)
+            all_pdfs = []
+            with _zf.ZipFile(zip_path, 'r') as zf:
+                for name in zf.namelist():
+                    if name.lower().endswith('.pdf'):
+                        zf.extract(name, upload_dir)
+                        fpath = os.path.join(upload_dir, name)
+                        all_pdfs.append((fpath, os.path.getsize(fpath), os.path.basename(name).lower()))
+                for name in zf.namelist():
+                    if name.lower().endswith('.zip'):
+                        zf.extract(name, upload_dir)
+                        nested = os.path.join(upload_dir, name)
+                        if _zf.is_zipfile(nested):
+                            with _zf.ZipFile(nested, 'r') as zf2:
+                                for n2 in zf2.namelist():
+                                    if n2.lower().endswith('.pdf'):
+                                        zf2.extract(n2, upload_dir)
+                                        fp2 = os.path.join(upload_dir, n2)
+                                        all_pdfs.append((fp2, os.path.getsize(fp2), os.path.basename(n2).lower()))
+                            try: os.remove(nested)
+                            except OSError: pass
+            if not all_pdfs:
+                return zip_path
+            edital_pdfs = [p for p in all_pdfs if 'edital' in p[2] and 'anexo' not in p[2] and 'termo' not in p[2] and 'minuta' not in p[2]]
+            best = max(edital_pdfs, key=lambda x: x[1]) if edital_pdfs else max(all_pdfs, key=lambda x: x[1])
+            for p in all_pdfs:
+                if p[0] != best[0]:
+                    try: os.remove(p[0])
+                    except OSError: pass
+            pdf_filename = re.sub(r'[^\w\-_\.]', '_', os.path.basename(best[0]))
+            final_path = os.path.join(upload_dir, pdf_filename)
+            if best[0] != final_path:
+                if os.path.exists(final_path): os.remove(final_path)
+                os.rename(best[0], final_path)
+            try: os.remove(zip_path)
+            except OSError: pass
+            # Limpar subpastas
+            for p in all_pdfs:
+                parent = os.path.dirname(p[0])
+                if parent != upload_dir:
+                    try: os.removedirs(parent)
+                    except OSError: pass
+            print(f"[PDF] PDF extraído de ZIP: {final_path}")
+            return final_path
+
         if doc and doc.path_arquivo and os.path.exists(doc.path_arquivo):
+            filepath = _extrair_pdf_de_zip(doc.path_arquivo)
+            if filepath != doc.path_arquivo:
+                doc.path_arquivo = filepath
+                db.commit()
             return send_file(
-                doc.path_arquivo,
+                filepath,
                 mimetype='application/pdf',
                 as_attachment=download_flag,
                 download_name=doc.nome_arquivo or f"edital_{edital.numero}.pdf"
@@ -8052,8 +8108,12 @@ def download_edital_pdf(edital_id):
             doc = None
 
         if edital.pdf_path and os.path.exists(edital.pdf_path):
+            filepath = _extrair_pdf_de_zip(edital.pdf_path)
+            if filepath != edital.pdf_path:
+                edital.pdf_path = filepath
+                db.commit()
             return send_file(
-                edital.pdf_path,
+                filepath,
                 mimetype='application/pdf',
                 as_attachment=download_flag,
                 download_name=edital.pdf_titulo or f"edital_{edital.numero}.pdf"
@@ -9241,8 +9301,21 @@ def listar_editais_salvos():
                 if melhor_analise:
                     edital_dict["score_tecnico"] = float(melhor_analise.score_tecnico) if melhor_analise.score_tecnico else None
                     edital_dict["score_final"] = float(melhor_analise.score_final) if melhor_analise.score_final else None
-                    edital_dict["recomendacao"] = melhor_analise.recomendacao
+                    edital_dict["score_geral"] = float(melhor_analise.score_final) if melhor_analise.score_final else None
                     edital_dict["analise_id"] = melhor_analise.id
+                    # Parsear recomendacao JSON para extrair scores individuais e decisao
+                    try:
+                        rec_data = json.loads(melhor_analise.recomendacao) if melhor_analise.recomendacao else {}
+                        if isinstance(rec_data, dict) and "scores" in rec_data:
+                            edital_dict["scores"] = rec_data["scores"]
+                            edital_dict["decisao_ia"] = rec_data.get("decisao")
+                            edital_dict["justificativa_ia"] = rec_data.get("justificativa")
+                            edital_dict["pontos_positivos"] = rec_data.get("pontos_positivos", [])
+                            edital_dict["pontos_atencao"] = rec_data.get("pontos_atencao", [])
+                        else:
+                            edital_dict["recomendacao"] = melhor_analise.recomendacao
+                    except (json.JSONDecodeError, TypeError):
+                        edital_dict["recomendacao"] = melhor_analise.recomendacao
 
             # Incluir estratégia/decisão go-nogo se solicitado
             if com_estrategia:
@@ -9301,6 +9374,88 @@ def calcular_scores_validacao_rest(edital_id):
 
 
 # Endpoint para calcular score profundo sob demanda (edital não salvo)
+@app.route("/api/editais/salvar-scores-captacao", methods=["POST"])
+@require_auth
+def salvar_scores_captacao():
+    """Salva scores calculados na Captação para que a Validação não precise recalcular."""
+    user_id = get_current_user_id()
+    data = request.get_json()
+    edital_id = data.get("edital_id")
+    if not edital_id:
+        return jsonify({"error": "edital_id obrigatório"}), 400
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = empresa.id if empresa else None
+
+        # Buscar produto correspondente (necessário para Analise — produto_id é NOT NULL)
+        from models import Produto
+        produto = db.query(Produto).filter(Produto.user_id == user_id).first()
+        if not produto:
+            return jsonify({"error": "Nenhum produto cadastrado"}), 400
+        produto_id = produto.id
+
+        # Verificar se já existe análise para este edital
+        analise_existente = db.query(Analise).filter(
+            Analise.edital_id == edital_id,
+            Analise.user_id == user_id
+        ).first()
+
+        score_tecnico = data.get("score_tecnico", 0)
+        score_comercial = data.get("score_comercial", 0)
+        score_final = data.get("score_final", 0)
+        decisao = data.get("decisao", "AVALIAR")
+        justificativa = data.get("justificativa", "")
+
+        recomendacao_text = json.dumps({
+            "decisao": decisao,
+            "justificativa": justificativa,
+            "scores": {
+                "tecnico": score_tecnico,
+                "documental": data.get("score_documental", 0),
+                "complexidade": data.get("score_complexidade", 0),
+                "juridico": data.get("score_juridico", 0),
+                "logistico": data.get("score_logistico", 0),
+                "comercial": score_comercial,
+            },
+            "pontos_positivos": data.get("pontos_positivos", []),
+            "pontos_atencao": data.get("pontos_atencao", []),
+        }, ensure_ascii=False)
+
+        if analise_existente:
+            analise_existente.score_tecnico = score_tecnico
+            analise_existente.score_comercial = score_comercial
+            analise_existente.score_final = score_final
+            analise_existente.recomendacao = recomendacao_text
+        else:
+            nova_analise = Analise(
+                id=str(uuid.uuid4()),
+                edital_id=edital_id,
+                produto_id=produto_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+                score_tecnico=score_tecnico,
+                score_comercial=score_comercial,
+                score_final=score_final,
+                recomendacao=recomendacao_text,
+                created_at=datetime.now(),
+            )
+            db.add(nova_analise)
+
+        db.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/score-profundo-sob-demanda", methods=["POST"])
 @require_auth
 def score_profundo_sob_demanda():

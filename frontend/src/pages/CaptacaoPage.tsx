@@ -742,25 +742,87 @@ export function CaptacaoPage(props?: PageProps) {
           : null,
       };
       // Se já tem ID do backend (UUID), reutiliza (não duplica)
+      let editalId: string | null = null;
       if (edital.id && edital.id.length === 36) {
         // Promover de temp_score para novo se necessário
         try { await crudUpdate("editais", edital.id, { status: "novo" }); } catch { /* ignora se não existe */ }
-        return edital.id;
+        editalId = edital.id;
       }
-      // Verificar se já existe um edital temp_score com mesmo número+órgão
-      try {
-        const existentes = await crudList("editais", { q: edital.numero, per_page: 5 });
-        const tempExistente = (existentes.items || []).find(
-          (e: Record<string, unknown>) => e.numero === edital.numero && e.orgao === edital.orgao
-        );
-        if (tempExistente) {
-          const existId = String(tempExistente.id);
-          await crudUpdate("editais", existId, { status: "novo" });
-          return existId;
+      if (!editalId) {
+        // Verificar se já existe um edital temp_score com mesmo número+órgão
+        try {
+          const existentes = await crudList("editais", { q: edital.numero, per_page: 5 });
+          const tempExistente = (existentes.items || []).find(
+            (e: Record<string, unknown>) => e.numero === edital.numero && e.orgao === edital.orgao
+          );
+          if (tempExistente) {
+            editalId = String(tempExistente.id);
+            await crudUpdate("editais", editalId, { status: "novo" });
+          }
+        } catch { /* ignora — cria novo */ }
+      }
+      if (!editalId) {
+        const criado = await crudCreate("editais", payload);
+        editalId = String(criado.id ?? "");
+      }
+
+      // P1: Salvar itens do edital no banco (alimenta aba Lotes na Validação)
+      if (editalId && edital.itens && edital.itens.length > 0) {
+        for (const item of edital.itens) {
+          try {
+            await crudCreate("editais-itens", {
+              edital_id: editalId,
+              numero_item: item.numero_item ?? null,
+              descricao: item.descricao || "",
+              quantidade: item.quantidade ?? null,
+              unidade_medida: item.unidade_medida || null,
+              valor_unitario_estimado: item.valor_unitario_estimado ?? null,
+              valor_total_estimado: item.valor_total_estimado ?? null,
+            });
+          } catch { /* ignora duplicatas */ }
         }
-      } catch { /* ignora — cria novo */ }
-      const criado = await crudCreate("editais", payload);
-      return String(criado.id ?? "");
+      }
+
+      // P2: Salvar scores da Captação (evita recálculo na Validação)
+      if (editalId && (edital.scoreProfundo || edital.score > 0)) {
+        try {
+          const token = localStorage.getItem("editais_ia_access_token");
+          const scorePayload = edital.scoreProfundo ? {
+            edital_id: editalId,
+            score_tecnico: edital.scoreProfundo.scores.tecnico,
+            score_documental: edital.scoreProfundo.scores.documental,
+            score_complexidade: edital.scoreProfundo.scores.complexidade,
+            score_juridico: edital.scoreProfundo.scores.juridico,
+            score_logistico: edital.scoreProfundo.scores.logistico,
+            score_comercial: edital.scoreProfundo.scores.comercial,
+            score_final: edital.scoreProfundo.score_geral,
+            decisao: edital.scoreProfundo.decisao,
+            justificativa: edital.scoreProfundo.justificativa,
+            pontos_positivos: edital.scoreProfundo.pontos_positivos,
+            pontos_atencao: edital.scoreProfundo.pontos_atencao,
+          } : {
+            // Score rápido (sem profundo) — salva técnico + comercial
+            edital_id: editalId,
+            score_tecnico: edital.scores.tecnico,
+            score_comercial: edital.scores.comercial,
+            score_final: edital.score,
+            decisao: edital.recomendacaoTexto === "PARTICIPAR" ? "GO" : edital.recomendacaoTexto === "NAO PARTICIPAR" ? "NO-GO" : "AVALIAR",
+            justificativa: edital.justificativa || "",
+          };
+          const scoreResp = await fetch("/api/editais/salvar-scores-captacao", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: token ? `Bearer ${token}` : "",
+            },
+            body: JSON.stringify(scorePayload),
+          });
+          const scoreResult = await scoreResp.json().catch(() => ({}));
+          console.log("[SALVAR-SCORES]", scoreResp.status, scoreResult);
+        } catch (err) { console.error("[SALVAR-SCORES] erro:", err); }
+      }
+
+      return editalId;
     } catch {
       return null;
     }
