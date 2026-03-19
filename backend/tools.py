@@ -2580,9 +2580,50 @@ def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str) -> Dict[st
                          'aluguel_sem_consumo', 'consumo_reagentes', 'consumo_insumos', 'servicos']:
             edital.categoria = categoria
 
-        # Extrair requisitos com IA
-        prompt = PROMPT_EXTRAIR_REQUISITOS.format(texto=texto[:15000])
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000)
+        # Carregar tipos de documento do banco para o prompt
+        from models import DocumentoNecessario, CategoriaDocumento
+        docs_nec = db.query(DocumentoNecessario).filter(DocumentoNecessario.ativo == True).order_by(DocumentoNecessario.ordem).all()
+
+        # Agrupar por categoria para injetar no prompt
+        categorias_docs = {}
+        for dn in docs_nec:
+            cat_nome = dn.categoria_rel.nome if dn.categoria_rel else "Outros"
+            categorias_docs.setdefault(cat_nome, []).append(f"{dn.tipo_chave} ({dn.nome})")
+
+        lista_tipos_str = ""
+        for cat_nome, tipos in categorias_docs.items():
+            lista_tipos_str += f"\n{cat_nome}:\n"
+            for t in tipos:
+                lista_tipos_str += f"  {t}\n"
+
+        # Montar prompt com tipos dinâmicos
+        prompt_dinamico = f"""Você é um especialista em análise de editais de licitação.
+
+Analise o texto do edital abaixo e extraia TODOS os requisitos técnicos, documentais e comerciais.
+
+Para cada requisito, retorne um objeto JSON com:
+- tipo: "tecnico", "documental" ou "comercial"
+- descricao: descrição completa do requisito
+- nome_especificacao: para tipo "documental", use o código (tipo_chave) da lista abaixo que melhor corresponde. Para tipo "tecnico", nome da especificação.
+- valor_exigido: para tipo "documental", use a subcategoria: "documento", "certidao" ou "tecnico". Para outros tipos, o valor exigido.
+- operador: operador se houver ("<", "<=", "=", ">=", ">")
+- valor_numerico: valor numérico extraído
+- obrigatorio: true se for obrigatório, false se for desejável
+
+CÓDIGOS DE DOCUMENTOS DISPONÍVEIS (use o tipo_chave como nome_especificacao):
+{lista_tipos_str}
+Se o edital exigir um documento que não se encaixa em nenhum código acima, use nome_especificacao="outro".
+
+IMPORTANTE: Identifique também documentos de habilitação IMPLÍCITOS que todo pregão eletrônico exige (contrato social, certidões fiscais, atestados técnicos, etc.), mesmo que o edital diga apenas "conforme SICAF" ou "habilitação conforme Lei 14.133/2021". Esses documentos são obrigatórios por lei.
+
+Retorne APENAS um array JSON válido, sem texto adicional.
+
+TEXTO DO EDITAL:
+{texto[:15000]}
+
+REQUISITOS EXTRAÍDOS (JSON):
+"""
+        resposta = call_deepseek([{"role": "user", "content": prompt_dinamico}], max_tokens=8000)
 
         requisitos_salvos = []
         try:
