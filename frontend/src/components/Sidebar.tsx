@@ -74,6 +74,8 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-empresa-certidoes", icon: <Shield size={14} />, label: "Certidoes", page: "crud:empresa-certidoes" },
           { id: "crud-fontes-certidoes", icon: <Globe size={14} />, label: "Fontes de Certidoes", page: "crud:fontes-certidoes" },
           { id: "crud-empresa-responsaveis", icon: <Users size={14} />, label: "Responsaveis", page: "crud:empresa-responsaveis" },
+          { id: "crud-cat-doc", icon: <FolderTree size={14} />, label: "Categorias Documento", page: "crud:categorias-documento" },
+          { id: "crud-docs-nec", icon: <FileText size={14} />, label: "Tipos de Documento", page: "crud:documentos-necessarios" },
         ],
       },
       {
@@ -176,8 +178,6 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-fontes", icon: <Search size={14} />, label: "Fontes Editais", page: "crud:fontes-editais" },
           { id: "crud-modalidades", icon: <Gavel size={14} />, label: "Modalidades Licitacao", page: "crud:modalidades-licitacao" },
           { id: "crud-origens", icon: <GitBranch size={14} />, label: "Origens Orgao", page: "crud:origens-orgao" },
-          { id: "crud-cat-doc", icon: <FolderTree size={14} />, label: "Categorias Documento", page: "crud:categorias-documento" },
-          { id: "crud-docs-nec", icon: <FileText size={14} />, label: "Docs Necessarios", page: "crud:documentos-necessarios" },
         ],
       },
     ]

@@ -10368,116 +10368,147 @@ def documentacao_necessaria(edital_id):
         ).all()
 
         # Documentos e certidões da empresa (indexados por tipo)
+        from models import DocumentoNecessario, CategoriaDocumento, FonteCertidao
         docs_empresa_por_tipo = {}
         certs_por_tipo = {}
+        certs_por_fonte = {}
         if empresa:
             for d in db.query(EmpresaDocumento).filter(EmpresaDocumento.empresa_id == empresa.id).all():
                 docs_empresa_por_tipo.setdefault(d.tipo, []).append(d)
             for c in db.query(EmpresaCertidao).filter(EmpresaCertidao.empresa_id == empresa.id).all():
                 certs_por_tipo.setdefault(c.tipo, []).append(c)
+                if c.fonte_certidao_id:
+                    certs_por_fonte[c.fonte_certidao_id] = c
 
         hoje = date.today()
         documentos = []
 
-        # Mapeamento de código -> (nome legível, categoria na pasta)
-        DOCS_CONHECIDOS = {
-            # Documentos da empresa (pasta azul)
-            "contrato_social": ("Contrato Social / Ato Constitutivo", "empresa"),
-            "alvara": ("Alvara de Funcionamento", "empresa"),
-            "procuracao": ("Procuracao do Representante Legal", "empresa"),
-            "afe": ("AFE - Autorizacao de Funcionamento (ANVISA)", "empresa"),
-            "cbpad": ("CBPAD", "empresa"),
-            "cbpp": ("CBPP", "empresa"),
-            "bombeiros": ("Auto de Vistoria do Corpo de Bombeiros", "empresa"),
-            # Certidões fiscais (pasta amarela)
-            "cnd_federal": ("CND Federal (Receita Federal / PGFN)", "fiscal"),
-            "cnd_estadual": ("CND Estadual (SEFAZ)", "fiscal"),
-            "cnd_municipal": ("CND Municipal (Prefeitura)", "fiscal"),
-            "fgts": ("CRF - Certificado de Regularidade do FGTS", "fiscal"),
-            "trabalhista": ("CNDT - Certidao Negativa de Debitos Trabalhistas", "fiscal"),
-            # Qualificação técnica (pasta verde)
-            "atestado_capacidade": ("Atestado de Capacidade Tecnica", "tecnica"),
-            "registro_conselho": ("Registro no Conselho de Classe", "tecnica"),
-            "balanco": ("Balanco Patrimonial", "tecnica"),
-            "qualificacao_tecnica": ("Qualificacao Tecnica Complementar", "tecnica"),
-        }
+        # === DOCUMENTOS: carregar do banco (documentos_necessarios) ===
+        docs_necessarios_db = db.query(DocumentoNecessario).filter(
+            DocumentoNecessario.ativo == True
+        ).order_by(DocumentoNecessario.ordem).all()
 
-        # Tipos que são certidões (buscam em empresa_certidoes ao invés de empresa_documentos)
-        TIPOS_CERTIDAO = {"cnd_federal", "cnd_estadual", "cnd_municipal", "fgts", "trabalhista"}
+        # === CERTIDÕES: carregar do banco (fontes_certidoes) ===
+        fontes_certidoes_db = db.query(FonteCertidao).filter(
+            FonteCertidao.ativo == True
+        ).order_by(FonteCertidao.nome).all()
+
+        # Tipos de certidão conhecidos (para checar_status)
+        TIPOS_CERTIDAO = {fc.tipo_certidao for fc in fontes_certidoes_db if fc.tipo_certidao}
 
         def checar_status_documento(tipo_ref):
-            """Cruza tipo_ref com documentos/certidões reais da empresa."""
-            if tipo_ref in TIPOS_CERTIDAO:
-                encontrados = certs_por_tipo.get(tipo_ref, [])
-                if encontrados:
-                    cert = encontrados[0]
-                    venc = cert.data_vencimento
-                    if cert.status == "vencida" or (venc and venc < hoje):
-                        return "vencido", venc.strftime("%d/%m/%Y") if venc else None
-                    elif cert.status in ("valida",):
-                        return "ok", venc.strftime("%d/%m/%Y") if venc else None
-                    else:
-                        return "faltando", None
-                return "faltando", None
-            else:
-                encontrados = docs_empresa_por_tipo.get(tipo_ref, [])
-                if encontrados:
-                    doc = encontrados[0]
-                    venc = doc.data_vencimento
-                    if venc and venc < hoje:
-                        return "vencido", venc.strftime("%d/%m/%Y") if venc else None
-                    return "ok", venc.strftime("%d/%m/%Y") if venc else None
-                return "faltando", None
+            """Cruza tipo_ref com documentos da empresa."""
+            encontrados = docs_empresa_por_tipo.get(tipo_ref, [])
+            if encontrados:
+                doc = encontrados[0]
+                venc = doc.data_vencimento
+                if venc and venc < hoje:
+                    return "vencido", venc.strftime("%d/%m/%Y") if venc else None
+                return "ok", venc.strftime("%d/%m/%Y") if venc else None
+            return "faltando", None
 
-        # ====================================================================
-        # MODO 1: Edital tem requisitos documentais extraídos do PDF → lista específica
-        # ====================================================================
+        def checar_status_certidao_por_fonte(fonte_id):
+            """Cruza fonte_certidao_id com certidões da empresa."""
+            cert = certs_por_fonte.get(fonte_id)
+            if cert:
+                venc = cert.data_vencimento
+                if cert.status == "vencida" or (venc and venc < hoje):
+                    return "vencido", venc.strftime("%d/%m/%Y") if venc else None
+                elif cert.status in ("valida",):
+                    return "ok", venc.strftime("%d/%m/%Y") if venc else None
+                else:
+                    return "faltando", None
+            return "faltando", None
+
+        # Tipos exigidos pelo edital (se requisitos foram extraídos do PDF)
+        tipos_exigidos_edital = set()
         if requisitos_doc:
-            tipos_ja_adicionados = set()
             for req in requisitos_doc:
                 tipo_ref = (req.nome_especificacao or "").strip().lower()
-                subcategoria = (req.valor_exigido or "").strip().lower()
+                tipos_exigidos_edital.add(tipo_ref)
 
-                if tipo_ref in DOCS_CONHECIDOS:
-                    nome, categoria = DOCS_CONHECIDOS[tipo_ref]
-                    status, validade = checar_status_documento(tipo_ref)
-                    tipos_ja_adicionados.add(tipo_ref)
-                elif tipo_ref == "outro" or tipo_ref not in DOCS_CONHECIDOS:
-                    # Documento não-padrão extraído pelo IA
-                    nome = req.descricao[:80] if req.descricao else "Documento exigido"
-                    # Inferir categoria pela subcategoria ou texto
-                    if subcategoria == "certidao":
-                        categoria = "fiscal"
-                    elif subcategoria == "tecnico":
-                        categoria = "tecnica"
-                    else:
-                        categoria = "empresa"
-                    status, validade = "faltando", None  # não temos match automático
-                else:
-                    continue
+        # === PARTE 1: Documentos da empresa (do banco documentos_necessarios) ===
+        for dn in docs_necessarios_db:
+            categoria = dn.categoria_rel.nome if dn.categoria_rel else "Outros"
 
-                documentos.append({
-                    "nome": nome,
-                    "categoria": categoria,
-                    "status": status,
-                    "validade": validade,
-                    "exigido": req.obrigatorio if req.obrigatorio is not None else True,
-                    "descricao_edital": req.descricao,
-                })
+            # Não incluir tipos de certidão aqui (vão na parte 2)
+            if dn.tipo_chave in TIPOS_CERTIDAO:
+                continue
 
-        # ====================================================================
-        # MODO 2: Sem requisitos extraídos → lista padrão de licitações
-        # ====================================================================
-        else:
-            for tipo_ref, (nome, categoria) in DOCS_CONHECIDOS.items():
-                status, validade = checar_status_documento(tipo_ref)
-                documentos.append({
-                    "nome": nome,
-                    "categoria": categoria,
-                    "status": status,
-                    "validade": validade,
-                    "exigido": True,
-                })
+            status, validade = checar_status_documento(dn.tipo_chave)
+            exigido = dn.tipo_chave in tipos_exigidos_edital if requisitos_doc else dn.obrigatorio
+            documentos.append({
+                "nome": dn.nome,
+                "categoria": categoria,
+                "status": status,
+                "validade": validade,
+                "exigido": exigido,
+            })
+
+        # === PARTE 2: Certidões (do banco fontes_certidoes) ===
+        for fc in fontes_certidoes_db:
+            status, validade = checar_status_certidao_por_fonte(fc.id)
+            exigido = fc.tipo_certidao in tipos_exigidos_edital if requisitos_doc else True
+            documentos.append({
+                "nome": fc.nome,
+                "categoria": "Certidões e Fiscal",
+                "status": status,
+                "validade": validade,
+                "exigido": exigido,
+            })
+
+        # === PARTE 3: Documentos extras do edital — inserir no banco se não existem ===
+        if requisitos_doc:
+            tipos_ja_incluidos = {dn.tipo_chave for dn in docs_necessarios_db} | {fc.tipo_certidao for fc in fontes_certidoes_db}
+            # Buscar categoria "Outros" para inserir novos tipos
+            cat_outros = db.query(CategoriaDocumento).filter(CategoriaDocumento.nome.ilike("%outro%")).first()
+            cat_outros_id = cat_outros.id if cat_outros else None
+            nomes_ja_inseridos = set()
+
+            for req in requisitos_doc:
+                tipo_ref = (req.nome_especificacao or "").strip().lower()
+                if tipo_ref not in tipos_ja_incluidos and tipo_ref != "":
+                    nome = req.descricao[:80] if req.descricao else "Documento exigido pelo edital"
+
+                    # Evitar duplicatas dentro do mesmo lote
+                    if nome in nomes_ja_inseridos:
+                        continue
+                    nomes_ja_inseridos.add(nome)
+
+                    # Gerar tipo_chave único a partir do nome
+                    import re as _re
+                    tipo_chave_novo = _re.sub(r'[^a-z0-9]', '_', nome.lower().strip())[:50]
+
+                    # Verificar se tipo_chave já existe no banco
+                    existe = db.query(DocumentoNecessario).filter(
+                        DocumentoNecessario.tipo_chave == tipo_chave_novo
+                    ).first()
+
+                    if not existe:
+                        # Inserir novo tipo de documento na tabela documentos_necessarios
+                        novo_doc_nec = DocumentoNecessario(
+                            id=str(uuid.uuid4()),
+                            categoria_id=cat_outros_id,
+                            nome=nome,
+                            tipo_chave=tipo_chave_novo,
+                            obrigatorio=True,
+                            ativo=True,
+                            ordem=200,
+                        )
+                        db.add(novo_doc_nec)
+                        print(f"[DOCS] Novo tipo inserido: {nome} (chave={tipo_chave_novo})")
+
+                    documentos.append({
+                        "nome": nome,
+                        "categoria": "Outros",
+                        "status": "faltando",
+                        "validade": None,
+                        "exigido": True,
+                        "descricao_edital": req.descricao,
+                    })
+
+            if nomes_ja_inseridos:
+                db.commit()
 
         return jsonify({
             "success": True,
@@ -10516,16 +10547,24 @@ def extrair_requisitos_edital(edital_id):
             return jsonify({"error": "Edital não encontrado"}), 404
 
         # Verificar se já tem requisitos extraídos
+        forcar = request.get_json(silent=True) or {}
+        forcar = forcar.get("forcar", False)
         requisitos_existentes = db.query(EditalRequisito).filter(
             EditalRequisito.edital_id == edital_id
         ).count()
-        if requisitos_existentes > 0:
+        if requisitos_existentes > 0 and not forcar:
             return jsonify({
                 "success": True,
                 "message": f"Edital já possui {requisitos_existentes} requisitos extraídos",
                 "requisitos_extraidos": requisitos_existentes,
                 "ja_existia": True,
             })
+
+        # Se forçar, deletar requisitos antigos
+        if forcar and requisitos_existentes > 0:
+            db.query(EditalRequisito).filter(EditalRequisito.edital_id == edital_id).delete()
+            db.commit()
+            print(f"[EXTRAIR-REQUISITOS] Removidos {requisitos_existentes} requisitos antigos (forcar=True)")
 
         # Buscar texto do PDF do edital
         doc = db.query(EditalDocumento).filter(

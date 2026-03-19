@@ -1141,83 +1141,49 @@ export function ValidacaoPage(props?: PageProps) {
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-              {/* Pasta 1: Documentos da Empresa (azul) */}
-              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                  <FolderOpen size={18} style={{ color: "#3b82f6" }} />
-                  <h4 style={{ margin: 0, fontSize: "14px" }}>Documentos da Empresa</h4>
-                </div>
-                {(() => {
-                  const docs = docsNecessaria.filter(d => d.categoria === "empresa");
-                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                  return docs.map((doc, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                        <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                        {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
+              {/* Pastas dinâmicas por categoria (vindas do banco) */}
+              {(() => {
+                const cores: Record<string, string> = {
+                  "Habilitação Jurídica": "#3b82f6",
+                  "Habilitação Fiscal": "#eab308",
+                  "Certidões e Fiscal": "#f59e0b",
+                  "Habilitação Econômico-Financeira": "#8b5cf6",
+                  "Qualificação Técnica": "#22c55e",
+                  "Sanitárias e Regulatórias": "#06b6d4",
+                  "Outros": "#64748b",
+                };
+                const categorias = [...new Set(docsNecessaria.map(d => d.categoria))];
+                return categorias.map((cat) => {
+                  const docs = docsNecessaria.filter(d => d.categoria === cat);
+                  if (docs.length === 0) return null;
+                  const cor = cores[cat] || "#94a3b8";
+                  return (
+                    <div key={cat} style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                        <FolderOpen size={18} style={{ color: cor }} />
+                        <h4 style={{ margin: 0, fontSize: "14px" }}>{cat}</h4>
+                        <span style={{ fontSize: "11px", color: "#64748b" }}>({docs.length})</span>
                       </div>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                        {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
-                        <StatusBadge
-                          status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                          label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                          size="small"
-                        />
-                      </div>
+                      {docs.map((doc, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.nome}</span>
+                            {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px", flexShrink: 0 }}>Exigido</span>}
+                          </div>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
+                            {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
+                            <StatusBadge
+                              status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
+                              label={doc.status === "ok" ? "Disponível" : doc.status === "vencido" ? "Vencido" : "Faltante"}
+                              size="small"
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ));
-                })()}
-              </div>
-
-              {/* Pasta 2: Documentos Fiscais e Certidões (amarelo) */}
-              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                  <FolderOpen size={18} style={{ color: "#eab308" }} />
-                  <h4 style={{ margin: 0, fontSize: "14px" }}>Certidoes e Fiscal</h4>
-                </div>
-                {(() => {
-                  const docs = docsNecessaria.filter(d => d.categoria === "fiscal");
-                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                  return docs.map((doc, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                      <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                        {doc.validade && <span style={{ fontSize: "11px", color: "#64748b" }}>{doc.validade}</span>}
-                        <StatusBadge
-                          status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                          label={doc.status === "ok" ? "OK" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                          size="small"
-                        />
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
-
-              {/* Pasta 3: Qualificação Técnica (verde) */}
-              <div style={{ border: "1px solid #334155", borderRadius: "8px", padding: "16px", backgroundColor: "#0f172a" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                  <FolderOpen size={18} style={{ color: "#22c55e" }} />
-                  <h4 style={{ margin: 0, fontSize: "14px" }}>Qualificacao Tecnica</h4>
-                </div>
-                {(() => {
-                  const docs = docsNecessaria.filter(d => d.categoria === "tecnica");
-                  if (docs.length === 0) return <p style={{ fontSize: "12px", color: "#64748b" }}>Nenhum documento desta categoria</p>;
-                  return docs.map((doc, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < docs.length - 1 ? "1px solid #1e293b" : "none" }}>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                        <span style={{ fontSize: "13px" }}>{doc.nome}</span>
-                        {doc.exigido && <span style={{ fontSize: "10px", color: "#f59e0b", border: "1px solid #f59e0b40", borderRadius: "4px", padding: "1px 4px" }}>Exigido</span>}
-                      </div>
-                      <StatusBadge
-                        status={doc.status === "ok" ? "success" : doc.status === "vencido" ? "warning" : "error"}
-                        label={doc.status === "ok" ? "Disponivel" : doc.status === "vencido" ? "Vencido" : "Faltante"}
-                        size="small"
-                      />
-                    </div>
-                  ));
-                })()}
-              </div>
+                  );
+                });
+              })()}
             </div>
             <div style={{ marginTop: "12px", fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>
               {docsNecessariaFonte === "requisitos_edital"
@@ -1292,10 +1258,9 @@ export function ValidacaoPage(props?: PageProps) {
 
       {/* Botões: Extrair Requisitos + Documentos Exigidos via IA */}
       <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-        {docsNecessariaFonte === "padrao_licitacao" && (
-          <ActionButton
+        <ActionButton
             icon={extraindoRequisitos ? <RefreshCw size={14} className="spin" /> : <FileText size={14} />}
-            label={extraindoRequisitos ? "Extraindo..." : "Extrair Requisitos do Edital"}
+            label={extraindoRequisitos ? "Identificando..." : (docsNecessariaFonte === "requisitos_edital" ? "Reidentificar Documentos do Edital" : "Identificar Documentos Exigidos pelo Edital")}
             variant="primary"
             onClick={async () => {
               if (extraindoRequisitos) return;
@@ -1304,7 +1269,8 @@ export function ValidacaoPage(props?: PageProps) {
                 const token = localStorage.getItem("editais_ia_access_token");
                 const resp = await fetch(`/api/editais/${edital.id}/extrair-requisitos`, {
                   method: "POST",
-                  headers: { Authorization: `Bearer ${token}` },
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ forcar: docsNecessariaFonte === "requisitos_edital" }),
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
@@ -1328,15 +1294,41 @@ export function ValidacaoPage(props?: PageProps) {
               }
             }}
           />
-        )}
         {onSendToChat && (
           <ActionButton
             icon={<Sparkles size={14} />}
-            label="Documentos Exigidos via IA"
+            label="Buscar Documentos Exigidos"
             variant="secondary"
             onClick={() => onSendToChat("Quais documentos são exigidos no edital " + edital.numero + "?")}
           />
         )}
+        <ActionButton
+          icon={<RefreshCw size={14} />}
+          label="Verificar Certidões"
+          variant="neutral"
+          onClick={async () => {
+            try {
+              const token = localStorage.getItem("editais_ia_access_token");
+              const headers: Record<string, string> = { "Content-Type": "application/json" };
+              if (token) headers["Authorization"] = `Bearer ${token}`;
+              const res = await fetch("/api/empresa-certidoes/buscar-stream", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ empresa_id: edital.id }),
+              });
+              if (res.ok) {
+                alert("Certidões verificadas. Recarregando dados...");
+                // Recarregar documentação
+                const docRes = await fetch(`/api/editais/${edital.id}/documentacao-necessaria`, { headers });
+                if (docRes.ok) {
+                  const docData = await docRes.json();
+                  setDocsNecessaria(docData.documentos || []);
+                  setDocsNecessariaFonte(docData.fonte || "padrao_licitacao");
+                }
+              }
+            } catch { alert("Erro ao verificar certidões."); }
+          }}
+        />
       </div>
     </div>
   );
