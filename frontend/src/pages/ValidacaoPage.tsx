@@ -11,6 +11,7 @@ import {
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate } from "../api/crud";
+import { createSession } from "../api/client";
 import { PdfViewer } from "../components/PdfViewer";
 
 // === INTERFACES ===
@@ -164,7 +165,14 @@ interface HistoricoRealItem {
 // === HELPERS ===
 
 // Gera session_id único por sessão de página
-const PAGE_SESSION_ID = `validacao-${Date.now()}`;
+// Sessão será criada sob demanda na primeira chamada IA
+let _pageSessionId: string | null = null;
+async function getOrCreateSession(): Promise<string> {
+  if (_pageSessionId) return _pageSessionId;
+  const session = await createSession("validacao-ia");
+  _pageSessionId = session.id;
+  return _pageSessionId;
+}
 
 // T18: Carrega editais salvos do backend via GET /api/editais/salvos
 async function loadEditaisSalvos(): Promise<Edital[]> {
@@ -544,7 +552,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: mensagem, session_id: PAGE_SESSION_ID }),
+        body: JSON.stringify({ message: mensagem, session_id: await getOrCreateSession() }),
       });
       if (!res.ok) throw new Error("Erro ao chamar IA");
       const data = await res.json();
@@ -576,7 +584,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           message: `Sobre o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao}: ${pergunta}`,
-          session_id: PAGE_SESSION_ID,
+          session_id: await getOrCreateSession(),
         }),
       });
       if (!res.ok) throw new Error("Erro ao chamar IA");
@@ -1965,7 +1973,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                   headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                   body: JSON.stringify({
                     message: `Sobre o edital ${edital.numero} do órgão ${edital.orgao}: Quais são os requisitos técnicos deste edital? Liste cada requisito técnico exigido.`,
-                    session_id: PAGE_SESSION_ID,
+                    session_id: await getOrCreateSession(),
                   }),
                 });
                 if (res.ok) {
@@ -1992,7 +2000,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                   headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                   body: JSON.stringify({
                     message: `Classifique este edital: ${edital.objeto}. Informe a categoria (comodato, venda, aluguel, consumo, serviço) e justifique.`,
-                    session_id: PAGE_SESSION_ID,
+                    session_id: await getOrCreateSession(),
                   }),
                 });
                 if (res.ok) {
