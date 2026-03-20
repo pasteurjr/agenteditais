@@ -278,11 +278,16 @@ export function PrecificacaoPage(props?: PageProps) {
       await crudCreate("edital-item-produto", {
         edital_item_id: selecaoItemId,
         produto_id: produtoId,
+        match_score: 100,
         confirmado: true,
       });
       setShowSelecaoModal(false);
       loadLotes(editalId);
-    } catch { /* */ }
+      alert("Produto vinculado com sucesso!");
+    } catch (err) {
+      console.error("[SELECAO] Erro:", err);
+      alert("Erro ao vincular produto. Pode já estar vinculado.");
+    }
   };
 
   const handleCalcVolume = async () => {
