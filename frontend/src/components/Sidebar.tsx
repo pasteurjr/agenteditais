@@ -100,6 +100,9 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-editais-req", icon: <Layers size={14} />, label: "Requisitos", page: "crud:editais-requisitos" },
           { id: "crud-editais-docs", icon: <FileText size={14} />, label: "Documentos", page: "crud:editais-documentos" },
           { id: "crud-editais-itens", icon: <Layers size={14} />, label: "Itens", page: "crud:editais-itens" },
+          { id: "crud-atas", icon: <FileText size={14} />, label: "Atas Consultadas", page: "crud:atas-consultadas" },
+          { id: "crud-precos", icon: <DollarSign size={14} />, label: "Histórico de Preços", page: "crud:precos-historicos" },
+          { id: "crud-concorrentes", icon: <Users size={14} />, label: "Concorrentes", page: "crud:concorrentes" },
         ],
       },
       {

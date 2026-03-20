@@ -15,7 +15,7 @@ from models import (
     Produto, ProdutoEspecificacao, ProdutoDocumento,
     FonteEdital, FonteCertidao, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
-    Concorrente, PrecoHistorico, ParticipacaoEdital,
+    Concorrente, PrecoHistorico, ParticipacaoEdital, AtaConsultada,
     Alerta, Monitoramento, Notificacao, PreferenciasNotificacao,
     Documento, Contrato, ContratoEntrega, Recurso,
     LeadCRM, AcaoPosPerda, AuditoriaLog, AprendizadoFeedback,
@@ -265,6 +265,13 @@ CRUD_TABLES = {
         "required": ["edital_id", "produto_id"],
     },
     # === Concorrência ===
+    "atas-consultadas": {
+        "model": AtaConsultada,
+        "user_scoped": True,
+        "search_fields": ["titulo", "orgao", "cnpj_orgao", "numero_controle_pncp"],
+        "label": "Ata Consultada",
+        "required": [],
+    },
     "concorrentes": {
         "model": Concorrente,
         "user_scoped": False,
