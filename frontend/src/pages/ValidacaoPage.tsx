@@ -283,6 +283,9 @@ export function ValidacaoPage(props?: PageProps) {
   // Análise de riscos
   const [riscosData, setRiscosData] = useState<Record<string, unknown> | null>(null);
   const [riscosLoading, setRiscosLoading] = useState(false);
+  // Histórico de vencedores
+  const [historicoVencedores, setHistoricoVencedores] = useState<Record<string, unknown> | null>(null);
+  const [historicoVencedoresLoading, setHistoricoVencedoresLoading] = useState(false);
 
   // Itens do edital
   const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
@@ -1489,6 +1492,79 @@ export function ValidacaoPage(props?: PageProps) {
           </div>
         )}
 
+        {/* Histórico de Vencedores (RF-034) */}
+        <div className="section-block">
+          <h4><History size={16} /> Histórico de Atas e Vencedores</h4>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
+            <ActionButton
+              icon={historicoVencedoresLoading ? <RefreshCw size={14} className="spin" /> : <Search size={14} />}
+              label={historicoVencedoresLoading ? "Buscando..." : (historicoVencedores ? "Rebuscar Atas" : "Buscar Atas no PNCP")}
+              variant="neutral"
+              loading={historicoVencedoresLoading}
+              onClick={async () => {
+                setHistoricoVencedoresLoading(true);
+                try {
+                  const token = localStorage.getItem("editais_ia_access_token");
+                  const res = await fetch(`/api/editais/${edital.id}/historico-vencedores`, {
+                    method: "POST",
+                    headers: { Authorization: token ? `Bearer ${token}` : "" },
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) setHistoricoVencedores(data);
+                    else alert(data.error || "Nenhuma ata encontrada");
+                  }
+                } catch { alert("Erro ao buscar atas."); }
+                finally { setHistoricoVencedoresLoading(false); }
+              }}
+            />
+            {!historicoVencedores && !historicoVencedoresLoading && (
+              <span style={{ fontSize: "12px", color: "#64748b" }}>Busca atas de registro de preço no PNCP para o mesmo objeto.</span>
+            )}
+          </div>
+
+          {historicoVencedores && (() => {
+            const atas = (historicoVencedores.atas || []) as { titulo?: string; orgao?: string; uf?: string; data_publicacao?: string; url_pncp?: string; numero_controle?: string }[];
+            const freq = historicoVencedores.frequencia as string | null;
+            const termo = historicoVencedores.termo as string;
+            return (
+              <div>
+                <div style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", color: "#94a3b8" }}>Termo: "{termo}"</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8" }}>|</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8" }}>{atas.length} ata(s) encontrada(s)</span>
+                  {freq && (
+                    <span style={{ padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 600,
+                      backgroundColor: freq === "semestral" ? "#22c55e20" : freq === "anual" ? "#3b82f620" : "#64748b20",
+                      color: freq === "semestral" ? "#22c55e" : freq === "anual" ? "#3b82f6" : "#94a3b8",
+                      border: `1px solid ${freq === "semestral" ? "#22c55e40" : freq === "anual" ? "#3b82f640" : "#64748b40"}`,
+                    }}>
+                      Recorrência: {freq === "semestral" ? "Semestral" : freq === "anual" ? "Anual" : "Esporádica"}
+                    </span>
+                  )}
+                </div>
+                {atas.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {atas.map((ata, i) => (
+                      <div key={i} style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #1e293b", backgroundColor: "#0f172a", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: "13px", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ata.titulo || ata.numero_controle || "Ata sem título"}</p>
+                          <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0" }}>{ata.orgao || ""} {ata.uf ? `(${ata.uf})` : ""} {ata.data_publicacao ? `— ${String(ata.data_publicacao).slice(0, 10)}` : ""}</p>
+                        </div>
+                        {ata.url_pncp && (
+                          <a href={ata.url_pncp} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#60a5fa", flexShrink: 0 }}>Ver no PNCP</a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: "13px", color: "#64748b" }}>Nenhuma ata encontrada para este objeto.</p>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Alerta de Recorrência */}
         {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
           <div className="section-block" style={{ backgroundColor: "#78350f20", borderRadius: "8px", padding: "16px", border: "1px solid #f59e0b40" }}>
@@ -1740,6 +1816,7 @@ export function ValidacaoPage(props?: PageProps) {
               setHistoricoReal([]);
               setReputacaoCalculada(null);
               setRiscosData(null);
+              setHistoricoVencedores(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}

@@ -10603,6 +10603,69 @@ ANÁLISE DE RISCOS (JSON):"""
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/historico-vencedores", methods=["POST"])
+@require_auth
+def historico_vencedores_edital(edital_id):
+    """Busca atas de registro de preço no PNCP para o mesmo objeto do edital, identificando vencedores anteriores."""
+    from tools import tool_buscar_atas_pncp
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Extrair termo de busca do objeto do edital (primeiras 3 palavras significativas)
+        import re
+        objeto = edital.objeto or ""
+        palavras_stop = {"aquisicao", "aquisição", "de", "do", "da", "dos", "das", "para", "com", "registro", "preco", "preço", "futura", "eventual", "fornecimento"}
+        palavras = [w for w in re.sub(r'[^\w\s]', ' ', objeto.lower()).split() if w not in palavras_stop and len(w) > 3][:3]
+        termo = " ".join(palavras) if palavras else objeto[:30]
+
+        resultado = tool_buscar_atas_pncp(termo, user_id)
+
+        if resultado.get("success"):
+            atas = resultado.get("atas", [])
+            # Enriquecer: tentar identificar frequência
+            datas = []
+            for ata in atas:
+                dp = ata.get("data_publicacao") or ata.get("data_assinatura")
+                if dp:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(str(dp).replace("Z", "")[:19])
+                        datas.append(dt)
+                    except (ValueError, TypeError):
+                        pass
+
+            frequencia = None
+            if len(datas) >= 2:
+                datas.sort()
+                diffs = [(datas[i+1] - datas[i]).days for i in range(len(datas)-1)]
+                media_dias = sum(diffs) / len(diffs) if diffs else 0
+                if media_dias <= 200:
+                    frequencia = "semestral"
+                elif media_dias <= 400:
+                    frequencia = "anual"
+                else:
+                    frequencia = "esporadica"
+
+            return jsonify({
+                "success": True,
+                "termo": termo,
+                "total": resultado.get("total", len(atas)),
+                "atas": atas[:10],
+                "frequencia": frequencia,
+            })
+        else:
+            return jsonify({"success": False, "error": resultado.get("error", "Nenhuma ata encontrada"), "termo": termo})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/<edital_id>/extrair-requisitos", methods=["POST"])
 @require_auth
 def extrair_requisitos_edital(edital_id):
