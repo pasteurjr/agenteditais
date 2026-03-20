@@ -169,8 +169,9 @@ interface HistoricoRealItem {
 let _pageSessionId: string | null = null;
 async function getOrCreateSession(): Promise<string> {
   if (_pageSessionId) return _pageSessionId;
-  const session = await createSession("validacao-ia");
-  _pageSessionId = session.id;
+  const session = await createSession("validacao-ia") as Record<string, unknown>;
+  _pageSessionId = String(session.session_id || session.id || "");
+  if (!_pageSessionId) throw new Error("Falha ao criar sessão");
   return _pageSessionId;
 }
 
