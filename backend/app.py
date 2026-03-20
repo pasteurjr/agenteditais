@@ -6260,12 +6260,15 @@ REQUISITOS DO EDITAL ({len(requisitos)} requisitos):
             'forma de pagamento', 'pagamento', 'pagar',
             'penalidade', 'multa', 'sanção', 'sanções',
             'documentos de habilitação', 'habilitação', 'documentos exigidos',
-            'qualificação técnica', 'atestado', 'certidão',
-            'termo de referência', 'anexo', 'especificação técnica',
+            'qualificação técnica', 'qualificacao tecnica', 'atestado', 'certidão',
+            'requisitos técnicos', 'requisitos tecnicos', 'requisito tecnico', 'requisito técnico',
+            'exigências técnicas', 'exigencias tecnicas', 'especificações', 'especificacoes',
+            'termo de referência', 'anexo', 'especificação técnica', 'especificacao tecnica',
             'cláusula', 'item', 'subitem',
             'critério de julgamento', 'desempate', 'lance',
             'contrato', 'vigência', 'aditivo',
-            'reajuste', 'índice', 'igpm', 'ipca'
+            'reajuste', 'índice', 'igpm', 'ipca',
+            'classifique', 'classificar', 'categoria',
         ]
         eh_pergunta_especifica = any(p in msg_lower for p in perguntas_especificas)
 
