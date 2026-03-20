@@ -10627,22 +10627,36 @@ def analisar_mercado_edital(edital_id):
             from models import Produto
             produto_match = db.query(Produto).filter(Produto.id == analise_exist.produto_id).first()
 
-        stop_similar = {"aquisicao", "aquisição", "contratacao", "contratação", "registro", "preco", "preço",
-                        "futura", "eventual", "fornecimento", "servico", "serviço", "atender", "demandas",
-                        "necessidades", "destinado", "destinada", "para", "material", "equipamento",
-                        "binocular", "trinocular", "automatico", "descartavel", "eletronico"}
+        # Palavras-chave para filtrar compras similares
+        # Prioridade: 1) primeira palavra significativa do produto, 2) palavras do objeto
+        import unicodedata
+        def _sem_acento_lower(txt):
+            return ''.join(c for c in unicodedata.normalize('NFD', txt.lower()) if unicodedata.category(c) != 'Mn')
 
-        # Combinar palavras do objeto + produto para máximo alcance
-        texto_obj = _re.sub(r'[^\w\s]', '', (edital.objeto or "").lower())
-        texto_prod = _re.sub(r'[^\w\s]', '', (produto_match.nome if produto_match else "").lower())
-        todas_palavras = set(w for w in f"{texto_obj} {texto_prod}".split() if len(w) > 4 and w not in stop_similar)
-        # Pegar as mais significativas (mais curtas = mais genéricas = melhor match)
-        palavras_obj = sorted(todas_palavras, key=len)[:4]
+        stop_similar = {"aquisicao", "contratacao", "registro", "preco", "futura", "eventual",
+                        "fornecimento", "servico", "atender", "demandas", "necessidades",
+                        "destinado", "destinada", "para", "material", "equipamento",
+                        "binocular", "trinocular", "automatico", "descartavel", "eletronico",
+                        "instituto", "nacional", "federal", "estadual", "municipal",
+                        "tecnicas", "cientificas", "pantanal", "eclipse", "modelo"}
+
+        palavras_chave = []
+        # Do produto (mais preciso)
+        if produto_match:
+            for w in _sem_acento_lower(produto_match.nome).split():
+                if len(w) > 4 and w not in stop_similar and w not in palavras_chave:
+                    palavras_chave.append(w)
+        # Do objeto (complementar)
+        for w in _sem_acento_lower(edital.objeto or "").split():
+            if len(w) > 5 and w not in stop_similar and w not in palavras_chave:
+                palavras_chave.append(w)
+        palavras_chave = palavras_chave[:4]
+        print(f"[MERCADO] Palavras-chave similares: {palavras_chave}")
 
         similares = []
         for c in compras:
-            obj_c = (c.get("objeto") or "").lower()
-            if any(p in obj_c for p in palavras_obj):
+            obj_c = _sem_acento_lower(c.get("objeto") or "")
+            if any(p in obj_c for p in palavras_chave):
                 similares.append(c)
 
         # Buscar valores das compras similares (Search API não retorna valores)
