@@ -10620,27 +10620,28 @@ def analisar_mercado_edital(edital_id):
             mod = c.get("modalidade", "Outro")
             modalidades[mod] = modalidades.get(mod, 0) + 1
 
-        # Compras similares — usar nome do produto (mais preciso que objeto do edital)
+        # Compras similares — usar palavras-chave do objeto + produto
         produto_match = None
         analise_exist = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.user_id == user_id).first()
         if analise_exist and analise_exist.produto_id:
             from models import Produto
             produto_match = db.query(Produto).filter(Produto.id == analise_exist.produto_id).first()
 
-        # Gerar palavras-chave de busca (produto > objeto)
         stop_similar = {"aquisicao", "aquisição", "contratacao", "contratação", "registro", "preco", "preço",
                         "futura", "eventual", "fornecimento", "servico", "serviço", "atender", "demandas",
-                        "necessidades", "destinado", "destinada", "para", "material", "equipamento"}
-        if produto_match:
-            texto_ref = produto_match.nome.lower()
-        else:
-            texto_ref = (edital.objeto or "").lower()
-        palavras_obj = [w for w in _re.sub(r'[^\w\s]', '', texto_ref).split() if len(w) > 3 and w not in stop_similar][:3]
+                        "necessidades", "destinado", "destinada", "para", "material", "equipamento",
+                        "binocular", "trinocular", "automatico", "descartavel", "eletronico"}
+
+        # Combinar palavras do objeto + produto para máximo alcance
+        texto_obj = _re.sub(r'[^\w\s]', '', (edital.objeto or "").lower())
+        texto_prod = _re.sub(r'[^\w\s]', '', (produto_match.nome if produto_match else "").lower())
+        todas_palavras = set(w for w in f"{texto_obj} {texto_prod}".split() if len(w) > 4 and w not in stop_similar)
+        # Pegar as mais significativas (mais curtas = mais genéricas = melhor match)
+        palavras_obj = sorted(todas_palavras, key=len)[:4]
 
         similares = []
         for c in compras:
             obj_c = (c.get("objeto") or "").lower()
-            # Exigir pelo menos 1 palavra significativa
             if any(p in obj_c for p in palavras_obj):
                 similares.append(c)
 
