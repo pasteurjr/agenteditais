@@ -10679,7 +10679,7 @@ def analisar_mercado_edital(edital_id):
                     c_ano = c.get("ano")
                     c_seq = c.get("seq")
                     if c_cnpj and c_ano and c_seq:
-                        url_det = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}"
+                        url_det = f"https://pncp.gov.br/api/consulta/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}"
                         resp_det = req.get(url_det, timeout=8, headers={"Accept": "application/json"})
                         if resp_det.status_code == 200:
                             dados_det = resp_det.json()
