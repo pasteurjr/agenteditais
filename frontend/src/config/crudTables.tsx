@@ -1142,6 +1142,22 @@ export const propostasConfig: CrudPageConfig = {
 
 // === 7. CONCORRÊNCIA ===
 
+export const orgaosPerfilConfig: CrudPageConfig = {
+  table: "orgaos-perfil",
+  title: "Perfil de Órgãos",
+  icon: <Building size={24} />,
+  fields: [
+    { name: "nome", label: "Nome do Órgão", type: "text", required: true, width: "full" },
+    { name: "cnpj", label: "CNPJ", type: "text", required: true, width: "half" },
+    { name: "uf", label: "UF", type: "text", width: "quarter" },
+    { name: "total_compras", label: "Total Compras", type: "number", width: "quarter" },
+    { name: "valor_total_compras", label: "Valor Total", type: "decimal", width: "half" },
+    { name: "valor_medio_compras", label: "Valor Médio", type: "decimal", width: "half" },
+    { name: "historico_pagamento", label: "Histórico Pagamento", type: "text", width: "half" },
+    { name: "analise_ia", label: "Análise IA", type: "textarea", width: "full" },
+  ],
+};
+
 export const atasConsultadasConfig: CrudPageConfig = {
   table: "atas-consultadas",
   title: "Atas Consultadas",
@@ -1538,6 +1554,7 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "editais-itens": editaisItensConfig,
   "analises": analisesConfig,
   "propostas": propostasConfig,
+  "orgaos-perfil": orgaosPerfilConfig,
   "atas-consultadas": atasConsultadasConfig,
   "concorrentes": concorrentesConfig,
   "precos-historicos": precosHistoricosConfig,

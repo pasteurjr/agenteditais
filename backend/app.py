@@ -10527,6 +10527,212 @@ def documentacao_necessaria(edital_id):
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/analisar-mercado", methods=["POST"])
+@require_auth
+def analisar_mercado_edital(edital_id):
+    """Análise de mercado do órgão: dados PNCP + histórico interno + IA."""
+    from models import Edital, OrgaoPerfil, EstrategiaEdital
+    from tools import _extrair_json_object
+    import requests as req
+    from datetime import datetime, timedelta
+
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        cnpj_orgao = edital.cnpj_orgao
+        nome_orgao = edital.orgao or ""
+        uf_orgao = edital.uf or ""
+
+        if not cnpj_orgao and not nome_orgao:
+            return jsonify({"error": "Edital sem dados do órgão (CNPJ ou nome)"}), 400
+
+        # Verificar cache no banco (< 30 dias)
+        forcar = (request.get_json(silent=True) or {}).get("forcar", False)
+        perfil_db = None
+        if cnpj_orgao:
+            perfil_db = db.query(OrgaoPerfil).filter(OrgaoPerfil.cnpj == cnpj_orgao).first()
+
+        if perfil_db and not forcar:
+            if perfil_db.ultima_atualizacao and perfil_db.ultima_atualizacao > datetime.now() - timedelta(days=30):
+                # Retornar do cache
+                hist_interno = _calcular_historico_interno(db, nome_orgao, user_id)
+                return jsonify({
+                    "success": True,
+                    "cache": True,
+                    "orgao": {"nome": perfil_db.nome, "cnpj": perfil_db.cnpj, "uf": perfil_db.uf},
+                    "estatisticas": {
+                        "total_compras": perfil_db.total_compras,
+                        "valor_total": float(perfil_db.valor_total_compras) if perfil_db.valor_total_compras else 0,
+                        "valor_medio": float(perfil_db.valor_medio_compras) if perfil_db.valor_medio_compras else 0,
+                        "modalidades": perfil_db.modalidades_frequentes or {},
+                    },
+                    "compras_similares": perfil_db.compras_similares or [],
+                    "historico_interno": hist_interno,
+                    "analise_ia": perfil_db.analise_ia or "",
+                })
+
+        # === Buscar no PNCP ===
+        print(f"[MERCADO] Buscando compras do órgão: {nome_orgao}")
+        # Buscar pelo nome do órgão (primeiras 3 palavras significativas)
+        import re as _re
+        palavras_orgao = [w for w in _re.sub(r'[^\w\s]', '', nome_orgao).split() if len(w) > 2][:4]
+        termo_orgao = " ".join(palavras_orgao)
+
+        compras = []
+        total_pncp = 0
+        try:
+            url_search = f"https://pncp.gov.br/api/search/?q={termo_orgao}&tipos_documento=edital&tam_pagina=50&pagina=1&ordenacao=-data"
+            resp = req.get(url_search, timeout=20, headers={"Accept": "application/json"})
+            if resp.status_code == 200:
+                data = resp.json()
+                total_pncp = data.get("total", 0)
+                for item in data.get("items", []):
+                    # Filtrar só do mesmo órgão (CNPJ ou nome)
+                    item_cnpj = item.get("orgao_cnpj", "")
+                    item_orgao = item.get("orgao_nome", "")
+                    if cnpj_orgao and item_cnpj != cnpj_orgao:
+                        continue
+                    if not cnpj_orgao and nome_orgao[:15].lower() not in item_orgao.lower():
+                        continue
+                    compras.append({
+                        "objeto": (item.get("description") or "")[:80],
+                        "valor": item.get("valor_global"),
+                        "data": str(item.get("data_publicacao_pncp", ""))[:10],
+                        "modalidade": item.get("modalidade_licitacao_nome", ""),
+                        "uf": item.get("uf", ""),
+                    })
+        except Exception as e:
+            print(f"[MERCADO] Erro ao buscar PNCP: {e}")
+
+        # Calcular estatísticas
+        valores = [c["valor"] for c in compras if c.get("valor") and c["valor"] > 0]
+        valor_total = sum(valores) if valores else 0
+        valor_medio = valor_total / len(valores) if valores else 0
+        modalidades = {}
+        for c in compras:
+            mod = c.get("modalidade", "Outro")
+            modalidades[mod] = modalidades.get(mod, 0) + 1
+
+        # Compras similares (mesmo segmento que o edital)
+        objeto_edital = (edital.objeto or "").lower()
+        palavras_obj = [w for w in _re.sub(r'[^\w\s]', '', objeto_edital).split() if len(w) > 4][:3]
+        similares = []
+        for c in compras:
+            obj_c = (c.get("objeto") or "").lower()
+            if any(p in obj_c for p in palavras_obj):
+                similares.append(c)
+
+        # Histórico interno
+        hist_interno = _calcular_historico_interno(db, nome_orgao, user_id)
+
+        # === Análise IA ===
+        analise_ia_texto = ""
+        try:
+            prompt_mercado = f"""Analise o perfil deste órgão contratante para licitações:
+
+ÓRGÃO: {nome_orgao}
+CNPJ: {cnpj_orgao or 'N/A'}
+UF: {uf_orgao}
+
+DADOS DO PNCP:
+- Total de compras encontradas: {len(compras)}
+- Valor total: R$ {valor_total:,.2f}
+- Valor médio por compra: R$ {valor_medio:,.2f}
+- Modalidades: {json.dumps(modalidades, ensure_ascii=False)}
+- Compras similares ao objeto "{edital.objeto[:50]}": {len(similares)}
+
+HISTÓRICO INTERNO DO SISTEMA:
+- Editais deste órgão no sistema: {hist_interno.get('total', 0)}
+- Decisões GO: {hist_interno.get('go', 0)} | NO-GO: {hist_interno.get('nogo', 0)}
+
+Gere uma análise concisa (3-5 frases) sobre:
+1. Perfil do órgão (volume, tipo de compras, porte)
+2. Risco de pagamento (baseado no tipo de órgão — federal/estadual/municipal)
+3. Oportunidades (recorrência, volume, segmento)
+4. Recomendação (vale a pena investir neste órgão?)
+
+Responda APENAS o texto da análise, sem JSON."""
+
+            analise_ia_texto = call_deepseek([{"role": "user", "content": prompt_mercado}], max_tokens=1000, model_override="deepseek-chat")
+            analise_ia_texto = analise_ia_texto.strip()
+        except Exception as e:
+            analise_ia_texto = f"Erro na análise IA: {e}"
+
+        # === Salvar no banco ===
+        if perfil_db:
+            perfil_db.nome = nome_orgao
+            perfil_db.uf = uf_orgao
+            perfil_db.total_compras = len(compras)
+            perfil_db.valor_total_compras = valor_total
+            perfil_db.valor_medio_compras = valor_medio
+            perfil_db.modalidades_frequentes = modalidades
+            perfil_db.compras_similares = similares[:10]
+            perfil_db.analise_ia = analise_ia_texto
+            perfil_db.ultima_atualizacao = datetime.now()
+        else:
+            perfil_db = OrgaoPerfil(
+                id=str(uuid.uuid4()),
+                cnpj=cnpj_orgao or f"sem_cnpj_{nome_orgao[:20]}",
+                nome=nome_orgao,
+                uf=uf_orgao,
+                total_compras=len(compras),
+                valor_total_compras=valor_total,
+                valor_medio_compras=valor_medio,
+                modalidades_frequentes=modalidades,
+                compras_similares=similares[:10],
+                analise_ia=analise_ia_texto,
+                ultima_atualizacao=datetime.now(),
+                user_id=user_id,
+            )
+            db.add(perfil_db)
+
+        db.commit()
+        print(f"[MERCADO] Perfil salvo: {nome_orgao}, {len(compras)} compras, {len(similares)} similares")
+
+        return jsonify({
+            "success": True,
+            "cache": False,
+            "orgao": {"nome": nome_orgao, "cnpj": cnpj_orgao, "uf": uf_orgao},
+            "estatisticas": {
+                "total_compras": len(compras),
+                "valor_total": valor_total,
+                "valor_medio": valor_medio,
+                "modalidades": modalidades,
+            },
+            "compras_similares": similares[:10],
+            "historico_interno": hist_interno,
+            "analise_ia": analise_ia_texto,
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+def _calcular_historico_interno(db, nome_orgao, user_id):
+    """Calcula decisões internas GO/NO-GO para um órgão."""
+    try:
+        editais_orgao = db.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.orgao.ilike(f"%{nome_orgao[:20]}%"),
+            Edital.status != "temp_score",
+        ).all()
+        total = len(editais_orgao)
+        go = sum(1 for e in editais_orgao if e.status == "go")
+        nogo = sum(1 for e in editais_orgao if e.status == "nogo")
+        avaliando = sum(1 for e in editais_orgao if e.status == "avaliando")
+        return {"total": total, "go": go, "nogo": nogo, "avaliando": avaliando}
+    except Exception:
+        return {"total": 0, "go": 0, "nogo": 0, "avaliando": 0}
+
+
 @app.route("/api/editais/<edital_id>/analisar-riscos", methods=["POST"])
 @require_auth
 def analisar_riscos_edital(edital_id):

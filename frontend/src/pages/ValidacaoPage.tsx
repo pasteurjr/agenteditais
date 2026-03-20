@@ -289,6 +289,9 @@ export function ValidacaoPage(props?: PageProps) {
   // Vencedores detalhados das atas
   const [vencedoresAtas, setVencedoresAtas] = useState<Record<string, unknown> | null>(null);
   const [vencedoresAtasLoading, setVencedoresAtasLoading] = useState(false);
+  // Análise de mercado
+  const [mercadoData, setMercadoData] = useState<Record<string, unknown> | null>(null);
+  const [mercadoLoading, setMercadoLoading] = useState(false);
   // Concorrentes
   const [concorrentesLista, setConcorrentesLista] = useState<Record<string, unknown>[] | null>(null);
   const [concorrentesLoading, setConcorrentesLoading] = useState(false);
@@ -1738,38 +1741,138 @@ export function ValidacaoPage(props?: PageProps) {
   };
 
   // Aba 4: Mercado (Reputação do Órgão da Analítica + Histórico da Cognitiva + botões IA)
-  const renderAbaMercado = (edital: Edital) => (
-    <div className="aba-content">
-      {/* Reputacao do Orgao — V4: dados reais calculados do histórico */}
-      <div className="section-block">
-        <h4><Building size={16} /> Reputacao do Orgao - {edital.orgao}</h4>
-        <div className="reputacao-grid">
-          <div className="reputacao-item">
-            <label>Pregoeiro</label>
-            <span>{edital.reputacaoOrgao.pregoeiro}</span>
-          </div>
-          <div className="reputacao-item">
-            <label>Pagamento</label>
-            <span>{reputacaoCalculada && reputacaoCalculada.total >= 3 ? (reputacaoCalculada.goCount > 0 ? "Pagador regular" : "Sem dados de contrato") : edital.reputacaoOrgao.pagador}</span>
-          </div>
-          <div className="reputacao-item">
-            <label>Historico</label>
-            <span>
-              {reputacaoCalculada && reputacaoCalculada.total >= 3
-                ? `${reputacaoCalculada.total} participacoes (${reputacaoCalculada.goCount} GO / ${reputacaoCalculada.nogoCount} NO-GO)`
-                : reputacaoCalculada && reputacaoCalculada.total > 0
-                  ? `${reputacaoCalculada.total} edital(is) encontrado(s)`
-                  : edital.reputacaoOrgao.historico}
-            </span>
-          </div>
-        </div>
-      </div>
+  const handleAnalisarMercado = async (editalId: string, forcar = false) => {
+    setMercadoLoading(true);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/editais/${editalId}/analisar-mercado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+        body: JSON.stringify({ forcar }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) setMercadoData(data);
+        else alert(data.error || "Erro na análise de mercado");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Erro ao analisar mercado.");
+      }
+    } catch { alert("Erro de conexão."); }
+    finally { setMercadoLoading(false); }
+  };
 
-      <p style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", marginTop: "8px" }}>
-        Histórico de editais semelhantes, atas e concorrentes estão disponíveis na aba Riscos. Preços e análise de concorrentes detalhada serão implementados na etapa de Precificação.
-      </p>
-    </div>
-  );
+  const renderAbaMercado = (edital: Edital) => {
+    const orgao = (mercadoData?.orgao || {}) as { nome?: string; cnpj?: string; uf?: string };
+    const stats = (mercadoData?.estatisticas || {}) as { total_compras?: number; valor_total?: number; valor_medio?: number; modalidades?: Record<string, number> };
+    const similares = (mercadoData?.compras_similares || []) as { objeto?: string; valor?: number; data?: string; modalidade?: string }[];
+    const histInterno = (mercadoData?.historico_interno || {}) as { total?: number; go?: number; nogo?: number; avaliando?: number };
+    const analiseIA = mercadoData?.analise_ia as string || "";
+    const fmtVal = (v: number) => v ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "—";
+
+    return (
+      <div className="aba-content">
+        {/* Botão de análise */}
+        <div className="section-block" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <ActionButton
+            icon={mercadoLoading ? <RefreshCw size={14} className="spin" /> : <Building size={14} />}
+            label={mercadoLoading ? "Analisando..." : (mercadoData ? "Reanalisar Mercado" : "Analisar Mercado do Órgão")}
+            variant="primary"
+            loading={mercadoLoading}
+            onClick={() => handleAnalisarMercado(edital.id, !!mercadoData)}
+          />
+          {!mercadoData && !mercadoLoading && (
+            <span style={{ fontSize: "12px", color: "#64748b" }}>Busca compras do órgão no PNCP, calcula estatísticas e gera análise via IA.</span>
+          )}
+          {mercadoData?.cache && (
+            <span style={{ fontSize: "11px", color: "#64748b", padding: "2px 8px", borderRadius: "8px", backgroundColor: "#1e293b" }}>Cache (dados recentes)</span>
+          )}
+        </div>
+
+        {mercadoData && (
+          <>
+            {/* Dados do Órgão */}
+            <div className="section-block">
+              <h4><Building size={16} /> Dados do Órgão</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                <div><label style={{ fontSize: "11px", color: "#94a3b8" }}>Nome</label><p style={{ fontSize: "13px", margin: "2px 0" }}>{orgao.nome || edital.orgao}</p></div>
+                <div><label style={{ fontSize: "11px", color: "#94a3b8" }}>CNPJ</label><p style={{ fontSize: "13px", margin: "2px 0" }}>{orgao.cnpj || "—"}</p></div>
+                <div><label style={{ fontSize: "11px", color: "#94a3b8" }}>UF</label><p style={{ fontSize: "13px", margin: "2px 0" }}>{orgao.uf || edital.uf}</p></div>
+              </div>
+            </div>
+
+            {/* Volume de Compras */}
+            <div className="section-block">
+              <h4><TrendingUp size={16} /> Volume de Compras no PNCP</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                  <div style={{ fontSize: "24px", fontWeight: 700, color: "#3b82f6" }}>{stats.total_compras || 0}</div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>Compras encontradas</div>
+                </div>
+                <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#22c55e" }}>{fmtVal(stats.valor_total || 0)}</div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>Valor total</div>
+                </div>
+                <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#eab308" }}>{fmtVal(stats.valor_medio || 0)}</div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>Valor médio</div>
+                </div>
+              </div>
+              {stats.modalidades && Object.keys(stats.modalidades).length > 0 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {Object.entries(stats.modalidades).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([mod, cnt]) => (
+                    <span key={mod} style={{ padding: "3px 8px", borderRadius: "10px", fontSize: "11px", backgroundColor: "#1e293b", color: "#94a3b8", border: "1px solid #334155" }}>
+                      {mod}: {cnt as number}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Compras Similares */}
+            {similares.length > 0 && (
+              <div className="section-block">
+                <h4><Search size={16} /> Compras Similares ({similares.length})</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {similares.map((c, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", borderRadius: "6px", border: "1px solid #1e293b", backgroundColor: "#0f172a" }}>
+                      <span style={{ fontSize: "12px", flex: 1 }}>{c.objeto}</span>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+                        {c.valor && <span style={{ fontSize: "12px", color: "#22c55e" }}>{fmtVal(c.valor)}</span>}
+                        <span style={{ fontSize: "11px", color: "#64748b" }}>{c.data}</span>
+                        <span style={{ fontSize: "10px", color: "#94a3b8", padding: "1px 6px", borderRadius: "6px", backgroundColor: "#1e293b" }}>{c.modalidade}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Histórico Interno */}
+            {histInterno.total && histInterno.total > 0 ? (
+              <div className="section-block">
+                <h4><ClipboardCheck size={16} /> Histórico Interno</h4>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <span style={{ padding: "4px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, backgroundColor: "#3b82f620", color: "#3b82f6" }}>{histInterno.total} edital(is)</span>
+                  {(histInterno.go ?? 0) > 0 && <span style={{ padding: "4px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, backgroundColor: "#22c55e20", color: "#22c55e" }}>{histInterno.go} GO</span>}
+                  {(histInterno.nogo ?? 0) > 0 && <span style={{ padding: "4px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, backgroundColor: "#ef444420", color: "#ef4444" }}>{histInterno.nogo} NO-GO</span>}
+                  {(histInterno.avaliando ?? 0) > 0 && <span style={{ padding: "4px 10px", borderRadius: "10px", fontSize: "12px", fontWeight: 600, backgroundColor: "#eab30820", color: "#eab308" }}>{histInterno.avaliando} Em Avaliação</span>}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Análise da IA */}
+            {analiseIA && (
+              <div className="section-block">
+                <h4><Sparkles size={16} /> Análise de Mercado (IA)</h4>
+                <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, whiteSpace: "pre-line" }}>{analiseIA}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
   // Aba 5: IA (antigo conteudo da Cognitiva — Resumo + Pergunte + botões rápidos)
   const renderAbaIA = (edital: Edital) => (
@@ -1898,6 +2001,7 @@ export function ValidacaoPage(props?: PageProps) {
               setHistoricoVencedores(null);
               setVencedoresAtas(null);
               setConcorrentesLista(null);
+              setMercadoData(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}

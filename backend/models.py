@@ -853,6 +853,42 @@ class PrecoHistorico(Base):
         }
 
 
+class OrgaoPerfil(Base):
+    """Perfil de órgãos contratantes com dados do PNCP e análise IA"""
+    __tablename__ = 'orgaos_perfil'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    cnpj = Column(String(20), unique=True, nullable=False)
+    nome = Column(String(255), nullable=True)
+    uf = Column(String(2), nullable=True)
+    total_compras = Column(Integer, default=0)
+    valor_total_compras = Column(DECIMAL(15, 2), nullable=True)
+    valor_medio_compras = Column(DECIMAL(15, 2), nullable=True)
+    modalidades_frequentes = Column(JSON, nullable=True)
+    compras_similares = Column(JSON, nullable=True)
+    analise_ia = Column(Text, nullable=True)
+    historico_pagamento = Column(String(100), nullable=True)
+    ultima_atualizacao = Column(DateTime, nullable=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cnpj": self.cnpj,
+            "nome": self.nome,
+            "uf": self.uf,
+            "total_compras": self.total_compras,
+            "valor_total_compras": float(self.valor_total_compras) if self.valor_total_compras else None,
+            "valor_medio_compras": float(self.valor_medio_compras) if self.valor_medio_compras else None,
+            "modalidades_frequentes": self.modalidades_frequentes,
+            "compras_similares": self.compras_similares,
+            "analise_ia": self.analise_ia,
+            "historico_pagamento": self.historico_pagamento,
+            "ultima_atualizacao": self.ultima_atualizacao.isoformat() if self.ultima_atualizacao else None,
+        }
+
+
 class AtaConsultada(Base):
     """Atas de registro de preço consultadas no PNCP"""
     __tablename__ = 'atas_consultadas'

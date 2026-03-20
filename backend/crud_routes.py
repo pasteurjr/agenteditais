@@ -15,7 +15,7 @@ from models import (
     Produto, ProdutoEspecificacao, ProdutoDocumento,
     FonteEdital, FonteCertidao, Edital, EditalRequisito, EditalDocumento, EditalItem,
     Analise, AnaliseDetalhe, Proposta,
-    Concorrente, PrecoHistorico, ParticipacaoEdital, AtaConsultada,
+    Concorrente, PrecoHistorico, ParticipacaoEdital, AtaConsultada, OrgaoPerfil,
     Alerta, Monitoramento, Notificacao, PreferenciasNotificacao,
     Documento, Contrato, ContratoEntrega, Recurso,
     LeadCRM, AcaoPosPerda, AuditoriaLog, AprendizadoFeedback,
@@ -265,6 +265,13 @@ CRUD_TABLES = {
         "required": ["edital_id", "produto_id"],
     },
     # === Concorrência ===
+    "orgaos-perfil": {
+        "model": OrgaoPerfil,
+        "user_scoped": True,
+        "search_fields": ["nome", "cnpj", "uf"],
+        "label": "Perfil de Órgão",
+        "required": ["cnpj"],
+    },
     "atas-consultadas": {
         "model": AtaConsultada,
         "user_scoped": True,
