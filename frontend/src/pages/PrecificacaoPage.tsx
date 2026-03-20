@@ -268,8 +268,8 @@ export function PrecificacaoPage(props?: PageProps) {
     try {
       const res = await crudList("produtos", { limit: 50 });
       const prods = res.items as unknown as Array<{ id: string; nome: string; fabricante: string }>;
-      setSugestoes(prods.map(p => ({ ...p, match_score: 0 })));
-    } catch { /* */ }
+      setSugestoes(prods.map(p => ({ produto_id: p.id, nome: p.nome, fabricante: p.fabricante, match_score: 0 })));
+    } catch (err) { console.error("[SELECAO] Erro ao carregar produtos:", err); }
     setShowSelecaoModal(true);
   };
 
@@ -964,8 +964,7 @@ export function PrecificacaoPage(props?: PageProps) {
         )}
 
         {/* Seleção de Portfolio Modal */}
-        {showSelecaoModal && (
-          <Modal title="Seleção de Portfolio (UC-P02)" onClose={() => setShowSelecaoModal(false)}>
+        <Modal isOpen={showSelecaoModal} title="Seleção de Portfolio" onClose={() => setShowSelecaoModal(false)} size="large">
             <p style={{ marginBottom: 12 }}>Selecione o produto do portfolio para vincular ao item:</p>
             <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
               <thead>
@@ -992,7 +991,6 @@ export function PrecificacaoPage(props?: PageProps) {
               </tbody>
             </table>
           </Modal>
-        )}
       </div>
     </div>
   );
