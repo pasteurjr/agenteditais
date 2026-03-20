@@ -10604,6 +10604,9 @@ def analisar_mercado_edital(edital_id):
                         "data": str(item.get("data_publicacao_pncp", ""))[:10],
                         "modalidade": item.get("modalidade_licitacao_nome", ""),
                         "uf": item.get("uf", ""),
+                        "cnpj_orgao": item_cnpj,
+                        "ano": item.get("ano"),
+                        "seq": item.get("numero_sequencial"),
                     })
         except Exception as e:
             print(f"[MERCADO] Erro ao buscar PNCP: {e}")
@@ -10617,14 +10620,51 @@ def analisar_mercado_edital(edital_id):
             mod = c.get("modalidade", "Outro")
             modalidades[mod] = modalidades.get(mod, 0) + 1
 
-        # Compras similares (mesmo segmento que o edital)
-        objeto_edital = (edital.objeto or "").lower()
-        palavras_obj = [w for w in _re.sub(r'[^\w\s]', '', objeto_edital).split() if len(w) > 4][:3]
+        # Compras similares — usar nome do produto (mais preciso que objeto do edital)
+        produto_match = None
+        analise_exist = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.user_id == user_id).first()
+        if analise_exist and analise_exist.produto_id:
+            from models import Produto
+            produto_match = db.query(Produto).filter(Produto.id == analise_exist.produto_id).first()
+
+        # Gerar palavras-chave de busca (produto > objeto)
+        stop_similar = {"aquisicao", "aquisição", "contratacao", "contratação", "registro", "preco", "preço",
+                        "futura", "eventual", "fornecimento", "servico", "serviço", "atender", "demandas",
+                        "necessidades", "destinado", "destinada", "para", "material", "equipamento"}
+        if produto_match:
+            texto_ref = produto_match.nome.lower()
+        else:
+            texto_ref = (edital.objeto or "").lower()
+        palavras_obj = [w for w in _re.sub(r'[^\w\s]', '', texto_ref).split() if len(w) > 3 and w not in stop_similar][:3]
+
         similares = []
         for c in compras:
             obj_c = (c.get("objeto") or "").lower()
+            # Exigir pelo menos 1 palavra significativa
             if any(p in obj_c for p in palavras_obj):
                 similares.append(c)
+
+        # Buscar valores das compras similares (Search API não retorna valores)
+        for c in similares[:5]:
+            if not c.get("valor") or c["valor"] == 0:
+                try:
+                    c_cnpj = c.get("cnpj_orgao") or cnpj_orgao
+                    c_ano = c.get("ano")
+                    c_seq = c.get("seq")
+                    if c_cnpj and c_ano and c_seq:
+                        url_det = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}"
+                        resp_det = req.get(url_det, timeout=8, headers={"Accept": "application/json"})
+                        if resp_det.status_code == 200:
+                            dados_det = resp_det.json()
+                            c["valor"] = dados_det.get("valorTotalEstimado") or dados_det.get("valorTotalHomologado") or 0
+                except Exception:
+                    pass
+
+        # Recalcular valores com dados atualizados
+        valores = [c["valor"] for c in compras if c.get("valor") and c["valor"] > 0]
+        if valores:
+            valor_total = sum(valores)
+            valor_medio = valor_total / len(valores)
 
         # Histórico interno
         hist_interno = _calcular_historico_interno(db, nome_orgao, user_id)
