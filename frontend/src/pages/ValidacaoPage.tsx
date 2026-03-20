@@ -1489,26 +1489,6 @@ export function ValidacaoPage(props?: PageProps) {
           </div>
         )}
 
-        {/* Avaliação por Dimensão (sempre visível, usa scores) */}
-        <div className="section-block">
-          <h4><Shield size={16} /> Avaliação por Dimensão</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
-            {[
-              { label: "Técnico", score: edital.scores.tecnico },
-              { label: "Documental", score: edital.scores.documental },
-              { label: "Complexidade", score: edital.scores.complexidade },
-              { label: "Jurídico", score: edital.scores.juridico },
-              { label: "Logístico", score: edital.scores.logistico },
-              { label: "Comercial", score: edital.scores.comercial },
-            ].map((dim, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-                <span style={{ fontSize: "13px" }}>{dim.label} ({dim.score}%)</span>
-                {getScoreDimensionBadge(dim.score)}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Alerta de Recorrência */}
         {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
           <div className="section-block" style={{ backgroundColor: "#78350f20", borderRadius: "8px", padding: "16px", border: "1px solid #f59e0b40" }}>
