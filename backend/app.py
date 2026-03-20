@@ -10556,7 +10556,12 @@ def analisar_riscos_edital(edital_id):
         empresa_id = empresa.id if empresa else None
 
         # === PASSO 2: Buscar atas no PNCP ===
-        termo_ata = produto_match.nome if produto_match else (edital.objeto or "")[:30]
+        # Usar palavras-chave do objeto (mesmo critério do endpoint historico-vencedores)
+        import re as _re2
+        objeto = edital.objeto or ""
+        palavras_stop = {"aquisicao", "aquisição", "de", "do", "da", "dos", "das", "para", "com", "registro", "preco", "preço", "futura", "eventual", "fornecimento"}
+        palavras = [w for w in _re2.sub(r'[^\w\s]', ' ', objeto.lower()).split() if w not in palavras_stop and len(w) > 3][:3]
+        termo_ata = " ".join(palavras) if palavras else (produto_match.nome if produto_match else objeto[:30])
         print(f"[RISCOS] Buscando atas para: {termo_ata}")
         atas_resultado = tool_buscar_atas_pncp(termo_ata, user_id)
         atas = atas_resultado.get("atas", []) if atas_resultado.get("success") else []
