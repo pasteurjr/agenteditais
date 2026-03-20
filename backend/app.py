@@ -10530,6 +10530,93 @@ def documentacao_necessaria(edital_id):
         db.close()
 
 
+# =============================================================================
+# Endpoints REST para Precificação (chamam tools diretamente, sem chat)
+# =============================================================================
+
+@app.route("/api/precificacao/<eip_id>/custos", methods=["POST"])
+@require_auth
+def precif_custos(eip_id):
+    """UC-P04: Configurar custos (Camada A) — calcula tributos e isenção ICMS."""
+    from tools import tool_configurar_custos
+    user_id = get_current_user_id()
+    data = request.get_json() or {}
+    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
+    resultado = tool_configurar_custos(
+        edital_item_produto_id=eip_id, user_id=user_id,
+        custo_unitario=data.get("custo_unitario"),
+        custo_fonte=data.get("custo_fonte", "manual"),
+        icms=data.get("icms"), ipi=data.get("ipi"), pis_cofins=data.get("pis_cofins"),
+        empresa_id=empresa.id if empresa else None,
+    )
+    return jsonify(resultado)
+
+
+@app.route("/api/precificacao/<eip_id>/preco-base", methods=["POST"])
+@require_auth
+def precif_preco_base(eip_id):
+    """UC-P05: Montar preço base (Camada B) — manual, custo+markup ou upload."""
+    from tools import tool_montar_preco_base
+    user_id = get_current_user_id()
+    data = request.get_json() or {}
+    resultado = tool_montar_preco_base(
+        edital_item_produto_id=eip_id, user_id=user_id,
+        modo=data.get("modo", "manual"),
+        preco_base=data.get("preco_base"),
+        markup_percentual=data.get("markup_percentual"),
+    )
+    return jsonify(resultado)
+
+
+@app.route("/api/precificacao/<eip_id>/referencia", methods=["POST"])
+@require_auth
+def precif_referencia(eip_id):
+    """UC-P06: Definir valor de referência (Camada C)."""
+    from tools import tool_definir_referencia
+    user_id = get_current_user_id()
+    data = request.get_json() or {}
+    resultado = tool_definir_referencia(
+        edital_item_produto_id=eip_id, user_id=user_id,
+        valor_referencia=data.get("valor_referencia"),
+        percentual_sobre_base=data.get("percentual_sobre_base"),
+    )
+    return jsonify(resultado)
+
+
+@app.route("/api/precificacao/<eip_id>/lances", methods=["POST"])
+@require_auth
+def precif_lances(eip_id):
+    """UC-P07: Estruturar lances (Camadas D e E)."""
+    from tools import tool_estruturar_lances
+    user_id = get_current_user_id()
+    data = request.get_json() or {}
+    resultado = tool_estruturar_lances(
+        edital_item_produto_id=eip_id, user_id=user_id,
+        lance_inicial=data.get("lance_inicial"),
+        lance_minimo=data.get("lance_minimo"),
+        modo_inicial=data.get("modo_inicial", "absoluto"),
+        modo_minimo=data.get("modo_minimo", "absoluto"),
+        desconto_maximo_pct=data.get("desconto_maximo_pct"),
+    )
+    return jsonify(resultado)
+
+
+@app.route("/api/precificacao/<edital_id>/estrategia", methods=["POST"])
+@require_auth
+def precif_estrategia(edital_id):
+    """UC-P08: Definir estratégia competitiva."""
+    from tools import tool_estrategia_competitiva
+    user_id = get_current_user_id()
+    data = request.get_json() or {}
+    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
+    resultado = tool_estrategia_competitiva(
+        edital_id=edital_id, user_id=user_id,
+        perfil=data.get("perfil", "quero_ganhar"),
+        empresa_id=empresa.id if empresa else None,
+    )
+    return jsonify(resultado)
+
+
 @app.route("/api/editais/<edital_id>/analisar-mercado", methods=["POST"])
 @require_auth
 def analisar_mercado_edital(edital_id):

@@ -315,55 +315,91 @@ export function PrecificacaoPage(props?: PageProps) {
     } catch { /* */ }
   };
 
+  const _fetchPrecif = async (url: string, body: Record<string, unknown>) => {
+    const token = localStorage.getItem("editais_ia_access_token");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Erro");
+    return data;
+  };
+
   const handleSalvarCustos = async () => {
     if (!vinculoId) return;
-    if (onSendToChat) {
-      const msg = custoUnit
-        ? `configure custos do item ${vinculoId} R$ ${custoUnit}`
-        : `configure custos do item ${vinculoId}`;
-      onSendToChat(msg);
-    }
+    setLoading(true);
+    try {
+      const result = await _fetchPrecif(`/api/precificacao/${vinculoId}/custos`, {
+        custo_unitario: custoUnit ? parseFloat(custoUnit) : null,
+      });
+      // Recarregar camada
+      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
+      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      alert("Custos salvos com sucesso!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar custos"); }
+    finally { setLoading(false); }
   };
 
   const handleSalvarPrecoBase = async () => {
     if (!vinculoId) return;
-    if (onSendToChat) {
-      if (modoPrecoBase === "markup") {
-        onSendToChat(`defina preço base com markup ${markup}% para item ${vinculoId}`);
-      } else {
-        onSendToChat(`defina preço base manual R$ ${precoBaseManual} para item ${vinculoId}`);
-      }
-    }
+    setLoading(true);
+    try {
+      await _fetchPrecif(`/api/precificacao/${vinculoId}/preco-base`, {
+        modo: modoPrecoBase === "markup" ? "custo_markup" : "manual",
+        markup_percentual: modoPrecoBase === "markup" && markup ? parseFloat(markup) : null,
+        preco_base: modoPrecoBase !== "markup" && precoBaseManual ? parseFloat(precoBaseManual) : null,
+      });
+      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
+      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      alert("Preço base salvo!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar preço base"); }
+    finally { setLoading(false); }
   };
 
   const handleSalvarReferencia = async () => {
     if (!vinculoId) return;
-    if (onSendToChat) {
-      if (valorRef) {
-        onSendToChat(`defina valor de referência R$ ${valorRef} para item ${vinculoId}`);
-      } else if (pctSobreBase) {
-        onSendToChat(`defina valor de referência ${pctSobreBase}% sobre base para item ${vinculoId}`);
-      }
-    }
+    setLoading(true);
+    try {
+      await _fetchPrecif(`/api/precificacao/${vinculoId}/referencia`, {
+        valor_referencia: valorRef ? parseFloat(valorRef) : null,
+        percentual_sobre_base: pctSobreBase ? parseFloat(pctSobreBase) : null,
+      });
+      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
+      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      alert("Valor de referência salvo!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar referência"); }
+    finally { setLoading(false); }
   };
 
   const handleSalvarLances = async () => {
     if (!vinculoId) return;
-    if (onSendToChat) {
-      const parts = [`estruture lances para item ${vinculoId}`];
-      if (lanceInicial) parts.push(`inicial R$ ${lanceInicial}`);
-      if (lanceMinimo) parts.push(`mínimo R$ ${lanceMinimo}`);
-      if (descontoMax) parts.push(`desconto máximo ${descontoMax}%`);
-      onSendToChat(parts.join(", "));
-    }
+    setLoading(true);
+    try {
+      await _fetchPrecif(`/api/precificacao/${vinculoId}/lances`, {
+        lance_inicial: lanceInicial ? parseFloat(lanceInicial) : null,
+        lance_minimo: lanceMinimo ? parseFloat(lanceMinimo) : null,
+        modo_inicial: modoInicial,
+        modo_minimo: modoMinimo,
+        desconto_maximo_pct: descontoMax ? parseFloat(descontoMax) : null,
+      });
+      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
+      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      alert("Lances salvos!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar lances"); }
+    finally { setLoading(false); }
   };
 
   const handleSimularEstrategia = async () => {
-    if (!editalId || !onSendToChat) return;
-    const msg = perfil === "quero_ganhar"
-      ? `simule estratégia quero ganhar para edital ${editalId}`
-      : `simule estratégia não ganhei no mínimo para edital ${editalId}`;
-    onSendToChat(msg);
+    if (!editalId) return;
+    setLoading(true);
+    try {
+      const result = await _fetchPrecif(`/api/precificacao/${editalId}/estrategia`, { perfil });
+      if (result.cenarios) setCenarios(result.cenarios);
+      alert("Estratégia salva!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar estratégia"); }
+    finally { setLoading(false); }
   };
 
   const handleBuscarHistorico = async () => {
@@ -456,9 +492,9 @@ export function PrecificacaoPage(props?: PageProps) {
 
   // ── Tabs ──
   const tabs = [
-    { id: "lotes", label: "Lotes", icon: <Layers size={16} /> },
-    { id: "camadas", label: "Camadas", icon: <BarChart3 size={16} /> },
-    { id: "lances", label: "Lances", icon: <Target size={16} /> },
+    { id: "lotes", label: `Lotes ${lotes.length > 0 ? (lotes.some(l => (l as Record<string,unknown>).status === "configurado") ? "✅" : "⚠️") : "❌"}`, icon: <Layers size={16} /> },
+    { id: "camadas", label: `Camadas ${camada ? (camada.preco_base ? "✅" : "⚠️") : "❌"}`, icon: <BarChart3 size={16} /> },
+    { id: "lances", label: `Lances ${camada?.lance_inicial ? "✅" : "❌"}`, icon: <Target size={16} /> },
     { id: "historico", label: "Histórico", icon: <History size={16} /> },
   ];
 
