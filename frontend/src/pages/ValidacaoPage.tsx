@@ -1583,8 +1583,13 @@ export function ValidacaoPage(props?: PageProps) {
                           });
                           if (res.ok) {
                             const data = await res.json();
-                            if (data.success) setVencedoresAtas(data);
-                            else alert(data.error || "Erro ao buscar vencedores");
+                            if (data.success) {
+                              setVencedoresAtas(data);
+                              const s = data.salvos;
+                              if (s && (s.concorrentes > 0 || s.precos_historicos > 0)) {
+                                console.log(`[VENCEDORES] Salvos: ${s.concorrentes} concorrentes, ${s.precos_historicos} preços`);
+                              }
+                            } else { alert(data.error || "Erro ao buscar vencedores"); }
                           }
                         } catch { alert("Erro ao buscar vencedores."); }
                         finally { setVencedoresAtasLoading(false); }

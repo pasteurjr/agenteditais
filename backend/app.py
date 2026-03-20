@@ -10739,9 +10739,82 @@ def vencedores_atas_edital(edital_id):
             except Exception:
                 pass
 
-        return jsonify({"success": True, "resultados": resultados, "total_atas_analisadas": len(resultados)})
+        # Salvar vencedores no banco (concorrentes + precos_historicos)
+        from models import Concorrente, PrecoHistorico
+        from datetime import datetime, date as date_type
+        salvos_concorrentes = 0
+        salvos_precos = 0
+
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = empresa.id if empresa else None
+
+        for res_ata in resultados:
+            for v in res_ata.get("vencedores", []):
+                cnpj_venc = v.get("cnpj_vencedor")
+                nome_venc = v.get("vencedor")
+                if not nome_venc:
+                    continue
+
+                # Criar/atualizar concorrente
+                concorrente = None
+                if cnpj_venc:
+                    concorrente = db.query(Concorrente).filter(Concorrente.cnpj == cnpj_venc).first()
+                if not concorrente and nome_venc:
+                    concorrente = db.query(Concorrente).filter(Concorrente.nome.ilike(f"%{nome_venc[:20]}%")).first()
+                if not concorrente:
+                    concorrente = Concorrente(
+                        id=str(uuid.uuid4()),
+                        nome=nome_venc,
+                        cnpj=cnpj_venc,
+                        editais_participados=1,
+                        editais_ganhos=1,
+                    )
+                    db.add(concorrente)
+                    salvos_concorrentes += 1
+                else:
+                    concorrente.editais_participados = (concorrente.editais_participados or 0) + 1
+                    concorrente.editais_ganhos = (concorrente.editais_ganhos or 0) + 1
+
+                # Salvar preço histórico (evitar duplicatas por cnpj+edital)
+                preco_existente = db.query(PrecoHistorico).filter(
+                    PrecoHistorico.cnpj_vencedor == cnpj_venc,
+                    PrecoHistorico.edital_id == edital_id,
+                ).first() if cnpj_venc else None
+
+                if not preco_existente:
+                    preco_hist = PrecoHistorico(
+                        id=str(uuid.uuid4()),
+                        edital_id=edital_id,
+                        user_id=user_id,
+                        empresa_id=empresa_id,
+                        concorrente_id=concorrente.id,
+                        preco_referencia=v.get("valor_estimado"),
+                        preco_vencedor=v.get("valor_homologado"),
+                        empresa_vencedora=nome_venc,
+                        cnpj_vencedor=cnpj_venc,
+                        resultado="derrota",
+                        fonte="pncp",
+                        data_registro=datetime.now(),
+                    )
+                    if v.get("valor_estimado") and v.get("valor_homologado") and v["valor_estimado"] > 0:
+                        preco_hist.desconto_percentual = round((1 - v["valor_homologado"] / v["valor_estimado"]) * 100, 2)
+                    db.add(preco_hist)
+                    salvos_precos += 1
+
+        if salvos_concorrentes > 0 or salvos_precos > 0:
+            db.commit()
+            print(f"[VENCEDORES] Salvos: {salvos_concorrentes} concorrentes, {salvos_precos} preços históricos")
+
+        return jsonify({
+            "success": True,
+            "resultados": resultados,
+            "total_atas_analisadas": len(resultados),
+            "salvos": {"concorrentes": salvos_concorrentes, "precos_historicos": salvos_precos},
+        })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
