@@ -264,10 +264,7 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleSelecaoPortfolio = async (itemId: string) => {
     setSelecaoItemId(itemId);
-    if (onSendToChat) {
-      onSendToChat(`selecione produto para o item ${itemId}`);
-    }
-    // Also try CRUD-based search
+    // Carregar produtos do portfolio e abrir modal
     try {
       const res = await crudList("produtos", { limit: 50 });
       const prods = res.items as unknown as Array<{ id: string; nome: string; fabricante: string }>;
@@ -573,7 +570,7 @@ export function PrecificacaoPage(props?: PageProps) {
                                       <TextInput value={loteVolume || String(lote.volume_exigido || "")} onChange={setLoteVolume} placeholder="Ex: 50000" />
                                     </FormField>
                                     <div className="form-field-actions">
-                                      <ActionButton icon={<Check size={16} />} label="Salvar Lote" variant="primary" onClick={() => handleSalvarLote(lote.id)} />
+                                      <ActionButton icon={<Check size={16} />} label="Atualizar Lote" variant="primary" onClick={() => handleSalvarLote(lote.id)} />
                                     </div>
                                   </div>
 
