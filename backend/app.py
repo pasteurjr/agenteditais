@@ -10667,11 +10667,24 @@ def analisar_mercado_edital(edital_id):
                     c_ano = c.get("ano")
                     c_seq = c.get("seq")
                     if c_cnpj and c_ano and c_seq:
+                        # Tentar valor da compra
                         url_det = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}"
                         resp_det = req.get(url_det, timeout=8, headers={"Accept": "application/json"})
                         if resp_det.status_code == 200:
                             dados_det = resp_det.json()
-                            c["valor"] = dados_det.get("valorTotalEstimado") or dados_det.get("valorTotalHomologado") or 0
+                            valor = dados_det.get("valorTotalEstimado") or dados_det.get("valorTotalHomologado")
+                            if valor:
+                                c["valor"] = valor
+                            else:
+                                # Valor não na compra — somar dos itens
+                                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}/itens"
+                                resp_itens = req.get(url_itens, timeout=8, headers={"Accept": "application/json"})
+                                if resp_itens.status_code == 200:
+                                    itens_det = resp_itens.json()
+                                    if isinstance(itens_det, list):
+                                        soma = sum(it.get("valorTotal") or 0 for it in itens_det)
+                                        if soma > 0:
+                                            c["valor"] = soma
                 except Exception:
                     pass
 
