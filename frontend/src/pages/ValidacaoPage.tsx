@@ -1766,6 +1766,7 @@ export function ValidacaoPage(props?: PageProps) {
     const orgao = (mercadoData?.orgao || {}) as { nome?: string; cnpj?: string; uf?: string };
     const stats = (mercadoData?.estatisticas || {}) as { total_compras?: number; valor_total?: number; valor_medio?: number; modalidades?: Record<string, number> };
     const similares = (mercadoData?.compras_similares || []) as { objeto?: string; valor?: number; data?: string; modalidade?: string }[];
+    const reputacao = (mercadoData?.reputacao || {}) as { esfera?: string; risco_pagamento?: string; volume?: string; modalidade_principal?: string; percentual_pregao?: number; editais_similares?: number };
     const histInterno = (mercadoData?.historico_interno || {}) as { total?: number; go?: number; nogo?: number; avaliando?: number };
     const analiseIA = mercadoData?.analise_ia as string || "";
     const fmtVal = (v: number) => v ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "—";
@@ -1800,6 +1801,39 @@ export function ValidacaoPage(props?: PageProps) {
                 <div><label style={{ fontSize: "11px", color: "#94a3b8" }}>UF</label><p style={{ fontSize: "13px", margin: "2px 0" }}>{orgao.uf || edital.uf}</p></div>
               </div>
             </div>
+
+            {/* Reputação (RF-033) */}
+            {reputacao.esfera && (
+              <div className="section-block">
+                <h4><Shield size={16} /> Reputação do Órgão</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px" }}>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Esfera</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: reputacao.esfera === "Federal" ? "#3b82f6" : reputacao.esfera === "Estadual" ? "#8b5cf6" : "#eab308" }}>{reputacao.esfera}</div>
+                  </div>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Risco Pagamento</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: reputacao.risco_pagamento === "Baixo" ? "#22c55e" : reputacao.risco_pagamento === "Médio" ? "#eab308" : "#ef4444" }}>{reputacao.risco_pagamento}</div>
+                  </div>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Volume Compras</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600 }}>{reputacao.volume}</div>
+                  </div>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Modalidade Principal</div>
+                    <div style={{ fontSize: "12px", fontWeight: 600 }}>{reputacao.modalidade_principal}</div>
+                  </div>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>% Pregão Eletrônico</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: (reputacao.percentual_pregao || 0) > 30 ? "#22c55e" : "#eab308" }}>{reputacao.percentual_pregao}%</div>
+                  </div>
+                  <div style={{ padding: "10px", borderRadius: "8px", backgroundColor: "#0f172a", border: "1px solid #1e293b", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#94a3b8" }}>Editais Similares</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600 }}>{reputacao.editais_similares}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Volume de Compras */}
             <div className="section-block">

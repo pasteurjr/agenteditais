@@ -10560,6 +10560,8 @@ def analisar_mercado_edital(edital_id):
             if perfil_db.ultima_atualizacao and perfil_db.ultima_atualizacao > datetime.now() - timedelta(days=30):
                 # Retornar do cache
                 hist_interno = _calcular_historico_interno(db, nome_orgao, user_id)
+                mods_cache = perfil_db.modalidades_frequentes or {}
+                esfera_c = "Federal" if any(p in (perfil_db.nome or "").upper() for p in ["MINISTERIO", "FEDERAL", "NACIONAL"]) else "Estadual" if any(p in (perfil_db.nome or "").upper() for p in ["ESTADO", "ESTADUAL"]) else "Municipal"
                 return jsonify({
                     "success": True,
                     "cache": True,
@@ -10568,9 +10570,17 @@ def analisar_mercado_edital(edital_id):
                         "total_compras": perfil_db.total_compras,
                         "valor_total": float(perfil_db.valor_total_compras) if perfil_db.valor_total_compras else 0,
                         "valor_medio": float(perfil_db.valor_medio_compras) if perfil_db.valor_medio_compras else 0,
-                        "modalidades": perfil_db.modalidades_frequentes or {},
+                        "modalidades": mods_cache,
                     },
                     "compras_similares": perfil_db.compras_similares or [],
+                    "reputacao": {
+                        "esfera": esfera_c,
+                        "risco_pagamento": "Baixo" if esfera_c == "Federal" else "Médio" if esfera_c == "Estadual" else "Alto",
+                        "volume": "Alto" if (perfil_db.total_compras or 0) > 100 else "Médio" if (perfil_db.total_compras or 0) > 20 else "Baixo",
+                        "modalidade_principal": max(mods_cache, key=mods_cache.get) if mods_cache else "N/A",
+                        "percentual_pregao": round(mods_cache.get("Pregão - Eletrônico", 0) / max(perfil_db.total_compras or 1, 1) * 100, 1),
+                        "editais_similares": len(perfil_db.compras_similares or []),
+                    },
                     "historico_interno": hist_interno,
                     "analise_ia": perfil_db.analise_ia or "",
                 })
@@ -10659,32 +10669,31 @@ def analisar_mercado_edital(edital_id):
             if any(p in obj_c for p in palavras_chave):
                 similares.append(c)
 
-        # Buscar valores das compras similares (Search API não retorna valores)
-        for c in similares[:5]:
+        # Buscar valores das compras (Search API não retorna valores)
+        # Buscar para as 10 primeiras compras (pregões e similares primeiro)
+        compras_para_buscar = sorted(compras, key=lambda x: 0 if x in similares else 1)[:10]
+        for c in compras_para_buscar:
             if not c.get("valor") or c["valor"] == 0:
                 try:
                     c_cnpj = c.get("cnpj_orgao") or cnpj_orgao
                     c_ano = c.get("ano")
                     c_seq = c.get("seq")
                     if c_cnpj and c_ano and c_seq:
-                        # Tentar valor da compra
                         url_det = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}"
                         resp_det = req.get(url_det, timeout=8, headers={"Accept": "application/json"})
                         if resp_det.status_code == 200:
                             dados_det = resp_det.json()
                             valor = dados_det.get("valorTotalEstimado") or dados_det.get("valorTotalHomologado")
-                            if valor:
-                                c["valor"] = valor
-                            else:
-                                # Valor não na compra — somar dos itens
-                                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}/itens"
-                                resp_itens = req.get(url_itens, timeout=8, headers={"Accept": "application/json"})
-                                if resp_itens.status_code == 200:
-                                    itens_det = resp_itens.json()
+                            if not valor:
+                                # Somar dos itens
+                                url_it = f"https://pncp.gov.br/api/pncp/v1/orgaos/{c_cnpj}/compras/{c_ano}/{c_seq}/itens"
+                                resp_it = req.get(url_it, timeout=8, headers={"Accept": "application/json"})
+                                if resp_it.status_code == 200:
+                                    itens_det = resp_it.json()
                                     if isinstance(itens_det, list):
-                                        soma = sum(it.get("valorTotal") or 0 for it in itens_det)
-                                        if soma > 0:
-                                            c["valor"] = soma
+                                        valor = sum(it.get("valorTotal") or 0 for it in itens_det)
+                            if valor and valor > 0:
+                                c["valor"] = valor
                 except Exception:
                     pass
 
@@ -10693,6 +10702,17 @@ def analisar_mercado_edital(edital_id):
         if valores:
             valor_total = sum(valores)
             valor_medio = valor_total / len(valores)
+
+        # Reputação estruturada (RF-033)
+        esfera = "Federal" if any(p in nome_orgao.upper() for p in ["MINISTERIO", "FEDERAL", "NACIONAL"]) else "Estadual" if any(p in nome_orgao.upper() for p in ["ESTADO", "ESTADUAL", "SECRETARIA DE ESTADO"]) else "Municipal"
+        reputacao = {
+            "esfera": esfera,
+            "risco_pagamento": "Baixo" if esfera == "Federal" else "Médio" if esfera == "Estadual" else "Alto",
+            "volume": "Alto" if len(compras) > 100 else "Médio" if len(compras) > 20 else "Baixo",
+            "modalidade_principal": max(modalidades, key=modalidades.get) if modalidades else "N/A",
+            "percentual_pregao": round(modalidades.get("Pregão - Eletrônico", 0) / max(len(compras), 1) * 100, 1),
+            "editais_similares": len(similares),
+        }
 
         # Histórico interno
         hist_interno = _calcular_historico_interno(db, nome_orgao, user_id)
@@ -10772,6 +10792,7 @@ Responda APENAS o texto da análise, sem JSON."""
                 "modalidades": modalidades,
             },
             "compras_similares": similares[:10],
+            "reputacao": reputacao,
             "historico_interno": hist_interno,
             "analise_ia": analise_ia_texto,
         })
