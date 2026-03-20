@@ -10710,17 +10710,32 @@ def vencedores_atas_edital(edital_id):
             return jsonify({"error": "Nenhuma ata fornecida"}), 400
 
         import requests as req
+        import re as _re
         resultados = []
         for ata in atas[:5]:  # Limitar a 5 atas
             cnpj = ata.get("cnpj_orgao") or ""
             ano = ata.get("ano")
-            seq = ata.get("sequencial")
-            if not cnpj or not ano or not seq:
+
+            # Extrair sequencial da COMPRA (não da ata) da URL ou numero_controle
+            seq_compra = None
+            url_pncp = ata.get("url_pncp") or ""
+            # URL formato: /atas/{cnpj}/{ano}/{seq_compra}/{seq_ata}
+            match_url = _re.search(r'/atas/\d+/\d+/(\d+)/\d+', url_pncp)
+            if match_url:
+                seq_compra = int(match_url.group(1))
+            else:
+                # numero_controle formato: cnpj-1-seq_compra/ano-seq_ata
+                nc = ata.get("numero_controle") or ""
+                match_nc = _re.search(r'\d{14}-\d+-(\d+)/\d+-\d+', nc)
+                if match_nc:
+                    seq_compra = int(match_nc.group(1))
+
+            if not cnpj or not ano or not seq_compra:
                 continue
 
             # Buscar itens da compra
             try:
-                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens"
                 resp = req.get(url_itens, timeout=15, headers={"Accept": "application/json"})
                 if resp.status_code != 200:
                     continue
@@ -10735,7 +10750,7 @@ def vencedores_atas_edital(edital_id):
                     if not num_item:
                         continue
                     try:
-                        url_resultado = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
+                        url_resultado = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens/{num_item}/resultados"
                         resp_r = req.get(url_resultado, timeout=10, headers={"Accept": "application/json"})
                         if resp_r.status_code == 200:
                             resultados_item = resp_r.json()
@@ -10771,20 +10786,21 @@ def vencedores_atas_edital(edital_id):
         from datetime import datetime, date as date_type
         salvos_concorrentes = 0
         salvos_precos = 0
+        cnpjs_processados = {}  # cache para evitar duplicatas no mesmo batch
 
         empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
         empresa_id = empresa.id if empresa else None
 
         for res_ata in resultados:
             for v in res_ata.get("vencedores", []):
-                cnpj_venc = v.get("cnpj_vencedor")
+                cnpj_venc = (v.get("cnpj_vencedor") or "").replace(".", "").replace("/", "").replace("-", "")
                 nome_venc = v.get("vencedor")
                 if not nome_venc:
                     continue
 
-                # Criar/atualizar concorrente
-                concorrente = None
-                if cnpj_venc:
+                # Criar/atualizar concorrente (evitar duplicatas)
+                concorrente = cnpjs_processados.get(cnpj_venc) if cnpj_venc else None
+                if not concorrente and cnpj_venc:
                     concorrente = db.query(Concorrente).filter(Concorrente.cnpj == cnpj_venc).first()
                 if not concorrente and nome_venc:
                     concorrente = db.query(Concorrente).filter(Concorrente.nome.ilike(f"%{nome_venc[:20]}%")).first()
@@ -10792,23 +10808,22 @@ def vencedores_atas_edital(edital_id):
                     concorrente = Concorrente(
                         id=str(uuid.uuid4()),
                         nome=nome_venc,
-                        cnpj=cnpj_venc,
+                        cnpj=cnpj_venc or None,
                         editais_participados=1,
                         editais_ganhos=1,
                     )
                     db.add(concorrente)
+                    db.flush()  # Garante ID gerado antes de usar
                     salvos_concorrentes += 1
                 else:
                     concorrente.editais_participados = (concorrente.editais_participados or 0) + 1
                     concorrente.editais_ganhos = (concorrente.editais_ganhos or 0) + 1
 
-                # Salvar preço histórico (evitar duplicatas por cnpj+edital)
-                preco_existente = db.query(PrecoHistorico).filter(
-                    PrecoHistorico.cnpj_vencedor == cnpj_venc,
-                    PrecoHistorico.edital_id == edital_id,
-                ).first() if cnpj_venc else None
+                if cnpj_venc:
+                    cnpjs_processados[cnpj_venc] = concorrente
 
-                if not preco_existente:
+                # Salvar preço histórico
+                try:
                     preco_hist = PrecoHistorico(
                         id=str(uuid.uuid4()),
                         edital_id=edital_id,
@@ -10818,7 +10833,7 @@ def vencedores_atas_edital(edital_id):
                         preco_referencia=v.get("valor_estimado"),
                         preco_vencedor=v.get("valor_homologado"),
                         empresa_vencedora=nome_venc,
-                        cnpj_vencedor=cnpj_venc,
+                        cnpj_vencedor=cnpj_venc or None,
                         resultado="derrota",
                         fonte="pncp",
                         data_registro=datetime.now(),
@@ -10827,10 +10842,15 @@ def vencedores_atas_edital(edital_id):
                         preco_hist.desconto_percentual = round((1 - v["valor_homologado"] / v["valor_estimado"]) * 100, 2)
                     db.add(preco_hist)
                     salvos_precos += 1
+                except Exception:
+                    pass  # Ignora duplicatas
 
-        if salvos_concorrentes > 0 or salvos_precos > 0:
+        try:
             db.commit()
             print(f"[VENCEDORES] Salvos: {salvos_concorrentes} concorrentes, {salvos_precos} preços históricos")
+        except Exception:
+            db.rollback()
+            print("[VENCEDORES] Erro ao salvar, rollback")
 
         return jsonify({
             "success": True,
