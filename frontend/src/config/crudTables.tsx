@@ -1142,6 +1142,24 @@ export const propostasConfig: CrudPageConfig = {
 
 // === 7. CONCORRÊNCIA ===
 
+export const atasConsultadasConfig: CrudPageConfig = {
+  table: "atas-consultadas",
+  title: "Atas Consultadas",
+  icon: <FileText size={24} />,
+  fields: [
+    { name: "titulo", label: "Título", type: "text", width: "full" },
+    { name: "orgao", label: "Órgão", type: "text", width: "half" },
+    { name: "cnpj_orgao", label: "CNPJ Órgão", type: "text", width: "half" },
+    { name: "uf", label: "UF", type: "text", width: "quarter" },
+    { name: "ano", label: "Ano", type: "number", width: "quarter" },
+    { name: "seq_compra", label: "Seq. Compra", type: "number", width: "quarter" },
+    { name: "numero_controle_pncp", label: "Nº Controle PNCP", type: "text", width: "half" },
+    { name: "url_pncp", label: "URL Ata (PNCP)", type: "text", width: "half" },
+    { name: "url_edital_origem", label: "URL Edital Origem", type: "text", width: "half" },
+    { name: "data_publicacao", label: "Data Publicação", type: "date", width: "half" },
+  ],
+};
+
 export const concorrentesConfig: CrudPageConfig = {
   table: "concorrentes",
   title: "Concorrentes",
@@ -1520,6 +1538,7 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "editais-itens": editaisItensConfig,
   "analises": analisesConfig,
   "propostas": propostasConfig,
+  "atas-consultadas": atasConsultadasConfig,
   "concorrentes": concorrentesConfig,
   "precos-historicos": precosHistoricosConfig,
   "participacoes-editais": participacoesEditaisConfig,
