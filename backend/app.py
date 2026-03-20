@@ -10666,6 +10666,33 @@ def historico_vencedores_edital(edital_id):
         db.close()
 
 
+@app.route("/api/concorrentes/listar", methods=["GET"])
+@require_auth
+def listar_concorrentes_api():
+    """Lista concorrentes cadastrados com estatísticas."""
+    from models import Concorrente
+    db = get_db()
+    try:
+        concorrentes = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(20).all()
+        return jsonify({
+            "success": True,
+            "total": len(concorrentes),
+            "concorrentes": [{
+                "id": c.id,
+                "nome": c.nome,
+                "cnpj": c.cnpj,
+                "editais_participados": c.editais_participados or 0,
+                "editais_ganhos": c.editais_ganhos or 0,
+                "taxa_vitoria": round((c.editais_ganhos or 0) / max(c.editais_participados or 1, 1) * 100, 1),
+                "preco_medio": float(c.preco_medio) if c.preco_medio else None,
+            } for c in concorrentes],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/<edital_id>/vencedores-atas", methods=["POST"])
 @require_auth
 def vencedores_atas_edital(edital_id):

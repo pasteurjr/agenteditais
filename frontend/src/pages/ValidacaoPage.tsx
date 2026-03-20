@@ -289,6 +289,9 @@ export function ValidacaoPage(props?: PageProps) {
   // Vencedores detalhados das atas
   const [vencedoresAtas, setVencedoresAtas] = useState<Record<string, unknown> | null>(null);
   const [vencedoresAtasLoading, setVencedoresAtasLoading] = useState(false);
+  // Concorrentes
+  const [concorrentesLista, setConcorrentesLista] = useState<Record<string, unknown>[] | null>(null);
+  const [concorrentesLoading, setConcorrentesLoading] = useState(false);
 
   // Itens do edital
   const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
@@ -1648,6 +1651,72 @@ export function ValidacaoPage(props?: PageProps) {
           })()}
         </div>
 
+        {/* Concorrentes Conhecidos */}
+        <div className="section-block">
+          <h4><Building size={16} /> Concorrentes Conhecidos</h4>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
+            <ActionButton
+              icon={concorrentesLoading ? <RefreshCw size={14} className="spin" /> : <Search size={14} />}
+              label={concorrentesLoading ? "Carregando..." : (concorrentesLista ? "Atualizar" : "Carregar Concorrentes")}
+              variant="neutral"
+              loading={concorrentesLoading}
+              onClick={async () => {
+                setConcorrentesLoading(true);
+                try {
+                  const token = localStorage.getItem("editais_ia_access_token");
+                  const res = await fetch("/api/concorrentes/listar", {
+                    headers: { Authorization: token ? `Bearer ${token}` : "" },
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) setConcorrentesLista(data.concorrentes);
+                  }
+                } catch { /* silencioso */ }
+                finally { setConcorrentesLoading(false); }
+              }}
+            />
+            {!concorrentesLista && !concorrentesLoading && (
+              <span style={{ fontSize: "12px", color: "#64748b" }}>Exibe concorrentes identificados em atas e resultados anteriores.</span>
+            )}
+          </div>
+          {concorrentesLista && concorrentesLista.length > 0 && (
+            <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ backgroundColor: "#0f172a" }}>
+                  <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Concorrente</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Participações</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Vitórias</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Taxa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {concorrentesLista.map((c, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid #1e293b" }}>
+                    <td style={{ padding: "6px 8px" }}>
+                      <span>{String(c.nome || "").slice(0, 35)}</span>
+                      {c.cnpj && <span style={{ fontSize: "10px", color: "#64748b", marginLeft: "4px" }}>({String(c.cnpj).slice(0, 8)}...)</span>}
+                    </td>
+                    <td style={{ padding: "6px 8px", textAlign: "center" }}>{Number(c.editais_participados || 0)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "center", color: "#22c55e", fontWeight: 600 }}>{Number(c.editais_ganhos || 0)}</td>
+                    <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                      <span style={{
+                        padding: "2px 6px", borderRadius: "8px", fontSize: "11px", fontWeight: 600,
+                        backgroundColor: Number(c.taxa_vitoria || 0) >= 70 ? "#ef444420" : Number(c.taxa_vitoria || 0) >= 40 ? "#eab30820" : "#22c55e20",
+                        color: Number(c.taxa_vitoria || 0) >= 70 ? "#ef4444" : Number(c.taxa_vitoria || 0) >= 40 ? "#eab308" : "#22c55e",
+                      }}>
+                        {Number(c.taxa_vitoria || 0)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {concorrentesLista && concorrentesLista.length === 0 && (
+            <p style={{ fontSize: "13px", color: "#64748b" }}>Nenhum concorrente cadastrado. Busque vencedores das atas para identificar concorrentes.</p>
+          )}
+        </div>
+
         {/* Alerta de Recorrência */}
         {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
           <div className="section-block" style={{ backgroundColor: "#78350f20", borderRadius: "8px", padding: "16px", border: "1px solid #f59e0b40" }}>
@@ -1901,6 +1970,7 @@ export function ValidacaoPage(props?: PageProps) {
               setRiscosData(null);
               setHistoricoVencedores(null);
               setVencedoresAtas(null);
+              setConcorrentesLista(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}
