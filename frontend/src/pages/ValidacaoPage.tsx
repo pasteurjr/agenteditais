@@ -533,13 +533,18 @@ export function ValidacaoPage(props?: PageProps) {
     setResumoLoading(true);
     try {
       const token = localStorage.getItem("editais_ia_access_token");
+      const mensagem = `Resuma de forma objetiva este edital de licitação:
+- Número: ${selectedEdital.numero}
+- Órgão: ${selectedEdital.orgao} (${selectedEdital.uf})
+- Objeto: ${selectedEdital.objeto}
+- Valor estimado: R$ ${selectedEdital.valor ? selectedEdital.valor.toLocaleString("pt-BR") : "Não informado"}
+- Data de abertura: ${selectedEdital.dataAbertura || "Não informada"}
+
+Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos de atenção. Seja objetivo em 3-5 frases.`;
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          message: `Resuma de forma objetiva o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao} (${selectedEdital.uf}). Objeto: ${selectedEdital.objeto}. Valor estimado: R$ ${selectedEdital.valor.toLocaleString("pt-BR")}. Data de abertura: ${selectedEdital.dataAbertura}. Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos de atenção.`,
-          session_id: PAGE_SESSION_ID,
-        }),
+        body: JSON.stringify({ message: mensagem, session_id: PAGE_SESSION_ID }),
       });
       if (!res.ok) throw new Error("Erro ao chamar IA");
       const data = await res.json();
@@ -549,7 +554,6 @@ export function ValidacaoPage(props?: PageProps) {
       ));
       setSelectedEdital(prev => prev ? { ...prev, resumo: resumoGerado } : null);
     } catch {
-      // Fallback: mensagem de erro amigável
       const resumoFallback = "Não foi possível gerar o resumo via IA. Verifique sua conexão ou tente novamente.";
       setEditais(prev => prev.map(e =>
         e.id === selectedEdital.id ? { ...e, resumo: resumoFallback } : e
@@ -1941,26 +1945,66 @@ export function ValidacaoPage(props?: PageProps) {
         )}
       </div>
 
-      {/* Botões rápidos via chat */}
-      {onSendToChat && (
-        <div className="section-block">
-          <h4><Sparkles size={16} /> Acoes Rapidas via IA</h4>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <ActionButton
-              icon={<Target size={14} />}
-              label="Requisitos Tecnicos"
-              variant="neutral"
-              onClick={() => onSendToChat("Quais são os requisitos técnicos do edital " + edital.numero + "?")}
-            />
-            <ActionButton
-              icon={<ClipboardCheck size={14} />}
-              label="Classificar Edital"
-              variant="neutral"
-              onClick={() => onSendToChat("Classifique este edital: " + edital.objeto)}
-            />
-          </div>
+      {/* Ações Rápidas via IA — resposta na própria aba */}
+      <div className="section-block">
+        <h4><Sparkles size={16} /> Ações Rápidas via IA</h4>
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "8px" }}>
+          <ActionButton
+            icon={<Target size={14} />}
+            label={loading ? "Buscando..." : "Requisitos Técnicos"}
+            variant="neutral"
+            loading={loading}
+            onClick={async () => {
+              setLoading(true);
+              setResposta("");
+              setPergunta("Quais são os requisitos técnicos?");
+              try {
+                const token = localStorage.getItem("editais_ia_access_token");
+                const res = await fetch("/api/chat", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({
+                    message: `Sobre o edital ${edital.numero} do órgão ${edital.orgao}: Quais são os requisitos técnicos deste edital? Liste cada requisito técnico exigido.`,
+                    session_id: PAGE_SESSION_ID,
+                  }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setResposta(data.response || "Sem resposta.");
+                }
+              } catch { setResposta("Erro ao buscar requisitos técnicos."); }
+              finally { setLoading(false); }
+            }}
+          />
+          <ActionButton
+            icon={<ClipboardCheck size={14} />}
+            label={loading ? "Classificando..." : "Classificar Edital"}
+            variant="neutral"
+            loading={loading}
+            onClick={async () => {
+              setLoading(true);
+              setResposta("");
+              setPergunta("Classificar edital");
+              try {
+                const token = localStorage.getItem("editais_ia_access_token");
+                const res = await fetch("/api/chat", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({
+                    message: `Classifique este edital: ${edital.objeto}. Informe a categoria (comodato, venda, aluguel, consumo, serviço) e justifique.`,
+                    session_id: PAGE_SESSION_ID,
+                  }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setResposta(data.response || "Sem resposta.");
+                }
+              } catch { setResposta("Erro ao classificar edital."); }
+              finally { setLoading(false); }
+            }}
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 
