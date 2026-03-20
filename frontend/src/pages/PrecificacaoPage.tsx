@@ -275,18 +275,40 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleConfirmarSelecao = async (produtoId: string) => {
     try {
-      await crudCreate("edital-item-produto", {
-        edital_item_id: selecaoItemId,
-        produto_id: produtoId,
-        match_score: 100,
-        confirmado: true,
-      });
+      // Se já existe vínculo para este item, deletar primeiro
+      const existente = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === selecaoItemId);
+      if (existente) {
+        try {
+          await crudUpdate("edital-item-produto", existente.id, {
+            produto_id: produtoId,
+            match_score: 100,
+            confirmado: true,
+          });
+        } catch {
+          // Se update falha (ex: constraint), deletar e recriar
+          const { crudDelete } = await import("../api/crud");
+          await crudDelete("edital-item-produto", existente.id);
+          await crudCreate("edital-item-produto", {
+            edital_item_id: selecaoItemId,
+            produto_id: produtoId,
+            match_score: 100,
+            confirmado: true,
+          });
+        }
+      } else {
+        await crudCreate("edital-item-produto", {
+          edital_item_id: selecaoItemId,
+          produto_id: produtoId,
+          match_score: 100,
+          confirmado: true,
+        });
+      }
       setShowSelecaoModal(false);
       loadLotes(editalId);
       alert("Produto vinculado com sucesso!");
     } catch (err) {
       console.error("[SELECAO] Erro:", err);
-      alert("Erro ao vincular produto. Pode já estar vinculado.");
+      alert("Erro ao vincular produto.");
     }
   };
 
