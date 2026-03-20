@@ -1494,7 +1494,7 @@ export function ValidacaoPage(props?: PageProps) {
 
         {/* Histórico de Vencedores (RF-034) */}
         <div className="section-block">
-          <h4><History size={16} /> Histórico de Atas e Vencedores</h4>
+          <h4><Clock size={16} /> Histórico de Atas e Vencedores</h4>
           <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
             <ActionButton
               icon={historicoVencedoresLoading ? <RefreshCw size={14} className="spin" /> : <Search size={14} />}
