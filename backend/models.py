@@ -2324,6 +2324,8 @@ def init_db():
             "ALTER TABLE parametros_score ADD COLUMN limiar_tecnico_nogo DECIMAL(5,2) DEFAULT 30.0",
             "ALTER TABLE parametros_score ADD COLUMN limiar_juridico_go DECIMAL(5,2) DEFAULT 60.0",
             "ALTER TABLE parametros_score ADD COLUMN limiar_juridico_nogo DECIMAL(5,2) DEFAULT 30.0",
+            # PrecoHistorico: vinculação com ata consultada
+            "ALTER TABLE precos_historicos ADD COLUMN ata_consultada_id VARCHAR(36) NULL",
         ]
         for stmt in alter_stmts:
             try:
