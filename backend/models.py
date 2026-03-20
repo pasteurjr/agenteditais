@@ -829,8 +829,12 @@ class PrecoHistorico(Base):
     # Fonte do dado
     fonte = Column(Enum('manual', 'pncp', 'ata_pdf', 'painel_precos'), nullable=True)
 
+    # Vinculo com ata consultada (edital de origem real do preço)
+    ata_consultada_id = Column(String(36), ForeignKey('atas_consultadas.id', ondelete='SET NULL'), nullable=True)
+
     concorrente = relationship("Concorrente", back_populates="precos_historicos")
     user = relationship("User", back_populates="precos_historicos")
+    ata_consultada = relationship("AtaConsultada", back_populates="precos_historicos")
 
     def to_dict(self):
         return {
@@ -846,6 +850,48 @@ class PrecoHistorico(Base):
             "motivo_perda": self.motivo_perda,
             "data_homologacao": self.data_homologacao.isoformat() if self.data_homologacao else None,
             "fonte": self.fonte,
+        }
+
+
+class AtaConsultada(Base):
+    """Atas de registro de preço consultadas no PNCP"""
+    __tablename__ = 'atas_consultadas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)  # Edital que motivou a consulta
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    numero_controle_pncp = Column(String(100), nullable=True, unique=True)
+    titulo = Column(String(255), nullable=True)
+    orgao = Column(String(255), nullable=True)
+    cnpj_orgao = Column(String(20), nullable=True)
+    uf = Column(String(2), nullable=True)
+    ano = Column(Integer, nullable=True)
+    seq_compra = Column(Integer, nullable=True)
+    url_pncp = Column(String(500), nullable=True)
+    url_edital_origem = Column(String(500), nullable=True)
+    data_publicacao = Column(DateTime, nullable=True)
+    data_vigencia_inicio = Column(Date, nullable=True)
+    data_vigencia_fim = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    edital = relationship("Edital", backref="atas_consultadas")
+    precos_historicos = relationship("PrecoHistorico", back_populates="ata_consultada")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "numero_controle_pncp": self.numero_controle_pncp,
+            "titulo": self.titulo,
+            "orgao": self.orgao,
+            "cnpj_orgao": self.cnpj_orgao,
+            "uf": self.uf,
+            "ano": self.ano,
+            "seq_compra": self.seq_compra,
+            "url_pncp": self.url_pncp,
+            "url_edital_origem": self.url_edital_origem,
+            "data_publicacao": self.data_publicacao.isoformat() if self.data_publicacao else None,
         }
 
 

@@ -10531,7 +10531,7 @@ def documentacao_necessaria(edital_id):
 @require_auth
 def analisar_riscos_edital(edital_id):
     """Análise completa de riscos: PDF via IA + atas + vencedores + concorrentes."""
-    from models import Edital, EditalDocumento, Concorrente, PrecoHistorico, Produto
+    from models import Edital, EditalDocumento, Concorrente, PrecoHistorico, Produto, AtaConsultada
     from tools import _extrair_json_object, tool_buscar_atas_pncp
     import requests as req
     import re as _re
@@ -10573,6 +10573,7 @@ def analisar_riscos_edital(edital_id):
         salvos_concorrentes = 0
         salvos_precos = 0
 
+        salvos_atas = 0
         for ata in atas[:5]:
             cnpj = ata.get("cnpj_orgao") or ""
             ano = ata.get("ano")
@@ -10581,6 +10582,37 @@ def analisar_riscos_edital(edital_id):
             seq_compra = int(match_url.group(1)) if match_url else None
             if not cnpj or not ano or not seq_compra:
                 continue
+
+            # Salvar ata no banco (evitar duplicata por numero_controle)
+            nc = ata.get("numero_controle") or ""
+            ata_db = db.query(AtaConsultada).filter(AtaConsultada.numero_controle_pncp == nc).first() if nc else None
+            if not ata_db:
+                url_edital_origem = f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq_compra}"
+                dp = ata.get("data_publicacao")
+                dt_pub = None
+                if dp:
+                    try:
+                        dt_pub = datetime.fromisoformat(str(dp).replace("Z", "")[:19])
+                    except (ValueError, TypeError):
+                        pass
+                ata_db = AtaConsultada(
+                    id=str(uuid.uuid4()),
+                    edital_id=edital_id,
+                    user_id=user_id,
+                    numero_controle_pncp=nc or None,
+                    titulo=ata.get("titulo"),
+                    orgao=ata.get("orgao"),
+                    cnpj_orgao=cnpj,
+                    uf=ata.get("uf"),
+                    ano=ano,
+                    seq_compra=seq_compra,
+                    url_pncp=url_pncp,
+                    url_edital_origem=url_edital_origem,
+                    data_publicacao=dt_pub,
+                )
+                db.add(ata_db)
+                db.flush()
+                salvos_atas += 1
             try:
                 url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens"
                 resp = req.get(url_itens, timeout=15, headers={"Accept": "application/json"})
@@ -10635,6 +10667,7 @@ def analisar_riscos_edital(edital_id):
                                             id=str(uuid.uuid4()), edital_id=edital_id, user_id=user_id,
                                             empresa_id=empresa_id, concorrente_id=conc.id,
                                             produto_id=produto_match.id if produto_match else None,
+                                            ata_consultada_id=ata_db.id,
                                             preco_referencia=item.get("valorUnitarioEstimado"),
                                             preco_vencedor=r.get("valorUnitarioHomologado"),
                                             empresa_vencedora=nome_venc, cnpj_vencedor=cnpj_venc,
@@ -10660,7 +10693,7 @@ def analisar_riscos_edital(edital_id):
         # Commit concorrentes e preços
         try:
             db.commit()
-            print(f"[RISCOS] Salvos: {salvos_concorrentes} concorrentes, {salvos_precos} preços")
+            print(f"[RISCOS] Salvos: {salvos_atas} atas, {salvos_concorrentes} concorrentes, {salvos_precos} preços")
         except Exception:
             db.rollback()
 
@@ -10758,7 +10791,7 @@ ANÁLISE DE RISCOS (JSON):"""
             # Concorrentes
             "concorrentes": concorrentes_lista,
             # Salvos
-            "salvos": {"concorrentes": salvos_concorrentes, "precos": salvos_precos},
+            "salvos": {"atas": salvos_atas, "concorrentes": salvos_concorrentes, "precos": salvos_precos},
         })
 
     except Exception as e:
