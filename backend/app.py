@@ -10530,9 +10530,13 @@ def documentacao_necessaria(edital_id):
 @app.route("/api/editais/<edital_id>/analisar-riscos", methods=["POST"])
 @require_auth
 def analisar_riscos_edital(edital_id):
-    """Analisa riscos do edital via IA a partir do PDF já baixado."""
-    from models import Edital, EditalDocumento
-    from tools import _extrair_json_object
+    """Análise completa de riscos: PDF via IA + atas + vencedores + concorrentes."""
+    from models import Edital, EditalDocumento, Concorrente, PrecoHistorico, Produto
+    from tools import _extrair_json_object, tool_buscar_atas_pncp
+    import requests as req
+    import re as _re
+    from datetime import datetime
+
     user_id = get_current_user_id()
     db = get_db()
     try:
@@ -10540,60 +10544,217 @@ def analisar_riscos_edital(edital_id):
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
+        # === PASSO 1: Identificar produto match ===
+        produto_match = None
+        analise_existente = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.user_id == user_id).first()
+        if analise_existente and analise_existente.produto_id:
+            produto_match = db.query(Produto).filter(Produto.id == analise_existente.produto_id).first()
+        if not produto_match:
+            produto_match = db.query(Produto).filter(Produto.user_id == user_id).first()
+
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = empresa.id if empresa else None
+
+        # === PASSO 2: Buscar atas no PNCP ===
+        termo_ata = produto_match.nome if produto_match else (edital.objeto or "")[:30]
+        print(f"[RISCOS] Buscando atas para: {termo_ata}")
+        atas_resultado = tool_buscar_atas_pncp(termo_ata, user_id)
+        atas = atas_resultado.get("atas", []) if atas_resultado.get("success") else []
+        print(f"[RISCOS] {len(atas)} atas encontradas")
+
+        # === PASSO 3: Buscar vencedores e preços das atas ===
+        vencedores_todos = []
+        cnpjs_processados = {}
+        salvos_concorrentes = 0
+        salvos_precos = 0
+
+        for ata in atas[:5]:
+            cnpj = ata.get("cnpj_orgao") or ""
+            ano = ata.get("ano")
+            url_pncp = ata.get("url_pncp") or ""
+            match_url = _re.search(r'/atas/\d+/\d+/(\d+)/\d+', url_pncp)
+            seq_compra = int(match_url.group(1)) if match_url else None
+            if not cnpj or not ano or not seq_compra:
+                continue
+            try:
+                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens"
+                resp = req.get(url_itens, timeout=15, headers={"Accept": "application/json"})
+                if resp.status_code != 200:
+                    continue
+                itens = resp.json()
+                if not isinstance(itens, list):
+                    continue
+                vencedores_ata = []
+                for item in itens[:10]:
+                    num_item = item.get("numeroItem")
+                    if not num_item:
+                        continue
+                    try:
+                        url_r = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens/{num_item}/resultados"
+                        resp_r = req.get(url_r, timeout=10, headers={"Accept": "application/json"})
+                        if resp_r.status_code == 200:
+                            res_item = resp_r.json()
+                            if isinstance(res_item, list) and res_item:
+                                r = res_item[0]
+                                cnpj_venc = (r.get("niFornecedor") or "").replace(".", "").replace("/", "").replace("-", "")
+                                nome_venc = r.get("nomeRazaoSocialFornecedor")
+                                vencedores_ata.append({
+                                    "item": num_item,
+                                    "descricao": str(item.get("descricao", ""))[:80],
+                                    "quantidade": item.get("quantidade"),
+                                    "valor_estimado": item.get("valorUnitarioEstimado"),
+                                    "vencedor": nome_venc,
+                                    "cnpj_vencedor": cnpj_venc,
+                                    "valor_homologado": r.get("valorUnitarioHomologado"),
+                                    "qtd_homologada": r.get("quantidadeHomologada"),
+                                    "valor_total_homologado": r.get("valorTotalHomologado"),
+                                    "porte": r.get("porteFornecedorNome"),
+                                })
+                                # Salvar concorrente
+                                if nome_venc and cnpj_venc:
+                                    conc = cnpjs_processados.get(cnpj_venc)
+                                    if not conc:
+                                        conc = db.query(Concorrente).filter(Concorrente.cnpj == cnpj_venc).first()
+                                    if not conc:
+                                        conc = Concorrente(id=str(uuid.uuid4()), nome=nome_venc, cnpj=cnpj_venc, editais_participados=1, editais_ganhos=1)
+                                        db.add(conc)
+                                        db.flush()
+                                        salvos_concorrentes += 1
+                                    else:
+                                        conc.editais_participados = (conc.editais_participados or 0) + 1
+                                        conc.editais_ganhos = (conc.editais_ganhos or 0) + 1
+                                    cnpjs_processados[cnpj_venc] = conc
+                                    # Salvar preço histórico
+                                    try:
+                                        ph = PrecoHistorico(
+                                            id=str(uuid.uuid4()), edital_id=edital_id, user_id=user_id,
+                                            empresa_id=empresa_id, concorrente_id=conc.id,
+                                            produto_id=produto_match.id if produto_match else None,
+                                            preco_referencia=item.get("valorUnitarioEstimado"),
+                                            preco_vencedor=r.get("valorUnitarioHomologado"),
+                                            empresa_vencedora=nome_venc, cnpj_vencedor=cnpj_venc,
+                                            resultado="derrota", fonte="pncp", data_registro=datetime.now(),
+                                        )
+                                        if item.get("valorUnitarioEstimado") and r.get("valorUnitarioHomologado") and item["valorUnitarioEstimado"] > 0:
+                                            ph.desconto_percentual = round((1 - r["valorUnitarioHomologado"] / item["valorUnitarioEstimado"]) * 100, 2)
+                                        db.add(ph)
+                                        salvos_precos += 1
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+                if vencedores_ata:
+                    vencedores_todos.append({
+                        "ata_titulo": ata.get("titulo") or f"Ata {ano}",
+                        "orgao": ata.get("orgao"), "uf": ata.get("uf"),
+                        "vencedores": vencedores_ata,
+                    })
+            except Exception:
+                pass
+
+        # Commit concorrentes e preços
+        try:
+            db.commit()
+            print(f"[RISCOS] Salvos: {salvos_concorrentes} concorrentes, {salvos_precos} preços")
+        except Exception:
+            db.rollback()
+
+        # === PASSO 4: Calcular recorrência ===
+        datas = []
+        for ata in atas:
+            dp = ata.get("data_publicacao") or ata.get("data_assinatura")
+            if dp:
+                try:
+                    dt = datetime.fromisoformat(str(dp).replace("Z", "")[:19])
+                    datas.append(dt)
+                except (ValueError, TypeError):
+                    pass
+        frequencia = None
+        if len(datas) >= 2:
+            datas.sort()
+            diffs = [(datas[i+1] - datas[i]).days for i in range(len(datas)-1)]
+            media_dias = sum(diffs) / len(diffs) if diffs else 0
+            frequencia = "semestral" if media_dias <= 200 else "anual" if media_dias <= 400 else "esporadica"
+
+        # === PASSO 5: Montar contexto competitivo para IA ===
+        contexto_competitivo = ""
+        if vencedores_todos:
+            nomes_venc = {}
+            for va in vencedores_todos:
+                for v in va["vencedores"]:
+                    n = v.get("vencedor", "")
+                    if n:
+                        nomes_venc[n] = nomes_venc.get(n, 0) + 1
+            top_conc = sorted(nomes_venc.items(), key=lambda x: -x[1])[:3]
+            contexto_competitivo = f"\n\nCONTEXTO COMPETITIVO:\n"
+            contexto_competitivo += f"- {len(atas)} atas encontradas no PNCP para produto similar\n"
+            if frequencia:
+                contexto_competitivo += f"- Recorrência: {frequencia}\n"
+            for nome, cnt in top_conc:
+                contexto_competitivo += f"- Concorrente: {nome} ({cnt} vitória(s))\n"
+
+        # === PASSO 6: Análise via IA do PDF ===
         doc = db.query(EditalDocumento).filter(
             EditalDocumento.edital_id == edital_id,
             EditalDocumento.texto_extraido != None
         ).first()
 
-        if not doc or not doc.texto_extraido or len(doc.texto_extraido) < 200:
-            return jsonify({"error": "Edital sem PDF com texto extraído. Baixe o PDF primeiro.", "sem_pdf": True}), 400
-
-        prompt = f"""Você é um especialista em análise de riscos em editais de licitação pública brasileira.
+        analise_ia = {}
+        if doc and doc.texto_extraido and len(doc.texto_extraido) >= 200:
+            prompt = f"""Você é um especialista em análise de riscos em editais de licitação pública brasileira.
 
 Analise o texto do edital abaixo e extraia uma análise completa de riscos.
-
+{contexto_competitivo}
 Retorne APENAS um JSON válido (sem texto adicional) com esta estrutura:
 {{
-  "modalidade": "tipo da modalidade (pregao_eletronico, dispensa, concorrencia, etc.)",
-  "prazo_pagamento": "prazo de pagamento mencionado no edital (ex: 30 dias, 45 dias) ou 'Não informado'",
-  "sinais_mercado": ["lista de sinais relevantes detectados (ex: 'Valor estimado muito baixo', 'Prazo de entrega curto', 'Exigências técnicas restritivas')"],
-  "riscos": [
-    {{
-      "tipo": "juridico|tecnico|financeiro|logistico",
-      "descricao": "descrição clara do risco identificado",
-      "severidade": "alto|medio|baixo",
-      "mitigacao": "sugestão de como mitigar ou contornar este risco"
-    }}
-  ],
-  "fatal_flaws": ["lista de problemas CRÍTICOS que podem impedir a participação (ex: 'Exigência de marca específica', 'Prazo impossível de cumprir')"],
-  "flags_juridicos": ["lista de cláusulas restritivas ou questionáveis juridicamente"],
-  "trechos_relevantes": [
-    {{
-      "trecho": "trecho exato ou resumido do edital (máx 150 chars)",
-      "tipo": "risco|oportunidade|alerta",
-      "comentario": "comentário analítico da IA sobre este trecho"
-    }}
-  ]
+  "modalidade": "tipo da modalidade",
+  "prazo_pagamento": "prazo de pagamento ou 'Não informado'",
+  "sinais_mercado": ["sinais relevantes detectados"],
+  "riscos": [{{"tipo": "juridico|tecnico|financeiro|logistico", "descricao": "...", "severidade": "alto|medio|baixo", "mitigacao": "..."}}],
+  "fatal_flaws": ["problemas CRÍTICOS que impedem participação"],
+  "flags_juridicos": ["cláusulas restritivas"],
+  "trechos_relevantes": [{{"trecho": "trecho do edital (máx 150 chars)", "tipo": "risco|oportunidade|alerta", "comentario": "comentário analítico"}}]
 }}
 
 REGRAS:
-- Identifique pelo menos 3-5 riscos de diferentes categorias
-- Fatal flaws são RAROS — só liste se realmente houver impedimento crítico
-- Trechos relevantes: selecione 3-8 trechos mais importantes
-- Seja objetivo e prático nas mitigações
+- 3-5 riscos de diferentes categorias. Se há dados competitivos, inclua riscos de concorrência.
+- Fatal flaws são RAROS
+- 3-8 trechos relevantes
+- Mitigações objetivas e práticas
 
 TEXTO DO EDITAL:
 {doc.texto_extraido[:20000]}
 
 ANÁLISE DE RISCOS (JSON):"""
 
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000, model_override="deepseek-chat")
-        resultado = _extrair_json_object(resposta)
+            resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000, model_override="deepseek-chat")
+            analise_ia = _extrair_json_object(resposta)
 
-        if not resultado:
-            return jsonify({"error": "IA não retornou análise válida"}), 500
+        # === PASSO 7: Carregar concorrentes do banco ===
+        concorrentes_db = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(20).all()
+        concorrentes_lista = [{
+            "nome": c.nome, "cnpj": c.cnpj,
+            "editais_participados": c.editais_participados or 0,
+            "editais_ganhos": c.editais_ganhos or 0,
+            "taxa_vitoria": round((c.editais_ganhos or 0) / max(c.editais_participados or 1, 1) * 100, 1),
+        } for c in concorrentes_db]
 
-        return jsonify({"success": True, **resultado})
+        # === RETORNAR TUDO ===
+        return jsonify({
+            "success": True,
+            # Análise IA
+            **analise_ia,
+            # Atas
+            "atas": atas[:10],
+            "frequencia": frequencia,
+            "termo_ata": termo_ata,
+            # Vencedores
+            "vencedores_resultados": vencedores_todos,
+            # Concorrentes
+            "concorrentes": concorrentes_lista,
+            # Salvos
+            "salvos": {"concorrentes": salvos_concorrentes, "precos": salvos_precos},
+        })
 
     except Exception as e:
         import traceback

@@ -1346,9 +1346,12 @@ export function ValidacaoPage(props?: PageProps) {
     </div>
   );
 
-  // Aba 3: Riscos — análise via IA do PDF do edital
+  // Aba 3: Riscos — análise completa (PDF + atas + vencedores + concorrentes)
   const handleAnalisarRiscos = async (editalId: string) => {
     setRiscosLoading(true);
+    setHistoricoVencedores(null);
+    setVencedoresAtas(null);
+    setConcorrentesLista(null);
     try {
       const token = localStorage.getItem("editais_ia_access_token");
       const res = await fetch(`/api/editais/${editalId}/analisar-riscos`, {
@@ -1359,6 +1362,10 @@ export function ValidacaoPage(props?: PageProps) {
         const data = await res.json();
         if (data.success) {
           setRiscosData(data);
+          // Popular dados de atas, vencedores e concorrentes do resultado unificado
+          if (data.atas) setHistoricoVencedores({ atas: data.atas, frequencia: data.frequencia, termo: data.termo_ata });
+          if (data.vencedores_resultados) setVencedoresAtas({ resultados: data.vencedores_resultados });
+          if (data.concorrentes) setConcorrentesLista(data.concorrentes);
         } else {
           alert(data.error || "Erro na análise de riscos");
         }
@@ -1498,13 +1505,14 @@ export function ValidacaoPage(props?: PageProps) {
           </div>
         )}
 
-        {/* Histórico de Vencedores (RF-034) */}
+        {/* Histórico de Vencedores (RF-034) — só aparece após análise */}
+        {riscosData && (
         <div className="section-block">
           <h4><Clock size={16} /> Histórico de Atas e Vencedores</h4>
           <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
             <ActionButton
               icon={historicoVencedoresLoading ? <RefreshCw size={14} className="spin" /> : <Search size={14} />}
-              label={historicoVencedoresLoading ? "Buscando..." : (historicoVencedores ? "Rebuscar Atas" : "Buscar Atas no PNCP")}
+              label={historicoVencedoresLoading ? "Buscando..." : "Rebuscar Atas"}
               variant="neutral"
               loading={historicoVencedoresLoading}
               onClick={async () => {
@@ -1650,14 +1658,16 @@ export function ValidacaoPage(props?: PageProps) {
             );
           })()}
         </div>
+        )}
 
-        {/* Concorrentes Conhecidos */}
+        {/* Concorrentes Conhecidos — só aparece após análise */}
+        {riscosData && (
         <div className="section-block">
           <h4><Building size={16} /> Concorrentes Conhecidos</h4>
           <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px" }}>
             <ActionButton
               icon={concorrentesLoading ? <RefreshCw size={14} className="spin" /> : <Search size={14} />}
-              label={concorrentesLoading ? "Carregando..." : (concorrentesLista ? "Atualizar" : "Carregar Concorrentes")}
+              label={concorrentesLoading ? "Atualizando..." : "Atualizar"}
               variant="neutral"
               loading={concorrentesLoading}
               onClick={async () => {
@@ -1675,9 +1685,7 @@ export function ValidacaoPage(props?: PageProps) {
                 finally { setConcorrentesLoading(false); }
               }}
             />
-            {!concorrentesLista && !concorrentesLoading && (
-              <span style={{ fontSize: "12px", color: "#64748b" }}>Exibe concorrentes identificados em atas e resultados anteriores.</span>
-            )}
+            <span style={{ fontSize: "12px", color: "#64748b" }}>Concorrentes identificados em atas e resultados anteriores.</span>
           </div>
           {concorrentesLista && concorrentesLista.length > 0 && (
             <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
@@ -1716,6 +1724,7 @@ export function ValidacaoPage(props?: PageProps) {
             <p style={{ fontSize: "13px", color: "#64748b" }}>Nenhum concorrente cadastrado. Busque vencedores das atas para identificar concorrentes.</p>
           )}
         </div>
+        )}
 
         {/* Alerta de Recorrência */}
         {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
