@@ -128,6 +128,10 @@ export function PrecificacaoPage(props?: PageProps) {
   const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
   const [loteEspecialidade, setLoteEspecialidade] = useState("");
   const [loteVolume, setLoteVolume] = useState("");
+  const [loteDescricao, setLoteDescricao] = useState("");
+  const [loteTipoAmostra, setLoteTipoAmostra] = useState("");
+  const [loteEquipamento, setLoteEquipamento] = useState("");
+  const [loteObservacoes, setLoteObservacoes] = useState("");
 
   // ── Tab: Camadas (UC-P02 a UC-P06) ──
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
@@ -254,8 +258,11 @@ export function PrecificacaoPage(props?: PageProps) {
   const handleSalvarLote = async (loteId: string) => {
     try {
       await crudUpdate("lotes", loteId, {
-        especialidade: loteEspecialidade,
-        volume_exigido: loteVolume ? Number(loteVolume) : null,
+        especialidade: loteEspecialidade || undefined,
+        volume_exigido: loteVolume ? Number(loteVolume) : undefined,
+        tipo_amostra: loteTipoAmostra || undefined,
+        equipamento_exigido: loteEquipamento || undefined,
+        observacoes_tecnicas: loteObservacoes || undefined,
         status: "configurado",
       });
       loadLotes(editalId);
@@ -575,7 +582,17 @@ export function PrecificacaoPage(props?: PageProps) {
                           {lotes.map((lote) => (
                             <div key={lote.id} className="card" style={{ marginBottom: 8, padding: 12 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                                onClick={() => setLoteExpandido(loteExpandido === lote.id ? null : lote.id)}>
+                                onClick={() => {
+                                  const novoId = loteExpandido === lote.id ? null : lote.id;
+                                  setLoteExpandido(novoId);
+                                  if (novoId) {
+                                    setLoteEspecialidade(lote.especialidade || "");
+                                    setLoteVolume(String(lote.volume_exigido || ""));
+                                    setLoteTipoAmostra(String((lote as Record<string,unknown>).tipo_amostra || ""));
+                                    setLoteEquipamento(String((lote as Record<string,unknown>).equipamento_exigido || ""));
+                                    setLoteObservacoes(String((lote as Record<string,unknown>).observacoes_tecnicas || ""));
+                                  }
+                                }}>
                                 <div>
                                   <strong>Lote {lote.numero_lote}</strong> — {lote.nome || "Sem nome"}
                                   <span className={`status-badge status-badge-${lote.status === "configurado" ? "success" : "warning"}`} style={{ marginLeft: 8 }}>
@@ -591,14 +608,25 @@ export function PrecificacaoPage(props?: PageProps) {
                                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
                                   <div className="form-grid form-grid-3">
                                     <FormField label="Especialidade">
-                                      <TextInput value={loteEspecialidade || lote.especialidade || ""} onChange={setLoteEspecialidade} placeholder="Ex: Hematologia" />
+                                      <TextInput value={loteEspecialidade || lote.especialidade || ""} onChange={setLoteEspecialidade} placeholder="Ex: Hematologia, Microscopia" />
                                     </FormField>
-                                    <FormField label="Volume Exigido">
+                                    <FormField label="Volume Exigido (testes/unidades)">
                                       <TextInput value={loteVolume || String(lote.volume_exigido || "")} onChange={setLoteVolume} placeholder="Ex: 50000" />
                                     </FormField>
-                                    <div className="form-field-actions">
-                                      <ActionButton icon={<Check size={16} />} label="Atualizar Lote" variant="primary" onClick={() => handleSalvarLote(lote.id)} />
-                                    </div>
+                                    <FormField label="Tipo de Amostra">
+                                      <TextInput value={loteTipoAmostra || String((lote as Record<string,unknown>).tipo_amostra || "")} onChange={setLoteTipoAmostra} placeholder="Ex: Sangue total, Soro, Urina" />
+                                    </FormField>
+                                  </div>
+                                  <div className="form-grid form-grid-2" style={{ marginTop: 8 }}>
+                                    <FormField label="Equipamento Exigido">
+                                      <TextInput value={loteEquipamento || String((lote as Record<string,unknown>).equipamento_exigido || "")} onChange={setLoteEquipamento} placeholder="Ex: Analisador bioquímico, Microscópio" />
+                                    </FormField>
+                                    <FormField label="Descrição / Observações Técnicas">
+                                      <TextInput value={loteObservacoes || String((lote as Record<string,unknown>).observacoes_tecnicas || "")} onChange={setLoteObservacoes} placeholder="Observações sobre o lote" />
+                                    </FormField>
+                                  </div>
+                                  <div style={{ marginTop: 8 }}>
+                                    <ActionButton icon={<Check size={16} />} label="Atualizar Lote" variant="primary" onClick={() => handleSalvarLote(lote.id)} />
                                   </div>
 
                                   {/* Itens deste lote */}
