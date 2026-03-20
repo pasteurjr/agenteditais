@@ -1765,73 +1765,9 @@ export function ValidacaoPage(props?: PageProps) {
         </div>
       </div>
 
-      {/* Historico Semelhante — V3: dados reais do mesmo órgão (movido da Cognitiva) */}
-      <div className="section-block">
-        <h4><Clock size={16} /> Historico de Editais Semelhantes</h4>
-        {historicoRealLoading ? (
-          <p className="empty-message">Buscando editais semelhantes...</p>
-        ) : historicoReal.length > 0 ? (
-          <div className="historico-list">
-            {historicoReal.map((h) => (
-              <div key={h.id} className="historico-item" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <span className="historico-nome" style={{ fontWeight: 600 }}>
-                  Edital {h.numero || h.id}
-                </span>
-                {h.decisao && (
-                  <StatusBadge
-                    status={h.decisao.toLowerCase().includes("go") && !h.decisao.toLowerCase().includes("no") ? "success" : h.decisao.toLowerCase().includes("no") ? "error" : "warning"}
-                    label={`Decisao: ${h.decisao}`}
-                    size="small"
-                  />
-                )}
-                {h.score !== undefined && h.score > 0 && (
-                  <span style={{ fontSize: "12px", color: "#94a3b8" }}>Score: {h.score}%</span>
-                )}
-                {h.objeto && (
-                  <span style={{ fontSize: "12px", color: "#64748b", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {h.objeto.length > 60 ? h.objeto.substring(0, 60) + "..." : h.objeto}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : edital.historicoSemelhante.length > 0 ? (
-          /* Fallback: dados originais do backend se a busca real não trouxe nada */
-          <div className="historico-list">
-            {edital.historicoSemelhante.map((h, i) => (
-              <div key={i} className="historico-item">
-                <StatusBadge
-                  status={h.resultado === "vencida" ? "success" : h.resultado === "perdida" ? "error" : "neutral"}
-                  label={h.resultado === "vencida" ? "Vencida" : h.resultado === "perdida" ? "Perdida" : "Cancelada"}
-                  size="small"
-                />
-                <span className="historico-nome">{h.nome}</span>
-                {h.motivo && <span className="historico-motivo">{h.motivo}</span>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-message">Nenhum edital semelhante encontrado no historico.</p>
-        )}
-      </div>
-
-      {/* Botões: Buscar Preços + Analisar Concorrentes */}
-      {onSendToChat && (
-        <div className="section-block" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <ActionButton
-            icon={<Search size={14} />}
-            label="Buscar Precos"
-            variant="primary"
-            onClick={() => onSendToChat("Busque preços de " + edital.objeto + " no PNCP")}
-          />
-          <ActionButton
-            icon={<Building size={14} />}
-            label="Analisar Concorrentes"
-            variant="neutral"
-            onClick={() => onSendToChat("Liste os concorrentes conhecidos")}
-          />
-        </div>
-      )}
+      <p style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", marginTop: "8px" }}>
+        Histórico de editais semelhantes, atas e concorrentes estão disponíveis na aba Riscos. Preços e análise de concorrentes detalhada serão implementados na etapa de Precificação.
+      </p>
     </div>
   );
 
@@ -1884,24 +1820,6 @@ export function ValidacaoPage(props?: PageProps) {
               label="Classificar Edital"
               variant="neutral"
               onClick={() => onSendToChat("Classifique este edital: " + edital.objeto)}
-            />
-            <ActionButton
-              icon={<FileText size={14} />}
-              label="Gerar Proposta"
-              variant="primary"
-              onClick={() => onSendToChat("Gere uma proposta do produto " + (edital.produtoCorrespondente || "[produto]") + " para o edital " + edital.numero)}
-            />
-            <ActionButton
-              icon={<Download size={14} />}
-              label="Baixar PDF do Edital"
-              variant="neutral"
-              onClick={() => onSendToChat("Baixe o PDF do edital " + edital.numero)}
-            />
-            <ActionButton
-              icon={<Search size={14} />}
-              label="Buscar Itens"
-              variant="neutral"
-              onClick={() => onSendToChat("Busque os itens do edital " + edital.numero)}
             />
           </div>
         </div>
