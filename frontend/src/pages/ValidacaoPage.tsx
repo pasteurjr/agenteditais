@@ -286,6 +286,9 @@ export function ValidacaoPage(props?: PageProps) {
   // Histórico de vencedores
   const [historicoVencedores, setHistoricoVencedores] = useState<Record<string, unknown> | null>(null);
   const [historicoVencedoresLoading, setHistoricoVencedoresLoading] = useState(false);
+  // Vencedores detalhados das atas
+  const [vencedoresAtas, setVencedoresAtas] = useState<Record<string, unknown> | null>(null);
+  const [vencedoresAtasLoading, setVencedoresAtasLoading] = useState(false);
 
   // Itens do edital
   const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
@@ -1560,6 +1563,81 @@ export function ValidacaoPage(props?: PageProps) {
                 ) : (
                   <p style={{ fontSize: "13px", color: "#64748b" }}>Nenhuma ata encontrada para este objeto.</p>
                 )}
+
+                {/* Botão Buscar Vencedores */}
+                {atas.length > 0 && (
+                  <div style={{ marginTop: "12px" }}>
+                    <ActionButton
+                      icon={vencedoresAtasLoading ? <RefreshCw size={14} className="spin" /> : <TrendingUp size={14} />}
+                      label={vencedoresAtasLoading ? "Buscando vencedores..." : (vencedoresAtas ? "Rebuscar Vencedores e Preços" : "Buscar Vencedores e Preços")}
+                      variant="primary"
+                      loading={vencedoresAtasLoading}
+                      onClick={async () => {
+                        setVencedoresAtasLoading(true);
+                        try {
+                          const token = localStorage.getItem("editais_ia_access_token");
+                          const res = await fetch(`/api/editais/${edital.id}/vencedores-atas`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+                            body: JSON.stringify({ atas }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (data.success) setVencedoresAtas(data);
+                            else alert(data.error || "Erro ao buscar vencedores");
+                          }
+                        } catch { alert("Erro ao buscar vencedores."); }
+                        finally { setVencedoresAtasLoading(false); }
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Resultados: Vencedores e Preços */}
+                {vencedoresAtas && (() => {
+                  const resultados = (vencedoresAtas.resultados || []) as { ata_titulo: string; orgao: string; uf: string; vencedores: { item: number; descricao: string; vencedor: string; cnpj_vencedor: string; valor_estimado: number; valor_homologado: number; qtd_homologada: number; valor_total_homologado: number; porte: string }[] }[];
+                  if (resultados.length === 0) return <p style={{ fontSize: "13px", color: "#64748b", marginTop: "8px" }}>Nenhum vencedor encontrado nas atas.</p>;
+                  return (
+                    <div style={{ marginTop: "12px" }}>
+                      <h5 style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "8px" }}>Vencedores e Preços Registrados</h5>
+                      {resultados.map((res, ri) => (
+                        <div key={ri} style={{ marginBottom: "12px", border: "1px solid #1e293b", borderRadius: "8px", overflow: "hidden" }}>
+                          <div style={{ padding: "8px 12px", backgroundColor: "#1e293b", fontSize: "12px", color: "#94a3b8" }}>
+                            {res.ata_titulo} — {res.orgao} {res.uf ? `(${res.uf})` : ""}
+                          </div>
+                          <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                            <thead>
+                              <tr style={{ backgroundColor: "#0f172a" }}>
+                                <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Item</th>
+                                <th style={{ padding: "6px 8px", textAlign: "left", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Vencedor</th>
+                                <th style={{ padding: "6px 8px", textAlign: "right", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Vlr Est.</th>
+                                <th style={{ padding: "6px 8px", textAlign: "right", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Vlr Homol.</th>
+                                <th style={{ padding: "6px 8px", textAlign: "right", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Desc.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {res.vencedores.map((v, vi) => {
+                                const desconto = v.valor_estimado && v.valor_homologado ? Math.round((1 - v.valor_homologado / v.valor_estimado) * 100) : null;
+                                return (
+                                  <tr key={vi} style={{ borderBottom: "1px solid #1e293b" }}>
+                                    <td style={{ padding: "6px 8px" }} title={v.descricao}>{v.descricao?.slice(0, 40) || `#${v.item}`}</td>
+                                    <td style={{ padding: "6px 8px" }}>
+                                      <span>{v.vencedor?.slice(0, 30)}</span>
+                                      {v.porte && <span style={{ fontSize: "10px", color: "#64748b", marginLeft: "4px" }}>({v.porte})</span>}
+                                    </td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#64748b" }}>{v.valor_estimado ? `R$ ${v.valor_estimado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#22c55e", fontWeight: 600 }}>{v.valor_homologado ? `R$ ${v.valor_homologado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: desconto && desconto > 0 ? "#22c55e" : "#ef4444" }}>{desconto !== null ? `${desconto}%` : "—"}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -1817,6 +1895,7 @@ export function ValidacaoPage(props?: PageProps) {
               setReputacaoCalculada(null);
               setRiscosData(null);
               setHistoricoVencedores(null);
+              setVencedoresAtas(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}

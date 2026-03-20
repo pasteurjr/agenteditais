@@ -10666,6 +10666,87 @@ def historico_vencedores_edital(edital_id):
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/vencedores-atas", methods=["POST"])
+@require_auth
+def vencedores_atas_edital(edital_id):
+    """Busca vencedores e preços das atas encontradas para o edital."""
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        data = request.get_json(silent=True) or {}
+        atas = data.get("atas", [])
+        if not atas:
+            return jsonify({"error": "Nenhuma ata fornecida"}), 400
+
+        import requests as req
+        resultados = []
+        for ata in atas[:5]:  # Limitar a 5 atas
+            cnpj = ata.get("cnpj_orgao") or ""
+            ano = ata.get("ano")
+            seq = ata.get("sequencial")
+            if not cnpj or not ano or not seq:
+                continue
+
+            # Buscar itens da compra
+            try:
+                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens"
+                resp = req.get(url_itens, timeout=15, headers={"Accept": "application/json"})
+                if resp.status_code != 200:
+                    continue
+                itens = resp.json()
+                if not isinstance(itens, list):
+                    continue
+
+                # Para cada item, buscar resultado (vencedor)
+                vencedores_ata = []
+                for item in itens[:10]:  # Limitar a 10 itens por ata
+                    num_item = item.get("numeroItem")
+                    if not num_item:
+                        continue
+                    try:
+                        url_resultado = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens/{num_item}/resultados"
+                        resp_r = req.get(url_resultado, timeout=10, headers={"Accept": "application/json"})
+                        if resp_r.status_code == 200:
+                            resultados_item = resp_r.json()
+                            if isinstance(resultados_item, list) and resultados_item:
+                                r = resultados_item[0]  # Primeiro resultado = vencedor
+                                vencedores_ata.append({
+                                    "item": num_item,
+                                    "descricao": str(item.get("descricao", ""))[:80],
+                                    "quantidade": item.get("quantidade"),
+                                    "valor_estimado": item.get("valorUnitarioEstimado"),
+                                    "vencedor": r.get("nomeRazaoSocialFornecedor"),
+                                    "cnpj_vencedor": r.get("niFornecedor"),
+                                    "valor_homologado": r.get("valorUnitarioHomologado"),
+                                    "qtd_homologada": r.get("quantidadeHomologada"),
+                                    "valor_total_homologado": r.get("valorTotalHomologado"),
+                                    "porte": r.get("porteFornecedorNome"),
+                                })
+                    except Exception:
+                        pass
+
+                if vencedores_ata:
+                    resultados.append({
+                        "ata_titulo": ata.get("titulo") or f"Ata {ano}/{seq}",
+                        "orgao": ata.get("orgao"),
+                        "uf": ata.get("uf"),
+                        "vencedores": vencedores_ata,
+                    })
+            except Exception:
+                pass
+
+        return jsonify({"success": True, "resultados": resultados, "total_atas_analisadas": len(resultados)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/<edital_id>/extrair-requisitos", methods=["POST"])
 @require_auth
 def extrair_requisitos_edital(edital_id):
