@@ -10527,6 +10527,82 @@ def documentacao_necessaria(edital_id):
         db.close()
 
 
+@app.route("/api/editais/<edital_id>/analisar-riscos", methods=["POST"])
+@require_auth
+def analisar_riscos_edital(edital_id):
+    """Analisa riscos do edital via IA a partir do PDF já baixado."""
+    from models import Edital, EditalDocumento
+    from tools import _extrair_json_object
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.texto_extraido != None
+        ).first()
+
+        if not doc or not doc.texto_extraido or len(doc.texto_extraido) < 200:
+            return jsonify({"error": "Edital sem PDF com texto extraído. Baixe o PDF primeiro.", "sem_pdf": True}), 400
+
+        prompt = f"""Você é um especialista em análise de riscos em editais de licitação pública brasileira.
+
+Analise o texto do edital abaixo e extraia uma análise completa de riscos.
+
+Retorne APENAS um JSON válido (sem texto adicional) com esta estrutura:
+{{
+  "modalidade": "tipo da modalidade (pregao_eletronico, dispensa, concorrencia, etc.)",
+  "prazo_pagamento": "prazo de pagamento mencionado no edital (ex: 30 dias, 45 dias) ou 'Não informado'",
+  "sinais_mercado": ["lista de sinais relevantes detectados (ex: 'Valor estimado muito baixo', 'Prazo de entrega curto', 'Exigências técnicas restritivas')"],
+  "riscos": [
+    {{
+      "tipo": "juridico|tecnico|financeiro|logistico",
+      "descricao": "descrição clara do risco identificado",
+      "severidade": "alto|medio|baixo",
+      "mitigacao": "sugestão de como mitigar ou contornar este risco"
+    }}
+  ],
+  "fatal_flaws": ["lista de problemas CRÍTICOS que podem impedir a participação (ex: 'Exigência de marca específica', 'Prazo impossível de cumprir')"],
+  "flags_juridicos": ["lista de cláusulas restritivas ou questionáveis juridicamente"],
+  "trechos_relevantes": [
+    {{
+      "trecho": "trecho exato ou resumido do edital (máx 150 chars)",
+      "tipo": "risco|oportunidade|alerta",
+      "comentario": "comentário analítico da IA sobre este trecho"
+    }}
+  ]
+}}
+
+REGRAS:
+- Identifique pelo menos 3-5 riscos de diferentes categorias
+- Fatal flaws são RAROS — só liste se realmente houver impedimento crítico
+- Trechos relevantes: selecione 3-8 trechos mais importantes
+- Seja objetivo e prático nas mitigações
+
+TEXTO DO EDITAL:
+{doc.texto_extraido[:20000]}
+
+ANÁLISE DE RISCOS (JSON):"""
+
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=8000, model_override="deepseek-chat")
+        resultado = _extrair_json_object(resposta)
+
+        if not resultado:
+            return jsonify({"error": "IA não retornou análise válida"}), 500
+
+        return jsonify({"success": True, **resultado})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/<edital_id>/extrair-requisitos", methods=["POST"])
 @require_auth
 def extrair_requisitos_edital(edital_id):

@@ -430,6 +430,26 @@ def _extrair_json_array(texto: str) -> List[Dict]:
     return []
 
 
+def _extrair_json_object(texto: str) -> Dict:
+    """Extrai um objeto JSON {} de uma resposta da IA."""
+    texto_limpo = texto
+    if "```json" in texto:
+        match = re.search(r'```json\s*([\s\S]*?)\s*```', texto)
+        if match:
+            texto_limpo = match.group(1)
+    elif "```" in texto:
+        match = re.search(r'```\s*([\s\S]*?)\s*```', texto)
+        if match:
+            texto_limpo = match.group(1)
+    json_match = re.search(r'\{[\s\S]*\}', texto_limpo)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
 def _extrair_info_produto(texto: str) -> Dict[str, Any]:
     """
     Usa IA para extrair informações do produto a partir do texto do manual.

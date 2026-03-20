@@ -280,6 +280,10 @@ export function ValidacaoPage(props?: PageProps) {
   const [docsNecessariaFonte, setDocsNecessariaFonte] = useState<string>("");
   const [extraindoRequisitos, setExtraindoRequisitos] = useState(false);
 
+  // Análise de riscos
+  const [riscosData, setRiscosData] = useState<Record<string, unknown> | null>(null);
+  const [riscosLoading, setRiscosLoading] = useState(false);
+
   // Itens do edital
   const [itensEdital, setItensEdital] = useState<EditalItemData[]>([]);
   const [itensLoading, setItensLoading] = useState(false);
@@ -1333,108 +1337,188 @@ export function ValidacaoPage(props?: PageProps) {
     </div>
   );
 
-  // Aba 3: Riscos (antigo conteudo da Analitica, sem Reputação do Órgão)
-  const renderAbaRiscos = (edital: Edital) => (
-    <div className="aba-content">
-      {/* Pipeline de Riscos */}
-      <div className="section-block">
-        <h4><AlertTriangle size={16} /> Pipeline de Riscos</h4>
-        <div className="pipeline-riscos">
-          <div className="pipeline-section">
-            <span className="pipeline-label">Modalidade e Risco</span>
-            <div className="pipeline-badges">
-              <span className="badge badge-info">Pregao Eletronico</span>
-              {edital.sinaisMercado.includes("Preco Predatorio Detectado") && <span className="badge badge-error">Risco Preco Predatorio</span>}
-              <span className="badge badge-neutral">Faturamento 45 dias</span>
-            </div>
-          </div>
-          <div className="pipeline-section">
-            <span className="pipeline-label">Flags Juridicos</span>
-            <div className="pipeline-badges">
-              {edital.flagsJuridicos.length > 0
-                ? edital.flagsJuridicos.map((flag, i) => <span key={i} className="badge badge-warning">{flag}</span>)
-                : <span className="badge badge-success">Nenhum flag identificado</span>
-              }
-            </div>
-          </div>
-        </div>
-      </div>
+  // Aba 3: Riscos — análise via IA do PDF do edital
+  const handleAnalisarRiscos = async (editalId: string) => {
+    setRiscosLoading(true);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/editais/${editalId}/analisar-riscos`, {
+        method: "POST",
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setRiscosData(data);
+        } else {
+          alert(data.error || "Erro na análise de riscos");
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Erro ao analisar riscos. Verifique se o PDF do edital foi baixado.");
+      }
+    } catch { alert("Erro de conexão ao analisar riscos."); }
+    finally { setRiscosLoading(false); }
+  };
 
-      {/* Fatal Flaws */}
-      {edital.fatalFlaws.length > 0 && (
-        <div className="section-block fatal-flaws-card">
-          <h4><XCircle size={16} /> Fatal Flaws - Problemas Criticos</h4>
-          <div className="fatal-flaws-list">
-            {edital.fatalFlaws.map((flaw, i) => (
-              <div key={i} className="fatal-flaw-item">
-                <AlertCircle size={16} />
-                <span>{flaw}</span>
+  const renderAbaRiscos = (edital: Edital) => {
+    const riscos = (riscosData?.riscos || []) as { tipo: string; descricao: string; severidade: string; mitigacao: string }[];
+    const fatalFlaws = (riscosData?.fatal_flaws || []) as string[];
+    const flagsJuridicos = (riscosData?.flags_juridicos || []) as string[];
+    const trechos = (riscosData?.trechos_relevantes || []) as { trecho: string; tipo: string; comentario: string }[];
+    const modalidade = riscosData?.modalidade as string || "";
+    const prazoPagamento = riscosData?.prazo_pagamento as string || "";
+    const sinaisMercado = (riscosData?.sinais_mercado || []) as string[];
+
+    const sevCor = (s: string) => s === "alto" ? "#ef4444" : s === "medio" ? "#eab308" : "#22c55e";
+    const sevLabel = (s: string) => s === "alto" ? "Alto" : s === "medio" ? "Médio" : "Baixo";
+    const trechoCor = (t: string) => t === "risco" ? "#ef4444" : t === "oportunidade" ? "#22c55e" : "#eab308";
+
+    return (
+      <div className="aba-content">
+        {/* Botão de análise */}
+        <div className="section-block" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <ActionButton
+            icon={riscosLoading ? <RefreshCw size={14} className="spin" /> : <AlertTriangle size={14} />}
+            label={riscosLoading ? "Analisando..." : (riscosData ? "Reanalisar Riscos do Edital" : "Analisar Riscos do Edital")}
+            variant="primary"
+            loading={riscosLoading}
+            onClick={() => handleAnalisarRiscos(edital.id)}
+          />
+          {!riscosData && !riscosLoading && (
+            <span style={{ fontSize: "12px", color: "#64748b" }}>Clique para analisar o PDF do edital e identificar riscos, flags e trechos relevantes.</span>
+          )}
+        </div>
+
+        {/* Pipeline de Riscos (dados da IA) */}
+        {riscosData && (
+          <div className="section-block">
+            <h4><AlertTriangle size={16} /> Pipeline de Riscos</h4>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+              {modalidade && (
+                <span style={{ padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, backgroundColor: "#3b82f620", color: "#3b82f6", border: "1px solid #3b82f640" }}>
+                  {modalidade.replace(/_/g, " ")}
+                </span>
+              )}
+              {prazoPagamento && (
+                <span style={{ padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, backgroundColor: "#64748b20", color: "#94a3b8", border: "1px solid #64748b40" }}>
+                  Pagamento: {prazoPagamento}
+                </span>
+              )}
+              {sinaisMercado.map((sinal, i) => (
+                <span key={i} style={{ padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: 600, backgroundColor: "#eab30820", color: "#eab308", border: "1px solid #eab30840" }}>
+                  {sinal}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Riscos identificados por categoria */}
+        {riscos.length > 0 && (
+          <div className="section-block">
+            <h4><Shield size={16} /> Riscos Identificados ({riscos.length})</h4>
+            {["juridico", "tecnico", "financeiro", "logistico"].map(tipo => {
+              const riscosTipo = riscos.filter(r => r.tipo === tipo);
+              if (riscosTipo.length === 0) return null;
+              const tipoLabel = tipo === "juridico" ? "Jurídico" : tipo === "tecnico" ? "Técnico" : tipo === "financeiro" ? "Financeiro" : "Logístico";
+              return (
+                <div key={tipo} style={{ marginBottom: "12px" }}>
+                  <h5 style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "6px" }}>{tipoLabel} ({riscosTipo.length})</h5>
+                  {riscosTipo.map((r, i) => (
+                    <div key={i} style={{ padding: "10px 14px", marginBottom: "6px", borderRadius: "8px", border: "1px solid #1e293b", backgroundColor: "#0f172a" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                        <p style={{ fontSize: "13px", margin: 0, flex: 1 }}>{r.descricao}</p>
+                        <span style={{ flexShrink: 0, padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: 700, backgroundColor: sevCor(r.severidade) + "20", color: sevCor(r.severidade), border: `1px solid ${sevCor(r.severidade)}40` }}>
+                          {sevLabel(r.severidade)}
+                        </span>
+                      </div>
+                      {r.mitigacao && (
+                        <p style={{ fontSize: "12px", color: "#64748b", margin: "6px 0 0", fontStyle: "italic" }}>Mitigação: {r.mitigacao}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Fatal Flaws */}
+        {fatalFlaws.length > 0 && (
+          <div className="section-block" style={{ backgroundColor: "#450a0a", borderRadius: "8px", padding: "16px", border: "1px solid #ef444440" }}>
+            <h4 style={{ color: "#ef4444" }}><XCircle size={16} /> Fatal Flaws — Problemas Críticos</h4>
+            {fatalFlaws.map((flaw, i) => (
+              <div key={i} style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "4px 0" }}>
+                <AlertCircle size={14} style={{ color: "#ef4444", flexShrink: 0, marginTop: "2px" }} />
+                <span style={{ fontSize: "13px", color: "#fca5a5" }}>{flaw}</span>
               </div>
             ))}
           </div>
-          <p className="fatal-flaws-note">O sistema identificou estes problemas criticos antes da leitura humana.</p>
-        </div>
-      )}
+        )}
 
-      {/* Alerta de Recorrencia */}
-      {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
-        <div className="section-block alerta-recorrencia">
-          <h4><AlertTriangle size={16} /> Alerta de Recorrencia</h4>
-          <p>Editais semelhantes foram <strong>perdidos {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length} vezes</strong> por motivos recorrentes.</p>
-        </div>
-      )}
+        {/* Flags Jurídicos */}
+        {flagsJuridicos.length > 0 && (
+          <div className="section-block">
+            <h4><Scale size={16} /> Flags Jurídicos ({flagsJuridicos.length})</h4>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {flagsJuridicos.map((flag, i) => (
+                <span key={i} style={{ padding: "4px 10px", borderRadius: "12px", fontSize: "12px", backgroundColor: "#eab30820", color: "#eab308", border: "1px solid #eab30840" }}>
+                  {flag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* Aderencia Trecho-a-Trecho */}
-      <div className="section-block">
-        <h4><Scale size={16} /> Aderencia Tecnica Trecho-a-Trecho</h4>
-        <table className="mini-table trecho-table">
-          <thead>
-            <tr><th>Trecho do Edital</th><th>Aderencia</th><th>Trecho do Portfolio</th></tr>
-          </thead>
-          <tbody>
-            {edital.aderenciaTrechos.map((t, i) => (
-              <tr key={i}>
-                <td className="trecho-cell">{t.trechoEdital}</td>
-                <td><ScoreBadge score={t.aderencia} /></td>
-                <td className="trecho-cell">{t.trechoPortfolio}</td>
-              </tr>
+        {/* Trechos Relevantes (RF-030) */}
+        {trechos.length > 0 && (
+          <div className="section-block">
+            <h4><FileText size={16} /> Trechos Relevantes do Edital ({trechos.length})</h4>
+            {trechos.map((t, i) => (
+              <div key={i} style={{ padding: "10px 14px", marginBottom: "8px", borderRadius: "8px", border: "1px solid #1e293b", backgroundColor: "#0f172a", borderLeft: `3px solid ${trechoCor(t.tipo)}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: trechoCor(t.tipo) }}>
+                    {t.tipo === "risco" ? "Risco" : t.tipo === "oportunidade" ? "Oportunidade" : "Alerta"}
+                  </span>
+                </div>
+                <p style={{ fontSize: "13px", color: "#e2e8f0", margin: "0 0 4px", fontStyle: "italic" }}>"{t.trecho}"</p>
+                <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>{t.comentario}</p>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        )}
 
-      {/* Badges de risco por dimensão de score */}
-      <div className="section-block">
-        <h4><Shield size={16} /> Avaliacao por Dimensao</h4>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Tecnico ({edital.scores.tecnico}%)</span>
-            {getScoreDimensionBadge(edital.scores.tecnico)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Documental ({edital.scores.documental}%)</span>
-            {getScoreDimensionBadge(edital.scores.documental)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Complexidade ({edital.scores.complexidade}%)</span>
-            {getScoreDimensionBadge(edital.scores.complexidade)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Juridico ({edital.scores.juridico}%)</span>
-            {getScoreDimensionBadge(edital.scores.juridico)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Logistico ({edital.scores.logistico}%)</span>
-            {getScoreDimensionBadge(edital.scores.logistico)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
-            <span style={{ fontSize: "13px" }}>Comercial ({edital.scores.comercial}%)</span>
-            {getScoreDimensionBadge(edital.scores.comercial)}
+        {/* Avaliação por Dimensão (sempre visível, usa scores) */}
+        <div className="section-block">
+          <h4><Shield size={16} /> Avaliação por Dimensão</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
+            {[
+              { label: "Técnico", score: edital.scores.tecnico },
+              { label: "Documental", score: edital.scores.documental },
+              { label: "Complexidade", score: edital.scores.complexidade },
+              { label: "Jurídico", score: edital.scores.juridico },
+              { label: "Logístico", score: edital.scores.logistico },
+              { label: "Comercial", score: edital.scores.comercial },
+            ].map((dim, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b" }}>
+                <span style={{ fontSize: "13px" }}>{dim.label} ({dim.score}%)</span>
+                {getScoreDimensionBadge(dim.score)}
+              </div>
+            ))}
           </div>
         </div>
+
+        {/* Alerta de Recorrência */}
+        {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length >= 2 && (
+          <div className="section-block" style={{ backgroundColor: "#78350f20", borderRadius: "8px", padding: "16px", border: "1px solid #f59e0b40" }}>
+            <h4 style={{ color: "#f59e0b" }}><AlertTriangle size={16} /> Alerta de Recorrência</h4>
+            <p style={{ fontSize: "13px", color: "#fbbf24" }}>Editais semelhantes foram <strong>perdidos {edital.historicoSemelhante.filter(h => h.resultado === "perdida").length} vezes</strong> por motivos recorrentes.</p>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // Aba 4: Mercado (Reputação do Órgão da Analítica + Histórico da Cognitiva + botões IA)
   const renderAbaMercado = (edital: Edital) => (
@@ -1675,6 +1759,7 @@ export function ValidacaoPage(props?: PageProps) {
               setDocsNecessariaErro("");
               setHistoricoReal([]);
               setReputacaoCalculada(null);
+              setRiscosData(null);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}
