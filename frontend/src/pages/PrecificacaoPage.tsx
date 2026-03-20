@@ -588,23 +588,40 @@ export function PrecificacaoPage(props?: PageProps) {
                                         <th style={{ textAlign: "left", padding: 4 }}>Descrição</th>
                                         <th style={{ textAlign: "right", padding: 4 }}>Qtd</th>
                                         <th style={{ textAlign: "right", padding: 4 }}>Valor Unit.</th>
-                                        <th style={{ padding: 4 }}>Ação</th>
+                                        <th style={{ textAlign: "left", padding: 4 }}>Produto Vinculado</th>
+                                        <th style={{ padding: 4 }}></th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {itensEdital.slice(0, 20).map((it) => (
+                                      {itensEdital.slice(0, 20).map((it) => {
+                                        const vinculo = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === it.id);
+                                        const prodVinculado = vinculo ? produtos.find(p => p.id === (vinculo as Record<string,unknown>).produto_id) : null;
+                                        return (
                                         <tr key={it.id} style={{ borderBottom: "1px solid var(--border-light, #eee)" }}>
                                           <td style={{ padding: 4 }}>{it.numero_item}</td>
-                                          <td style={{ padding: 4, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.descricao}</td>
+                                          <td style={{ padding: 4, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.descricao}</td>
                                           <td style={{ textAlign: "right", padding: 4 }}>{it.quantidade}</td>
                                           <td style={{ textAlign: "right", padding: 4 }}>{fmt(it.valor_unitario_estimado)}</td>
+                                          <td style={{ padding: 4 }}>
+                                            {prodVinculado ? (
+                                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#22c55e20", color: "#22c55e", border: "1px solid #22c55e40" }}>
+                                                ✅ {prodVinculado.nome?.slice(0, 30)}
+                                              </span>
+                                            ) : (
+                                              <span style={{ fontSize: 12, color: "#94a3b8" }}>—</span>
+                                            )}
+                                          </td>
                                           <td style={{ padding: 4, textAlign: "center" }}>
-                                            <button className="btn btn-sm" onClick={() => handleSelecaoPortfolio(it.id)} title="Selecionar produto">
-                                              <Target size={14} />
-                                            </button>
+                                            <ActionButton
+                                              icon={<Target size={14} />}
+                                              label={prodVinculado ? "Trocar" : "Vincular Produto"}
+                                              variant={prodVinculado ? "neutral" : "primary"}
+                                              onClick={() => handleSelecaoPortfolio(it.id)}
+                                            />
                                           </td>
                                         </tr>
-                                      ))}
+                                        );
+                                      })}
                                     </tbody>
                                   </table>
                                   {itensEdital.length > 20 && <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>... e mais {itensEdital.length - 20} itens</p>}
