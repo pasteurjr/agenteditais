@@ -5902,11 +5902,15 @@ def tool_buscar_arquivos_edital_pncp(edital_id: str = None, cnpj: str = None, an
         arquivo_edital = None
         for arq in arquivos_processados:
             titulo_lower = arq['titulo'].lower()
-            if any(termo in titulo_lower for termo in ['edital', 'pregão', 'pregao', 'pe ']):
+            tipo_lower = arq.get('tipo', '').lower()
+            if any(termo in titulo_lower or termo in tipo_lower for termo in [
+                'edital', 'pregão', 'pregao', 'pe ', 'termo de referência', 'termo de referencia',
+                'tr ', 'instrumento convocatório', 'instrumento convocatorio',
+            ]):
                 arquivo_edital = arq
                 break
 
-        # Se não encontrou por título, usar o primeiro
+        # Se não encontrou por título/tipo, tentar Termo de Referência antes do primeiro
         if not arquivo_edital and arquivos_processados:
             arquivo_edital = arquivos_processados[0]
 
