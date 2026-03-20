@@ -1929,7 +1929,14 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         <h4><Sparkles size={16} /> Resumo Gerado pela IA</h4>
         {edital.resumo ? (
           <div>
-            <p className="resumo-text">{edital.resumo}</p>
+            <div className="resumo-text" style={{ fontSize: "13px", lineHeight: 1.7, color: "#e2e8f0" }} dangerouslySetInnerHTML={{ __html: edital.resumo
+              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+              .replace(/^### (.+)$/gm, '<h4 style="color:#60a5fa;margin:8px 0 4px;font-size:14px;">$1</h4>')
+              .replace(/^## (.+)$/gm, '<h3 style="color:#818cf8;margin:10px 0 4px;font-size:15px;">$1</h3>')
+              .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 12px;">• $1</div>')
+              .replace(/\n\n/g, '<br/><br/>')
+              .replace(/\n/g, '<br/>')
+            }} />
             <ActionButton icon={<Sparkles size={14} />} label="Regerar Resumo" onClick={handleResumirEdital} loading={resumoLoading} variant="neutral" />
           </div>
         ) : (
@@ -1949,7 +1956,14 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         {resposta && (
           <div className="resposta-box">
             <strong>Resposta:</strong>
-            <p>{resposta}</p>
+            <div style={{ fontSize: "13px", lineHeight: 1.7, color: "#e2e8f0", marginTop: "4px" }} dangerouslySetInnerHTML={{ __html: resposta
+              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+              .replace(/^### (.+)$/gm, '<h4 style="color:#60a5fa;margin:8px 0 4px;font-size:14px;">$1</h4>')
+              .replace(/^## (.+)$/gm, '<h3 style="color:#818cf8;margin:10px 0 4px;font-size:15px;">$1</h3>')
+              .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 12px;">• $1</div>')
+              .replace(/\n\n/g, '<br/><br/>')
+              .replace(/\n/g, '<br/>')
+            }} />
           </div>
         )}
       </div>
@@ -2165,7 +2179,14 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         {resposta && (
           <div className="resposta-box" style={{ marginTop: "1rem" }}>
             <strong>Resposta:</strong>
-            <p>{resposta}</p>
+            <div style={{ fontSize: "13px", lineHeight: 1.7, color: "#e2e8f0", marginTop: "4px" }} dangerouslySetInnerHTML={{ __html: resposta
+              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+              .replace(/^### (.+)$/gm, '<h4 style="color:#60a5fa;margin:8px 0 4px;font-size:14px;">$1</h4>')
+              .replace(/^## (.+)$/gm, '<h3 style="color:#818cf8;margin:10px 0 4px;font-size:15px;">$1</h3>')
+              .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 12px;">• $1</div>')
+              .replace(/\n\n/g, '<br/><br/>')
+              .replace(/\n/g, '<br/>')
+            }} />
           </div>
         )}
       </Modal>
