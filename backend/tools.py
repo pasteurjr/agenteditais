@@ -8322,11 +8322,12 @@ import math
 PROMPT_EXTRAIR_LOTES = """Analise o texto do edital de licitação abaixo e extraia a estrutura de LOTES e ITENS.
 
 REGRAS:
-1. Se o edital organiza itens em lotes (Lote 01, Lote 02...), identifique cada lote e quais itens (numero_item) pertencem a ele.
-2. Se o edital é "item a item" (sem agrupamento em lotes), crie um lote para cada item.
-3. Se todos os itens formam um lote único, retorne um único lote.
-4. Identifique o tipo de julgamento: "por_lote" (menor preço global do lote) ou "por_item" (menor preço por item).
-5. Para cada lote, tente identificar a especialidade (ex: "Hematologia", "Bioquímica", "Informática").
+1. Se o edital organiza itens em lotes (Lote 01, Lote 02...), identifique cada lote e quais itens pertencem a ele.
+2. Se o edital não tem lotes explícitos, agrupe itens por ESPECIALIDADE/CATEGORIA (ex: hematologia, coagulação, bioquímica, insumos).
+3. Identifique o tipo de julgamento: "por_lote" (menor preço global do lote) ou "por_item" (menor preço por item).
+4. Para cada lote, defina a especialidade.
+5. Em itens_numeros, use o campo "numero_item" de cada item da lista abaixo. TODOS os itens devem ser alocados em algum lote.
+6. Itens que não se encaixam em nenhuma especialidade vão num lote "Avulsos".
 
 Os itens do edital já importados do PNCP são:
 {itens_json}
@@ -8351,11 +8352,11 @@ TEXTO DO EDITAL:
 
 def _extrair_lotes_ia(texto_edital: str, itens_db: list) -> Dict[str, Any]:
     """Usa IA para extrair estrutura de lotes do texto do edital."""
-    # Montar JSON dos itens para contexto
+    # Montar JSON dos itens para contexto (usar índice se numero_item é null)
     itens_info = []
-    for item in itens_db:
+    for idx, item in enumerate(itens_db, 1):
         itens_info.append({
-            "numero_item": item.numero_item,
+            "numero_item": item.numero_item if item.numero_item is not None else idx,
             "descricao": (item.descricao or "")[:200],
             "quantidade": float(item.quantidade or 0),
             "valor_total": float(item.valor_total_estimado or 0),
@@ -8472,8 +8473,27 @@ def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
         else:
             print(f"[LOTES] Sem texto do PDF — criando lotes por item")
 
-        # Mapa numero_item → EditalItem
-        itens_por_numero = {i.numero_item: i for i in itens_db}
+        # Mapa numero_item → EditalItem (com fallback para índice)
+        itens_por_numero = {}
+        itens_por_indice = {}
+        for idx, i in enumerate(itens_db, 1):
+            if i.numero_item is not None:
+                itens_por_numero[i.numero_item] = i
+            itens_por_indice[idx] = i
+            itens_por_indice[str(idx)] = i
+            # Também mapear pelo ID
+            itens_por_numero[i.id] = i
+
+        def _resolver_item(ref):
+            """Resolve referência de item (numero_item, índice ou id)."""
+            if ref in itens_por_numero:
+                return itens_por_numero[ref]
+            if ref in itens_por_indice:
+                return itens_por_indice[ref]
+            try:
+                return itens_por_indice.get(int(ref))
+            except (ValueError, TypeError):
+                return None
 
         # 5. Criar lotes no banco
         lotes_criados = []
@@ -8487,8 +8507,9 @@ def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
                 especialidade = lote_info.get("especialidade")
                 itens_numeros = lote_info.get("itens_numeros", [])
 
-                # Calcular valor estimado do lote
-                itens_do_lote = [itens_por_numero[n] for n in itens_numeros if n in itens_por_numero]
+                # Calcular valor estimado do lote — resolver por numero, indice ou id
+                itens_do_lote = [_resolver_item(n) for n in itens_numeros]
+                itens_do_lote = [i for i in itens_do_lote if i is not None]
                 valor_est = sum(float(i.valor_total_estimado or 0) for i in itens_do_lote)
 
                 lote = Lote(
@@ -8505,19 +8526,19 @@ def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
                 db.flush()
 
                 # Vincular itens ao lote
-                for ordem, item_num in enumerate(itens_numeros, 1):
-                    item = itens_por_numero.get(item_num)
+                for ordem, item_ref in enumerate(itens_numeros, 1):
+                    item = _resolver_item(item_ref)
                     if item:
                         li = LoteItem(lote_id=lote.id, edital_item_id=item.id, ordem=ordem)
                         db.add(li)
-                        itens_alocados.add(item_num)
+                        itens_alocados.add(item.id)
 
                 ld = lote.to_dict()
                 ld["itens"] = [i.to_dict() for i in itens_do_lote]
                 lotes_criados.append(ld)
 
             # Itens não alocados pela IA → criar lote "Avulsos"
-            nao_alocados = [i for i in itens_db if i.numero_item not in itens_alocados]
+            nao_alocados = [i for i in itens_db if i.id not in itens_alocados]
             if nao_alocados:
                 lote_avulso = Lote(
                     edital_id=edital_id,
