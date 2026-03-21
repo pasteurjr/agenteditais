@@ -672,12 +672,38 @@ export function PrecificacaoPage(props?: PageProps) {
                                             )}
                                           </td>
                                           <td style={{ padding: 4, textAlign: "center" }}>
-                                            <ActionButton
-                                              icon={<Target size={14} />}
-                                              label={prodVinculado ? "Trocar" : "Vincular Produto"}
-                                              variant={prodVinculado ? "neutral" : "primary"}
-                                              onClick={() => handleSelecaoPortfolio(it.id)}
-                                            />
+                                            <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                                              <ActionButton
+                                                icon={<Target size={14} />}
+                                                label={prodVinculado ? "Trocar" : "Vincular"}
+                                                variant={prodVinculado ? "neutral" : "primary"}
+                                                onClick={() => handleSelecaoPortfolio(it.id)}
+                                              />
+                                              <ActionButton
+                                                icon={<Lightbulb size={14} />}
+                                                label="IA"
+                                                variant="neutral"
+                                                loading={loading}
+                                                onClick={async () => {
+                                                  setLoading(true);
+                                                  try {
+                                                    const token = localStorage.getItem("editais_ia_access_token");
+                                                    const res = await fetch(`/api/precificacao/vincular-ia/${it.id}`, {
+                                                      method: "POST",
+                                                      headers: { Authorization: token ? `Bearer ${token}` : "" },
+                                                    });
+                                                    const data = await res.json();
+                                                    if (data.success) {
+                                                      loadLotes(editalId);
+                                                      alert(`IA vinculou: ${data.produto_nome || "Produto"} (match: ${data.match_score || 0}%)\n${data.justificativa || ""}`);
+                                                    } else {
+                                                      alert(data.error || "IA não encontrou produto compatível");
+                                                    }
+                                                  } catch { alert("Erro ao vincular com IA"); }
+                                                  finally { setLoading(false); }
+                                                }}
+                                              />
+                                            </div>
                                           </td>
                                         </tr>
                                         );

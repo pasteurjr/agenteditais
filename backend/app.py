@@ -10534,6 +10534,21 @@ def documentacao_necessaria(edital_id):
 # Endpoints REST para Precificação (chamam tools diretamente, sem chat)
 # =============================================================================
 
+@app.route("/api/precificacao/vincular-ia/<item_id>", methods=["POST"])
+@require_auth
+def precif_vincular_ia(item_id):
+    """UC-P02: Seleção inteligente — IA analisa item e sugere melhor produto do portfolio."""
+    from tools import tool_selecao_portfolio
+    user_id = get_current_user_id()
+    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
+    resultado = tool_selecao_portfolio(
+        edital_item_id=item_id,
+        user_id=user_id,
+        empresa_id=empresa.id if empresa else None,
+    )
+    return jsonify(resultado)
+
+
 @app.route("/api/precificacao/<eip_id>/custos", methods=["POST"])
 @require_auth
 def precif_custos(eip_id):
