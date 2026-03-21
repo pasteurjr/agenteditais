@@ -8662,9 +8662,41 @@ def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = 
 
         sugestoes.sort(key=lambda x: x["match_score"], reverse=True)
 
+        # Auto-vincular o melhor match se score > 20
+        if sugestoes and sugestoes[0]["match_score"] > 20:
+            melhor = sugestoes[0]
+            vinculo = db.query(EditalItemProduto).filter(
+                EditalItemProduto.edital_item_id == edital_item_id,
+                EditalItemProduto.user_id == user_id
+            ).first()
+            if vinculo:
+                vinculo.produto_id = melhor["produto_id"]
+                vinculo.match_score = melhor["match_score"]
+                vinculo.confirmado = True
+            else:
+                vinculo = EditalItemProduto(
+                    edital_item_id=edital_item_id,
+                    produto_id=melhor["produto_id"],
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    match_score=melhor["match_score"],
+                    confirmado=True,
+                )
+                db.add(vinculo)
+            db.commit()
+            return {
+                "success": True,
+                "auto_vinculado": True,
+                "produto_nome": melhor["nome"],
+                "match_score": melhor["match_score"],
+                "justificativa": f"Melhor match: {melhor['nome']} ({melhor['match_score']}%)",
+                "sugestoes": sugestoes[:5],
+            }
+
         return {
-            "success": True,
-            "item": item.to_dict(),
+            "success": len(sugestoes) > 0,
+            "auto_vinculado": False,
+            "error": "Nenhum produto com match suficiente" if not sugestoes else None,
             "sugestoes": sugestoes[:10],
             "total_produtos": len(produtos),
             "mensagem": f"{len(sugestoes)} produto(s) encontrado(s) com match para o item",
