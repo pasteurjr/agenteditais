@@ -271,11 +271,21 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleSelecaoPortfolio = async (itemId: string) => {
     setSelecaoItemId(itemId);
-    // Carregar produtos do portfolio e abrir modal
+    // Carregar produtos e ordenar por relevância ao item
     try {
-      const res = await crudList("produtos", { limit: 50 });
-      const prods = res.items as unknown as Array<{ id: string; nome: string; fabricante: string }>;
-      setSugestoes(prods.map(p => ({ produto_id: p.id, nome: p.nome, fabricante: p.fabricante, match_score: 0 })));
+      const res = await crudList("produtos", { limit: 100 });
+      const prods = res.items as unknown as Array<{ id: string; nome: string; fabricante: string; categoria: string }>;
+      // Encontrar descrição do item para match
+      const item = itensEdital.find(it => it.id === itemId);
+      const descItem = (item?.descricao || "").toLowerCase();
+      // Calcular score de match simples (palavras em comum)
+      const palavrasItem = descItem.split(/\s+/).filter(w => w.length > 3);
+      const sugestoesSorted = prods.map(p => {
+        const nomeLower = p.nome.toLowerCase();
+        const matchCount = palavrasItem.filter(w => nomeLower.includes(w)).length;
+        return { produto_id: p.id, nome: p.nome, fabricante: p.fabricante || "—", categoria: p.categoria || "", match_score: matchCount };
+      }).sort((a, b) => b.match_score - a.match_score);
+      setSugestoes(sugestoesSorted);
     } catch (err) { console.error("[SELECAO] Erro ao carregar produtos:", err); }
     setShowSelecaoModal(true);
   };
