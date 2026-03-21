@@ -1130,6 +1130,21 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                       </span>
                     )}
                     <StatusBadge status={lote.status === "rascunho" ? "warning" : lote.status === "configurado" ? "info" : "success"} label={lote.status} />
+                    <button
+                      title="Excluir lote"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: "2px" }}
+                      onClick={async (ev) => {
+                        ev.stopPropagation();
+                        if (!window.confirm(`Excluir Lote ${lote.numero_lote} — ${lote.nome}?`)) return;
+                        try {
+                          const { crudDelete } = await import("../api/crud");
+                          await crudDelete("lotes", lote.id);
+                          setLotesEdital(prev => prev.filter(l => l.id !== lote.id));
+                        } catch { alert("Erro ao excluir lote."); }
+                      }}
+                    >
+                      <XCircle size={16} />
+                    </button>
                   </div>
                 </div>
 
