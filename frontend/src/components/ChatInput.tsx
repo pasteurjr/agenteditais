@@ -181,6 +181,20 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "verificar_completude_3", nome: "✅ 📋 Falta informação?", prompt: "Falta informação no produto [NOME]?" },
 
   // =============================================================================
+  // 10.2 PRECIFICAÇÃO - Sprint 3
+  // =============================================================================
+  { id: "sep_10_2", nome: "━━━ 10.2 PRECIFICAÇÃO ━━━", prompt: "" },
+  { id: "precif_vincular_ia", nome: "✅ 🤖 Vincular produto com IA", prompt: "Selecione o melhor produto do portfolio para o item [ITEM_ID]" },
+  { id: "precif_organizar_lotes", nome: "✅ 📦 Organizar lotes do edital", prompt: "Organize os lotes do edital [NUMERO]" },
+  { id: "precif_volumetria", nome: "✅ 🧮 Calcular volumetria", prompt: "Calcule a volumetria: volume 50000, repetições amostras 2, calibradores 3, controles 2, rendimento 500" },
+  { id: "precif_custos", nome: "✅ 💰 Configurar custos", prompt: "Configure custos do item [ITEM_ID] com custo unitário R$ [VALOR]" },
+  { id: "precif_preco_base", nome: "✅ 💵 Montar preço base", prompt: "Defina preço base com markup [PERCENTUAL]% para item [ITEM_ID]" },
+  { id: "precif_referencia", nome: "✅ 🎯 Definir valor de referência", prompt: "Defina valor de referência R$ [VALOR] para item [ITEM_ID]" },
+  { id: "precif_lances", nome: "✅ 📊 Estruturar lances", prompt: "Estruture lances: inicial R$ [VALOR], mínimo R$ [VALOR] para item [ITEM_ID]" },
+  { id: "precif_estrategia", nome: "✅ 🏆 Definir estratégia competitiva", prompt: "Defina estratégia competitiva: quero ganhar para edital [NUMERO]" },
+  { id: "precif_comodato", nome: "✅ 🔧 Registrar comodato", prompt: "Registre comodato: equipamento [NOME], valor R$ [VALOR], prazo [MESES] meses" },
+
+  // =============================================================================
   // 11. FONTES DE EDITAIS
   // =============================================================================
   { id: "sep_11", nome: "━━━ 11. FONTES DE EDITAIS ━━━", prompt: "" },
