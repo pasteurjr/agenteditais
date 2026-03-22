@@ -739,13 +739,26 @@ export function PrecificacaoPage(props?: PageProps) {
                                                   finally { setLoading(false); }
                                                 }}
                                               />
-                                              {!prodVinculado && (
+                                              {prodVinculado ? (
+                                                <ActionButton
+                                                  icon={<X size={14} />}
+                                                  label="Desvincular"
+                                                  variant="neutral"
+                                                  onClick={async () => {
+                                                    if (!window.confirm(`Desvincular "${prodVinculado.nome?.slice(0, 30)}" deste item?`)) return;
+                                                    try {
+                                                      const { crudDelete } = await import("../api/crud");
+                                                      await crudDelete("edital-item-produto", vinculo!.id);
+                                                      loadLotes(editalId);
+                                                    } catch { alert("Erro ao desvincular."); }
+                                                  }}
+                                                />
+                                              ) : (
                                                 <ActionButton
                                                   icon={<X size={14} />}
                                                   label="Pular"
                                                   variant="neutral"
                                                   onClick={() => {
-                                                    // Marcar item como pulado (estado local)
                                                     setItensEdital(prev => prev.map(item =>
                                                       item.id === it.id ? { ...item, _pulado: true } as EditalItem : item
                                                     ));
