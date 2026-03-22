@@ -684,12 +684,16 @@ export function PrecificacaoPage(props?: PageProps) {
                                               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#22c55e20", color: "#22c55e", border: "1px solid #22c55e40" }}>
                                                 ✅ {prodVinculado.nome?.slice(0, 30)}
                                               </span>
+                                            ) : (it as Record<string, unknown>)._pulado ? (
+                                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#64748b20", color: "#94a3b8", border: "1px solid #64748b40" }}>
+                                                ⏭️ Pulado
+                                              </span>
                                             ) : (
-                                              <span style={{ fontSize: 12, color: "#94a3b8" }}>—</span>
+                                              <span style={{ fontSize: 12, color: "#f59e0b" }}>⚠️ Sem produto no portfolio</span>
                                             )}
                                           </td>
                                           <td style={{ padding: 4, textAlign: "center" }}>
-                                            <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                                            <div style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
                                               <ActionButton
                                                 icon={<Target size={14} />}
                                                 label={prodVinculado ? "Trocar" : "Vincular"}
@@ -710,16 +714,44 @@ export function PrecificacaoPage(props?: PageProps) {
                                                       headers: { Authorization: token ? `Bearer ${token}` : "" },
                                                     });
                                                     const data = await res.json();
-                                                    if (data.success) {
+                                                    if (data.success && data.auto_vinculado) {
                                                       loadLotes(editalId);
                                                       alert(`IA vinculou: ${data.produto_nome || "Produto"} (match: ${data.match_score || 0}%)\n${data.justificativa || ""}`);
+                                                    } else if (data.success && !data.auto_vinculado) {
+                                                      // IA não encontrou match suficiente
+                                                      const cadastrar = window.confirm(
+                                                        "Nenhum produto compatível encontrado no portfolio.\n\n" +
+                                                        "Deseja cadastrar um novo produto?\n" +
+                                                        "(Clique OK para ir ao Portfolio, Cancelar para pular este item)"
+                                                      );
+                                                      if (cadastrar) {
+                                                        window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "portfolio" } }));
+                                                      }
                                                     } else {
-                                                      alert(data.error || "IA não encontrou produto compatível");
+                                                      const cadastrar = window.confirm(
+                                                        `${data.error || "Nenhum produto compatível"}\n\nDeseja cadastrar um novo produto no Portfolio?`
+                                                      );
+                                                      if (cadastrar) {
+                                                        window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "portfolio" } }));
+                                                      }
                                                     }
                                                   } catch { alert("Erro ao vincular com IA"); }
                                                   finally { setLoading(false); }
                                                 }}
                                               />
+                                              {!prodVinculado && (
+                                                <ActionButton
+                                                  icon={<X size={14} />}
+                                                  label="Pular"
+                                                  variant="neutral"
+                                                  onClick={() => {
+                                                    // Marcar item como pulado (estado local)
+                                                    setItensEdital(prev => prev.map(item =>
+                                                      item.id === it.id ? { ...item, _pulado: true } as EditalItem : item
+                                                    ));
+                                                  }}
+                                                />
+                                              )}
                                             </div>
                                           </td>
                                         </tr>
