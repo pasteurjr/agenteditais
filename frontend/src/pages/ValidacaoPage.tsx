@@ -1157,6 +1157,44 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                       { key: "quantidade", header: "Qtd", width: "70px" },
                       { key: "unidade_medida", header: "Unid", width: "80px" },
                       { key: "valor_total_estimado", header: "Vlr Total", width: "100px", render: (item) => formatCurrency(Number(item.valor_total_estimado) || 0) },
+                      { key: "mover", header: "Mover para", width: "150px", render: (item) => {
+                        const outrosLotes = lotesEdital.filter(l => l.id !== lote.id);
+                        if (outrosLotes.length === 0) return <span style={{ fontSize: 11, color: "#64748b" }}>—</span>;
+                        return (
+                          <select
+                            style={{ fontSize: 11, padding: "2px 4px", borderRadius: 4, backgroundColor: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", cursor: "pointer" }}
+                            defaultValue=""
+                            onChange={async (ev) => {
+                              const novoLoteId = ev.target.value;
+                              if (!novoLoteId) return;
+                              try {
+                                // Buscar lote_item atual
+                                const loteItens = await crudList("lote-itens", { parent_id: lote.id, limit: 200 });
+                                const loteItem = (loteItens.items || []).find((li: Record<string, unknown>) => li.edital_item_id === item.id);
+                                if (loteItem) {
+                                  // Deletar do lote atual e criar no novo
+                                  const { crudDelete } = await import("../api/crud");
+                                  await crudDelete("lote-itens", String(loteItem.id));
+                                  await crudCreate("lote-itens", { lote_id: novoLoteId, edital_item_id: item.id, ordem: 99 });
+                                } else {
+                                  // Item sem vínculo — criar direto no novo lote
+                                  await crudCreate("lote-itens", { lote_id: novoLoteId, edital_item_id: item.id, ordem: 99 });
+                                }
+                                // Recarregar lotes
+                                const token = localStorage.getItem("editais_ia_access_token");
+                                const res = await fetch(`/api/editais/${selectedEdital?.id}/lotes`, { headers: { Authorization: `Bearer ${token}` } });
+                                if (res.ok) { const data = await res.json(); setLotesEdital(data.lotes || []); }
+                              } catch { alert("Erro ao mover item."); }
+                              ev.target.value = "";
+                            }}
+                          >
+                            <option value="">Mover...</option>
+                            {outrosLotes.map(ol => (
+                              <option key={ol.id} value={ol.id}>Lote {ol.numero_lote} — {ol.nome?.slice(0, 15)}</option>
+                            ))}
+                          </select>
+                        );
+                      }},
                     ]}
                     data={lote.itens}
                     emptyMessage="Sem itens"
