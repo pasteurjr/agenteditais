@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import {
   DollarSign, Search, TrendingUp, History, Lightbulb, Package,
   Layers, Target, BarChart3, Shield, ChevronDown, ChevronUp,
-  Check, AlertTriangle, Download,
+  Check, AlertTriangle, Download, X,
 } from "lucide-react";
 import {
   Card, DataTable, ActionButton, FormField, TextInput, SelectInput,
