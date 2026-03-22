@@ -203,7 +203,11 @@ export function PrecificacaoPage(props?: PageProps) {
       const lotesData = (res.items as unknown as Lote[]) || [];
       setLotes(lotesData);
       const itensRes = await crudList("editais-itens", { parent_id: eid, limit: 200 });
-      setItensEdital((itensRes.items as unknown as EditalItem[]) || []);
+      const itensComIgnorado = ((itensRes.items || []) as Record<string, unknown>[]).map(it => ({
+        ...it,
+        _ignorado: it.tipo_beneficio === "ignorado",
+      }));
+      setItensEdital(itensComIgnorado as unknown as EditalItem[]);
       // Load lote_itens para saber quais itens pertencem a cada lote
       const loteItensMap: Record<string, string[]> = {};
       for (const lote of lotesData) {
@@ -684,9 +688,9 @@ export function PrecificacaoPage(props?: PageProps) {
                                               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#22c55e20", color: "#22c55e", border: "1px solid #22c55e40" }}>
                                                 ✅ {prodVinculado.nome?.slice(0, 30)}
                                               </span>
-                                            ) : (it as Record<string, unknown>)._pulado ? (
+                                            ) : (it as Record<string, unknown>)._ignorado || (it as Record<string, unknown>).tipo_beneficio === "ignorado" ? (
                                               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#64748b20", color: "#94a3b8", border: "1px solid #64748b40" }}>
-                                                ⏭️ Pulado
+                                                ⏭️ Ignorado
                                               </span>
                                             ) : (
                                               <span style={{ fontSize: 12, color: "#f59e0b" }}>⚠️ Sem produto no portfolio</span>
@@ -753,15 +757,32 @@ export function PrecificacaoPage(props?: PageProps) {
                                                     } catch { alert("Erro ao desvincular."); }
                                                   }}
                                                 />
+                                              ) : (it as Record<string, unknown>)._ignorado ? (
+                                                <ActionButton
+                                                  icon={<Check size={14} />}
+                                                  label="Reativar"
+                                                  variant="neutral"
+                                                  onClick={async () => {
+                                                    try {
+                                                      await crudUpdate("editais-itens", it.id, { tipo_beneficio: null });
+                                                      setItensEdital(prev => prev.map(item =>
+                                                        item.id === it.id ? { ...item, _ignorado: false } as EditalItem : item
+                                                      ));
+                                                    } catch { alert("Erro ao reativar item."); }
+                                                  }}
+                                                />
                                               ) : (
                                                 <ActionButton
                                                   icon={<X size={14} />}
-                                                  label="Pular"
+                                                  label="Ignorar"
                                                   variant="neutral"
-                                                  onClick={() => {
-                                                    setItensEdital(prev => prev.map(item =>
-                                                      item.id === it.id ? { ...item, _pulado: true } as EditalItem : item
-                                                    ));
+                                                  onClick={async () => {
+                                                    try {
+                                                      await crudUpdate("editais-itens", it.id, { tipo_beneficio: "ignorado" });
+                                                      setItensEdital(prev => prev.map(item =>
+                                                        item.id === it.id ? { ...item, _ignorado: true } as EditalItem : item
+                                                      ));
+                                                    } catch { alert("Erro ao ignorar item."); }
                                                   }}
                                                 />
                                               )}
