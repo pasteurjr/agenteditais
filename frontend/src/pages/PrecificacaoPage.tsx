@@ -124,6 +124,7 @@ export function PrecificacaoPage(props?: PageProps) {
 
   // ── Tab: Lotes (UC-P01) ──
   const [lotes, setLotes] = useState<Lote[]>([]);
+  const [loteItensMap, setLoteItensMap] = useState<Record<string, string[]>>({});
   const [itensEdital, setItensEdital] = useState<EditalItem[]>([]);
   const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
   const [loteEspecialidade, setLoteEspecialidade] = useState("");
@@ -199,9 +200,19 @@ export function PrecificacaoPage(props?: PageProps) {
     setLoading(true);
     try {
       const res = await crudList("lotes", { parent_id: eid, limit: 100 });
-      setLotes((res.items as unknown as Lote[]) || []);
+      const lotesData = (res.items as unknown as Lote[]) || [];
+      setLotes(lotesData);
       const itensRes = await crudList("editais-itens", { parent_id: eid, limit: 200 });
       setItensEdital((itensRes.items as unknown as EditalItem[]) || []);
+      // Load lote_itens para saber quais itens pertencem a cada lote
+      const loteItensMap: Record<string, string[]> = {};
+      for (const lote of lotesData) {
+        try {
+          const liRes = await crudList("lote-itens", { parent_id: lote.id, limit: 200 });
+          loteItensMap[lote.id] = ((liRes.items || []) as Record<string, unknown>[]).map(li => String(li.edital_item_id));
+        } catch { loteItensMap[lote.id] = []; }
+      }
+      setLoteItensMap(loteItensMap);
       // Load vinculos
       const vRes = await crudList("edital-item-produto", { limit: 200 });
       setVinculos((vRes.items as unknown as Vinculo[]) || []);
@@ -653,7 +664,13 @@ export function PrecificacaoPage(props?: PageProps) {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {itensEdital.slice(0, 20).map((it) => {
+                                      {(() => {
+                                        // Filtrar itens que pertencem a este lote
+                                        const itensDoLote = loteItensMap[lote.id]
+                                          ? itensEdital.filter(it => loteItensMap[lote.id].includes(it.id))
+                                          : itensEdital; // fallback: todos (lote sem mapeamento)
+                                        return itensDoLote;
+                                      })().slice(0, 20).map((it) => {
                                         const vinculo = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === it.id);
                                         const prodVinculado = vinculo ? produtos.find(p => p.id === (vinculo as Record<string,unknown>).produto_id) : null;
                                         return (
