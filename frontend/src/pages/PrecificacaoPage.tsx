@@ -155,6 +155,7 @@ export function PrecificacaoPage(props?: PageProps) {
   const [sugestoes, setSugestoes] = useState<Array<{ produto_id: string; nome: string; fabricante: string; match_score: number }>>([]);
   const [showSelecaoModal, setShowSelecaoModal] = useState(false);
   // UC-P03: Volumetria
+  const [precisaVolumetria, setPrecisaVolumetria] = useState<boolean | null>(null);
   const [volEdital, setVolEdital] = useState("");
   const [rendimento, setRendimento] = useState("");
   const [repAmostras, setRepAmostras] = useState("0");
@@ -229,9 +230,11 @@ export function PrecificacaoPage(props?: PageProps) {
         } catch { loteItensMap[lote.id] = []; }
       }
       setLoteItensMap(loteItensMap);
-      // Load vinculos
-      const vRes = await crudList("edital-item-produto", { limit: 200 });
-      setVinculos((vRes.items as unknown as Vinculo[]) || []);
+      // Load vinculos — filtrar apenas itens deste edital
+      const allItemIds = new Set(itensComIgnorado.map((i) => (i as Record<string, unknown>).id as string));
+      const vRes = await crudList("edital-item-produto", { limit: 500 });
+      const allVinculos = (vRes.items as unknown as Vinculo[]) || [];
+      setVinculos(allVinculos.filter(v => allItemIds.has(v.edital_item_id)));
       // Load comodatos
       const cRes = await crudList("comodatos", { parent_id: eid, limit: 50 });
       setComodatos((cRes.items as unknown as Comodato[]) || []);
@@ -253,6 +256,32 @@ export function PrecificacaoPage(props?: PageProps) {
       } catch { setCamada(null); }
     })();
   }, [vinculoId]);
+
+  // ── Detecção de necessidade de volumetria ──
+  useEffect(() => {
+    if (!vinculoId) { setPrecisaVolumetria(null); return; }
+    const v = vinculos.find(vv => vv.id === vinculoId);
+    if (!v) { setPrecisaVolumetria(null); return; }
+    const item = itensEdital.find(i => i.id === v.edital_item_id);
+    const prod = produtos.find(p => p.id === v.produto_id);
+    const desc = ((item?.descricao || "") + " " + (prod?.nome || "")).toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const cat = ((prod as Record<string, unknown>)?.categoria as string || "").toLowerCase();
+
+    // Termos que indicam volumetria (produto vendido em embalagem com rendimento)
+    const termosVolumetria = ["kit", "reagente", "caixa com", "frasco", "testes", "determinacoes", "dosagens", "ensaios", "reacoes"];
+    // Termos que indicam compra unitária (sem volumetria)
+    const termosUnitario = ["microscopio", "autoclave", "centrifuga", "equipamento", "impressora", "computador", "monitor", "balanca"];
+
+    const temTermoVol = termosVolumetria.some(t => desc.includes(t)) || cat === "reagente";
+    const temTermoUnit = termosUnitario.some(t => desc.includes(t)) || cat === "equipamento";
+    const temRendimento = (prod as Record<string, unknown>)?.rendimento_testes != null &&
+                          Number((prod as Record<string, unknown>)?.rendimento_testes) > 0;
+
+    if (temTermoUnit && !temTermoVol) setPrecisaVolumetria(false);
+    else if (temTermoVol || temRendimento) setPrecisaVolumetria(true);
+    else setPrecisaVolumetria(false); // default: sem volumetria
+  }, [vinculoId, vinculos, itensEdital, produtos]);
 
   // ── Handlers ──
 
@@ -319,8 +348,16 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleConfirmarSelecao = async (produtoId: string) => {
     try {
-      // Se já existe vínculo para este item, deletar primeiro
-      const existente = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === selecaoItemId);
+      // Buscar vínculo existente (no state OU no banco)
+      let existente = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === selecaoItemId);
+      if (!existente) {
+        // Tentar buscar no banco (pode existir mas não estar no state filtrado)
+        try {
+          const dbRes = await crudList("edital-item-produto", { edital_item_id: selecaoItemId, limit: 1 });
+          const dbItems = (dbRes.items || []) as unknown as Vinculo[];
+          if (dbItems.length > 0) existente = dbItems[0];
+        } catch { /* ignore */ }
+      }
       if (existente) {
         try {
           await crudUpdate("edital-item-produto", existente.id, {
@@ -533,14 +570,44 @@ export function PrecificacaoPage(props?: PageProps) {
     ...vinculos.map(v => {
       const item = itensEdital.find(i => i.id === v.edital_item_id);
       const prod = produtos.find(p => p.id === v.produto_id);
+      // Descobrir lote do item
+      const loteEntry = Object.entries(loteItensMap).find(([, ids]) => ids.includes(v.edital_item_id));
+      const lote = loteEntry ? lotes.find(l => l.id === loteEntry[0]) : null;
+      // Nome curto do item (extrair de parênteses ou tipo de análise)
+      const desc = item?.descricao || "";
+      const parenMatch = desc.match(/\(([^)]{2,30})\)/);
+      const tipoMatch = desc.match(/tipo de an[aá]lise:\s*([^,]{3,40})/i);
+      const shortName = parenMatch ? parenMatch[1] : tipoMatch ? tipoMatch[1].trim() : desc.slice(0, 30);
+      const loteLabel = lote ? `Lote ${lote.numero_lote} (${lote.nome})` : "";
       return {
         value: v.id,
-        label: `Item ${item?.numero_item ?? "?"} — ${prod?.nome?.slice(0, 30) ?? "Produto"} ${v.confirmado ? "✓" : ""}`,
+        label: `${loteLabel} → ${shortName} / ${prod?.nome?.slice(0, 30) ?? "Produto"} ${v.confirmado ? "✓" : ""}`,
       };
     }),
   ];
 
   const curVinculo = vinculos.find(v => v.id === vinculoId);
+
+  // Detectar se existe produto compatível no portfolio para um item
+  const _norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const _stopWords = new Set(["para","tipo","conjunto","completo","caracteristicas","adicionais","equipamento","apresentacao","metodo","teste","reagente","diagnostico","clinico","marca","dispositivos"]);
+  const temProdutoCompativelNoPortfolio = useCallback((descricao: string): boolean => {
+    if (!descricao || produtos.length === 0) return false;
+    // Extrair nome curto: conteúdo entre parênteses (ex: "TP", "TTPA") ou tipo de análise
+    const parenMatch = descricao.match(/\(([^)]{2,30})\)/);
+    const tipoMatch = descricao.match(/tipo de an[aá]lise:\s*([^,]{3,60})/i);
+    const keyPhrase = parenMatch ? parenMatch[1] : tipoMatch ? tipoMatch[1] : "";
+    if (!keyPhrase) return false; // sem nome curto identificável = não dá pra comparar
+    const keyNorm = _norm(keyPhrase);
+    const keyWords = keyNorm.split(/\s+/).filter(w => w.length > 2 && !_stopWords.has(w));
+    if (keyWords.length === 0) return false;
+
+    return produtos.some(p => {
+      const nomeLower = _norm(p.nome || "");
+      // Match: pelo menos 1 palavra-chave do nome curto aparece no nome do produto
+      return keyWords.some(kw => nomeLower.includes(kw));
+    });
+  }, [produtos]);
 
   // ── Column defs ──
   const historicoColumns: Column<HistoricoPreco>[] = [
@@ -773,8 +840,10 @@ export function PrecificacaoPage(props?: PageProps) {
                                               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 12, fontWeight: 600, backgroundColor: "#64748b20", color: "#94a3b8", border: "1px solid #64748b40" }}>
                                                 ⏭️ Ignorado
                                               </span>
+                                            ) : temProdutoCompativelNoPortfolio(it.descricao) ? (
+                                              <span style={{ fontSize: 12, color: "#f59e0b" }}>⚠️ Não vinculado — existe produto compatível</span>
                                             ) : (
-                                              <span style={{ fontSize: 12, color: "#f59e0b" }}>⚠️ Sem produto no portfolio</span>
+                                              <span style={{ fontSize: 12, color: "#ef4444" }}>❌ Sem produto no portfolio</span>
                                             )}
                                           </td>
                                           <td style={{ padding: 4, textAlign: "center" }}>
@@ -946,32 +1015,80 @@ export function PrecificacaoPage(props?: PageProps) {
 
                     {vinculoId && (
                       <>
-                        {/* UC-P03: Volumetria */}
-                        <Card title="Volumetria (UC-P03)" icon={<BarChart3 size={18} />}>
-                          <div className="form-grid form-grid-3">
-                            <FormField label="Volume do Edital">
-                              <TextInput value={volEdital || String(curVinculo?.volume_edital || "")} onChange={setVolEdital} placeholder="50000" />
-                            </FormField>
-                            <FormField label="Rendimento (por kit)">
-                              <TextInput value={rendimento || String(curVinculo?.rendimento_produto || "")} onChange={setRendimento} placeholder="500" />
-                            </FormField>
-                            <FormField label="Rep. Amostras">
-                              <TextInput value={repAmostras} onChange={setRepAmostras} placeholder="0" />
-                            </FormField>
-                            <FormField label="Rep. Calibradores">
-                              <TextInput value={repCalib} onChange={setRepCalib} placeholder="0" />
-                            </FormField>
-                            <FormField label="Rep. Controles">
-                              <TextInput value={repControles} onChange={setRepControles} placeholder="0" />
-                            </FormField>
-                            <div className="form-field-actions">
-                              <ActionButton icon={<BarChart3 size={16} />} label="Calcular" variant="primary" onClick={handleCalcVolume} />
+                        {/* Banner de detecção de volumetria */}
+                        <Card title="Volumetria" icon={<BarChart3 size={18} />}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                            backgroundColor: precisaVolumetria ? "#f59e0b15" : "#22c55e15",
+                            border: `1px solid ${precisaVolumetria ? "#f59e0b40" : "#22c55e40"}`,
+                          }}>
+                            <span style={{ fontSize: 18 }}>{precisaVolumetria ? "⚠️" : "✅"}</span>
+                            <span style={{ flex: 1 }}>
+                              {precisaVolumetria
+                                ? "Detectei necessidade de cálculo de volumetria para este item (kit/reagente com rendimento por embalagem)."
+                                : "Item de compra unitária — sem necessidade de cálculo de volumetria. Quantidade do edital será usada diretamente."}
+                            </span>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button
+                                className={`btn ${precisaVolumetria ? "btn-primary" : "btn-secondary"}`}
+                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                onClick={() => setPrecisaVolumetria(true)}
+                              >
+                                Sim, calcular
+                              </button>
+                              <button
+                                className={`btn ${!precisaVolumetria ? "btn-primary" : "btn-secondary"}`}
+                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                onClick={() => setPrecisaVolumetria(false)}
+                              >
+                                Não, usar qtd direta
+                              </button>
                             </div>
                           </div>
-                          {curVinculo?.formula_calculo && (
+
+                          {/* UC-P03: Campos de volumetria — só se confirmado */}
+                          {precisaVolumetria && (
+                            <>
+                              <div className="form-grid form-grid-3" style={{ marginTop: 12 }}>
+                                <FormField label="Volume do Edital (testes)">
+                                  <TextInput value={volEdital || String(curVinculo?.volume_edital || "")} onChange={setVolEdital} placeholder="50000" />
+                                </FormField>
+                                <FormField label="Rendimento por Kit (testes/kit)">
+                                  <TextInput value={rendimento || String(curVinculo?.rendimento_produto || "")} onChange={setRendimento} placeholder="500" />
+                                </FormField>
+                                <FormField label="Rep. Amostras">
+                                  <TextInput value={repAmostras} onChange={setRepAmostras} placeholder="0" />
+                                </FormField>
+                                <FormField label="Rep. Calibradores">
+                                  <TextInput value={repCalib} onChange={setRepCalib} placeholder="0" />
+                                </FormField>
+                                <FormField label="Rep. Controles">
+                                  <TextInput value={repControles} onChange={setRepControles} placeholder="0" />
+                                </FormField>
+                                <div className="form-field-actions">
+                                  <ActionButton icon={<BarChart3 size={16} />} label="Calcular e Salvar" variant="primary" onClick={handleCalcVolume} />
+                                </div>
+                              </div>
+                              {curVinculo?.formula_calculo && (
+                                <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
+                                  <strong>Fórmula:</strong> {curVinculo.formula_calculo}<br />
+                                  <strong>Kits necessários:</strong> {curVinculo.quantidade_kits}
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* Sem volumetria: mostra resumo direto */}
+                          {precisaVolumetria === false && (
                             <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
-                              <strong>Fórmula:</strong> {curVinculo.formula_calculo}<br />
-                              <strong>Kits necessários:</strong> {curVinculo.quantidade_kits}
+                              {(() => {
+                                const item = itensEdital.find(i => i.id === curVinculo?.edital_item_id);
+                                const qtd = item?.quantidade || 0;
+                                return (
+                                  <>
+                                    <strong>Quantidade do edital:</strong> {qtd} unidades — será usada diretamente como quantidade final.
+                                  </>
+                                );
+                              })()}
                             </div>
                           )}
                         </Card>
