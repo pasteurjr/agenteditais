@@ -10534,6 +10534,50 @@ def documentacao_necessaria(edital_id):
 # Endpoints REST para Precificação (chamam tools diretamente, sem chat)
 # =============================================================================
 
+@app.route("/api/precificacao/buscar-cadastrar-produto/<item_id>", methods=["POST"])
+@require_auth
+def precif_buscar_cadastrar_produto(item_id):
+    """Busca produto na web pela descrição do item, baixa PDF se encontrar, cadastra e vincula."""
+    from models import EditalItem
+    from tools import tool_web_search
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        item = db.query(EditalItem).filter(EditalItem.id == item_id).first()
+        if not item:
+            return jsonify({"success": False, "error": "Item não encontrado"})
+
+        tipo = (request.get_json(silent=True) or {}).get("tipo", "web")  # "web" ou "anvisa"
+        desc = (item.descricao or "")[:100]
+
+        if tipo == "anvisa":
+            from tools import tool_buscar_anvisa
+            resultado = tool_buscar_anvisa(desc, user_id)
+        else:
+            resultado = tool_web_search(f"manual ficha técnica {desc}", user_id)
+
+        if not resultado.get("success"):
+            return jsonify({"success": False, "error": resultado.get("error", "Nenhum resultado")})
+
+        # Retornar resultados para o usuário escolher
+        pdfs = resultado.get("resultados_pdf", [])[:5]
+        outros = resultado.get("outros_resultados", [])[:5]
+        registros_anvisa = resultado.get("registros", [])[:5]
+
+        return jsonify({
+            "success": True,
+            "item_descricao": desc,
+            "pdfs": pdfs,
+            "outros": outros,
+            "registros_anvisa": registros_anvisa,
+            "total": resultado.get("total_resultados", 0),
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+    finally:
+        db.close()
+
+
 @app.route("/api/precificacao/vincular-ia/<item_id>", methods=["POST"])
 @require_auth
 def precif_vincular_ia(item_id):

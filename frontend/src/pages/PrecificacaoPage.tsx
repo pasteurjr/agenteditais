@@ -11,6 +11,7 @@ import {
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudGet } from "../api/crud";
+import { createSession, sendMessage } from "../api/client";
 import { getEditais, getProdutos } from "../api/client";
 import type { Edital, Produto } from "../api/client";
 
@@ -126,6 +127,8 @@ export function PrecificacaoPage(props?: PageProps) {
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loteItensMap, setLoteItensMap] = useState<Record<string, string[]>>({});
   const [itensEdital, setItensEdital] = useState<EditalItem[]>([]);
+  const [iaProcessing, setIaProcessing] = useState<string | null>(null);
+  const [iaResponse, setIaResponse] = useState<string | null>(null);
   const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
   const [loteEspecialidade, setLoteEspecialidade] = useState("");
   const [loteVolume, setLoteVolume] = useState("");
@@ -775,21 +778,40 @@ export function PrecificacaoPage(props?: PageProps) {
                                                 <>
                                                   <ActionButton
                                                     icon={<Search size={14} />}
-                                                    label="Buscar na Web"
+                                                    label={iaProcessing ? "Buscando..." : "Buscar na Web"}
                                                     variant="neutral"
-                                                    onClick={() => {
-                                                      // Extrair palavras-chave da descrição
-                                                      const desc = (it.descricao || "").slice(0, 60);
-                                                      if (onSendToChat) onSendToChat(`Busque o manual do produto "${desc}" na web`);
+                                                    loading={!!iaProcessing}
+                                                    onClick={async () => {
+                                                      const desc = (it.descricao || "").slice(0, 80);
+                                                      setIaProcessing("Buscando produto na web...");
+                                                      setIaResponse(null);
+                                                      try {
+                                                        const session = await createSession("precif-busca-web") as Record<string, unknown>;
+                                                        const sid = String(session.session_id || session.id);
+                                                        const resp = await sendMessage(sid, `Busque o manual do produto "${desc}" na web e cadastre`);
+                                                        setIaResponse(resp.response || "Busca concluída.");
+                                                        loadLotes(editalId);
+                                                      } catch { setIaResponse("Erro na busca web."); }
+                                                      finally { setIaProcessing(null); }
                                                     }}
                                                   />
                                                   <ActionButton
                                                     icon={<Shield size={14} />}
-                                                    label="ANVISA"
+                                                    label={iaProcessing ? "Buscando..." : "ANVISA"}
                                                     variant="neutral"
-                                                    onClick={() => {
-                                                      const desc = (it.descricao || "").slice(0, 60);
-                                                      if (onSendToChat) onSendToChat(`Busque registros ANVISA para "${desc}"`);
+                                                    loading={!!iaProcessing}
+                                                    onClick={async () => {
+                                                      const desc = (it.descricao || "").slice(0, 80);
+                                                      setIaProcessing("Buscando ANVISA...");
+                                                      setIaResponse(null);
+                                                      try {
+                                                        const session = await createSession("precif-anvisa") as Record<string, unknown>;
+                                                        const sid = String(session.session_id || session.id);
+                                                        const resp = await sendMessage(sid, `Busque registros ANVISA para "${desc}"`);
+                                                        setIaResponse(resp.response || "Busca ANVISA concluída.");
+                                                        loadLotes(editalId);
+                                                      } catch { setIaResponse("Erro na busca ANVISA."); }
+                                                      finally { setIaProcessing(null); }
                                                     }}
                                                   />
                                                   <ActionButton
@@ -815,6 +837,21 @@ export function PrecificacaoPage(props?: PageProps) {
                                     </tbody>
                                   </table>
                                   {itensEdital.length > 20 && <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>... e mais {itensEdital.length - 20} itens</p>}
+                                  {/* Resposta da IA (busca web / ANVISA) */}
+                                  {iaProcessing && (
+                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, backgroundColor: "#1e293b", fontSize: 12, color: "#60a5fa" }}>
+                                      ⏳ {iaProcessing}
+                                    </div>
+                                  )}
+                                  {iaResponse && !iaProcessing && (
+                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, backgroundColor: "#0f172a", border: "1px solid #334155", fontSize: 12, color: "#e2e8f0", maxHeight: 200, overflowY: "auto" }}
+                                      dangerouslySetInnerHTML={{ __html: iaResponse
+                                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                                        .replace(/^- (.+)$/gm, '<div style="padding:1px 0 1px 8px;">• $1</div>')
+                                        .replace(/\n/g, '<br/>')
+                                      }}
+                                    />
+                                  )}
                                 </div>
                               )}
                             </div>
