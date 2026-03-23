@@ -3,8 +3,10 @@ import type { PageProps } from "../types";
 import {
   DollarSign, Search, TrendingUp, History, Lightbulb, Package,
   Layers, Target, BarChart3, Shield, ChevronDown, ChevronUp,
-  Check, AlertTriangle, Download, X,
+  Check, AlertTriangle, Download, X, Globe, Loader2, Sparkles,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Card, DataTable, ActionButton, FormField, TextInput, SelectInput,
   TabPanel, Modal,
@@ -129,6 +131,13 @@ export function PrecificacaoPage(props?: PageProps) {
   const [itensEdital, setItensEdital] = useState<EditalItem[]>([]);
   const [iaProcessing, setIaProcessing] = useState<string | null>(null);
   const [iaResponse, setIaResponse] = useState<string | null>(null);
+  // Modals: Buscar na Web / ANVISA (mesmo padrão do PortfolioPage)
+  const [showBuscaWebModal, setShowBuscaWebModal] = useState(false);
+  const [showAnvisaModal, setShowAnvisaModal] = useState(false);
+  const [buscaNomeProduto, setBuscaNomeProduto] = useState("");
+  const [buscaFabricante, setBuscaFabricante] = useState("");
+  const [anvisaRegistro, setAnvisaRegistro] = useState("");
+  const [anvisaNomeProduto, setAnvisaNomeProduto] = useState("");
   const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
   const [loteEspecialidade, setLoteEspecialidade] = useState("");
   const [loteVolume, setLoteVolume] = useState("");
@@ -549,6 +558,55 @@ export function PrecificacaoPage(props?: PageProps) {
     },
   ];
 
+  // ── Handlers: Buscar na Web / ANVISA (modal → IA) ──
+  const handleBuscaWebConfirm = async () => {
+    if (!buscaNomeProduto) return;
+    const msg = buscaFabricante
+      ? `Busque o manual do produto ${buscaNomeProduto} do fabricante ${buscaFabricante} na web e cadastre`
+      : `Busque o manual do produto ${buscaNomeProduto} na web e cadastre`;
+    setShowBuscaWebModal(false);
+    setIaProcessing("Buscando produto na web...");
+    setIaResponse(null);
+    try {
+      const session = await createSession("precif-busca-web") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const resp = await sendMessage(sid, msg);
+      setIaResponse(resp.response || "Busca web concluída.");
+      setBuscaNomeProduto("");
+      setBuscaFabricante("");
+      if (editalId) loadLotes(editalId);
+    } catch (err) {
+      console.error("[BuscaWeb] Erro:", err);
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca web"}`);
+    } finally {
+      setIaProcessing(null);
+    }
+  };
+
+  const handleAnvisaConfirm = async () => {
+    let msg = "";
+    if (anvisaRegistro) msg = `Busque o registro ANVISA numero ${anvisaRegistro}`;
+    else if (anvisaNomeProduto) msg = `Busque registros ANVISA para o produto ${anvisaNomeProduto}`;
+    else return;
+    setShowAnvisaModal(false);
+    setIaProcessing("Buscando registros ANVISA...");
+    setIaResponse(null);
+    try {
+      const session = await createSession("precif-anvisa") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const resp = await sendMessage(sid, msg);
+      setIaResponse(resp.response || "Busca ANVISA concluída.");
+      setAnvisaRegistro("");
+      setAnvisaNomeProduto("");
+      if (editalId) loadLotes(editalId);
+    } catch (err) {
+      console.error("[ANVISA] Erro:", err);
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca ANVISA"}`);
+    } finally {
+      setIaProcessing(null);
+    }
+  };
+
   // ── Tabs ──
   const tabs = [
     { id: "lotes", label: `Lotes ${lotes.length > 0 ? (lotes.some(l => (l as Record<string,unknown>).status === "configurado") ? "✅" : "⚠️") : "❌"}`, icon: <Layers size={16} /> },
@@ -777,41 +835,23 @@ export function PrecificacaoPage(props?: PageProps) {
                                               ) : (
                                                 <>
                                                   <ActionButton
-                                                    icon={<Search size={14} />}
-                                                    label={iaProcessing ? "Buscando..." : "Buscar na Web"}
+                                                    icon={<Globe size={14} />}
+                                                    label="Buscar na Web"
                                                     variant="neutral"
-                                                    loading={!!iaProcessing}
-                                                    onClick={async () => {
-                                                      const desc = (it.descricao || "").slice(0, 80);
-                                                      setIaProcessing("Buscando produto na web...");
-                                                      setIaResponse(null);
-                                                      try {
-                                                        const session = await createSession("precif-busca-web") as Record<string, unknown>;
-                                                        const sid = String(session.session_id || session.id);
-                                                        const resp = await sendMessage(sid, `Busque o manual do produto "${desc}" na web e cadastre`);
-                                                        setIaResponse(resp.response || "Busca concluída.");
-                                                        loadLotes(editalId);
-                                                      } catch { setIaResponse("Erro na busca web."); }
-                                                      finally { setIaProcessing(null); }
+                                                    onClick={() => {
+                                                      setBuscaNomeProduto((it.descricao || "").slice(0, 120));
+                                                      setBuscaFabricante("");
+                                                      setShowBuscaWebModal(true);
                                                     }}
                                                   />
                                                   <ActionButton
                                                     icon={<Shield size={14} />}
-                                                    label={iaProcessing ? "Buscando..." : "ANVISA"}
+                                                    label="ANVISA"
                                                     variant="neutral"
-                                                    loading={!!iaProcessing}
-                                                    onClick={async () => {
-                                                      const desc = (it.descricao || "").slice(0, 80);
-                                                      setIaProcessing("Buscando ANVISA...");
-                                                      setIaResponse(null);
-                                                      try {
-                                                        const session = await createSession("precif-anvisa") as Record<string, unknown>;
-                                                        const sid = String(session.session_id || session.id);
-                                                        const resp = await sendMessage(sid, `Busque registros ANVISA para "${desc}"`);
-                                                        setIaResponse(resp.response || "Busca ANVISA concluída.");
-                                                        loadLotes(editalId);
-                                                      } catch { setIaResponse("Erro na busca ANVISA."); }
-                                                      finally { setIaProcessing(null); }
+                                                    onClick={() => {
+                                                      setAnvisaNomeProduto((it.descricao || "").slice(0, 120));
+                                                      setAnvisaRegistro("");
+                                                      setShowAnvisaModal(true);
                                                     }}
                                                   />
                                                   <ActionButton
@@ -839,18 +879,25 @@ export function PrecificacaoPage(props?: PageProps) {
                                   {itensEdital.length > 20 && <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>... e mais {itensEdital.length - 20} itens</p>}
                                   {/* Resposta da IA (busca web / ANVISA) */}
                                   {iaProcessing && (
-                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, backgroundColor: "#1e293b", fontSize: 12, color: "#60a5fa" }}>
-                                      ⏳ {iaProcessing}
+                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, backgroundColor: "#1e293b", fontSize: 12, color: "#60a5fa", display: "flex", alignItems: "center", gap: 8 }}>
+                                      <Loader2 size={14} className="spin" /> {iaProcessing}
                                     </div>
                                   )}
                                   {iaResponse && !iaProcessing && (
-                                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, backgroundColor: "#0f172a", border: "1px solid #334155", fontSize: 12, color: "#e2e8f0", maxHeight: 200, overflowY: "auto" }}
-                                      dangerouslySetInnerHTML={{ __html: iaResponse
-                                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                                        .replace(/^- (.+)$/gm, '<div style="padding:1px 0 1px 8px;">• $1</div>')
-                                        .replace(/\n/g, '<br/>')
-                                      }}
-                                    />
+                                    <Card>
+                                      <div style={{ position: "relative" }}>
+                                        <button
+                                          onClick={() => setIaResponse(null)}
+                                          style={{ position: "absolute", top: 0, right: 0, background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 18 }}
+                                        >&times;</button>
+                                        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                                          <Sparkles size={18} style={{ color: "var(--accent-primary)", flexShrink: 0, marginTop: 2 }} />
+                                          <div className="markdown-response" style={{ fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({href, children}) => <a href={href as string} target="_blank" rel="noopener noreferrer">{children}</a> }}>{iaResponse}</ReactMarkdown>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </Card>
                                   )}
                                 </div>
                               )}
@@ -1239,6 +1286,56 @@ export function PrecificacaoPage(props?: PageProps) {
                 ))}
               </tbody>
             </table>
+          </Modal>
+
+          {/* === MODAL BUSCAR NA WEB === */}
+          <Modal
+            isOpen={showBuscaWebModal}
+            onClose={() => { setShowBuscaWebModal(false); setBuscaNomeProduto(""); setBuscaFabricante(""); }}
+            title="Buscar Produto na Web"
+            footer={
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowBuscaWebModal(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={handleBuscaWebConfirm} disabled={!buscaNomeProduto}>
+                  <Globe size={14} /> Buscar via IA
+                </button>
+              </>
+            }
+          >
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
+              A IA busca informações do produto na web e cadastra automaticamente no portfólio.
+            </p>
+            <FormField label="Nome do Produto" required>
+              <TextInput value={buscaNomeProduto} onChange={setBuscaNomeProduto} placeholder="Ex: Reagente Hematologia XN-L" />
+            </FormField>
+            <FormField label="Fabricante (opcional)">
+              <TextInput value={buscaFabricante} onChange={setBuscaFabricante} placeholder="Ex: Sysmex" />
+            </FormField>
+          </Modal>
+
+          {/* === MODAL ANVISA === */}
+          <Modal
+            isOpen={showAnvisaModal}
+            onClose={() => { setShowAnvisaModal(false); setAnvisaRegistro(""); setAnvisaNomeProduto(""); }}
+            title="Registros de Produtos pela ANVISA"
+            footer={
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowAnvisaModal(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={handleAnvisaConfirm} disabled={!anvisaRegistro && !anvisaNomeProduto}>
+                  <Shield size={14} /> Buscar via IA
+                </button>
+              </>
+            }
+          >
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
+              A IA tenta trazer os registros e o usuário valida ou complementa.
+            </p>
+            <FormField label="Número de Registro ANVISA">
+              <TextInput value={anvisaRegistro} onChange={setAnvisaRegistro} placeholder="Ex: 80000000001" />
+            </FormField>
+            <FormField label="ou Nome do Produto">
+              <TextInput value={anvisaNomeProduto} onChange={setAnvisaNomeProduto} placeholder="Ex: Reagente Teste Rápido" />
+            </FormField>
           </Modal>
       </div>
     </div>
