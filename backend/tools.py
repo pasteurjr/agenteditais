@@ -9294,3 +9294,108 @@ TOOLS_MAP["estrategia_competitiva"] = tool_estrategia_competitiva
 TOOLS_MAP["historico_precos_camada_f"] = tool_historico_precos_camada_f
 TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
 
+
+def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
+    """Agrega histórico de preços + recomendação IA + concorrentes para um item-produto."""
+    db = get_db()
+    try:
+        # Resolver produto e item
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.id == eip_id,
+            EditalItemProduto.user_id == user_id
+        ).first()
+        if not vinculo:
+            return {"success": False, "error": "Vínculo não encontrado"}
+
+        produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first()
+        item = db.query(EditalItem).filter(EditalItem.id == vinculo.edital_item_id).first()
+        edital = db.query(Edital).filter(Edital.id == item.edital_id).first() if item else None
+
+        termo = produto.nome if produto else (item.descricao[:80] if item else "")
+        edital_id = edital.id if edital else None
+
+        # 1. Histórico local
+        hist_result = tool_historico_precos(termo=termo, user_id=user_id)
+        historico = {"qtd_registros": 0, "preco_min": None, "preco_medio": None, "preco_max": None}
+        if hist_result.get("success") and hist_result.get("estatisticas"):
+            stats = hist_result["estatisticas"]
+            historico = {
+                "qtd_registros": stats.get("total_registros", 0),
+                "preco_min": stats.get("preco_minimo", None),
+                "preco_medio": stats.get("preco_medio", None),
+                "preco_max": stats.get("preco_maximo", None),
+            }
+
+        # 2. Recomendação IA
+        rec_result = tool_recomendar_preco(termo=termo, edital_id=edital_id, user_id=user_id)
+        recomendacao = {
+            "custo_sugerido": None, "markup_sugerido": None,
+            "preco_base_sugerido": None, "referencia_sugerida": None,
+            "faixa": {"agressivo": None, "ideal": None, "conservador": None},
+            "justificativa": "Sem dados suficientes para recomendação.",
+            "fonte": None,
+        }
+        if rec_result.get("success"):
+            rec = rec_result.get("recomendacao", {})
+            fonte = rec_result.get("fonte", "")
+            preco_ideal = rec.get("preco_ideal") or rec.get("preco_medio", 0)
+            preco_agressivo = rec.get("preco_agressivo") or rec.get("preco_minimo_sugerido", 0)
+            preco_conservador = rec.get("preco_conservador") or rec.get("preco_maximo_sugerido", 0)
+
+            # Custo sugerido: ~85% do preço mínimo do mercado
+            preco_min_mercado = (rec_result.get("estatisticas_historico", {}).get("preco_minimo_vencedor")
+                                 or rec_result.get("estatisticas_mercado", {}).get("preco_minimo")
+                                 or preco_agressivo)
+            custo_sug = round(float(preco_min_mercado) * 0.85, 2) if preco_min_mercado else None
+            markup_sug = round(((float(preco_ideal) / float(custo_sug)) - 1) * 100, 1) if custo_sug and preco_ideal and custo_sug > 0 else None
+
+            recomendacao = {
+                "custo_sugerido": custo_sug,
+                "markup_sugerido": markup_sug,
+                "preco_base_sugerido": round(float(preco_ideal), 2) if preco_ideal else None,
+                "referencia_sugerida": round(float(preco_conservador), 2) if preco_conservador else None,
+                "faixa": {
+                    "agressivo": round(float(preco_agressivo), 2) if preco_agressivo else None,
+                    "ideal": round(float(preco_ideal), 2) if preco_ideal else None,
+                    "conservador": round(float(preco_conservador), 2) if preco_conservador else None,
+                },
+                "justificativa": rec_result.get("justificativa", ""),
+                "fonte": fonte,
+            }
+
+        # 3. Concorrentes
+        concorrentes = []
+        try:
+            concs = db.query(Concorrente).order_by(
+                Concorrente.editais_ganhos.desc()
+            ).limit(5).all()
+            for c in concs:
+                concorrentes.append({
+                    "nome": c.nome,
+                    "taxa_vitoria": float(c.taxa_vitoria) if c.taxa_vitoria else 0,
+                    "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
+                    "editais_ganhos": c.editais_ganhos or 0,
+                })
+        except Exception:
+            pass
+
+        # 4. Referência do edital
+        ref_edital = None
+        if item and item.valor_unitario_estimado:
+            ref_edital = float(item.valor_unitario_estimado)
+
+        return {
+            "success": True,
+            "historico": historico,
+            "recomendacao": recomendacao,
+            "concorrentes": concorrentes,
+            "referencia_edital": ref_edital,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["insights_precificacao"] = tool_insights_precificacao
+

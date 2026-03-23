@@ -10676,6 +10676,16 @@ def precif_estrategia(edital_id):
     return jsonify(resultado)
 
 
+@app.route("/api/precificacao/<eip_id>/insights", methods=["GET"])
+@require_auth
+def precif_insights(eip_id):
+    """Agrega histórico + recomendação IA + concorrentes para um item-produto."""
+    from tools import tool_insights_precificacao
+    user_id = get_current_user_id()
+    resultado = tool_insights_precificacao(eip_id, user_id)
+    return jsonify(resultado)
+
+
 @app.route("/api/editais/<edital_id>/analisar-mercado", methods=["POST"])
 @require_auth
 def analisar_mercado_edital(edital_id):
