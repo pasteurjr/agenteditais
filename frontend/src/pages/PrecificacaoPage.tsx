@@ -741,7 +741,27 @@ export function PrecificacaoPage(props?: PageProps) {
                                         return (
                                         <tr key={it.id} style={{ borderBottom: "1px solid var(--border-light, #eee)" }}>
                                           <td style={{ padding: 4 }}>{it.numero_item}</td>
-                                          <td style={{ padding: 4, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.descricao}</td>
+                                          <td style={{ padding: 4, maxWidth: 350 }}>
+                                            {(() => {
+                                              const desc = it.descricao || "";
+                                              // Extrair nome curto: conteúdo entre parênteses ou "tipo de análise: ..."
+                                              const parenMatch = desc.match(/\(([^)]{2,30})\)/);
+                                              const tipoMatch = desc.match(/tipo de an[aá]lise:\s*([^,]{3,60})/i);
+                                              const shortName = parenMatch ? parenMatch[1] : tipoMatch ? tipoMatch[1].trim() : null;
+                                              return (
+                                                <div>
+                                                  {shortName && (
+                                                    <strong style={{ display: "block", fontSize: 13, marginBottom: 2, color: "var(--text-primary)" }}>
+                                                      {shortName}
+                                                    </strong>
+                                                  )}
+                                                  <span style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    {desc}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })()}
+                                          </td>
                                           <td style={{ textAlign: "right", padding: 4 }}>{it.quantidade}</td>
                                           <td style={{ textAlign: "right", padding: 4 }}>{fmt(it.valor_unitario_estimado)}</td>
                                           <td style={{ padding: 4 }}>
