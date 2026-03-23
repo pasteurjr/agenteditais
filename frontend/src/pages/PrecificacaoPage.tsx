@@ -342,14 +342,19 @@ export function PrecificacaoPage(props?: PageProps) {
   useEffect(() => {
     if (!vinculoId) { setInsights(null); return; }
     setInsightsLoading(true);
+    setInsights(null);
     const token = localStorage.getItem("editais_ia_access_token");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
     fetch(`/api/precificacao/${vinculoId}/insights`, {
       headers: { Authorization: token ? `Bearer ${token}` : "" },
+      signal: controller.signal,
     })
       .then(r => r.json())
       .then(data => { if (data.success) setInsights(data); })
       .catch(() => {})
-      .finally(() => setInsightsLoading(false));
+      .finally(() => { clearTimeout(timeout); setInsightsLoading(false); });
+    return () => { controller.abort(); clearTimeout(timeout); };
   }, [vinculoId]);
 
   // ── Handlers ──
@@ -1175,12 +1180,18 @@ export function PrecificacaoPage(props?: PageProps) {
                               <Loader2 size={16} className="spin" /> Consultando histórico de preços e concorrência...
                             </div>
                           )}
-                          {!insightsLoading && !insights && (
-                            <p style={{ fontSize: 13, color: "var(--text-secondary)", padding: "8px 0" }}>
-                              Nenhum registro histórico encontrado para este produto. Preencha os campos manualmente.
-                            </p>
+                          {!insightsLoading && (!insights || !(insights as Record<string, unknown>).tem_dados) && (
+                            <div style={{ padding: "12px", fontSize: 13, color: "var(--text-secondary)", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)" }}>
+                              <p style={{ marginBottom: 8 }}>Nenhum registro histórico encontrado para este produto.</p>
+                              <p>Preencha os campos manualmente ou use o chat para buscar preços no PNCP.</p>
+                              {insights && (insights as Record<string, unknown>).termos_tentados && (
+                                <p style={{ fontSize: 11, marginTop: 8, color: "#64748b" }}>
+                                  Termos buscados: {((insights as Record<string, unknown>).termos_tentados as string[]).join(" | ")}
+                                </p>
+                              )}
+                            </div>
                           )}
-                          {!insightsLoading && insights && (
+                          {!insightsLoading && insights && (insights as Record<string, unknown>).tem_dados && (
                             <>
                               {/* Banner resumo */}
                               <div style={{ display: "flex", gap: 16, padding: "8px 12px", borderRadius: 8, backgroundColor: "#3b82f610", border: "1px solid #3b82f630", fontSize: 13, marginBottom: 12, flexWrap: "wrap" }}>

@@ -9297,6 +9297,7 @@ TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
 
 def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
     """Agrega histórico de preços + recomendação IA + concorrentes para um item-produto."""
+    import re, unicodedata
     db = get_db()
     try:
         # Resolver produto e item
@@ -9310,24 +9311,41 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
         produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first()
         item = db.query(EditalItem).filter(EditalItem.id == vinculo.edital_item_id).first()
         edital = db.query(Edital).filter(Edital.id == item.edital_id).first() if item else None
-
-        termo = produto.nome if produto else (item.descricao[:80] if item else "")
         edital_id = edital.id if edital else None
 
-        # 1. Histórico local
-        hist_result = tool_historico_precos(termo=termo, user_id=user_id)
-        historico = {"qtd_registros": 0, "preco_min": None, "preco_medio": None, "preco_max": None}
-        if hist_result.get("success") and hist_result.get("estatisticas"):
-            stats = hist_result["estatisticas"]
-            historico = {
-                "qtd_registros": stats.get("total_registros", 0),
-                "preco_min": stats.get("preco_minimo", None),
-                "preco_medio": stats.get("preco_medio", None),
-                "preco_max": stats.get("preco_maximo", None),
-            }
+        # Construir termos de busca progressivos (do mais específico ao mais genérico)
+        # Ex: "Kit TTPA Coagulação Celer Wondfo" → ["TTPA coagulação", "TTPA", "coagulação reagente"]
+        nome_prod = produto.nome if produto else ""
+        desc_item = item.descricao if item else ""
+        # Extrair nome curto do item (entre parênteses ou tipo de análise)
+        paren = re.search(r'\(([^)]{2,30})\)', desc_item)
+        tipo_analise = re.search(r'tipo de an[aá]lise:\s*([^,]{3,60})', desc_item, re.I)
+        nome_curto = paren.group(1) if paren else (tipo_analise.group(1).strip() if tipo_analise else "")
+        # Remover stop words e fabricante do nome do produto para busca
+        stop = {"kit", "para", "de", "do", "da", "com", "tipo", "reagente", "diagnóstico", "clínico"}
+        def _norm(s):
+            return unicodedata.normalize("NFD", s.lower()).encode("ascii", "ignore").decode()
+        palavras_prod = [w for w in _norm(nome_prod).split() if len(w) > 2 and w not in stop]
+        cat_prod = (produto.categoria or "") if produto else ""
 
-        # 2. Recomendação IA
-        rec_result = tool_recomendar_preco(termo=termo, edital_id=edital_id, user_id=user_id)
+        termos_busca = []
+        # 1. Nome curto + categoria (ex: "TTPA coagulação")
+        if nome_curto:
+            termos_busca.append(f"{nome_curto} {cat_prod}".strip())
+        # 2. Palavras-chave do produto (ex: "ttpa coagulacao celer wondfo")
+        if palavras_prod:
+            termos_busca.append(" ".join(palavras_prod[:3]))
+        # 3. Só nome curto (ex: "TTPA")
+        if nome_curto and nome_curto not in termos_busca:
+            termos_busca.append(nome_curto)
+        # 4. Nome completo do produto como último recurso
+        if nome_prod:
+            termos_busca.append(nome_prod)
+        if not termos_busca:
+            termos_busca = [desc_item[:60] if desc_item else ""]
+
+        # Tentar cada termo até encontrar dados
+        historico = {"qtd_registros": 0, "preco_min": None, "preco_medio": None, "preco_max": None}
         recomendacao = {
             "custo_sugerido": None, "markup_sugerido": None,
             "preco_base_sugerido": None, "referencia_sugerida": None,
@@ -9335,33 +9353,66 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
             "justificativa": "Sem dados suficientes para recomendação.",
             "fonte": None,
         }
-        if rec_result.get("success"):
-            rec = rec_result.get("recomendacao", {})
-            fonte = rec_result.get("fonte", "")
-            preco_ideal = rec.get("preco_ideal") or rec.get("preco_medio", 0)
-            preco_agressivo = rec.get("preco_agressivo") or rec.get("preco_minimo_sugerido", 0)
-            preco_conservador = rec.get("preco_conservador") or rec.get("preco_maximo_sugerido", 0)
+        termo_usado = ""
 
-            # Custo sugerido: ~85% do preço mínimo do mercado
-            preco_min_mercado = (rec_result.get("estatisticas_historico", {}).get("preco_minimo_vencedor")
-                                 or rec_result.get("estatisticas_mercado", {}).get("preco_minimo")
-                                 or preco_agressivo)
-            custo_sug = round(float(preco_min_mercado) * 0.85, 2) if preco_min_mercado else None
-            markup_sug = round(((float(preco_ideal) / float(custo_sug)) - 1) * 100, 1) if custo_sug and preco_ideal and custo_sug > 0 else None
+        for termo in termos_busca:
+            if not termo.strip():
+                continue
+            # 1. Histórico local
+            hist_result = tool_historico_precos(termo=termo, user_id=user_id)
+            if hist_result.get("success") and hist_result.get("estatisticas"):
+                stats = hist_result["estatisticas"]
+                if stats.get("total_registros", 0) > 0:
+                    historico = {
+                        "qtd_registros": stats.get("total_registros", 0),
+                        "preco_min": stats.get("preco_minimo"),
+                        "preco_medio": stats.get("preco_medio"),
+                        "preco_max": stats.get("preco_maximo"),
+                    }
+                    termo_usado = termo
+                    break
 
-            recomendacao = {
-                "custo_sugerido": custo_sug,
-                "markup_sugerido": markup_sug,
-                "preco_base_sugerido": round(float(preco_ideal), 2) if preco_ideal else None,
-                "referencia_sugerida": round(float(preco_conservador), 2) if preco_conservador else None,
-                "faixa": {
-                    "agressivo": round(float(preco_agressivo), 2) if preco_agressivo else None,
-                    "ideal": round(float(preco_ideal), 2) if preco_ideal else None,
-                    "conservador": round(float(preco_conservador), 2) if preco_conservador else None,
-                },
-                "justificativa": rec_result.get("justificativa", ""),
-                "fonte": fonte,
-            }
+            # 2. Recomendação (inclui fallback PNCP internamente)
+            rec_result = tool_recomendar_preco(termo=termo, edital_id=edital_id, user_id=user_id)
+            if rec_result.get("success"):
+                termo_usado = termo
+                rec = rec_result.get("recomendacao", {})
+                fonte = rec_result.get("fonte", "")
+                preco_ideal = rec.get("preco_ideal") or rec.get("preco_medio", 0)
+                preco_agressivo = rec.get("preco_agressivo") or rec.get("preco_minimo_sugerido", 0)
+                preco_conservador = rec.get("preco_conservador") or rec.get("preco_maximo_sugerido", 0)
+
+                preco_min_mercado = (rec_result.get("estatisticas_historico", {}).get("preco_minimo_vencedor")
+                                     or rec_result.get("estatisticas_mercado", {}).get("preco_minimo")
+                                     or preco_agressivo)
+                custo_sug = round(float(preco_min_mercado) * 0.85, 2) if preco_min_mercado else None
+                markup_sug = round(((float(preco_ideal) / float(custo_sug)) - 1) * 100, 1) if custo_sug and preco_ideal and custo_sug > 0 else None
+
+                # Preencher historico do PNCP se local estava vazio
+                if historico["qtd_registros"] == 0:
+                    stats_mercado = rec_result.get("estatisticas_mercado") or rec_result.get("estatisticas_historico", {})
+                    if stats_mercado:
+                        historico = {
+                            "qtd_registros": stats_mercado.get("total_registros") or stats_mercado.get("total_contratos", 0),
+                            "preco_min": stats_mercado.get("preco_minimo") or stats_mercado.get("preco_minimo_vencedor"),
+                            "preco_medio": stats_mercado.get("preco_medio") or stats_mercado.get("preco_medio_vencedor"),
+                            "preco_max": stats_mercado.get("preco_maximo"),
+                        }
+
+                recomendacao = {
+                    "custo_sugerido": custo_sug,
+                    "markup_sugerido": markup_sug,
+                    "preco_base_sugerido": round(float(preco_ideal), 2) if preco_ideal else None,
+                    "referencia_sugerida": round(float(preco_conservador), 2) if preco_conservador else None,
+                    "faixa": {
+                        "agressivo": round(float(preco_agressivo), 2) if preco_agressivo else None,
+                        "ideal": round(float(preco_ideal), 2) if preco_ideal else None,
+                        "conservador": round(float(preco_conservador), 2) if preco_conservador else None,
+                    },
+                    "justificativa": rec_result.get("justificativa", ""),
+                    "fonte": fonte,
+                }
+                break  # Encontrou dados, parar
 
         # 3. Concorrentes
         concorrentes = []
@@ -9384,8 +9435,16 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
         if item and item.valor_unitario_estimado:
             ref_edital = float(item.valor_unitario_estimado)
 
+        # Sinalizar se realmente tem dados úteis
+        tem_dados = (historico["qtd_registros"] > 0 or
+                     recomendacao["custo_sugerido"] is not None or
+                     ref_edital is not None)
+
         return {
             "success": True,
+            "tem_dados": tem_dados,
+            "termo_usado": termo_usado,
+            "termos_tentados": termos_busca,
             "historico": historico,
             "recomendacao": recomendacao,
             "concorrentes": concorrentes,
