@@ -772,19 +772,40 @@ export function PrecificacaoPage(props?: PageProps) {
                                                   }}
                                                 />
                                               ) : (
-                                                <ActionButton
-                                                  icon={<X size={14} />}
-                                                  label="Ignorar"
-                                                  variant="neutral"
-                                                  onClick={async () => {
-                                                    try {
-                                                      await crudUpdate("editais-itens", it.id, { tipo_beneficio: "ignorado" });
-                                                      setItensEdital(prev => prev.map(item =>
-                                                        item.id === it.id ? { ...item, _ignorado: true } as EditalItem : item
-                                                      ));
-                                                    } catch { alert("Erro ao ignorar item."); }
-                                                  }}
-                                                />
+                                                <>
+                                                  <ActionButton
+                                                    icon={<Search size={14} />}
+                                                    label="Buscar na Web"
+                                                    variant="neutral"
+                                                    onClick={() => {
+                                                      // Extrair palavras-chave da descrição
+                                                      const desc = (it.descricao || "").slice(0, 60);
+                                                      if (onSendToChat) onSendToChat(`Busque o manual do produto "${desc}" na web`);
+                                                    }}
+                                                  />
+                                                  <ActionButton
+                                                    icon={<Shield size={14} />}
+                                                    label="ANVISA"
+                                                    variant="neutral"
+                                                    onClick={() => {
+                                                      const desc = (it.descricao || "").slice(0, 60);
+                                                      if (onSendToChat) onSendToChat(`Busque registros ANVISA para "${desc}"`);
+                                                    }}
+                                                  />
+                                                  <ActionButton
+                                                    icon={<X size={14} />}
+                                                    label="Ignorar"
+                                                    variant="neutral"
+                                                    onClick={async () => {
+                                                      try {
+                                                        await crudUpdate("editais-itens", it.id, { tipo_beneficio: "ignorado" });
+                                                        setItensEdital(prev => prev.map(item =>
+                                                          item.id === it.id ? { ...item, _ignorado: true } as EditalItem : item
+                                                        ));
+                                                      } catch { alert("Erro ao ignorar item."); }
+                                                    }}
+                                                  />
+                                                </>
                                               )}
                                             </div>
                                           </td>
