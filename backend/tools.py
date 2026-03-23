@@ -9295,15 +9295,154 @@ TOOLS_MAP["historico_precos_camada_f"] = tool_historico_precos_camada_f
 TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
 
 
+def tool_extrair_vencedores_atas(atas: list, user_id: str, edital_id: str = None) -> Dict[str, Any]:
+    """Extrai vencedores e preços de atas PNCP e salva em precos_historicos + concorrentes."""
+    import requests as req
+    import re as _re
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa_id = empresa.id if empresa else None
+        resultados = []
+        precos_extraidos = []
+
+        for ata in atas[:5]:
+            cnpj = ata.get("cnpj_orgao") or ""
+            ano = ata.get("ano")
+            seq_compra = None
+            url_pncp = ata.get("url_pncp") or ""
+            match_url = _re.search(r'/atas/\d+/\d+/(\d+)/\d+', url_pncp)
+            if match_url:
+                seq_compra = int(match_url.group(1))
+            else:
+                nc = ata.get("numero_controle") or ""
+                match_nc = _re.search(r'\d{14}-\d+-(\d+)/\d+-\d+', nc)
+                if match_nc:
+                    seq_compra = int(match_nc.group(1))
+            if not cnpj or not ano or not seq_compra:
+                continue
+            try:
+                url_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens"
+                resp = req.get(url_itens, timeout=15, headers={"Accept": "application/json"})
+                if resp.status_code != 200:
+                    continue
+                itens = resp.json()
+                if not isinstance(itens, list):
+                    continue
+                vencedores_ata = []
+                for it in itens[:10]:
+                    num_item = it.get("numeroItem")
+                    if not num_item:
+                        continue
+                    try:
+                        url_r = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq_compra}/itens/{num_item}/resultados"
+                        resp_r = req.get(url_r, timeout=10, headers={"Accept": "application/json"})
+                        if resp_r.status_code == 200:
+                            res_item = resp_r.json()
+                            if isinstance(res_item, list) and res_item:
+                                r = res_item[0]
+                                v_data = {
+                                    "item": num_item,
+                                    "descricao": str(it.get("descricao", ""))[:80],
+                                    "quantidade": it.get("quantidade"),
+                                    "valor_estimado": it.get("valorUnitarioEstimado"),
+                                    "vencedor": r.get("nomeRazaoSocialFornecedor"),
+                                    "cnpj_vencedor": r.get("niFornecedor"),
+                                    "valor_homologado": r.get("valorUnitarioHomologado"),
+                                    "qtd_homologada": r.get("quantidadeHomologada"),
+                                    "valor_total_homologado": r.get("valorTotalHomologado"),
+                                }
+                                vencedores_ata.append(v_data)
+                                if v_data["valor_homologado"]:
+                                    precos_extraidos.append(float(v_data["valor_homologado"]))
+                    except Exception:
+                        pass
+                if vencedores_ata:
+                    resultados.append({
+                        "ata_titulo": ata.get("titulo") or f"Ata {ano}/{seq_compra}",
+                        "orgao": ata.get("orgao"),
+                        "vencedores": vencedores_ata,
+                    })
+            except Exception:
+                pass
+
+        # Salvar no banco
+        salvos_c = 0
+        salvos_p = 0
+        cnpjs_cache = {}
+        for res_ata in resultados:
+            for v in res_ata.get("vencedores", []):
+                cnpj_v = (v.get("cnpj_vencedor") or "").replace(".", "").replace("/", "").replace("-", "")
+                nome_v = v.get("vencedor")
+                if not nome_v:
+                    continue
+                conc = cnpjs_cache.get(cnpj_v) if cnpj_v else None
+                if not conc and cnpj_v:
+                    conc = db.query(Concorrente).filter(Concorrente.cnpj == cnpj_v).first()
+                if not conc and nome_v:
+                    conc = db.query(Concorrente).filter(Concorrente.nome.ilike(f"%{nome_v[:20]}%")).first()
+                if not conc:
+                    conc = Concorrente(id=str(uuid.uuid4()), nome=nome_v, cnpj=cnpj_v or None, editais_participados=1, editais_ganhos=1)
+                    db.add(conc)
+                    db.flush()
+                    salvos_c += 1
+                else:
+                    conc.editais_participados = (conc.editais_participados or 0) + 1
+                    conc.editais_ganhos = (conc.editais_ganhos or 0) + 1
+                if cnpj_v:
+                    cnpjs_cache[cnpj_v] = conc
+                try:
+                    ph = PrecoHistorico(
+                        id=str(uuid.uuid4()), edital_id=edital_id, user_id=user_id,
+                        empresa_id=empresa_id, concorrente_id=conc.id,
+                        preco_referencia=v.get("valor_estimado"), preco_vencedor=v.get("valor_homologado"),
+                        empresa_vencedora=nome_v, cnpj_vencedor=cnpj_v or None,
+                        resultado="derrota", fonte="pncp", data_registro=datetime.now(),
+                    )
+                    if v.get("valor_estimado") and v.get("valor_homologado") and v["valor_estimado"] > 0:
+                        ph.desconto_percentual = round((1 - v["valor_homologado"] / v["valor_estimado"]) * 100, 2)
+                    db.add(ph)
+                    salvos_p += 1
+                except Exception:
+                    pass
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        # Stats dos preços extraídos
+        stats = {}
+        if precos_extraidos:
+            stats = {
+                "qtd_registros": len(precos_extraidos),
+                "preco_min": round(min(precos_extraidos), 2),
+                "preco_medio": round(sum(precos_extraidos) / len(precos_extraidos), 2),
+                "preco_max": round(max(precos_extraidos), 2),
+            }
+        return {
+            "success": len(resultados) > 0,
+            "resultados": resultados,
+            "total_atas": len(resultados),
+            "precos_extraidos": precos_extraidos,
+            "stats": stats,
+            "salvos": {"concorrentes": salvos_c, "precos_historicos": salvos_p},
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["extrair_vencedores_atas"] = tool_extrair_vencedores_atas
+
+
 def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
-    """Agrega histórico de preços + recomendação IA + concorrentes para um item-produto."""
+    """Pipeline completo: histórico local → buscar atas PNCP → extrair preços → sugerir valores."""
     import re, unicodedata
     db = get_db()
     try:
-        # Resolver produto e item
         vinculo = db.query(EditalItemProduto).filter(
-            EditalItemProduto.id == eip_id,
-            EditalItemProduto.user_id == user_id
+            EditalItemProduto.id == eip_id, EditalItemProduto.user_id == user_id
         ).first()
         if not vinculo:
             return {"success": False, "error": "Vínculo não encontrado"}
@@ -9313,113 +9452,133 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
         edital = db.query(Edital).filter(Edital.id == item.edital_id).first() if item else None
         edital_id = edital.id if edital else None
 
-        # Construir termos de busca progressivos (do mais específico ao mais genérico)
-        # Ex: "Kit TTPA Coagulação Celer Wondfo" → ["TTPA coagulação", "TTPA", "coagulação reagente"]
+        # Construir termos de busca progressivos
         nome_prod = produto.nome if produto else ""
         desc_item = item.descricao if item else ""
-        # Extrair nome curto do item (entre parênteses ou tipo de análise)
         paren = re.search(r'\(([^)]{2,30})\)', desc_item)
         tipo_analise = re.search(r'tipo de an[aá]lise:\s*([^,]{3,60})', desc_item, re.I)
         nome_curto = paren.group(1) if paren else (tipo_analise.group(1).strip() if tipo_analise else "")
-        # Remover stop words e fabricante do nome do produto para busca
-        stop = {"kit", "para", "de", "do", "da", "com", "tipo", "reagente", "diagnóstico", "clínico"}
+        stop = {"kit", "para", "de", "do", "da", "com", "tipo", "reagente", "diagnostico", "clinico"}
         def _norm(s):
             return unicodedata.normalize("NFD", s.lower()).encode("ascii", "ignore").decode()
         palavras_prod = [w for w in _norm(nome_prod).split() if len(w) > 2 and w not in stop]
-        cat_prod = (produto.categoria or "") if produto else ""
 
         termos_busca = []
-        # 1. Nome curto + categoria (ex: "TTPA coagulação")
         if nome_curto:
-            termos_busca.append(f"{nome_curto} {cat_prod}".strip())
-        # 2. Palavras-chave do produto (ex: "ttpa coagulacao celer wondfo")
+            termos_busca.append(nome_curto)
         if palavras_prod:
             termos_busca.append(" ".join(palavras_prod[:3]))
-        # 3. Só nome curto (ex: "TTPA")
-        if nome_curto and nome_curto not in termos_busca:
-            termos_busca.append(nome_curto)
-        # 4. Nome completo do produto como último recurso
-        if nome_prod:
+        if nome_prod and nome_prod not in termos_busca:
             termos_busca.append(nome_prod)
         if not termos_busca:
             termos_busca = [desc_item[:60] if desc_item else ""]
 
-        # Tentar cada termo até encontrar dados
         historico = {"qtd_registros": 0, "preco_min": None, "preco_medio": None, "preco_max": None}
+        atas_encontradas = []
+        etapa = "inicio"
+        termo_usado = ""
+
+        # === ETAPA 1: Histórico local ===
+        for termo in termos_busca:
+            if not termo.strip():
+                continue
+            etapa = f"historico_local:{termo}"
+            hist_result = tool_historico_precos(termo=termo, user_id=user_id)
+            if hist_result.get("success") and hist_result.get("estatisticas", {}).get("total_registros", 0) > 0:
+                stats = hist_result["estatisticas"]
+                historico = {
+                    "qtd_registros": stats["total_registros"],
+                    "preco_min": stats.get("preco_minimo"),
+                    "preco_medio": stats.get("preco_medio"),
+                    "preco_max": stats.get("preco_maximo"),
+                }
+                termo_usado = termo
+                etapa = "historico_local_ok"
+                break
+
+        # === ETAPA 2: Se não tem local → buscar atas PNCP + extrair vencedores ===
+        if historico["qtd_registros"] == 0:
+            for termo in termos_busca:
+                if not termo.strip():
+                    continue
+                etapa = f"busca_atas:{termo}"
+                atas_result = tool_buscar_atas_pncp(termo=termo, user_id=user_id)
+                if atas_result.get("success") and atas_result.get("atas"):
+                    atas_encontradas = atas_result["atas"][:5]
+                    etapa = f"extraindo_vencedores:{len(atas_encontradas)}_atas"
+                    # Extrair vencedores e salvar no banco
+                    ext_result = tool_extrair_vencedores_atas(
+                        atas=atas_encontradas, user_id=user_id, edital_id=edital_id
+                    )
+                    if ext_result.get("success") and ext_result.get("stats"):
+                        historico = ext_result["stats"]
+                        termo_usado = termo
+                        etapa = "atas_extraidas_ok"
+                        break
+
+        # === ETAPA 3: Se não tem atas → buscar contratos PNCP ===
+        if historico["qtd_registros"] == 0:
+            for termo in termos_busca:
+                if not termo.strip():
+                    continue
+                etapa = f"busca_contratos:{termo}"
+                pncp_result = tool_buscar_precos_pncp(termo=termo, meses=24, user_id=user_id)
+                if pncp_result.get("success") and pncp_result.get("estatisticas"):
+                    stats = pncp_result["estatisticas"]
+                    if stats.get("preco_medio"):
+                        historico = {
+                            "qtd_registros": pncp_result.get("total_contratos", 0),
+                            "preco_min": stats.get("preco_minimo"),
+                            "preco_medio": stats.get("preco_medio"),
+                            "preco_max": stats.get("preco_maximo"),
+                        }
+                        termo_usado = termo
+                        etapa = "contratos_pncp_ok"
+                        break
+
+        # === ETAPA 4: Calcular sugestões com os dados disponíveis ===
         recomendacao = {
             "custo_sugerido": None, "markup_sugerido": None,
             "preco_base_sugerido": None, "referencia_sugerida": None,
+            "lance_inicial_sugerido": None, "lance_minimo_sugerido": None,
             "faixa": {"agressivo": None, "ideal": None, "conservador": None},
             "justificativa": "Sem dados suficientes para recomendação.",
             "fonte": None,
         }
-        termo_usado = ""
+        ref_edital = float(item.valor_unitario_estimado) if item and item.valor_unitario_estimado else None
 
-        for termo in termos_busca:
-            if not termo.strip():
-                continue
-            # 1. Histórico local
-            hist_result = tool_historico_precos(termo=termo, user_id=user_id)
-            if hist_result.get("success") and hist_result.get("estatisticas"):
-                stats = hist_result["estatisticas"]
-                if stats.get("total_registros", 0) > 0:
-                    historico = {
-                        "qtd_registros": stats.get("total_registros", 0),
-                        "preco_min": stats.get("preco_minimo"),
-                        "preco_medio": stats.get("preco_medio"),
-                        "preco_max": stats.get("preco_maximo"),
-                    }
-                    termo_usado = termo
-                    break
+        if historico["qtd_registros"] > 0 and historico["preco_medio"]:
+            p_min = float(historico["preco_min"] or historico["preco_medio"])
+            p_med = float(historico["preco_medio"])
+            p_max = float(historico["preco_max"] or historico["preco_medio"])
 
-            # 2. Recomendação (inclui fallback PNCP internamente)
-            rec_result = tool_recomendar_preco(termo=termo, edital_id=edital_id, user_id=user_id)
-            if rec_result.get("success"):
-                termo_usado = termo
-                rec = rec_result.get("recomendacao", {})
-                fonte = rec_result.get("fonte", "")
-                preco_ideal = rec.get("preco_ideal") or rec.get("preco_medio", 0)
-                preco_agressivo = rec.get("preco_agressivo") or rec.get("preco_minimo_sugerido", 0)
-                preco_conservador = rec.get("preco_conservador") or rec.get("preco_maximo_sugerido", 0)
+            custo_sug = round(p_min * 0.85, 2)
+            preco_base_sug = round(p_med * 0.97, 2)  # ideal
+            ref_sug = ref_edital or round(p_med * 0.99, 2)  # conservador
+            lance_ini_sug = preco_base_sug
+            lance_min_sug = round(custo_sug * 1.10, 2)  # margem mínima 10%
+            markup_sug = round(((preco_base_sug / custo_sug) - 1) * 100, 1) if custo_sug > 0 else None
 
-                preco_min_mercado = (rec_result.get("estatisticas_historico", {}).get("preco_minimo_vencedor")
-                                     or rec_result.get("estatisticas_mercado", {}).get("preco_minimo")
-                                     or preco_agressivo)
-                custo_sug = round(float(preco_min_mercado) * 0.85, 2) if preco_min_mercado else None
-                markup_sug = round(((float(preco_ideal) / float(custo_sug)) - 1) * 100, 1) if custo_sug and preco_ideal and custo_sug > 0 else None
+            recomendacao = {
+                "custo_sugerido": custo_sug,
+                "markup_sugerido": markup_sug,
+                "preco_base_sugerido": preco_base_sug,
+                "referencia_sugerida": ref_sug,
+                "lance_inicial_sugerido": lance_ini_sug,
+                "lance_minimo_sugerido": lance_min_sug,
+                "faixa": {
+                    "agressivo": round(p_med * 0.95, 2),
+                    "ideal": round(p_med * 0.97, 2),
+                    "conservador": round(p_med * 0.99, 2),
+                },
+                "justificativa": f"Baseado em {historico['qtd_registros']} registros. Preço médio: R$ {p_med:,.2f}, mínimo: R$ {p_min:,.2f}.",
+                "fonte": etapa.split(":")[0] if ":" in etapa else etapa,
+            }
 
-                # Preencher historico do PNCP se local estava vazio
-                if historico["qtd_registros"] == 0:
-                    stats_mercado = rec_result.get("estatisticas_mercado") or rec_result.get("estatisticas_historico", {})
-                    if stats_mercado:
-                        historico = {
-                            "qtd_registros": stats_mercado.get("total_registros") or stats_mercado.get("total_contratos", 0),
-                            "preco_min": stats_mercado.get("preco_minimo") or stats_mercado.get("preco_minimo_vencedor"),
-                            "preco_medio": stats_mercado.get("preco_medio") or stats_mercado.get("preco_medio_vencedor"),
-                            "preco_max": stats_mercado.get("preco_maximo"),
-                        }
-
-                recomendacao = {
-                    "custo_sugerido": custo_sug,
-                    "markup_sugerido": markup_sug,
-                    "preco_base_sugerido": round(float(preco_ideal), 2) if preco_ideal else None,
-                    "referencia_sugerida": round(float(preco_conservador), 2) if preco_conservador else None,
-                    "faixa": {
-                        "agressivo": round(float(preco_agressivo), 2) if preco_agressivo else None,
-                        "ideal": round(float(preco_ideal), 2) if preco_ideal else None,
-                        "conservador": round(float(preco_conservador), 2) if preco_conservador else None,
-                    },
-                    "justificativa": rec_result.get("justificativa", ""),
-                    "fonte": fonte,
-                }
-                break  # Encontrou dados, parar
-
-        # 3. Concorrentes
+        # Concorrentes
         concorrentes = []
         try:
-            concs = db.query(Concorrente).order_by(
-                Concorrente.editais_ganhos.desc()
-            ).limit(5).all()
+            concs = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(5).all()
             for c in concs:
                 concorrentes.append({
                     "nome": c.nome,
@@ -9430,27 +9589,23 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-        # 4. Referência do edital
-        ref_edital = None
-        if item and item.valor_unitario_estimado:
-            ref_edital = float(item.valor_unitario_estimado)
-
-        # Sinalizar se realmente tem dados úteis
-        tem_dados = (historico["qtd_registros"] > 0 or
-                     recomendacao["custo_sugerido"] is not None or
-                     ref_edital is not None)
+        tem_dados = (historico["qtd_registros"] > 0 or ref_edital is not None)
 
         return {
             "success": True,
             "tem_dados": tem_dados,
             "termo_usado": termo_usado,
             "termos_tentados": termos_busca,
+            "etapa": etapa,
             "historico": historico,
             "recomendacao": recomendacao,
             "concorrentes": concorrentes,
             "referencia_edital": ref_edital,
+            "atas_encontradas": len(atas_encontradas),
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
     finally:
         db.close()

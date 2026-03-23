@@ -1173,20 +1173,32 @@ export function PrecificacaoPage(props?: PageProps) {
                           )}
                         </Card>
 
-                        {/* Card IA: Sugestões de preço baseadas em histórico */}
-                        <Card title="Sugestões IA — Histórico e Mercado" icon={<Sparkles size={18} />}>
+                        {/* Card IA: Precificação Assistida */}
+                        <Card title="Precificação Assistida por IA" icon={<Sparkles size={18} />}>
                           {insightsLoading && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0", color: "#60a5fa", fontSize: 13 }}>
-                              <Loader2 size={16} className="spin" /> Consultando histórico de preços e concorrência...
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 0", color: "#60a5fa", fontSize: 13 }}>
+                              <Loader2 size={16} className="spin" /> Buscando histórico de preços e atas no PNCP...
                             </div>
                           )}
                           {!insightsLoading && (!insights || !(insights as Record<string, unknown>).tem_dados) && (
                             <div style={{ padding: "12px", fontSize: 13, color: "var(--text-secondary)", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)" }}>
-                              <p style={{ marginBottom: 8 }}>Nenhum registro histórico encontrado para este produto.</p>
-                              <p>Preencha os campos manualmente ou use o chat para buscar preços no PNCP.</p>
+                              <p style={{ marginBottom: 8 }}>Nenhum registro histórico ou ata encontrado para este produto.</p>
+                              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                <ActionButton icon={<Search size={14} />} label="Rebuscar no PNCP" variant="primary" loading={insightsLoading}
+                                  onClick={() => {
+                                    setInsights(null);
+                                    setInsightsLoading(true);
+                                    const token = localStorage.getItem("editais_ia_access_token");
+                                    fetch(`/api/precificacao/${vinculoId}/insights`, { headers: { Authorization: token ? `Bearer ${token}` : "" } })
+                                      .then(r => r.json()).then(data => { if (data.success) setInsights(data); })
+                                      .catch(() => {}).finally(() => setInsightsLoading(false));
+                                  }}
+                                />
+                              </div>
                               {insights && (insights as Record<string, unknown>).termos_tentados && (
                                 <p style={{ fontSize: 11, marginTop: 8, color: "#64748b" }}>
                                   Termos buscados: {((insights as Record<string, unknown>).termos_tentados as string[]).join(" | ")}
+                                  {(insights as Record<string, unknown>).etapa && <span> | Etapa: {String((insights as Record<string, unknown>).etapa)}</span>}
                                 </p>
                               )}
                             </div>
@@ -1194,8 +1206,9 @@ export function PrecificacaoPage(props?: PageProps) {
                           {!insightsLoading && insights && (insights as Record<string, unknown>).tem_dados && (
                             <>
                               {/* Banner resumo */}
-                              <div style={{ display: "flex", gap: 16, padding: "8px 12px", borderRadius: 8, backgroundColor: "#3b82f610", border: "1px solid #3b82f630", fontSize: 13, marginBottom: 12, flexWrap: "wrap" }}>
-                                <span><strong>{insights.historico.qtd_registros}</strong> registros encontrados</span>
+                              <div style={{ display: "flex", gap: 16, padding: "8px 12px", borderRadius: 8, backgroundColor: "#3b82f610", border: "1px solid #3b82f630", fontSize: 13, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+                                <span><strong>{insights.historico.qtd_registros}</strong> registros</span>
+                                {(insights as Record<string, unknown>).atas_encontradas ? <span><strong>{String((insights as Record<string, unknown>).atas_encontradas)}</strong> atas</span> : null}
                                 {insights.historico.preco_min != null && (
                                   <>
                                     <span>Mín: <strong style={{ color: "#22c55e" }}>{fmt(insights.historico.preco_min)}</strong></span>
@@ -1207,62 +1220,44 @@ export function PrecificacaoPage(props?: PageProps) {
                                   <span>Ref. Edital: <strong style={{ color: "#f59e0b" }}>{fmt(insights.referencia_edital)}</strong></span>
                                 )}
                                 {insights.recomendacao.fonte && (
-                                  <span style={{ color: "var(--text-secondary)" }}>Fonte: {insights.recomendacao.fonte}</span>
+                                  <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, backgroundColor: "#3b82f620", color: "#3b82f6" }}>
+                                    {insights.recomendacao.fonte}
+                                  </span>
                                 )}
+                                <ActionButton icon={<Search size={12} />} label="Rebuscar" variant="neutral"
+                                  onClick={() => {
+                                    setInsights(null);
+                                    setInsightsLoading(true);
+                                    const token = localStorage.getItem("editais_ia_access_token");
+                                    fetch(`/api/precificacao/${vinculoId}/insights`, { headers: { Authorization: token ? `Bearer ${token}` : "" } })
+                                      .then(r => r.json()).then(data => { if (data.success) setInsights(data); })
+                                      .catch(() => {}).finally(() => setInsightsLoading(false));
+                                  }}
+                                />
                               </div>
 
-                              {/* 3 colunas: sugestões */}
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-                                {/* Custo sugerido */}
-                                <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center" }}>
-                                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Custo Sugerido</p>
-                                  <p style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>
-                                    {insights.recomendacao.custo_sugerido ? fmt(insights.recomendacao.custo_sugerido) : "—"}
-                                  </p>
-                                  <p style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 8 }}>baseado no preço mín. histórico</p>
-                                  {insights.recomendacao.custo_sugerido && (
-                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "3px 10px" }}
-                                      onClick={() => setCustoUnit(String(insights.recomendacao.custo_sugerido))}>
-                                      Usar como Custo →
-                                    </button>
-                                  )}
-                                </div>
-                                {/* Preço base sugerido */}
-                                <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center" }}>
-                                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Preço Base Sugerido</p>
-                                  <p style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>
-                                    {insights.recomendacao.preco_base_sugerido ? fmt(insights.recomendacao.preco_base_sugerido) : "—"}
-                                  </p>
-                                  <p style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 8 }}>
-                                    {insights.recomendacao.faixa.agressivo && insights.recomendacao.faixa.conservador
-                                      ? `Faixa: ${fmt(insights.recomendacao.faixa.agressivo)} — ${fmt(insights.recomendacao.faixa.conservador)}`
-                                      : "preço ideal do mercado"}
-                                  </p>
-                                  {insights.recomendacao.preco_base_sugerido && (
-                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "3px 10px" }}
-                                      onClick={() => { setModoPrecoBase("manual"); setPrecoBaseManual(String(insights.recomendacao.preco_base_sugerido)); }}>
-                                      Usar como Preço →
-                                    </button>
-                                  )}
-                                </div>
-                                {/* Referência sugerida */}
-                                <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center" }}>
-                                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Referência Sugerida</p>
-                                  <p style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>
-                                    {(insights.referencia_edital || insights.recomendacao.referencia_sugerida)
-                                      ? fmt(insights.referencia_edital || insights.recomendacao.referencia_sugerida)
-                                      : "—"}
-                                  </p>
-                                  <p style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 8 }}>
-                                    {insights.referencia_edital ? "valor do edital" : "baseado no preço conservador"}
-                                  </p>
-                                  {(insights.referencia_edital || insights.recomendacao.referencia_sugerida) && (
-                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "3px 10px" }}
-                                      onClick={() => setValorRef(String(insights.referencia_edital || insights.recomendacao.referencia_sugerida))}>
-                                      Usar como Referência →
-                                    </button>
-                                  )}
-                                </div>
+                              {/* 5 cards: sugestões A-E */}
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+                                {[
+                                  { label: "Custo (A)", valor: insights.recomendacao.custo_sugerido, desc: "85% do mín. histórico", action: () => setCustoUnit(String(insights.recomendacao.custo_sugerido)) },
+                                  { label: "Preço Base (B)", valor: insights.recomendacao.preco_base_sugerido, desc: `Faixa: ${fmt(insights.recomendacao.faixa?.agressivo)}–${fmt(insights.recomendacao.faixa?.conservador)}`, action: () => { setModoPrecoBase("manual"); setPrecoBaseManual(String(insights.recomendacao.preco_base_sugerido)); } },
+                                  { label: "Referência (C)", valor: insights.referencia_edital || insights.recomendacao.referencia_sugerida, desc: insights.referencia_edital ? "valor do edital" : "preço conservador", action: () => setValorRef(String(insights.referencia_edital || insights.recomendacao.referencia_sugerida)) },
+                                  { label: "Lance Inicial (D)", valor: (insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number | null, desc: "= preço base sugerido", action: () => setLanceInicial(String((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido)) },
+                                  { label: "Lance Mínimo (E)", valor: (insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido as number | null, desc: "custo + margem 10%", action: () => setLanceMinimo(String((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido)) },
+                                ].map((s, i) => (
+                                  <div key={i} style={{ padding: 10, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center" }}>
+                                    <p style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 2, fontWeight: 600 }}>{s.label}</p>
+                                    <p style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 2 }}>
+                                      {s.valor ? fmt(s.valor as number) : "—"}
+                                    </p>
+                                    <p style={{ fontSize: 9, color: "var(--text-secondary)", marginBottom: 6 }}>{s.desc}</p>
+                                    {s.valor && (
+                                      <button className="btn btn-secondary" style={{ fontSize: 10, padding: "2px 8px" }} onClick={s.action}>
+                                        Usar →
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
 
                               {/* Concorrentes (colapsável) */}
