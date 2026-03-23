@@ -602,11 +602,20 @@ function ProdutoEditForm({ item, onSaved, onCancel }: { item: Record<string, unk
     setSaving(true);
     setError(null);
     try {
-      // 1. Atualizar produto
+      // 1. Atualizar produto — derivar categoria da classe se possível
+      const classeObj = classes.find((c: Record<string, unknown>) => String(c.id) === classeId);
+      const classeNome = classeObj ? String(classeObj.nome || "").toLowerCase() : "";
+      const catDerivada = classeNome.includes("reagente") ? "reagente"
+        : classeNome.includes("equipamento") ? "equipamento"
+        : classeNome.includes("insumo") ? "insumo_hospitalar"
+        : classeNome.includes("inform") ? "informatica"
+        : classeNome.includes("rede") ? "redes"
+        : classeNome.includes("mobil") ? "mobiliario"
+        : categoria || "outro";
       await crudUpdate("produtos", produtoId, {
         nome, fabricante, modelo, ncm,
         subclasse_id: subclasseId || null,
-        categoria: categoria || "outro",
+        categoria: catDerivada,
         preco_referencia: precoRef ? Number(precoRef) : null,
         descricao,
         status_pipeline: statusPipeline,
@@ -707,15 +716,8 @@ function ProdutoEditForm({ item, onSaved, onCancel }: { item: Record<string, unk
           </div>
         </div>
 
-        {/* Linha 3: Categoria + NCM + Fabricante + Modelo */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
-          <div>
-            <label style={labelStyle}>Categoria</label>
-            <select style={selectStyle} value={categoria} onChange={e => setCategoria(e.target.value)}>
-              <option value="">Selecione...</option>
-              {CATEGORIAS.map(c => <option key={c} value={c}>{c.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</option>)}
-            </select>
-          </div>
+        {/* Linha 3: NCM + Fabricante + Modelo */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
           <div>
             <label style={labelStyle}>NCM</label>
             <input style={inputStyle} value={ncm} onChange={e => setNcm(e.target.value)} />

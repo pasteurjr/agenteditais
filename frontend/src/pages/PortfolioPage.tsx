@@ -323,6 +323,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   };
 
   const handleEditarAbrir = async (produto: Produto) => {
+    console.log("[EDITAR] Abrindo produto:", produto.id, produto.nome, "subclasse_id:", produto.subclasse_id);
     setEditProduto(produto);
     setEditForm({
       nome: produto.nome || "",

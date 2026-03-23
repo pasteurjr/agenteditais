@@ -146,7 +146,7 @@ export function PrecificacaoPage(props?: PageProps) {
   const [loteEquipamento, setLoteEquipamento] = useState("");
   const [loteObservacoes, setLoteObservacoes] = useState("");
 
-  // ── Tab: Camadas (UC-P02 a UC-P06) ──
+  // ── Tab: Custos e Preços (UC-P02 a UC-P06) ──
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [vinculoId, setVinculoId] = useState("");
   const [camada, setCamada] = useState<PrecoCamada | null>(null);
@@ -257,7 +257,7 @@ export function PrecificacaoPage(props?: PageProps) {
     })();
   }, [vinculoId]);
 
-  // ── Detecção de necessidade de volumetria ──
+  // ── Detecção de necessidade de conversão + pré-preenchimento via especificações ──
   useEffect(() => {
     if (!vinculoId) { setPrecisaVolumetria(null); return; }
     const v = vinculos.find(vv => vv.id === vinculoId);
@@ -268,19 +268,65 @@ export function PrecificacaoPage(props?: PageProps) {
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const cat = ((prod as Record<string, unknown>)?.categoria as string || "").toLowerCase();
 
-    // Termos que indicam volumetria (produto vendido em embalagem com rendimento)
+    // Termos que indicam conversão (produto vendido em embalagem com rendimento)
     const termosVolumetria = ["kit", "reagente", "caixa com", "frasco", "testes", "determinacoes", "dosagens", "ensaios", "reacoes"];
-    // Termos que indicam compra unitária (sem volumetria)
+    // Termos que indicam compra unitária (sem conversão)
     const termosUnitario = ["microscopio", "autoclave", "centrifuga", "equipamento", "impressora", "computador", "monitor", "balanca"];
 
     const temTermoVol = termosVolumetria.some(t => desc.includes(t)) || cat === "reagente";
     const temTermoUnit = termosUnitario.some(t => desc.includes(t)) || cat === "equipamento";
-    const temRendimento = (prod as Record<string, unknown>)?.rendimento_testes != null &&
-                          Number((prod as Record<string, unknown>)?.rendimento_testes) > 0;
 
     if (temTermoUnit && !temTermoVol) setPrecisaVolumetria(false);
-    else if (temTermoVol || temRendimento) setPrecisaVolumetria(true);
-    else setPrecisaVolumetria(false); // default: sem volumetria
+    else if (temTermoVol) setPrecisaVolumetria(true);
+    else setPrecisaVolumetria(false);
+
+    // Pré-preencher: quantidade do edital
+    const qtdItem = item?.quantidade;
+    if (qtdItem && Number(qtdItem) > 0) setVolEdital(String(Number(qtdItem)));
+    else setVolEdital("");
+
+    // Buscar especificações do produto para rendimento e repetições
+    if (prod) {
+      (async () => {
+        try {
+          const specsRes = await crudList("produtos-especificacoes", { parent_id: prod.id, limit: 50 });
+          const specs = (specsRes.items || []) as Record<string, unknown>[];
+          const getSpec = (nome: string) => {
+            const s = specs.find(sp => String(sp.nome_especificacao || "").toLowerCase().includes(nome.toLowerCase()));
+            return s ? String(s.valor || "") : "";
+          };
+
+          // Rendimento: da especificação, ou do vínculo (se já salvo)
+          const rendSpec = getSpec("Rendimento");
+          const rendVinc = Number(v.rendimento_produto || 0);
+          if (rendVinc > 0) setRendimento(String(rendVinc));
+          else if (rendSpec) setRendimento(rendSpec);
+          else setRendimento("");
+
+          // Repetições: da especificação, ou do vínculo (se já salvo)
+          const repAmSpec = getSpec("Repetições Amostras");
+          const repCalSpec = getSpec("Repetições Calibradores");
+          const repCtSpec = getSpec("Repetições Controles");
+          setRepAmostras(String(Number(v.repeticoes_amostras) || Number(repAmSpec) || 0));
+          setRepCalib(String(Number(v.repeticoes_calibradores) || Number(repCalSpec) || 0));
+          setRepControles(String(Number(v.repeticoes_controles) || Number(repCtSpec) || 0));
+
+          // Se encontrou rendimento na spec, forçar detecção de conversão
+          if (rendSpec && Number(rendSpec) > 0) setPrecisaVolumetria(true);
+        } catch {
+          // Sem especificações — usar dados do vínculo
+          setRendimento(v.rendimento_produto ? String(v.rendimento_produto) : "");
+          setRepAmostras(String(v.repeticoes_amostras || 0));
+          setRepCalib(String(v.repeticoes_calibradores || 0));
+          setRepControles(String(v.repeticoes_controles || 0));
+        }
+      })();
+    } else {
+      setRendimento("");
+      setRepAmostras("0");
+      setRepCalib("0");
+      setRepControles("0");
+    }
   }, [vinculoId, vinculos, itensEdital, produtos]);
 
   // ── Handlers ──
@@ -395,21 +441,22 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleCalcVolume = async () => {
     if (!vinculoId) return;
+    setLoading(true);
     try {
-      await crudUpdate("edital-item-produto", vinculoId, {
-        volume_edital: Number(volEdital) || 0,
-        rendimento_produto: Number(rendimento) || 0,
-        repeticoes_amostras: Number(repAmostras) || 0,
-        repeticoes_calibradores: Number(repCalib) || 0,
-        repeticoes_controles: Number(repControles) || 0,
-      });
-      // Calculate locally
       const vol = Number(volEdital) || 0;
       const rend = Number(rendimento) || 1;
-      const total = vol + Number(repAmostras) + Number(repCalib) + Number(repControles);
+      const rAmostras = Number(repAmostras) || 0;
+      const rCalib = Number(repCalib) || 0;
+      const rControles = Number(repControles) || 0;
+      const total = vol + rAmostras + rCalib + rControles;
       const kits = Math.ceil(total / rend);
-      const formula = `(${vol} + ${repAmostras} + ${repCalib} + ${repControles}) / ${rend} = ${(total/rend).toFixed(3)} → ${kits}`;
+      const formula = `(${vol} + ${rAmostras} + ${rCalib} + ${rControles}) / ${rend} = ${(total/rend).toFixed(3)} → ${kits} kits`;
       await crudUpdate("edital-item-produto", vinculoId, {
+        volume_edital: vol,
+        rendimento_produto: rend,
+        repeticoes_amostras: rAmostras,
+        repeticoes_calibradores: rCalib,
+        repeticoes_controles: rControles,
         volume_real_ajustado: total,
         quantidade_kits: kits,
         formula_calculo: formula,
@@ -417,7 +464,13 @@ export function PrecificacaoPage(props?: PageProps) {
       // Refresh
       const v = await crudGet("edital-item-produto", vinculoId) as unknown as Vinculo;
       setVinculos(prev => prev.map(x => x.id === vinculoId ? v : x));
-    } catch { /* */ }
+      alert(`Conversão salva! ${kits} embalagens/kits necessários.`);
+    } catch (err) {
+      console.error("[VOLUMETRIA] Erro:", err);
+      alert(`Erro ao calcular: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const _fetchPrecif = async (url: string, body: Record<string, unknown>) => {
@@ -564,7 +617,7 @@ export function PrecificacaoPage(props?: PageProps) {
     link.click();
   };
 
-  // ── Vinculo selector for Camadas/Lances tabs ──
+  // ── Vinculo selector for Custos e Preços/Lances tabs ──
   const vinculoOptions = [
     { value: "", label: "Selecione item-produto..." },
     ...vinculos.map(v => {
@@ -677,7 +730,7 @@ export function PrecificacaoPage(props?: PageProps) {
   // ── Tabs ──
   const tabs = [
     { id: "lotes", label: `Lotes ${lotes.length > 0 ? (lotes.some(l => (l as Record<string,unknown>).status === "configurado") ? "✅" : "⚠️") : "❌"}`, icon: <Layers size={16} /> },
-    { id: "camadas", label: `Camadas ${camada ? (camada.preco_base ? "✅" : "⚠️") : "❌"}`, icon: <BarChart3 size={16} /> },
+    { id: "camadas", label: `Custos e Preços ${camada ? (camada.preco_base ? "✅" : "⚠️") : "❌"}`, icon: <DollarSign size={16} /> },
     { id: "lances", label: `Lances ${camada?.lance_inicial ? "✅" : "❌"}`, icon: <Target size={16} /> },
     { id: "historico", label: "Histórico", icon: <History size={16} /> },
   ];
@@ -691,7 +744,7 @@ export function PrecificacaoPage(props?: PageProps) {
           <DollarSign size={24} />
           <div>
             <h1>Precificação</h1>
-            <p>Camadas de preço, lances e estratégia competitiva</p>
+            <p>Custos, preços, lances e estratégia competitiva</p>
           </div>
         </div>
       </div>
@@ -998,7 +1051,7 @@ export function PrecificacaoPage(props?: PageProps) {
                   </div>
                 )}
 
-                {/* ═══════════════════ TAB: CAMADAS (UC-P02 a UC-P06) ═══════════════════ */}
+                {/* ═══════════════════ TAB: CUSTOS E PREÇOS (UC-P02 a UC-P06) ═══════════════════ */}
                 {activeTab === "camadas" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     {/* Item-Produto selector */}
@@ -1016,31 +1069,30 @@ export function PrecificacaoPage(props?: PageProps) {
                     {vinculoId && (
                       <>
                         {/* Banner de detecção de volumetria */}
-                        <Card title="Volumetria" icon={<BarChart3 size={18} />}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
-                            backgroundColor: precisaVolumetria ? "#f59e0b15" : "#22c55e15",
-                            border: `1px solid ${precisaVolumetria ? "#f59e0b40" : "#22c55e40"}`,
-                          }}>
-                            <span style={{ fontSize: 18 }}>{precisaVolumetria ? "⚠️" : "✅"}</span>
-                            <span style={{ flex: 1 }}>
+                        <Card title="Conversão de Quantidade" icon={<BarChart3 size={18} />}>
+                          <div style={{ padding: 16, borderRadius: 8, border: "2px solid #3b82f6", backgroundColor: "#3b82f610", textAlign: "center" }}>
+                            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>
+                              Este item requer conversão de quantidade?
+                            </p>
+                            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>
                               {precisaVolumetria
-                                ? "Detectei necessidade de cálculo de volumetria para este item (kit/reagente com rendimento por embalagem)."
-                                : "Item de compra unitária — sem necessidade de cálculo de volumetria. Quantidade do edital será usada diretamente."}
-                            </span>
-                            <div style={{ display: "flex", gap: 8 }}>
+                                ? "Detectamos que este item é vendido em embalagem com rendimento fixo (ex: kit com X testes, caixa com X unidades). O cálculo converte a quantidade do edital em número de embalagens."
+                                : "Detectamos que este item é de compra unitária. A quantidade do edital será usada diretamente."}
+                            </p>
+                            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                               <button
-                                className={`btn ${precisaVolumetria ? "btn-primary" : "btn-secondary"}`}
-                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                className="btn btn-primary"
+                                style={{ fontSize: 14, padding: "8px 24px", opacity: precisaVolumetria ? 1 : 0.5 }}
                                 onClick={() => setPrecisaVolumetria(true)}
                               >
-                                Sim, calcular
+                                Sim, converter quantidade
                               </button>
                               <button
-                                className={`btn ${!precisaVolumetria ? "btn-primary" : "btn-secondary"}`}
-                                style={{ fontSize: 12, padding: "4px 12px" }}
+                                className="btn btn-secondary"
+                                style={{ fontSize: 14, padding: "8px 24px", opacity: !precisaVolumetria ? 1 : 0.5 }}
                                 onClick={() => setPrecisaVolumetria(false)}
                               >
-                                Não, usar qtd direta
+                                Não, usar quantidade do edital
                               </button>
                             </div>
                           </div>
@@ -1049,11 +1101,11 @@ export function PrecificacaoPage(props?: PageProps) {
                           {precisaVolumetria && (
                             <>
                               <div className="form-grid form-grid-3" style={{ marginTop: 12 }}>
-                                <FormField label="Volume do Edital (testes)">
-                                  <TextInput value={volEdital || String(curVinculo?.volume_edital || "")} onChange={setVolEdital} placeholder="50000" />
+                                <FormField label="Quantidade do Edital">
+                                  <TextInput value={volEdital} onChange={setVolEdital} placeholder="Qtd exigida no edital" />
                                 </FormField>
-                                <FormField label="Rendimento por Kit (testes/kit)">
-                                  <TextInput value={rendimento || String(curVinculo?.rendimento_produto || "")} onChange={setRendimento} placeholder="500" />
+                                <FormField label="Rendimento por Embalagem">
+                                  <TextInput value={rendimento} onChange={setRendimento} placeholder="Unidades por embalagem/kit" />
                                 </FormField>
                                 <FormField label="Rep. Amostras">
                                   <TextInput value={repAmostras} onChange={setRepAmostras} placeholder="0" />
@@ -1065,7 +1117,7 @@ export function PrecificacaoPage(props?: PageProps) {
                                   <TextInput value={repControles} onChange={setRepControles} placeholder="0" />
                                 </FormField>
                                 <div className="form-field-actions">
-                                  <ActionButton icon={<BarChart3 size={16} />} label="Calcular e Salvar" variant="primary" onClick={handleCalcVolume} />
+                                  <ActionButton icon={<BarChart3 size={16} />} label="Calcular e Salvar" variant="primary" onClick={handleCalcVolume} loading={loading} />
                                 </div>
                               </div>
                               {curVinculo?.formula_calculo && (
@@ -1093,8 +1145,8 @@ export function PrecificacaoPage(props?: PageProps) {
                           )}
                         </Card>
 
-                        {/* UC-P04: Base de Custos — Camada A */}
-                        <Card title="Camada A — Base de Custos (UC-P04)" icon={<DollarSign size={18} />}>
+                        {/* UC-P04: Base de Custos */}
+                        <Card title="Base de Custos" icon={<DollarSign size={18} />}>
                           <div className="form-grid form-grid-3">
                             <FormField label="Custo Unitário (R$)">
                               <TextInput value={custoUnit || String(camada?.custo_unitario || "")} onChange={setCustoUnit} placeholder="85.00" />
@@ -1116,8 +1168,8 @@ export function PrecificacaoPage(props?: PageProps) {
                           )}
                         </Card>
 
-                        {/* UC-P05: Preço Base — Camada B */}
-                        <Card title="Camada B — Preço Base (UC-P05)" icon={<TrendingUp size={18} />}>
+                        {/* UC-P05: Preço Base */}
+                        <Card title="Preço Base" icon={<TrendingUp size={18} />}>
                           <div className="form-grid form-grid-3">
                             <FormField label="Modo">
                               <SelectInput value={modoPrecoBase} onChange={setModoPrecoBase} options={[
@@ -1141,14 +1193,14 @@ export function PrecificacaoPage(props?: PageProps) {
                           </div>
                           {camada?.preco_base && (
                             <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
-                              Custo (A): {fmt(camada.custo_base_final)} → <strong>Preço Base (B): {fmt(camada.preco_base)}</strong>
+                              Custo: {fmt(camada.custo_base_final)} → <strong>Preço Base: {fmt(camada.preco_base)}</strong>
                               {camada.markup_percentual && <span> (markup: {pct(camada.markup_percentual)})</span>}
                             </div>
                           )}
                         </Card>
 
-                        {/* UC-P06: Valor de Referência — Camada C */}
-                        <Card title="Camada C — Valor de Referência (UC-P06)" icon={<Target size={18} />}>
+                        {/* UC-P06: Valor de Referência */}
+                        <Card title="Valor de Referência" icon={<Target size={18} />}>
                           <div className="form-grid form-grid-3">
                             <FormField label="Valor Referência (R$)" hint={camada?.valor_referencia_disponivel ? "Importado do edital" : "Não disponível no edital"}>
                               <TextInput value={valorRef || String(camada?.valor_referencia_edital || "")} onChange={setValorRef} placeholder="145.00" />
@@ -1162,7 +1214,7 @@ export function PrecificacaoPage(props?: PageProps) {
                           </div>
                           {camada?.target_referencia && (
                             <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
-                              <strong>Comparativo:</strong> A={fmt(camada.custo_base_final)} | B={fmt(camada.preco_base)} | <strong>C={fmt(camada.target_referencia)}</strong>
+                              <strong>Comparativo:</strong> Custo={fmt(camada.custo_base_final)} | Preço Base={fmt(camada.preco_base)} | <strong>Referência={fmt(camada.target_referencia)}</strong>
                               {camada.margem_sobre_custo != null && <span> | Margem: {pct(camada.margem_sobre_custo)}</span>}
                             </div>
                           )}
@@ -1188,7 +1240,7 @@ export function PrecificacaoPage(props?: PageProps) {
                         <Card title="Estrutura de Lances (UC-P07)" icon={<Target size={18} />}>
                           <div className="form-grid form-grid-2">
                             <div>
-                              <h4 style={{ marginBottom: 8 }}>Camada D — Valor Inicial</h4>
+                              <h4 style={{ marginBottom: 8 }}>Valor Inicial do Lance</h4>
                               <FormField label="Modo">
                                 <SelectInput value={modoInicial} onChange={setModoInicial} options={[
                                   { value: "absoluto", label: "Valor Absoluto" },
@@ -1200,7 +1252,7 @@ export function PrecificacaoPage(props?: PageProps) {
                               </FormField>
                             </div>
                             <div>
-                              <h4 style={{ marginBottom: 8 }}>Camada E — Valor Mínimo</h4>
+                              <h4 style={{ marginBottom: 8 }}>Valor Mínimo do Lance</h4>
                               <FormField label="Modo">
                                 <SelectInput value={modoMinimo} onChange={setModoMinimo} options={[
                                   { value: "absoluto", label: "Valor Absoluto" },

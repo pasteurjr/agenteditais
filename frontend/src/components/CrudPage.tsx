@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { Search, Plus, Save, Trash2, X, Database, ChevronLeft, Eye, EyeOff, Building } from "lucide-react";
 import { crudList, crudGet, crudCreate, crudUpdate, crudDelete, getCrudSchema } from "../api/crud";
 import type { CrudColumnSchema } from "../api/crud";
@@ -807,12 +807,14 @@ export function CrudPage({ config }: CrudPageProps) {
         )}
 
         {/* Custom edit form (replaces default form on edit) */}
-        {!isNew && selectedId && renderEditForm && (
-          renderEditForm({
-            item: formData,
-            onSaved: () => { setSelectedId(null); loadItems(); },
-            onCancel: () => { setSelectedId(null); setError(null); },
-          })
+        {!isNew && selectedId && renderEditForm && formData.id && (
+          <Fragment key={String(formData.id)}>
+            {renderEditForm({
+              item: formData,
+              onSaved: () => { setSelectedId(null); loadItems(); },
+              onCancel: () => { setSelectedId(null); setError(null); },
+            })}
+          </Fragment>
         )}
 
         {/* Form area (default — used when no custom form applies) */}
