@@ -244,21 +244,17 @@ export const empresaResponsaveisConfig: CrudPageConfig = {
 
 export const beneficiosFiscaisNcmConfig: CrudPageConfig = {
   table: "beneficios-fiscais-ncm",
-  title: "Beneficios Fiscais NCM",
+  title: "Benefícios Fiscais NCM",
   icon: <DollarSign size={24} />,
-  parentFk: "empresa_id",
-  parentTable: "empresas",
-  parentLabelField: "razao_social",
   fields: [
     { name: "ncm", label: "NCM", type: "text", required: true, width: "half", placeholder: "3822.00.90" },
-    { name: "descricao", label: "Descricao", type: "text", width: "half", placeholder: "Reagentes de diagnostico" },
+    { name: "descricao", label: "Descrição", type: "text", width: "half", placeholder: "Reagentes de diagnóstico" },
     { name: "icms", label: "ICMS (%)", type: "number", width: "half" },
     { name: "ipi", label: "IPI (%)", type: "number", width: "half" },
     { name: "pis", label: "PIS (%)", type: "number", width: "half" },
     { name: "cofins", label: "COFINS (%)", type: "number", width: "half" },
-    { name: "isencao_icms", label: "Isencao ICMS", type: "boolean", width: "half" },
-    { name: "base_legal", label: "Base Legal", type: "text", width: "full", placeholder: "Convenio ICMS 100/97" },
-    { name: "empresa_id", label: "Empresa ID", type: "text", width: "half" },
+    { name: "isencao_icms", label: "Isenção ICMS", type: "boolean", width: "half" },
+    { name: "base_legal", label: "Base Legal", type: "text", width: "full", placeholder: "Convênio ICMS 100/97" },
     { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
   ],
 };

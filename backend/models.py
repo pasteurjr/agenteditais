@@ -2309,12 +2309,9 @@ class BeneficioFiscalNcm(Base):
     cofins = Column(DECIMAL(5, 2), default=7.60)
     isencao_icms = Column(Boolean, default=False)
     base_legal = Column(String(500), nullable=True)
-    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='SET NULL'), nullable=True)
     ativo = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-    empresa = relationship("Empresa", backref="beneficios_fiscais_ncm")
 
     def to_dict(self):
         def _f(v):

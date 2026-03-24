@@ -160,8 +160,6 @@ CRUD_TABLES = {
     "beneficios-fiscais-ncm": {
         "model": BeneficioFiscalNcm,
         "user_scoped": False,
-        "parent_fk": "empresa_id",
-        "parent_model": Empresa,
         "search_fields": ["ncm", "descricao", "base_legal"],
         "label": "Benefício Fiscal NCM",
         "required": ["ncm"],
