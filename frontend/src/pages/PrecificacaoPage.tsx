@@ -163,10 +163,14 @@ export function PrecificacaoPage(props?: PageProps) {
   const [repControles, setRepControles] = useState("0");
   // UC-P04: Custos
   const [custoUnit, setCustoUnit] = useState("");
+  const [editIcms, setEditIcms] = useState("");
+  const [editIpi, setEditIpi] = useState("");
+  const [editPisCofins, setEditPisCofins] = useState("");
   // UC-P05: Preço base
   const [modoPrecoBase, setModoPrecoBase] = useState("markup");
   const [markup, setMarkup] = useState("");
   const [precoBaseManual, setPrecoBaseManual] = useState("");
+  const [reutilizarPreco, setReutilizarPreco] = useState(false);
   // UC-P06: Referência
   const [valorRef, setValorRef] = useState("");
   const [pctSobreBase, setPctSobreBase] = useState("");
@@ -1593,16 +1597,28 @@ ${html}
                             <FormField label="NCM">
                               <TextInput value={camada?.ncm || ""} onChange={() => {}} placeholder="Automático do produto" />
                             </FormField>
-                            <div className="form-field-actions">
-                              <ActionButton icon={<Check size={16} />} label="Salvar Custos" variant="primary" onClick={handleSalvarCustos} />
-                            </div>
+                            <div />
                           </div>
-                          {camada && (
-                            <div style={{ marginTop: 12, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
-                              <span>ICMS: {pct(camada.icms)} {camada.isencao_icms && <span style={{ color: "var(--color-success, green)" }}>ISENTO</span>}</span>
-                              <span>IPI: {pct(camada.ipi)}</span>
-                              <span>PIS+COFINS: {pct(camada.pis_cofins)}</span>
-                              <span><strong>Custo Final: {fmt(camada.custo_base_final)}</strong></span>
+                          <div className="form-grid form-grid-3" style={{ marginTop: 8 }}>
+                            <FormField label="ICMS (%)" hint={camada?.isencao_icms ? "ISENTO — NCM 3822" : ""}>
+                              <TextInput value={editIcms || String(camada?.icms ?? "")} onChange={setEditIcms} placeholder="0" />
+                            </FormField>
+                            <FormField label="IPI (%)">
+                              <TextInput value={editIpi || String(camada?.ipi ?? "")} onChange={setEditIpi} placeholder="0" />
+                            </FormField>
+                            <FormField label="PIS+COFINS (%)">
+                              <TextInput value={editPisCofins || String(camada?.pis_cofins ?? "")} onChange={setEditPisCofins} placeholder="9.25" />
+                            </FormField>
+                          </div>
+                          <div style={{ marginTop: 8 }}>
+                            <ActionButton icon={<Check size={16} />} label="Salvar Custos" variant="primary" onClick={handleSalvarCustos} />
+                          </div>
+                          {camada?.custo_base_final && (
+                            <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
+                              <strong>Custo Final: {fmt(camada.custo_base_final)}</strong>
+                              <span style={{ marginLeft: 12, color: "var(--text-secondary)" }}>
+                                (ICMS: {pct(camada.icms)}{camada.isencao_icms ? " ISENTO" : ""} | IPI: {pct(camada.ipi)} | PIS+COFINS: {pct(camada.pis_cofins)})
+                              </span>
                             </div>
                           )}
                         </Card>
@@ -1630,6 +1646,25 @@ ${html}
                               <FormField label="Markup (%)">
                                 <TextInput value={markup || String(camada?.markup_percentual || "")} onChange={setMarkup} placeholder="30" />
                               </FormField>
+                            ) : modoPrecoBase === "upload" ? (
+                              <FormField label="Tabela de Preços (.csv)">
+                                <input type="file" accept=".csv" style={{ fontSize: 13 }} onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    const text = ev.target?.result as string;
+                                    const lines = text.split("\n").filter(l => l.trim());
+                                    // Tentar extrair preço da primeira linha de dados (pular header)
+                                    for (let i = 1; i < lines.length; i++) {
+                                      const cols = lines[i].split(/[;,\t]/);
+                                      const preco = cols.find(c => /^\d+[.,]\d+$/.test(c.trim()));
+                                      if (preco) { setPrecoBaseManual(preco.trim().replace(",", ".")); break; }
+                                    }
+                                  };
+                                  reader.readAsText(file);
+                                }} />
+                              </FormField>
                             ) : (
                               <FormField label="Preço Base (R$)">
                                 <TextInput value={precoBaseManual || String(camada?.preco_base || "")} onChange={setPrecoBaseManual} placeholder="Preço de venda" />
@@ -1638,6 +1673,12 @@ ${html}
                             <div className="form-field-actions">
                               <ActionButton icon={<Check size={16} />} label="Salvar Preço Base" variant="primary" onClick={handleSalvarPrecoBase} />
                             </div>
+                          </div>
+                          <div style={{ marginTop: 8 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", color: "var(--text-secondary)" }}>
+                              <input type="checkbox" checked={reutilizarPreco} onChange={(e) => setReutilizarPreco(e.target.checked)} />
+                              Reutilizar este Preço Base em outros editais
+                            </label>
                           </div>
                           {camada?.preco_base && (
                             <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 8, fontSize: 13 }}>
