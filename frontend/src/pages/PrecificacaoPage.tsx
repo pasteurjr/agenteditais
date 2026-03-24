@@ -351,7 +351,25 @@ export function PrecificacaoPage(props?: PageProps) {
       signal: controller.signal,
     })
       .then(r => r.json())
-      .then(data => { if (data.success) setInsights(data); })
+      .then(data => {
+        if (data.success) {
+          setInsights(data);
+          // Auto-preencher campos se IA tem sugestões E campo não tem valor salvo no banco
+          if (data.tem_dados && data.recomendacao) {
+            const rec = data.recomendacao;
+            if (rec.custo_sugerido && !camada?.custo_unitario) setCustoUnit(String(rec.custo_sugerido));
+            if (rec.preco_base_sugerido && !camada?.preco_base) {
+              setModoPrecoBase("manual");
+              setPrecoBaseManual(String(rec.preco_base_sugerido));
+            }
+            if ((data.referencia_edital || rec.referencia_sugerida) && !camada?.valor_referencia_edital) {
+              setValorRef(String(data.referencia_edital || rec.referencia_sugerida));
+            }
+            if (rec.lance_inicial_sugerido && !camada?.lance_inicial) setLanceInicial(String(rec.lance_inicial_sugerido));
+            if (rec.lance_minimo_sugerido && !camada?.lance_minimo) setLanceMinimo(String(rec.lance_minimo_sugerido));
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => { clearTimeout(timeout); setInsightsLoading(false); });
     return () => { controller.abort(); clearTimeout(timeout); };
