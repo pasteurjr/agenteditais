@@ -712,6 +712,8 @@ export function PrecificacaoPage(props?: PageProps) {
       if (insights.referencia_edital != null) md += `| **Referência do Edital** | ${fmt(insights.referencia_edital)} |\n`;
       md += `\n`;
 
+      const variacaoAlta = insights.historico.preco_max && insights.historico.preco_min && Number(insights.historico.preco_max) / Number(insights.historico.preco_min) > 5;
+
       md += `### Sugestões de Preço\n\n`;
       md += `| Camada | Valor Sugerido | Critério |\n|---|---|---|\n`;
       md += `| **(A) Custo** | ${insights.recomendacao.custo_sugerido ? fmt(insights.recomendacao.custo_sugerido) : "—"} | 85% da referência histórica |\n`;
@@ -720,6 +722,33 @@ export function PrecificacaoPage(props?: PageProps) {
       md += `| **(D) Lance Inicial** | ${(insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido ? fmt((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number) : "—"} | = Preço Base |\n`;
       md += `| **(E) Lance Mínimo** | ${(insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido ? fmt((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido as number) : "—"} | Custo + 10% margem |\n`;
       md += `\n`;
+
+      md += `### Como a IA calculou cada valor\n\n`;
+      if (insights.recomendacao.custo_sugerido) {
+        md += `**(A) Base de Custos — ${fmt(insights.recomendacao.custo_sugerido)}**\n`;
+        md += `> Calculado como 85% da referência histórica. Preço mínimo dos vencedores: ${fmt(insights.historico.preco_min)}, média: ${fmt(insights.historico.preco_medio)}.`;
+        md += variacaoAlta ? ` Alta variação detectada (${fmt(insights.historico.preco_min)} a ${fmt(insights.historico.preco_max)}) — usado percentil entre mínimo e média como base, em vez do mínimo puro.\n\n` : `\n\n`;
+      }
+      if (insights.recomendacao.preco_base_sugerido) {
+        md += `**(B) Preço Base — ${fmt(insights.recomendacao.preco_base_sugerido)}**\n`;
+        md += `> 97% da média dos vencedores (${fmt(insights.historico.preco_medio)}). Faixa competitiva: ${fmt(insights.recomendacao.faixa.agressivo)} (agressivo) a ${fmt(insights.recomendacao.faixa.conservador)} (conservador).`;
+        md += insights.recomendacao.markup_sugerido ? ` Markup implícito sobre o custo: ${insights.recomendacao.markup_sugerido}%.\n\n` : `\n\n`;
+      }
+      if (insights.referencia_edital || insights.recomendacao.referencia_sugerida) {
+        const refVal = insights.referencia_edital || insights.recomendacao.referencia_sugerida;
+        md += `**(C) Valor de Referência — ${fmt(refVal as number)}**\n`;
+        md += insights.referencia_edital
+          ? `> Valor importado diretamente do edital. Este é o teto estimado pelo órgão licitante.\n\n`
+          : `> 99% da média histórica (preço conservador). Serve como target estratégico — o valor máximo que se pretende atingir na disputa.\n\n`;
+      }
+      if ((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido) {
+        md += `**(D) Lance Inicial — ${fmt((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number)}**\n`;
+        md += `> Igual ao preço base sugerido. É o valor de entrada no leilão/pregão.\n\n`;
+      }
+      if ((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido) {
+        md += `**(E) Lance Mínimo — ${fmt((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido as number)}**\n`;
+        md += `> Custo sugerido (${fmt(insights.recomendacao.custo_sugerido)}) + 10% de margem mínima. Abaixo deste valor, a operação gera prejuízo.\n\n`;
+      }
 
       // Concorrentes
       if (insights.concorrentes.length > 0) {
