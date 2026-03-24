@@ -9569,6 +9569,53 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
             lance_min_sug = round(custo_sug * 1.10, 2)  # margem mínima 10%
             markup_sug = round(((preco_base_sug / custo_sug) - 1) * 100, 1) if custo_sug > 0 else None
 
+            # Gerar justificativa detalhada via IA
+            justificativa_ia = ""
+            try:
+                # Montar contexto para a IA
+                venc_resumo = ""
+                for res in vencedores_detalhes[:3]:
+                    for v in (res.get("vencedores") or [])[:5]:
+                        venc_resumo += f"- {v.get('descricao','')}: vencedor {v.get('vencedor','')}, estimado R$ {v.get('valor_estimado','?')}, homologado R$ {v.get('valor_homologado','?')}\n"
+                conc_resumo = ", ".join([c.nome for c in db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(3).all()])
+
+                prompt_just = f"""Analise os dados de preços históricos de licitações para o produto "{nome_prod}" e justifique as sugestões de preço.
+
+DADOS DO MERCADO:
+- {historico['qtd_registros']} registros encontrados (fonte: {etapa})
+- Preço mínimo dos vencedores: R$ {p_min:.2f}
+- Preço médio dos vencedores: R$ {p_med:.2f}
+- Preço máximo dos vencedores: R$ {p_max:.2f}
+- Valor de referência do edital: {f'R$ {ref_edital:.2f}' if ref_edital else 'Não disponível'}
+
+VENCEDORES RECENTES:
+{venc_resumo or 'Sem detalhes disponíveis'}
+
+PRINCIPAIS CONCORRENTES: {conc_resumo or 'Sem dados'}
+
+SUGESTÕES CALCULADAS:
+- Custo sugerido (A): R$ {custo_sug:.2f} (85% do preço mínimo)
+- Preço base (B): R$ {preco_base_sug:.2f} (97% da média = preço competitivo)
+- Referência/Target (C): R$ {ref_sug:.2f}
+- Lance inicial (D): R$ {lance_ini_sug:.2f}
+- Lance mínimo (E): R$ {lance_min_sug:.2f} (custo + 10% margem)
+
+Escreva uma justificativa técnica em 3-5 parágrafos curtos explicando:
+1. De onde vieram os dados e qual a confiabilidade
+2. Por que cada preço sugerido foi calculado dessa forma
+3. Riscos e oportunidades considerando o mercado
+4. Recomendação final (se deve ser agressivo ou conservador)
+
+Responda em português, direto ao ponto, sem enrolação."""
+
+                justificativa_ia = call_deepseek(
+                    [{"role": "user", "content": prompt_just}],
+                    max_tokens=1000,
+                    model_override="deepseek-chat"
+                )
+            except Exception as e:
+                justificativa_ia = f"Baseado em {historico['qtd_registros']} registros. Preço médio: R$ {p_med:,.2f}, mínimo: R$ {p_min:,.2f}. (Erro ao gerar análise detalhada: {e})"
+
             recomendacao = {
                 "custo_sugerido": custo_sug,
                 "markup_sugerido": markup_sug,
@@ -9581,7 +9628,7 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
                     "ideal": round(p_med * 0.97, 2),
                     "conservador": round(p_med * 0.99, 2),
                 },
-                "justificativa": f"Baseado em {historico['qtd_registros']} registros. Preço médio: R$ {p_med:,.2f}, mínimo: R$ {p_min:,.2f}.",
+                "justificativa": justificativa_ia,
                 "fonte": etapa.split(":")[0] if ":" in etapa else etapa,
             }
 

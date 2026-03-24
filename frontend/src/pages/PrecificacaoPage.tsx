@@ -1344,11 +1344,16 @@ export function PrecificacaoPage(props?: PageProps) {
                                 </details>
                               )}
 
-                              {/* Justificativa */}
+                              {/* Justificativa IA detalhada */}
                               {insights.recomendacao.justificativa && (
-                                <p style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic" }}>
-                                  {insights.recomendacao.justificativa}
-                                </p>
+                                <details open style={{ fontSize: 12, marginTop: 8 }}>
+                                  <summary style={{ cursor: "pointer", color: "var(--text-secondary)", marginBottom: 6, fontWeight: 600 }}>
+                                    <Sparkles size={12} style={{ display: "inline", marginRight: 4 }} /> Análise IA — Justificativa dos preços
+                                  </summary>
+                                  <div className="markdown-response" style={{ fontSize: 12, padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)", border: "1px solid var(--border)" }}>
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{insights.recomendacao.justificativa}</ReactMarkdown>
+                                  </div>
+                                </details>
                               )}
                             </>
                           )}
