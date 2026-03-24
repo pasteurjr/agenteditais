@@ -755,9 +755,6 @@ export function PrecificacaoPage(props?: PageProps) {
       if (camada.lance_inicial) md += `| **Lance Inicial** | ${fmt(Number(camada.lance_inicial))} |\n`;
       if (camada.lance_minimo) md += `| **Lance Mínimo** | ${fmt(Number(camada.lance_minimo))} |\n`;
       if (camada.margem_minima != null) md += `| **Margem Mínima** | ${camada.margem_minima}% |\n`;
-    } else {
-      md += `## 4. Valores Definidos pelo Usuário\n\n`;
-      md += `> Nenhum valor definido ainda. Use os botões "Usar →" das sugestões acima e salve cada seção.\n`;
     }
 
     // Abrir em nova aba com toolbar MD/PDF (mesmo padrão da Captação)
