@@ -1534,9 +1534,20 @@ ${html}
 
                         {/* UC-P04: Base de Custos */}
                         <Card title="Base de Custos" icon={<DollarSign size={18} />}>
+                          {/* Explicação IA */}
+                          {insights && (insights as Record<string, unknown>).tem_dados && insights.recomendacao.custo_sugerido && (
+                            <div style={{ padding: "8px 12px", borderRadius: 6, backgroundColor: "#3b82f608", border: "1px solid #3b82f620", fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                              <Sparkles size={12} style={{ display: "inline", marginRight: 4, color: "#3b82f6" }} />
+                              <strong>IA:</strong> Custo sugerido de <strong>{fmt(insights.recomendacao.custo_sugerido)}</strong> — calculado como 85% da referência histórica.
+                              Preço mínimo dos vencedores: {fmt(insights.historico.preco_min)}, média: {fmt(insights.historico.preco_medio)}.
+                              {insights.historico.preco_max && insights.historico.preco_min && Number(insights.historico.preco_max) / Number(insights.historico.preco_min) > 5
+                                ? " Alta variação detectada — usado percentil entre mínimo e média como base."
+                                : ""}
+                            </div>
+                          )}
                           <div className="form-grid form-grid-3">
                             <FormField label="Custo Unitário (R$)">
-                              <TextInput value={custoUnit || String(camada?.custo_unitario || "")} onChange={setCustoUnit} placeholder="85.00" />
+                              <TextInput value={custoUnit || String(camada?.custo_unitario || "")} onChange={setCustoUnit} placeholder="Custo de aquisição" />
                             </FormField>
                             <FormField label="NCM">
                               <TextInput value={camada?.ncm || ""} onChange={() => {}} placeholder="Automático do produto" />
@@ -1557,6 +1568,15 @@ ${html}
 
                         {/* UC-P05: Preço Base */}
                         <Card title="Preço Base" icon={<TrendingUp size={18} />}>
+                          {/* Explicação IA */}
+                          {insights && (insights as Record<string, unknown>).tem_dados && insights.recomendacao.preco_base_sugerido && (
+                            <div style={{ padding: "8px 12px", borderRadius: 6, backgroundColor: "#3b82f608", border: "1px solid #3b82f620", fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                              <Sparkles size={12} style={{ display: "inline", marginRight: 4, color: "#3b82f6" }} />
+                              <strong>IA:</strong> Preço base sugerido de <strong>{fmt(insights.recomendacao.preco_base_sugerido)}</strong> — 97% da média dos vencedores ({fmt(insights.historico.preco_medio)}).
+                              Faixa competitiva: {fmt(insights.recomendacao.faixa.agressivo)} (agressivo) a {fmt(insights.recomendacao.faixa.conservador)} (conservador).
+                              {insights.recomendacao.markup_sugerido ? ` Markup implícito: ${insights.recomendacao.markup_sugerido}%.` : ""}
+                            </div>
+                          )}
                           <div className="form-grid form-grid-3">
                             <FormField label="Modo">
                               <SelectInput value={modoPrecoBase} onChange={setModoPrecoBase} options={[
@@ -1567,11 +1587,11 @@ ${html}
                             </FormField>
                             {modoPrecoBase === "markup" ? (
                               <FormField label="Markup (%)">
-                                <TextInput value={markup || String(camada?.markup_percentual || "")} onChange={setMarkup} placeholder="76.47" />
+                                <TextInput value={markup || String(camada?.markup_percentual || "")} onChange={setMarkup} placeholder="30" />
                               </FormField>
                             ) : (
                               <FormField label="Preço Base (R$)">
-                                <TextInput value={precoBaseManual || String(camada?.preco_base || "")} onChange={setPrecoBaseManual} placeholder="150.00" />
+                                <TextInput value={precoBaseManual || String(camada?.preco_base || "")} onChange={setPrecoBaseManual} placeholder="Preço de venda" />
                               </FormField>
                             )}
                             <div className="form-field-actions">
@@ -1588,9 +1608,19 @@ ${html}
 
                         {/* UC-P06: Valor de Referência */}
                         <Card title="Valor de Referência" icon={<Target size={18} />}>
+                          {/* Explicação IA */}
+                          {insights && (insights as Record<string, unknown>).tem_dados && (insights.referencia_edital || insights.recomendacao.referencia_sugerida) && (
+                            <div style={{ padding: "8px 12px", borderRadius: 6, backgroundColor: "#3b82f608", border: "1px solid #3b82f620", fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                              <Sparkles size={12} style={{ display: "inline", marginRight: 4, color: "#3b82f6" }} />
+                              <strong>IA:</strong> {insights.referencia_edital
+                                ? `Valor de referência do edital: ${fmt(insights.referencia_edital)}. Este é o teto estimado pelo órgão.`
+                                : `Referência sugerida de ${fmt(insights.recomendacao.referencia_sugerida)} — 99% da média histórica (preço conservador). Serve como target estratégico na disputa.`
+                              }
+                            </div>
+                          )}
                           <div className="form-grid form-grid-3">
                             <FormField label="Valor Referência (R$)" hint={camada?.valor_referencia_disponivel ? "Importado do edital" : "Não disponível no edital"}>
-                              <TextInput value={valorRef || String(camada?.valor_referencia_edital || "")} onChange={setValorRef} placeholder="145.00" />
+                              <TextInput value={valorRef || String(camada?.valor_referencia_edital || "")} onChange={setValorRef} placeholder="Target estratégico" />
                             </FormField>
                             <FormField label="OU % sobre Preço Base">
                               <TextInput value={pctSobreBase || String(camada?.percentual_sobre_base || "")} onChange={setPctSobreBase} placeholder="95" />
