@@ -9694,7 +9694,7 @@ Responda em português, direto ao ponto, sem enrolação."""
 
         tem_dados = (historico["qtd_registros"] > 0 or ref_edital is not None)
 
-        return {
+        resultado = {
             "success": True,
             "tem_dados": tem_dados,
             "termo_usado": termo_usado,
@@ -9708,6 +9708,23 @@ Responda em português, direto ao ponto, sem enrolação."""
             "atas_detalhes": atas_detalhes,
             "vencedores_detalhes": vencedores_detalhes,
         }
+
+        # Persistir análise IA na PrecoCamada
+        try:
+            import json as _json
+            camada = db.query(PrecoCamada).filter(
+                PrecoCamada.edital_item_produto_id == eip_id,
+                PrecoCamada.user_id == user_id
+            ).first()
+            if camada:
+                camada.analise_ia_json = _json.dumps(resultado, ensure_ascii=False, default=str)
+                camada.analise_ia_data = datetime.now()
+                camada.analise_ia_termo = termo_usado
+                db.commit()
+        except Exception:
+            pass  # Não falhar por causa da persistência
+
+        return resultado
     except Exception as e:
         import traceback
         traceback.print_exc()

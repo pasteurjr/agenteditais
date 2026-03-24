@@ -10686,6 +10686,29 @@ def precif_insights(eip_id):
     return jsonify(resultado)
 
 
+@app.route("/api/precificacao/<eip_id>/insights-salvos", methods=["GET"])
+@require_auth
+def precif_insights_salvos(eip_id):
+    """Retorna análise IA salva no banco (sem recalcular)."""
+    import json as _json
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        from models import PrecoCamada
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == eip_id,
+            PrecoCamada.user_id == user_id
+        ).first()
+        if camada and camada.analise_ia_json:
+            data = _json.loads(camada.analise_ia_json)
+            data["saved"] = True
+            data["saved_at"] = camada.analise_ia_data.isoformat() if camada.analise_ia_data else None
+            return jsonify(data)
+        return jsonify({"saved": False})
+    finally:
+        db.close()
+
+
 @app.route("/api/editais/<edital_id>/analisar-mercado", methods=["POST"])
 @require_auth
 def analisar_mercado_edital(edital_id):

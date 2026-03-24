@@ -338,42 +338,54 @@ export function PrecificacaoPage(props?: PageProps) {
     }
   }, [vinculoId, vinculos, itensEdital, produtos]);
 
-  // ── Buscar insights IA ao selecionar vínculo ──
+  // ── Helper: aplicar insights nos campos ──
+  const _aplicarInsights = useCallback((data: Record<string, unknown>) => {
+    if (data.tem_dados && data.recomendacao) {
+      const rec = data.recomendacao as Record<string, unknown>;
+      if (rec.custo_sugerido && !camada?.custo_unitario) setCustoUnit(String(rec.custo_sugerido));
+      if (rec.preco_base_sugerido && !camada?.preco_base) {
+        setModoPrecoBase("manual");
+        setPrecoBaseManual(String(rec.preco_base_sugerido));
+      }
+      if ((data.referencia_edital || rec.referencia_sugerida) && !camada?.valor_referencia_edital) {
+        setValorRef(String(data.referencia_edital || rec.referencia_sugerida));
+      }
+      if (rec.lance_inicial_sugerido && !camada?.lance_inicial) setLanceInicial(String(rec.lance_inicial_sugerido));
+      if (rec.lance_minimo_sugerido && !camada?.lance_minimo) setLanceMinimo(String(rec.lance_minimo_sugerido));
+    }
+  }, [camada]);
+
+  // ── Buscar insights IA ao selecionar vínculo (salvo primeiro, PNCP se necessário) ──
   useEffect(() => {
     if (!vinculoId) { setInsights(null); return; }
     setInsightsLoading(true);
     setInsights(null);
     const token = localStorage.getItem("editais_ia_access_token");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
-    fetch(`/api/precificacao/${vinculoId}/insights`, {
-      headers: { Authorization: token ? `Bearer ${token}` : "" },
-      signal: controller.signal,
-    })
+    const headers = { Authorization: token ? `Bearer ${token}` : "" };
+
+    // 1. Tentar carregar insights salvos (instantâneo)
+    fetch(`/api/precificacao/${vinculoId}/insights-salvos`, { headers })
       .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          setInsights(data);
-          // Auto-preencher campos se IA tem sugestões E campo não tem valor salvo no banco
-          if (data.tem_dados && data.recomendacao) {
-            const rec = data.recomendacao;
-            if (rec.custo_sugerido && !camada?.custo_unitario) setCustoUnit(String(rec.custo_sugerido));
-            if (rec.preco_base_sugerido && !camada?.preco_base) {
-              setModoPrecoBase("manual");
-              setPrecoBaseManual(String(rec.preco_base_sugerido));
-            }
-            if ((data.referencia_edital || rec.referencia_sugerida) && !camada?.valor_referencia_edital) {
-              setValorRef(String(data.referencia_edital || rec.referencia_sugerida));
-            }
-            if (rec.lance_inicial_sugerido && !camada?.lance_inicial) setLanceInicial(String(rec.lance_inicial_sugerido));
-            if (rec.lance_minimo_sugerido && !camada?.lance_minimo) setLanceMinimo(String(rec.lance_minimo_sugerido));
-          }
+      .then(saved => {
+        if (saved.saved && saved.success && saved.tem_dados) {
+          setInsights(saved);
+          _aplicarInsights(saved);
+          setInsightsLoading(false);
+          return;
         }
+        // 2. Se não tem salvo → chamar pipeline completo (PNCP)
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        fetch(`/api/precificacao/${vinculoId}/insights`, { headers, signal: controller.signal })
+          .then(r2 => r2.json())
+          .then(data => {
+            if (data.success) { setInsights(data); _aplicarInsights(data); }
+          })
+          .catch(() => {})
+          .finally(() => { clearTimeout(timeout); setInsightsLoading(false); });
       })
-      .catch(() => {})
-      .finally(() => { clearTimeout(timeout); setInsightsLoading(false); });
-    return () => { controller.abort(); clearTimeout(timeout); };
-  }, [vinculoId]);
+      .catch(() => { setInsightsLoading(false); });
+  }, [vinculoId, _aplicarInsights]);
 
   // ── Handlers ──
 
@@ -1386,7 +1398,7 @@ ${html}
                             <div style={{ padding: "12px", fontSize: 13, color: "var(--text-secondary)", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)" }}>
                               <p style={{ marginBottom: 8 }}>Nenhum registro histórico ou ata encontrado para este produto.</p>
                               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                                <ActionButton icon={<Search size={14} />} label="Rebuscar no PNCP" variant="primary" loading={insightsLoading}
+                                <ActionButton icon={<Search size={14} />} label="Regenerar Análise" variant="primary" loading={insightsLoading}
                                   onClick={() => {
                                     setInsights(null);
                                     setInsightsLoading(true);
@@ -1426,7 +1438,7 @@ ${html}
                                     {insights.recomendacao.fonte}
                                   </span>
                                 )}
-                                <ActionButton icon={<Search size={12} />} label="Rebuscar" variant="neutral"
+                                <ActionButton icon={<Search size={12} />} label="Regenerar" variant="neutral"
                                   onClick={() => {
                                     setInsights(null);
                                     setInsightsLoading(true);

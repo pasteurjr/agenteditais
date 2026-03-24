@@ -2205,6 +2205,10 @@ class PrecoCamada(Base):
     preco_min_historico = Column(DECIMAL(15, 4), nullable=True)
     preco_max_historico = Column(DECIMAL(15, 4), nullable=True)
     qtd_registros_historico = Column(Integer, default=0)
+    # Análise IA — persistência dos insights
+    analise_ia_json = Column(Text, nullable=True)       # JSON completo dos insights
+    analise_ia_data = Column(DateTime, nullable=True)    # Quando foi gerada
+    analise_ia_termo = Column(String(255), nullable=True) # Termo usado na busca
     # Status geral
     status = Column(Enum('rascunho', 'parcial', 'completo', 'aprovado'), default='rascunho')
     created_at = Column(DateTime, default=datetime.now)
@@ -2362,6 +2366,10 @@ def init_db():
             "ALTER TABLE parametros_score ADD COLUMN limiar_juridico_nogo DECIMAL(5,2) DEFAULT 30.0",
             # PrecoHistorico: vinculação com ata consultada
             "ALTER TABLE precos_historicos ADD COLUMN ata_consultada_id VARCHAR(36) NULL",
+            # PrecoCamada: persistência da análise IA
+            "ALTER TABLE preco_camadas ADD COLUMN analise_ia_json LONGTEXT NULL",
+            "ALTER TABLE preco_camadas ADD COLUMN analise_ia_data DATETIME NULL",
+            "ALTER TABLE preco_camadas ADD COLUMN analise_ia_termo VARCHAR(255) NULL",
         ]
         for stmt in alter_stmts:
             try:
