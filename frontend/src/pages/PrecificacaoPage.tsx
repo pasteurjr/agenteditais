@@ -3,7 +3,7 @@ import type { PageProps } from "../types";
 import {
   DollarSign, Search, TrendingUp, History, Lightbulb, Package,
   Layers, Target, BarChart3, Shield, ChevronDown, ChevronUp,
-  Check, AlertTriangle, Download, X, Globe, Loader2, Sparkles,
+  Check, AlertTriangle, Download, X, Globe, Loader2, Sparkles, FileText,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -645,6 +645,153 @@ export function PrecificacaoPage(props?: PageProps) {
     link.click();
   };
 
+  // ── Relatório de Custos e Preços ──
+  const handleRelatorioCustoPreco = () => {
+    const v = vinculos.find(vv => vv.id === vinculoId);
+    const item = v ? itensEdital.find(i => i.id === v.edital_item_id) : null;
+    const prod = v ? produtos.find(p => p.id === v.produto_id) : null;
+    const ed = editais.find(e => (e.id ?? e.numero) === editalId);
+    const lote = Object.entries(loteItensMap).find(([, ids]) => v && ids.includes(v.edital_item_id));
+    const loteObj = lote ? lotes.find(l => l.id === lote[0]) : null;
+
+    const now = new Date();
+    const dataHora = now.toLocaleString("pt-BR");
+    let md = `# Relatório de Custos e Preços\n\n`;
+    md += `**Data:** ${dataHora}\n\n`;
+    md += `---\n\n`;
+    md += `## 1. Identificação\n\n`;
+    md += `| Campo | Valor |\n|---|---|\n`;
+    md += `| **Edital** | ${ed?.numero || editalId} |\n`;
+    md += `| **Órgão** | ${ed?.orgao || "—"} |\n`;
+    md += `| **Lote** | ${loteObj ? `${loteObj.numero_lote} — ${loteObj.nome}` : "—"} |\n`;
+    md += `| **Item** | ${item?.descricao?.slice(0, 100) || "—"} |\n`;
+    md += `| **Produto** | ${prod?.nome || "—"} |\n`;
+    md += `| **Fabricante** | ${prod?.fabricante || "—"} |\n`;
+    md += `| **Quantidade** | ${item?.quantidade || "—"} |\n`;
+    md += `\n---\n\n`;
+
+    // Conversão de quantidade
+    if (curVinculo?.formula_calculo) {
+      md += `## 2. Conversão de Quantidade\n\n`;
+      md += `| Campo | Valor |\n|---|---|\n`;
+      md += `| **Volume do Edital** | ${curVinculo.volume_edital || "—"} |\n`;
+      md += `| **Rendimento por Embalagem** | ${curVinculo.rendimento_produto || "—"} |\n`;
+      md += `| **Repetições (Amostras/Calib./Controles)** | ${curVinculo.repeticoes_amostras}/${curVinculo.repeticoes_calibradores}/${curVinculo.repeticoes_controles} |\n`;
+      md += `| **Fórmula** | ${curVinculo.formula_calculo} |\n`;
+      md += `| **Quantidade de Kits** | **${curVinculo.quantidade_kits}** |\n`;
+      md += `\n---\n\n`;
+    }
+
+    // Insights IA
+    if (insights && (insights as Record<string, unknown>).tem_dados) {
+      md += `## 3. Análise de Mercado (IA)\n\n`;
+      md += `| Indicador | Valor |\n|---|---|\n`;
+      md += `| **Registros encontrados** | ${insights.historico.qtd_registros} |\n`;
+      md += `| **Preço mínimo** | ${insights.historico.preco_min != null ? fmt(insights.historico.preco_min) : "—"} |\n`;
+      md += `| **Preço médio** | ${insights.historico.preco_medio != null ? fmt(insights.historico.preco_medio) : "—"} |\n`;
+      md += `| **Preço máximo** | ${insights.historico.preco_max != null ? fmt(insights.historico.preco_max) : "—"} |\n`;
+      md += `| **Fonte** | ${insights.recomendacao.fonte || "—"} |\n`;
+      if (insights.referencia_edital != null) md += `| **Referência do Edital** | ${fmt(insights.referencia_edital)} |\n`;
+      md += `\n`;
+
+      md += `### Sugestões de Preço\n\n`;
+      md += `| Camada | Valor Sugerido | Critério |\n|---|---|---|\n`;
+      md += `| **(A) Custo** | ${insights.recomendacao.custo_sugerido ? fmt(insights.recomendacao.custo_sugerido) : "—"} | 85% do preço mínimo histórico |\n`;
+      md += `| **(B) Preço Base** | ${insights.recomendacao.preco_base_sugerido ? fmt(insights.recomendacao.preco_base_sugerido) : "—"} | 97% da média (preço competitivo) |\n`;
+      md += `| **(C) Referência** | ${insights.recomendacao.referencia_sugerida ? fmt(insights.recomendacao.referencia_sugerida) : "—"} | Target estratégico |\n`;
+      md += `| **(D) Lance Inicial** | ${(insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido ? fmt((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number) : "—"} | = Preço Base |\n`;
+      md += `| **(E) Lance Mínimo** | ${(insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido ? fmt((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido as number) : "—"} | Custo + 10% margem |\n`;
+      md += `\n`;
+
+      // Concorrentes
+      if (insights.concorrentes.length > 0) {
+        md += `### Concorrentes\n\n`;
+        md += `| Empresa | Vitórias | Taxa | Preço Médio |\n|---|---|---|---|\n`;
+        for (const c of insights.concorrentes) {
+          md += `| ${c.nome} | ${c.editais_ganhos} | ${c.taxa_vitoria.toFixed(1)}% | ${fmt(c.preco_medio)} |\n`;
+        }
+        md += `\n`;
+      }
+
+      // Vencedores detalhados
+      const vencDet = (insights as Record<string, unknown>).vencedores_detalhes as Array<Record<string, unknown>> | undefined;
+      if (vencDet && vencDet.length > 0) {
+        md += `### Preços Detalhados dos Vencedores\n\n`;
+        for (const res of vencDet) {
+          md += `**${res.ata_titulo} — ${res.orgao}**\n\n`;
+          md += `| Item | Descrição | Vencedor | Estimado | Homologado |\n|---|---|---|---|---|\n`;
+          for (const vv of ((res.vencedores || []) as Array<Record<string, unknown>>)) {
+            md += `| ${vv.item} | ${String(vv.descricao || "").slice(0, 40)} | ${String(vv.vencedor || "").slice(0, 25)} | ${vv.valor_estimado ? fmt(Number(vv.valor_estimado)) : "—"} | ${vv.valor_homologado ? fmt(Number(vv.valor_homologado)) : "—"} |\n`;
+          }
+          md += `\n`;
+        }
+      }
+
+      // Justificativa IA
+      if (insights.recomendacao.justificativa) {
+        md += `### Justificativa IA\n\n`;
+        md += `${insights.recomendacao.justificativa}\n\n`;
+      }
+      md += `---\n\n`;
+    }
+
+    // Valores definidos (salvos)
+    md += `## 4. Valores Definidos pelo Usuário\n\n`;
+    md += `| Campo | Valor |\n|---|---|\n`;
+    md += `| **Custo Unitário** | ${camada?.custo_unitario ? fmt(Number(camada.custo_unitario)) : "—"} |\n`;
+    md += `| **NCM** | ${camada?.ncm || "—"} |\n`;
+    md += `| **ICMS** | ${camada?.icms != null ? `${camada.icms}%` : "—"}${camada?.isencao_icms ? " (ISENTO)" : ""} |\n`;
+    md += `| **IPI** | ${camada?.ipi != null ? `${camada.ipi}%` : "—"} |\n`;
+    md += `| **PIS+COFINS** | ${camada?.pis_cofins != null ? `${camada.pis_cofins}%` : "—"} |\n`;
+    md += `| **Custo Base Final** | ${camada?.custo_base_final ? fmt(Number(camada.custo_base_final)) : "—"} |\n`;
+    md += `| **Modo Preço Base** | ${camada?.modo_preco_base || "—"} |\n`;
+    md += `| **Markup** | ${camada?.markup_percentual ? `${camada.markup_percentual}%` : "—"} |\n`;
+    md += `| **Preço Base** | ${camada?.preco_base ? fmt(Number(camada.preco_base)) : "—"} |\n`;
+    md += `| **Valor Referência** | ${camada?.valor_referencia_edital ? fmt(Number(camada.valor_referencia_edital)) : "—"} |\n`;
+    md += `| **Target** | ${camada?.target_referencia ? fmt(Number(camada.target_referencia)) : "—"} |\n`;
+    md += `| **Margem sobre Custo** | ${camada?.margem_sobre_custo != null ? `${camada.margem_sobre_custo}%` : "—"} |\n`;
+    md += `| **Lance Inicial** | ${camada?.lance_inicial ? fmt(Number(camada.lance_inicial)) : "—"} |\n`;
+    md += `| **Lance Mínimo** | ${camada?.lance_minimo ? fmt(Number(camada.lance_minimo)) : "—"} |\n`;
+    md += `| **Margem Mínima** | ${camada?.margem_minima != null ? `${camada.margem_minima}%` : "—"} |\n`;
+
+    // Abrir em nova aba com toolbar MD/PDF (mesmo padrão da Captação)
+    const tableRegex = /(\|.+\|\n)+/g;
+    let html = md.replace(tableRegex, (tableBlock) => {
+      const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+      if (rows.length < 2) return tableBlock;
+      let t = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#334155;margin:8px 0;width:100%;font-size:13px;">\n';
+      rows.forEach((row, ri) => {
+        if (ri === 1 && row.match(/^\|[\s-|]+\|$/)) return;
+        const cells = row.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => c.trim());
+        const tag = ri === 0 ? 'th' : 'td';
+        const bg = ri === 0 ? ' style="background:#1e293b;color:#94a3b8;text-align:left;"' : '';
+        t += '<tr>' + cells.map(c => `<${tag}${bg}>${c}</${tag}>`).join('') + '</tr>\n';
+      });
+      t += '</table>\n';
+      return t;
+    });
+    html = html
+      .replace(/^#### (.+)$/gm, '<h4 style="color:#60a5fa;margin:16px 0 8px;">$1</h4>')
+      .replace(/^### (.+)$/gm, '<h3 style="color:#818cf8;margin:24px 0 12px;padding-bottom:6px;border-bottom:1px solid #334155;">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 style="color:#a78bfa;margin:32px 0 16px;">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 style="color:#e2e8f0;margin:0 0 24px;">$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color:#60a5fa;">$1</a>')
+      .replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #475569;padding:4px 12px;margin:4px 0;color:#94a3b8;">$1</blockquote>')
+      .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 16px;">• $1</div>')
+      .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;"/>')
+      .replace(/  \n/g, '<br/>');
+
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Relatório Custos e Preços — ${dataHora}</title>
+<style>body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;max-width:1100px;margin:0 auto;padding:64px 24px 32px;line-height:1.6}table{font-size:13px}th{font-weight:600}td,th{padding:6px 10px;border:1px solid #334155}tr:nth-child(even){background:#1e293b}h1{color:#e2e8f0;font-size:24px}h2{color:#a78bfa;font-size:20px}h3{color:#818cf8;font-size:16px;border-bottom:1px solid #334155;padding-bottom:6px}strong{color:#f1f5f9}@media print{@page{margin:10mm}body{background:white;color:#1e293b;padding-top:0;max-width:none}h1,h2,h3,h4,strong{color:#1e293b}td,th{border-color:#cbd5e1}tr:nth-child(even){background:#f1f5f9}.toolbar-relatorio{display:none!important}}.toolbar-relatorio{position:fixed;top:0;left:0;right:0;z-index:1000;background:#1e293b;border-bottom:2px solid #334155;padding:10px 24px;display:flex;gap:12px;align-items:center}.toolbar-relatorio button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}.btn-md{background:#3b82f6;color:white}.btn-pdf{background:#8b5cf6;color:white}.toolbar-relatorio span{color:#94a3b8;font-size:13px;margin-left:auto}</style></head><body>
+<div class="toolbar-relatorio"><button class="btn-md" onclick="baixarMD()">📥 Baixar MD</button><button class="btn-pdf" onclick="window.print()">📄 Baixar PDF</button><span>Relatório gerado em ${dataHora}</span></div>
+${html}
+<script>var mdContent=${JSON.stringify(md)};function baixarMD(){var b=new Blob(['\\uFEFF'+mdContent],{type:'text/markdown;charset=utf-8;'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='relatorio_custos_precos_${now.toISOString().slice(0, 10)}.md';a.click();URL.revokeObjectURL(u)}</script></body></html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    window.open(URL.createObjectURL(blob), '_blank');
+  };
+
   // ── Vinculo selector for Custos e Preços/Lances tabs ──
   const vinculoOptions = [
     { value: "", label: "Selecione item-produto..." },
@@ -1091,6 +1238,11 @@ export function PrecificacaoPage(props?: PageProps) {
                         <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 8 }}>
                           Nenhum vínculo item-produto encontrado. Vá à aba Lotes e clique no ícone <Target size={12} /> para vincular produtos.
                         </p>
+                      )}
+                      {vinculoId && (
+                        <div style={{ marginTop: 8 }}>
+                          <ActionButton icon={<FileText size={14} />} label="Relatório de Custos e Preços" variant="neutral" onClick={handleRelatorioCustoPreco} />
+                        </div>
                       )}
                     </Card>
 
