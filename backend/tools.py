@@ -9546,6 +9546,41 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
                         etapa = "contratos_pncp_ok"
                         break
 
+        # === Concorrentes — extrair dos vencedores das atas (não global) ===
+        concorrentes: list = []
+        if vencedores_detalhes:
+            conc_map: Dict[str, Dict[str, Any]] = {}
+            for res in vencedores_detalhes:
+                for v in (res.get("vencedores") or []):
+                    nome_v = v.get("vencedor") or ""
+                    if not nome_v:
+                        continue
+                    if nome_v not in conc_map:
+                        conc_map[nome_v] = {"nome": nome_v, "vitorias": 0, "precos": []}
+                    conc_map[nome_v]["vitorias"] += 1
+                    if v.get("valor_homologado"):
+                        conc_map[nome_v]["precos"].append(float(v["valor_homologado"]))
+            for c in sorted(conc_map.values(), key=lambda x: x["vitorias"], reverse=True)[:5]:
+                preco_m = round(sum(c["precos"]) / len(c["precos"]), 2) if c["precos"] else 0
+                concorrentes.append({
+                    "nome": c["nome"],
+                    "taxa_vitoria": 0,
+                    "preco_medio": preco_m,
+                    "editais_ganhos": c["vitorias"],
+                })
+        if not concorrentes:
+            try:
+                concs = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(5).all()
+                for c in concs:
+                    concorrentes.append({
+                        "nome": c.nome,
+                        "taxa_vitoria": float(c.taxa_vitoria) if c.taxa_vitoria else 0,
+                        "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
+                        "editais_ganhos": c.editais_ganhos or 0,
+                    })
+            except Exception:
+                pass
+
         # === ETAPA 4: Calcular sugestões com os dados disponíveis ===
         recomendacao = {
             "custo_sugerido": None, "markup_sugerido": None,
@@ -9651,42 +9686,6 @@ Responda em português, direto ao ponto, sem enrolação."""
                 "justificativa": justificativa_ia,
                 "fonte": etapa.split(":")[0] if ":" in etapa else etapa,
             }
-
-        # Concorrentes — extrair dos vencedores das atas (não global)
-        concorrentes = []
-        if vencedores_detalhes:
-            conc_map: Dict[str, Dict[str, Any]] = {}
-            for res in vencedores_detalhes:
-                for v in (res.get("vencedores") or []):
-                    nome_v = v.get("vencedor") or ""
-                    if not nome_v:
-                        continue
-                    if nome_v not in conc_map:
-                        conc_map[nome_v] = {"nome": nome_v, "vitorias": 0, "precos": []}
-                    conc_map[nome_v]["vitorias"] += 1
-                    if v.get("valor_homologado"):
-                        conc_map[nome_v]["precos"].append(float(v["valor_homologado"]))
-            for c in sorted(conc_map.values(), key=lambda x: x["vitorias"], reverse=True)[:5]:
-                preco_m = round(sum(c["precos"]) / len(c["precos"]), 2) if c["precos"] else 0
-                concorrentes.append({
-                    "nome": c["nome"],
-                    "taxa_vitoria": 0,
-                    "preco_medio": preco_m,
-                    "editais_ganhos": c["vitorias"],
-                })
-        if not concorrentes:
-            # Fallback: buscar do banco
-            try:
-                concs = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(5).all()
-                for c in concs:
-                    concorrentes.append({
-                        "nome": c.nome,
-                        "taxa_vitoria": float(c.taxa_vitoria) if c.taxa_vitoria else 0,
-                        "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
-                        "editais_ganhos": c.editais_ganhos or 0,
-                    })
-            except Exception:
-                pass
 
         tem_dados = (historico["qtd_registros"] > 0 or ref_edital is not None)
 
