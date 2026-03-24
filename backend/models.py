@@ -2326,7 +2326,6 @@ class BeneficioFiscalNcm(Base):
             "cofins": _f(self.cofins),
             "isencao_icms": self.isencao_icms,
             "base_legal": self.base_legal,
-            "empresa_id": self.empresa_id,
             "ativo": self.ativo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
