@@ -9475,6 +9475,8 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
 
         historico = {"qtd_registros": 0, "preco_min": None, "preco_medio": None, "preco_max": None}
         atas_encontradas = []
+        atas_detalhes = []  # lista de atas com metadata
+        vencedores_detalhes = []  # lista de resultados com vencedores por ata
         etapa = "inicio"
         termo_usado = ""
 
@@ -9512,6 +9514,14 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
                     )
                     if ext_result.get("success") and ext_result.get("stats"):
                         historico = ext_result["stats"]
+                        vencedores_detalhes = ext_result.get("resultados", [])
+                        atas_detalhes = [{
+                            "titulo": a.get("titulo", ""),
+                            "orgao": a.get("orgao", ""),
+                            "uf": a.get("uf", ""),
+                            "url_pncp": a.get("url_pncp", ""),
+                            "data_publicacao": a.get("data_publicacao", ""),
+                        } for a in atas_encontradas]
                         termo_usado = termo
                         etapa = "atas_extraidas_ok"
                         break
@@ -9602,6 +9612,8 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
             "concorrentes": concorrentes,
             "referencia_edital": ref_edital,
             "atas_encontradas": len(atas_encontradas),
+            "atas_detalhes": atas_detalhes,
+            "vencedores_detalhes": vencedores_detalhes,
         }
     except Exception as e:
         import traceback

@@ -1289,6 +1289,61 @@ export function PrecificacaoPage(props?: PageProps) {
                                 </details>
                               )}
 
+                              {/* Atas encontradas (expansível) */}
+                              {(insights as Record<string, unknown>).atas_detalhes && ((insights as Record<string, unknown>).atas_detalhes as Array<Record<string, string>>).length > 0 && (
+                                <details style={{ fontSize: 12, marginBottom: 8 }}>
+                                  <summary style={{ cursor: "pointer", color: "var(--text-secondary)", marginBottom: 6 }}>
+                                    Atas consultadas ({((insights as Record<string, unknown>).atas_detalhes as Array<Record<string, string>>).length})
+                                  </summary>
+                                  {((insights as Record<string, unknown>).atas_detalhes as Array<Record<string, string>>).map((ata, i) => (
+                                    <div key={i} style={{ padding: "6px 8px", marginBottom: 4, borderRadius: 6, backgroundColor: "var(--bg-secondary, #f5f5f5)", fontSize: 12 }}>
+                                      <strong>{ata.titulo}</strong> — {ata.orgao} ({ata.uf})
+                                      {ata.url_pncp && (
+                                        <a href={ata.url_pncp} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: "#3b82f6", fontSize: 11 }}>Ver no PNCP ↗</a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </details>
+                              )}
+
+                              {/* Preços detalhados dos vencedores (expansível) */}
+                              {(insights as Record<string, unknown>).vencedores_detalhes && ((insights as Record<string, unknown>).vencedores_detalhes as Array<Record<string, unknown>>).length > 0 && (
+                                <details style={{ fontSize: 12, marginBottom: 8 }}>
+                                  <summary style={{ cursor: "pointer", color: "var(--text-secondary)", marginBottom: 6 }}>
+                                    Preços detalhados dos vencedores
+                                  </summary>
+                                  {((insights as Record<string, unknown>).vencedores_detalhes as Array<Record<string, unknown>>).map((res, ri) => (
+                                    <div key={ri} style={{ marginBottom: 8 }}>
+                                      <p style={{ fontSize: 11, fontWeight: 600, marginBottom: 4, color: "var(--text-primary)" }}>
+                                        {String(res.ata_titulo)} — {String(res.orgao)}
+                                      </p>
+                                      <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+                                        <thead>
+                                          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                                            <th style={{ textAlign: "left", padding: 3 }}>Item</th>
+                                            <th style={{ textAlign: "left", padding: 3 }}>Descrição</th>
+                                            <th style={{ textAlign: "left", padding: 3 }}>Vencedor</th>
+                                            <th style={{ textAlign: "right", padding: 3 }}>Estimado</th>
+                                            <th style={{ textAlign: "right", padding: 3 }}>Homologado</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {((res.vencedores || []) as Array<Record<string, unknown>>).map((v, vi) => (
+                                            <tr key={vi} style={{ borderBottom: "1px solid var(--border-light, #eee)" }}>
+                                              <td style={{ padding: 3 }}>{String(v.item)}</td>
+                                              <td style={{ padding: 3, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v.descricao || "")}</td>
+                                              <td style={{ padding: 3 }}>{String(v.vencedor || "").slice(0, 25)}</td>
+                                              <td style={{ textAlign: "right", padding: 3 }}>{v.valor_estimado ? fmt(Number(v.valor_estimado)) : "—"}</td>
+                                              <td style={{ textAlign: "right", padding: 3, fontWeight: 600 }}>{v.valor_homologado ? fmt(Number(v.valor_homologado)) : "—"}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ))}
+                                </details>
+                              )}
+
                               {/* Justificativa */}
                               {insights.recomendacao.justificativa && (
                                 <p style={{ fontSize: 11, color: "var(--text-secondary)", fontStyle: "italic" }}>
