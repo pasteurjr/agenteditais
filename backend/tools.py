@@ -20,7 +20,7 @@ from models import (
     ParametroScore, Empresa, SubclasseProduto, ClasseProdutoV2,
     # FASE 1 Precificação
     Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
-    EstrategiaEdital,
+    EstrategiaEdital, BeneficioFiscalNcm,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -8810,22 +8810,44 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
         produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first()
         ncm = produto.ncm if produto else None
 
-        # Carregar parâmetros da empresa
-        params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
-        ncm_isencoes = (params.ncm_isencao_icms or ["3822"]) if params else ["3822"]
-
-        # Detectar isenção ICMS por NCM
-        isencao_icms = False
+        # 1) Tentar buscar benefício fiscal cadastrado na tabela beneficios_fiscais_ncm
+        beneficio = None
         if ncm:
-            for prefixo in ncm_isencoes:
-                if ncm.replace(".", "").startswith(prefixo.replace(".", "")):
-                    isencao_icms = True
-                    break
+            ncm_limpo = ncm.replace(".", "")
+            # Busca exata primeiro, depois por prefixo (mais específico ganha)
+            candidatos = db.query(BeneficioFiscalNcm).filter(
+                BeneficioFiscalNcm.ativo == True
+            ).all()
+            melhor = None
+            melhor_len = 0
+            for c in candidatos:
+                prefixo_limpo = c.ncm.replace(".", "")
+                if ncm_limpo.startswith(prefixo_limpo) and len(prefixo_limpo) > melhor_len:
+                    melhor = c
+                    melhor_len = len(prefixo_limpo)
+            beneficio = melhor
 
-        # Usar valores fornecidos ou defaults da empresa
-        _icms = 0.0 if isencao_icms else (icms if icms is not None else float(params.icms_padrao or 18) if params else 18.0)
-        _ipi = ipi if ipi is not None else float(params.ipi_padrao or 0) if params else 0.0
-        _pis = pis_cofins if pis_cofins is not None else float(params.pis_cofins or 9.25) if params else 9.25
+        # 2) Carregar parâmetros da empresa (fallback)
+        params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
+
+        # 3) Determinar valores tributários: parâmetro explícito > tabela NCM > params empresa > default
+        if beneficio:
+            isencao_icms = beneficio.isencao_icms
+            _icms = 0.0 if isencao_icms else (icms if icms is not None else float(beneficio.icms or 0))
+            _ipi = ipi if ipi is not None else float(beneficio.ipi or 0)
+            _pis = pis_cofins if pis_cofins is not None else float(beneficio.pis or 0) + float(beneficio.cofins or 0)
+        else:
+            # Fallback: lógica original com parâmetros da empresa
+            ncm_isencoes = (params.ncm_isencao_icms or ["3822"]) if params else ["3822"]
+            isencao_icms = False
+            if ncm:
+                for prefixo in ncm_isencoes:
+                    if ncm.replace(".", "").startswith(prefixo.replace(".", "")):
+                        isencao_icms = True
+                        break
+            _icms = 0.0 if isencao_icms else (icms if icms is not None else float(params.icms_padrao or 18) if params else 18.0)
+            _ipi = ipi if ipi is not None else float(params.ipi_padrao or 0) if params else 0.0
+            _pis = pis_cofins if pis_cofins is not None else float(params.pis_cofins or 9.25) if params else 9.25
         _custo = custo_unitario or float(produto.preco_referencia or 0) if produto else 0
 
         # Custo base final = custo * (1 + impostos/100) — simplificado
@@ -8857,10 +8879,19 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
         camada.updated_at = datetime.now()
         db.commit()
 
+        fonte_tributaria = "beneficio_fiscal_ncm" if beneficio else "parametros_empresa"
+        msg_extra = ""
+        if beneficio:
+            msg_extra = f" (via tabela benefícios fiscais NCM"
+            if beneficio.base_legal:
+                msg_extra += f" — {beneficio.base_legal}"
+            msg_extra += ")"
+        elif isencao_icms:
+            msg_extra = f" (ICMS isento — NCM {ncm})"
+
         return {
             "success": True,
-            "mensagem": f"Base de custos configurada: R$ {custo_base_final:.2f}" +
-                        (f" (ICMS isento — NCM {ncm})" if isencao_icms else ""),
+            "mensagem": f"Base de custos configurada: R$ {custo_base_final:.2f}" + msg_extra,
             "camada_id": camada.id,
             "custo_unitario": _custo,
             "ncm": ncm,
@@ -8869,6 +8900,7 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
             "ipi": _ipi,
             "pis_cofins": _pis,
             "custo_base_final": custo_base_final,
+            "fonte_tributaria": fonte_tributaria,
         }
 
     except Exception as e:

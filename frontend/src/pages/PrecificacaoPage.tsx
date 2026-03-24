@@ -1807,6 +1807,52 @@ ${html}
 
                         {/* UC-P08: Estratégia Competitiva */}
                         <Card title="Estratégia Competitiva (UC-P08)" icon={<Shield size={18} />}>
+                          {/* Explanation card */}
+                          <div style={{
+                            background: "var(--bg-secondary, #f8f9fa)", borderRadius: 8,
+                            padding: 16, marginBottom: 16, border: "1px solid var(--border-light, #e2e8f0)",
+                          }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                              <div>
+                                <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>🏆 "Quero Ganhar"</h4>
+                                <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)" }}>
+                                  Disputa agressiva: lances decrescentes até o valor mínimo (E).
+                                  Máxima chance de vitória.
+                                </p>
+                                <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--color-danger, #ef4444)" }}>
+                                  Risco: margem mínima.
+                                </p>
+                              </div>
+                              <div>
+                                <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>📊 "Não Ganhei no Mínimo"</h4>
+                                <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)" }}>
+                                  Reposicionamento: se não ganhou com lance mínimo, posicionar para melhor colocação possível.
+                                </p>
+                                <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--color-info, #3b82f6)" }}>
+                                  Objetivo: 2º ou 3º lugar para futuras negociações.
+                                </p>
+                              </div>
+                            </div>
+                            {insights && insights.recomendacao?.faixa?.agressivo != null && insights.recomendacao?.faixa?.conservador != null && (
+                              <div style={{
+                                marginTop: 12, padding: "10px 14px", borderRadius: 6,
+                                background: "var(--bg-primary-light, #eff6ff)", border: "1px solid var(--color-primary, #3b82f6)",
+                                fontSize: 13,
+                              }}>
+                                <strong>💡 Insight histórico:</strong>{" "}
+                                Com base no histórico, lance entre{" "}
+                                <strong>{fmt(insights.recomendacao.faixa.agressivo)}</strong> e{" "}
+                                <strong>{fmt(insights.recomendacao.faixa.conservador)}</strong>{" "}
+                                tem maior chance de vitória.
+                                {insights.historico?.qtd_registros > 0 && (
+                                  <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>
+                                    ({insights.historico.qtd_registros} registros analisados)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
                           <div className="form-grid form-grid-2">
                             <div
                               onClick={() => setPerfil("quero_ganhar")}
@@ -1939,6 +1985,55 @@ ${html}
                           </table>
                         </div>
                       )}
+
+                      {/* Impacto no preço do lote */}
+                      {comodatos.length > 0 && (() => {
+                        const totalEquipamentos = comodatos.length;
+                        const valorTotalEquipamentos = comodatos.reduce((acc, c) => acc + (c.valor_equipamento || 0), 0);
+                        const amortizacaoMensalTotal = comodatos.reduce((acc, c) => acc + (c.valor_mensal_amortizacao || 0), 0);
+                        const totalItensEdital = itensEdital.reduce((acc, item) => acc + (item.quantidade || 0), 0);
+                        const impactoPorItem = totalItensEdital > 0 ? amortizacaoMensalTotal / totalItensEdital : 0;
+
+                        return (
+                          <div style={{
+                            marginTop: 16, padding: 16, borderRadius: 8,
+                            background: "var(--bg-primary-light, #eff6ff)",
+                            border: "1px solid var(--color-primary, #3b82f6)",
+                          }}>
+                            <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "var(--color-primary, #3b82f6)" }}>
+                              📦 Impacto do Comodato no Preço
+                            </h4>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, fontSize: 13 }}>
+                              <div>
+                                <label style={{ fontSize: 11, color: "var(--text-secondary)" }}>Total equipamentos</label>
+                                <br /><strong>{totalEquipamentos}</strong>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, color: "var(--text-secondary)" }}>Valor total equipamentos</label>
+                                <br /><strong>{fmt(valorTotalEquipamentos)}</strong>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, color: "var(--text-secondary)" }}>Amortização mensal total</label>
+                                <br /><strong>{fmt(amortizacaoMensalTotal)}</strong>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 11, color: "var(--text-secondary)" }}>Impacto por item do lote</label>
+                                <br />
+                                <strong style={{ color: totalItensEdital > 0 ? "var(--color-danger, #ef4444)" : "var(--text-secondary)" }}>
+                                  {totalItensEdital > 0
+                                    ? `+ ${fmt(impactoPorItem)} /item`
+                                    : "Sem itens vinculados"}
+                                </strong>
+                              </div>
+                            </div>
+                            {totalItensEdital > 0 && (
+                              <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)" }}>
+                                Cálculo: {fmt(amortizacaoMensalTotal)} (amortização mensal) ÷ {totalItensEdital} itens = {fmt(impactoPorItem)} por item
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </Card>
                   </div>
                 )}

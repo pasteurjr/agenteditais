@@ -25,6 +25,7 @@ from models import (
     CategoriaDocumento, DocumentoNecessario,
     # FASE 1 Precificação
     Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
+    BeneficioFiscalNcm,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -155,6 +156,15 @@ CRUD_TABLES = {
         "search_fields": ["nome", "cargo", "email", "cpf"],
         "label": "Responsável da Empresa",
         "required": ["empresa_id", "nome"],
+    },
+    "beneficios-fiscais-ncm": {
+        "model": BeneficioFiscalNcm,
+        "user_scoped": False,
+        "parent_fk": "empresa_id",
+        "parent_model": Empresa,
+        "search_fields": ["ncm", "descricao", "base_legal"],
+        "label": "Benefício Fiscal NCM",
+        "required": ["ncm"],
     },
     # === Portfolio ===
     "produtos": {

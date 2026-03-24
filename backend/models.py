@@ -2296,6 +2296,46 @@ class Lance(Base):
         }
 
 
+class BeneficioFiscalNcm(Base):
+    """Benefícios fiscais por NCM — base legal, alíquotas e isenções"""
+    __tablename__ = 'beneficios_fiscais_ncm'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ncm = Column(String(20), nullable=False)
+    descricao = Column(String(255), nullable=True)
+    icms = Column(DECIMAL(5, 2), default=0.0)
+    ipi = Column(DECIMAL(5, 2), default=0.0)
+    pis = Column(DECIMAL(5, 2), default=1.65)
+    cofins = Column(DECIMAL(5, 2), default=7.60)
+    isencao_icms = Column(Boolean, default=False)
+    base_legal = Column(String(500), nullable=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='SET NULL'), nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", backref="beneficios_fiscais_ncm")
+
+    def to_dict(self):
+        def _f(v):
+            return float(v) if v is not None else None
+        return {
+            "id": self.id,
+            "ncm": self.ncm,
+            "descricao": self.descricao,
+            "icms": _f(self.icms),
+            "ipi": _f(self.ipi),
+            "pis": _f(self.pis),
+            "cofins": _f(self.cofins),
+            "isencao_icms": self.isencao_icms,
+            "base_legal": self.base_legal,
+            "empresa_id": self.empresa_id,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Comodato(Base):
     """Gestão de equipamentos em comodato (UC-P10)"""
     __tablename__ = 'comodatos'
@@ -2553,6 +2593,30 @@ def init_db():
             print("[DB] Áreas, classes e subclasses de produto inseridas")
     except Exception as e:
         print(f"[DB] Erro ao inserir áreas/classes: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    # Seed: Benefício fiscal NCM padrão (reagentes diagnóstico)
+    db = SessionLocal()
+    try:
+        from models import BeneficioFiscalNcm as _BFN
+        if db.query(_BFN).count() == 0:
+            db.add(_BFN(
+                ncm="3822.00.90",
+                descricao="Reagentes de diagnóstico ou de laboratório",
+                icms=0.0,
+                ipi=0.0,
+                pis=1.65,
+                cofins=7.60,
+                isencao_icms=True,
+                base_legal="Convênio ICMS 100/97 — Isenção ICMS para reagentes diagnóstico",
+                ativo=True,
+            ))
+            db.commit()
+            print("[DB] Benefício fiscal NCM 3822 (reagentes diagnóstico) inserido")
+    except Exception as e:
+        print(f"[DB] Erro ao inserir benefício fiscal NCM: {e}")
         db.rollback()
     finally:
         db.close()

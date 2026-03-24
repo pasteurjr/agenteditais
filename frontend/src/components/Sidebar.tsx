@@ -76,6 +76,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-empresa-responsaveis", icon: <Users size={14} />, label: "Responsaveis", page: "crud:empresa-responsaveis" },
           { id: "crud-cat-doc", icon: <FolderTree size={14} />, label: "Categorias Documento", page: "crud:categorias-documento" },
           { id: "crud-docs-nec", icon: <FileText size={14} />, label: "Tipos de Documento", page: "crud:documentos-necessarios" },
+          { id: "crud-beneficios-fiscais-ncm", icon: <DollarSign size={14} />, label: "Beneficios Fiscais NCM", page: "crud:beneficios-fiscais-ncm" },
         ],
       },
       {
