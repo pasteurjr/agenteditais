@@ -9562,7 +9562,12 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
             p_med = float(historico["preco_medio"])
             p_max = float(historico["preco_max"] or historico["preco_medio"])
 
-            custo_sug = round(p_min * 0.85, 2)
+            # Usar mediana dos preços para sugestão (mais robusto que mínimo)
+            # Se variação > 5x entre min e max, provável diferença de unidade de medida
+            variacao_alta = (p_max / p_min) > 5 if p_min > 0 else False
+            # Custo: usar percentil 25 (entre mínimo e média) se variação alta
+            p_custo_ref = round((p_min + p_med) / 2, 2) if variacao_alta else p_min
+            custo_sug = round(p_custo_ref * 0.85, 2)
             preco_base_sug = round(p_med * 0.97, 2)  # ideal
             ref_sug = ref_edital or round(p_med * 0.99, 2)  # conservador
             lance_ini_sug = preco_base_sug
@@ -9577,34 +9582,49 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
                 for res in vencedores_detalhes[:3]:
                     for v in (res.get("vencedores") or [])[:5]:
                         venc_resumo += f"- {v.get('descricao','')}: vencedor {v.get('vencedor','')}, estimado R$ {v.get('valor_estimado','?')}, homologado R$ {v.get('valor_homologado','?')}\n"
-                conc_resumo = ", ".join([c.nome for c in db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(3).all()])
+                conc_resumo = ", ".join([f"{c['nome']} (preço médio: R$ {c['preco_medio']:.2f})" for c in concorrentes[:3]]) if concorrentes else "Sem dados"
+                alerta_unidade = ""
+                if variacao_alta:
+                    alerta_unidade = f"\n⚠️ ATENÇÃO: Alta variação de preços (R$ {p_min:.2f} a R$ {p_max:.2f}, ratio {p_max/p_min:.1f}x). Provável diferença de unidade de medida entre as atas (preço por teste vs por kit/caixa). Analise os itens individuais para verificar."
+
+                # Informações do item do edital
+                qtd_edital = item.quantidade if item else None
+                unidade_edital = getattr(item, 'unidade_medida', None) if item else None
+                rendimento_kit = curVinculo_rend = vinculo.rendimento_produto if vinculo else None
 
                 prompt_just = f"""Analise os dados de preços históricos de licitações para o produto "{nome_prod}" e justifique as sugestões de preço.
 
-DADOS DO MERCADO:
-- {historico['qtd_registros']} registros encontrados (fonte: {etapa})
-- Preço mínimo dos vencedores: R$ {p_min:.2f}
-- Preço médio dos vencedores: R$ {p_med:.2f}
-- Preço máximo dos vencedores: R$ {p_max:.2f}
-- Valor de referência do edital: {f'R$ {ref_edital:.2f}' if ref_edital else 'Não disponível'}
+PRODUTO: {nome_prod}
+ITEM DO EDITAL: {desc_item[:150] if desc_item else 'N/A'}
+QUANTIDADE DO EDITAL: {qtd_edital or 'N/A'} {unidade_edital or ''}
+RENDIMENTO POR KIT/EMBALAGEM: {rendimento_kit or 'N/A'}
 
-VENCEDORES RECENTES:
+DADOS DO MERCADO:
+- {historico['qtd_registros']} registros de atas extraídas do PNCP
+- Preço mínimo homologado: R$ {p_min:.2f}
+- Preço médio homologado: R$ {p_med:.2f}
+- Preço máximo homologado: R$ {p_max:.2f}
+- Valor de referência do edital: {f'R$ {ref_edital:.2f}' if ref_edital else 'Não disponível'}{alerta_unidade}
+
+VENCEDORES RECENTES (das atas do PNCP):
 {venc_resumo or 'Sem detalhes disponíveis'}
 
-PRINCIPAIS CONCORRENTES: {conc_resumo or 'Sem dados'}
+CONCORRENTES IDENTIFICADOS: {conc_resumo}
 
 SUGESTÕES CALCULADAS:
-- Custo sugerido (A): R$ {custo_sug:.2f} (85% do preço mínimo)
+- Custo sugerido (A): R$ {custo_sug:.2f} {'(média entre mínimo e médio × 85%, devido à alta variação)' if variacao_alta else '(85% do preço mínimo)'}
 - Preço base (B): R$ {preco_base_sug:.2f} (97% da média = preço competitivo)
 - Referência/Target (C): R$ {ref_sug:.2f}
 - Lance inicial (D): R$ {lance_ini_sug:.2f}
 - Lance mínimo (E): R$ {lance_min_sug:.2f} (custo + 10% margem)
 
-Escreva uma justificativa técnica em 3-5 parágrafos curtos explicando:
-1. De onde vieram os dados e qual a confiabilidade
-2. Por que cada preço sugerido foi calculado dessa forma
-3. Riscos e oportunidades considerando o mercado
-4. Recomendação final (se deve ser agressivo ou conservador)
+Escreva uma justificativa técnica em 4-6 parágrafos curtos explicando:
+1. De onde vieram os dados (atas do PNCP) e qual a confiabilidade
+2. IMPORTANTE: Analise se os preços encontrados referem-se à mesma unidade de medida (teste unitário vs kit/caixa). Se houver variação alta, alerte o usuário
+3. Por que cada preço sugerido foi calculado dessa forma
+4. Concorrentes identificados e seus padrões de preço
+5. Riscos e oportunidades considerando o mercado
+6. Recomendação final (se deve ser agressivo ou conservador)
 
 Responda em português, direto ao ponto, sem enrolação."""
 
@@ -9632,19 +9652,41 @@ Responda em português, direto ao ponto, sem enrolação."""
                 "fonte": etapa.split(":")[0] if ":" in etapa else etapa,
             }
 
-        # Concorrentes
+        # Concorrentes — extrair dos vencedores das atas (não global)
         concorrentes = []
-        try:
-            concs = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(5).all()
-            for c in concs:
+        if vencedores_detalhes:
+            conc_map: Dict[str, Dict[str, Any]] = {}
+            for res in vencedores_detalhes:
+                for v in (res.get("vencedores") or []):
+                    nome_v = v.get("vencedor") or ""
+                    if not nome_v:
+                        continue
+                    if nome_v not in conc_map:
+                        conc_map[nome_v] = {"nome": nome_v, "vitorias": 0, "precos": []}
+                    conc_map[nome_v]["vitorias"] += 1
+                    if v.get("valor_homologado"):
+                        conc_map[nome_v]["precos"].append(float(v["valor_homologado"]))
+            for c in sorted(conc_map.values(), key=lambda x: x["vitorias"], reverse=True)[:5]:
+                preco_m = round(sum(c["precos"]) / len(c["precos"]), 2) if c["precos"] else 0
                 concorrentes.append({
-                    "nome": c.nome,
-                    "taxa_vitoria": float(c.taxa_vitoria) if c.taxa_vitoria else 0,
-                    "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
-                    "editais_ganhos": c.editais_ganhos or 0,
+                    "nome": c["nome"],
+                    "taxa_vitoria": 0,
+                    "preco_medio": preco_m,
+                    "editais_ganhos": c["vitorias"],
                 })
-        except Exception:
-            pass
+        if not concorrentes:
+            # Fallback: buscar do banco
+            try:
+                concs = db.query(Concorrente).order_by(Concorrente.editais_ganhos.desc()).limit(5).all()
+                for c in concs:
+                    concorrentes.append({
+                        "nome": c.nome,
+                        "taxa_vitoria": float(c.taxa_vitoria) if c.taxa_vitoria else 0,
+                        "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
+                        "editais_ganhos": c.editais_ganhos or 0,
+                    })
+            except Exception:
+                pass
 
         tem_dados = (historico["qtd_registros"] > 0 or ref_edital is not None)
 
