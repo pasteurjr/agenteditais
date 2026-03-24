@@ -9631,8 +9631,8 @@ def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
 
 PRODUTO: {nome_prod}
 ITEM DO EDITAL: {desc_item[:150] if desc_item else 'N/A'}
-QUANTIDADE DO EDITAL: {qtd_edital or 'N/A'} {unidade_edital or ''}
-RENDIMENTO POR KIT/EMBALAGEM: {rendimento_kit or 'N/A'}
+QUANTIDADE DO EDITAL: {int(float(qtd_edital)) if qtd_edital else 'N/A'} unidades
+RENDIMENTO POR KIT/EMBALAGEM: {int(float(rendimento_kit)) if rendimento_kit else 'N/A'} testes/kit
 
 DADOS DO MERCADO:
 - {historico['qtd_registros']} registros de atas extraídas do PNCP
@@ -9653,9 +9653,14 @@ SUGESTÕES CALCULADAS:
 - Lance inicial (D): R$ {lance_ini_sug:.2f}
 - Lance mínimo (E): R$ {lance_min_sug:.2f} (custo + 10% margem)
 
+REGRAS IMPORTANTES PARA SUA ANÁLISE:
+- NÃO invente números nem multiplique quantidades. Use exatamente os valores informados acima.
+- Quando a ata tem múltiplos itens com preços diferentes (ex: item 1 = R$ 2,70, item 4 = R$ 28,00), são REAGENTES DIFERENTES (ex: TTPA, TP, Fibrinogênio), NÃO o mesmo produto em unidades diferentes.
+- Cada item da ata é um reagente/exame diferente. A variação de preço reflete a complexidade de cada exame, não diferença de embalagem.
+
 Escreva uma justificativa técnica em 4-6 parágrafos curtos explicando:
 1. De onde vieram os dados (atas do PNCP) e qual a confiabilidade
-2. IMPORTANTE: Analise se os preços encontrados referem-se à mesma unidade de medida (teste unitário vs kit/caixa). Se houver variação alta, alerte o usuário
+2. Análise dos preços: identifique qual(is) item(ns) da ata correspondem ao produto "{nome_curto or nome_prod}" e use esses preços como referência principal
 3. Por que cada preço sugerido foi calculado dessa forma
 4. Concorrentes identificados e seus padrões de preço
 5. Riscos e oportunidades considerando o mercado

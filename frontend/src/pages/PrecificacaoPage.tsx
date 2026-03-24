@@ -696,7 +696,7 @@ export function PrecificacaoPage(props?: PageProps) {
 
       md += `### Sugestões de Preço\n\n`;
       md += `| Camada | Valor Sugerido | Critério |\n|---|---|---|\n`;
-      md += `| **(A) Custo** | ${insights.recomendacao.custo_sugerido ? fmt(insights.recomendacao.custo_sugerido) : "—"} | 85% do preço mínimo histórico |\n`;
+      md += `| **(A) Custo** | ${insights.recomendacao.custo_sugerido ? fmt(insights.recomendacao.custo_sugerido) : "—"} | 85% da referência histórica |\n`;
       md += `| **(B) Preço Base** | ${insights.recomendacao.preco_base_sugerido ? fmt(insights.recomendacao.preco_base_sugerido) : "—"} | 97% da média (preço competitivo) |\n`;
       md += `| **(C) Referência** | ${insights.recomendacao.referencia_sugerida ? fmt(insights.recomendacao.referencia_sugerida) : "—"} | Target estratégico |\n`;
       md += `| **(D) Lance Inicial** | ${(insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido ? fmt((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number) : "—"} | = Preço Base |\n`;
@@ -735,24 +735,30 @@ export function PrecificacaoPage(props?: PageProps) {
       md += `---\n\n`;
     }
 
-    // Valores definidos (salvos)
-    md += `## 4. Valores Definidos pelo Usuário\n\n`;
-    md += `| Campo | Valor |\n|---|---|\n`;
-    md += `| **Custo Unitário** | ${camada?.custo_unitario ? fmt(Number(camada.custo_unitario)) : "—"} |\n`;
-    md += `| **NCM** | ${camada?.ncm || "—"} |\n`;
-    md += `| **ICMS** | ${camada?.icms != null ? `${camada.icms}%` : "—"}${camada?.isencao_icms ? " (ISENTO)" : ""} |\n`;
-    md += `| **IPI** | ${camada?.ipi != null ? `${camada.ipi}%` : "—"} |\n`;
-    md += `| **PIS+COFINS** | ${camada?.pis_cofins != null ? `${camada.pis_cofins}%` : "—"} |\n`;
-    md += `| **Custo Base Final** | ${camada?.custo_base_final ? fmt(Number(camada.custo_base_final)) : "—"} |\n`;
-    md += `| **Modo Preço Base** | ${camada?.modo_preco_base || "—"} |\n`;
-    md += `| **Markup** | ${camada?.markup_percentual ? `${camada.markup_percentual}%` : "—"} |\n`;
-    md += `| **Preço Base** | ${camada?.preco_base ? fmt(Number(camada.preco_base)) : "—"} |\n`;
-    md += `| **Valor Referência** | ${camada?.valor_referencia_edital ? fmt(Number(camada.valor_referencia_edital)) : "—"} |\n`;
-    md += `| **Target** | ${camada?.target_referencia ? fmt(Number(camada.target_referencia)) : "—"} |\n`;
-    md += `| **Margem sobre Custo** | ${camada?.margem_sobre_custo != null ? `${camada.margem_sobre_custo}%` : "—"} |\n`;
-    md += `| **Lance Inicial** | ${camada?.lance_inicial ? fmt(Number(camada.lance_inicial)) : "—"} |\n`;
-    md += `| **Lance Mínimo** | ${camada?.lance_minimo ? fmt(Number(camada.lance_minimo)) : "—"} |\n`;
-    md += `| **Margem Mínima** | ${camada?.margem_minima != null ? `${camada.margem_minima}%` : "—"} |\n`;
+    // Valores definidos (salvos) — só mostrar se tem algum valor preenchido
+    const temValoresDefinidos = camada && (camada.custo_unitario || camada.preco_base || camada.lance_inicial);
+    if (temValoresDefinidos) {
+      md += `## 4. Valores Definidos pelo Usuário\n\n`;
+      md += `| Campo | Valor |\n|---|---|\n`;
+      if (camada.custo_unitario) md += `| **Custo Unitário** | ${fmt(Number(camada.custo_unitario))} |\n`;
+      if (camada.ncm) md += `| **NCM** | ${camada.ncm} |\n`;
+      if (camada.icms != null) md += `| **ICMS** | ${camada.icms}%${camada.isencao_icms ? " (ISENTO)" : ""} |\n`;
+      if (camada.ipi != null) md += `| **IPI** | ${camada.ipi}% |\n`;
+      if (camada.pis_cofins != null) md += `| **PIS+COFINS** | ${camada.pis_cofins}% |\n`;
+      if (camada.custo_base_final) md += `| **Custo Base Final** | ${fmt(Number(camada.custo_base_final))} |\n`;
+      if (camada.modo_preco_base) md += `| **Modo Preço Base** | ${camada.modo_preco_base} |\n`;
+      if (camada.markup_percentual) md += `| **Markup** | ${camada.markup_percentual}% |\n`;
+      if (camada.preco_base) md += `| **Preço Base** | ${fmt(Number(camada.preco_base))} |\n`;
+      if (camada.valor_referencia_edital) md += `| **Valor Referência** | ${fmt(Number(camada.valor_referencia_edital))} |\n`;
+      if (camada.target_referencia) md += `| **Target** | ${fmt(Number(camada.target_referencia))} |\n`;
+      if (camada.margem_sobre_custo != null) md += `| **Margem sobre Custo** | ${camada.margem_sobre_custo}% |\n`;
+      if (camada.lance_inicial) md += `| **Lance Inicial** | ${fmt(Number(camada.lance_inicial))} |\n`;
+      if (camada.lance_minimo) md += `| **Lance Mínimo** | ${fmt(Number(camada.lance_minimo))} |\n`;
+      if (camada.margem_minima != null) md += `| **Margem Mínima** | ${camada.margem_minima}% |\n`;
+    } else {
+      md += `## 4. Valores Definidos pelo Usuário\n\n`;
+      md += `> Nenhum valor definido ainda. Use os botões "Usar →" das sugestões acima e salve cada seção.\n`;
+    }
 
     // Abrir em nova aba com toolbar MD/PDF (mesmo padrão da Captação)
     const tableRegex = /(\|.+\|\n)+/g;
@@ -1391,7 +1397,7 @@ ${html}
                               {/* 5 cards: sugestões A-E */}
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
                                 {[
-                                  { label: "Custo (A)", valor: insights.recomendacao.custo_sugerido, desc: "85% do mín. histórico", action: () => setCustoUnit(String(insights.recomendacao.custo_sugerido)) },
+                                  { label: "Custo (A)", valor: insights.recomendacao.custo_sugerido, desc: "85% da ref. histórica", action: () => setCustoUnit(String(insights.recomendacao.custo_sugerido)) },
                                   { label: "Preço Base (B)", valor: insights.recomendacao.preco_base_sugerido, desc: `Faixa: ${fmt(insights.recomendacao.faixa?.agressivo)}–${fmt(insights.recomendacao.faixa?.conservador)}`, action: () => { setModoPrecoBase("manual"); setPrecoBaseManual(String(insights.recomendacao.preco_base_sugerido)); } },
                                   { label: "Referência (C)", valor: insights.referencia_edital || insights.recomendacao.referencia_sugerida, desc: insights.referencia_edital ? "valor do edital" : "preço conservador", action: () => setValorRef(String(insights.referencia_edital || insights.recomendacao.referencia_sugerida)) },
                                   { label: "Lance Inicial (D)", valor: (insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number | null, desc: "= preço base sugerido", action: () => setLanceInicial(String((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido)) },
