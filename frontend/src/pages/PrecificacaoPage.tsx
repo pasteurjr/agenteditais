@@ -679,11 +679,12 @@ export function PrecificacaoPage(props?: PageProps) {
           if (c3) cens.push(c3);
         }
       }
-      setCenarios(cens);
+      // Acumular cenários (novos no topo)
+      setCenarios(prev => [...cens, ...prev]);
       if (cens.length > 0) {
         alert(`Simulação concluída! ${cens.length} cenários gerados.`);
       } else {
-        alert("Simulação concluída, mas nenhum cenário gerado. Verifique se os custos e lances estão salvos.");
+        alert("Nenhum cenário gerado. Verifique se custos e lances estão salvos na aba Custos e Preços.");
       }
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao simular estratégia"); }
     finally { setLoading(false); }
@@ -2020,44 +2021,88 @@ ${html}
                               onClick={() => setPerfil("quero_ganhar")}
                               style={{
                                 padding: 16, borderRadius: 8, cursor: "pointer",
-                                border: perfil === "quero_ganhar" ? "2px solid var(--color-primary, #3b82f6)" : "1px solid var(--border)",
-                                background: perfil === "quero_ganhar" ? "var(--bg-primary-light, #eff6ff)" : "var(--bg)",
+                                border: perfil === "quero_ganhar" ? "2px solid #22c55e" : "1px solid var(--border)",
+                                background: perfil === "quero_ganhar" ? "#22c55e" : "transparent",
+                                color: perfil === "quero_ganhar" ? "#fff" : "var(--text-primary)",
                               }}
                             >
-                              <h4>QUERO GANHAR</h4>
-                              <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Estratégia agressiva — prioriza competitividade</p>
+                              <h4 style={{ color: perfil === "quero_ganhar" ? "#fff" : "var(--text-primary)" }}>🏆 QUERO GANHAR</h4>
+                              <p style={{ fontSize: 13, color: perfil === "quero_ganhar" ? "#dcfce7" : "var(--text-secondary)" }}>Disputa agressiva até o lance mínimo — máxima chance de vitória</p>
                             </div>
                             <div
                               onClick={() => setPerfil("nao_ganhei_minimo")}
                               style={{
                                 padding: 16, borderRadius: 8, cursor: "pointer",
-                                border: perfil === "nao_ganhei_minimo" ? "2px solid var(--color-primary, #3b82f6)" : "1px solid var(--border)",
-                                background: perfil === "nao_ganhei_minimo" ? "var(--bg-primary-light, #eff6ff)" : "var(--bg)",
+                                border: perfil === "nao_ganhei_minimo" ? "2px solid #f59e0b" : "1px solid var(--border)",
+                                background: perfil === "nao_ganhei_minimo" ? "#f59e0b" : "transparent",
+                                color: perfil === "nao_ganhei_minimo" ? "#fff" : "var(--text-primary)",
                               }}
                             >
-                              <h4>NÃO GANHEI NO MÍNIMO</h4>
-                              <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Reposicionar — renegociar margem</p>
+                              <h4 style={{ color: perfil === "nao_ganhei_minimo" ? "#fff" : "var(--text-primary)" }}>📊 NÃO GANHEI NO MÍNIMO</h4>
+                              <p style={{ fontSize: 13, color: perfil === "nao_ganhei_minimo" ? "#fef3c7" : "var(--text-secondary)" }}>Reposicionar para melhor colocação (2º, 3º lugar)</p>
                             </div>
                           </div>
-                          <div style={{ marginTop: 12 }}>
-                            <ActionButton icon={<TrendingUp size={16} />} label="Simular Disputa" variant="primary" onClick={handleSimularEstrategia} />
+                          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                            <ActionButton icon={<TrendingUp size={16} />} label="Simular (Fórmula)" variant="primary" onClick={handleSimularEstrategia} />
+                            <ActionButton icon={<Sparkles size={16} />} label="Simular com IA" variant="neutral" loading={insightsLoading}
+                              onClick={async () => {
+                                if (!vinculoId || !insights) { alert("Selecione um vínculo e aguarde os insights da IA."); return; }
+                                setLoading(true);
+                                try {
+                                  const rec = insights.recomendacao;
+                                  const faixa = rec.faixa || {};
+                                  const custoSug = rec.custo_sugerido || 0;
+                                  const agressivo = Number(faixa.agressivo || 0);
+                                  const ideal = Number(faixa.ideal || 0);
+                                  const conservador = Number(faixa.conservador || 0);
+                                  const iaCens: Record<string, unknown>[] = [];
+                                  if (perfil === "quero_ganhar") {
+                                    iaCens.push(
+                                      { label: "IA Agressivo", valor: agressivo, margem: custoSug > 0 ? ((agressivo - custoSug) / custoSug * 100) : 0 },
+                                      { label: "IA Ideal", valor: ideal, margem: custoSug > 0 ? ((ideal - custoSug) / custoSug * 100) : 0 },
+                                      { label: "IA Conservador", valor: conservador, margem: custoSug > 0 ? ((conservador - custoSug) / custoSug * 100) : 0 },
+                                    );
+                                  } else {
+                                    const minSug = Number((rec as Record<string, unknown>).lance_minimo_sugerido || custoSug * 1.1);
+                                    iaCens.push(
+                                      { label: "IA Mínimo", valor: minSug, margem: custoSug > 0 ? ((minSug - custoSug) / custoSug * 100) : 0 },
+                                      { label: "IA Custo+5%", valor: custoSug * 1.05, margem: 5.0 },
+                                      { label: "IA Break-even", valor: custoSug, margem: 0 },
+                                    );
+                                  }
+                                  // Adicionar ao histórico de simulações
+                                  setCenarios(prev => [...iaCens, ...prev]);
+                                  alert(`Simulação IA: ${iaCens.length} cenários baseados em ${insights.historico.qtd_registros} registros históricos.`);
+                                } catch (e) { alert(e instanceof Error ? e.message : "Erro na simulação IA"); }
+                                finally { setLoading(false); }
+                              }}
+                            />
                           </div>
                           {cenarios.length > 0 && (
                             <div style={{ marginTop: 12, fontSize: 13 }}>
-                              <h4 style={{ marginBottom: 8 }}>Cenários de Disputa</h4>
-                              <div style={{ display: "grid", gridTemplateColumns: `repeat(${cenarios.length}, 1fr)`, gap: 8 }}>
-                                {cenarios.map((c, i) => {
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                <h4>Simulações ({cenarios.length} cenários)</h4>
+                                <button onClick={() => setCenarios([])} style={{ fontSize: 11, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>Limpar</button>
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                                {cenarios.slice(0, 6).map((c, i) => {
                                   const label = String(c.label || `Cenário ${i + 1}`);
                                   const valor = Number(c.valor || 0);
                                   const margem = Number(c.margem || 0);
                                   const isNeg = margem < 0;
+                                  const isIA = label.startsWith("IA ");
                                   return (
-                                    <div key={i} style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center", backgroundColor: i === 1 ? "#3b82f610" : "transparent" }}>
-                                      <p style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>{label}</p>
-                                      <p style={{ fontSize: 20, fontWeight: 700 }}>{valor > 0 ? fmt(valor) : "—"}</p>
+                                    <div key={i} style={{
+                                      padding: 12, borderRadius: 8, textAlign: "center",
+                                      border: isIA ? "1px solid #8b5cf640" : "1px solid var(--border)",
+                                      backgroundColor: isIA ? "#8b5cf610" : "transparent",
+                                    }}>
+                                      <p style={{ fontSize: 10, color: isIA ? "#8b5cf6" : "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>
+                                        {isIA && "🤖 "}{label}
+                                      </p>
+                                      <p style={{ fontSize: 18, fontWeight: 700 }}>{valor > 0 ? fmt(valor) : "—"}</p>
                                       <p style={{ fontSize: 11, color: isNeg ? "#ef4444" : "#22c55e", marginTop: 4 }}>
-                                        Margem: {margem.toFixed(1)}%
-                                        {isNeg && " ⚠️ Prejuízo"}
+                                        Margem: {margem.toFixed(1)}%{isNeg && " ⚠️"}
                                       </p>
                                     </div>
                                   );
@@ -2065,7 +2110,12 @@ ${html}
                               </div>
                               {cenarios.some(c => Number(c.margem || 0) < 0) && (
                                 <p style={{ marginTop: 8, fontSize: 12, color: "#ef4444" }}>
-                                  ⚠️ Alguns cenários resultam em prejuízo. Revise o custo base e os lances.
+                                  ⚠️ Cenários com margem negativa indicam prejuízo. Revise custos e lances.
+                                </p>
+                              )}
+                              {cenarios.length > 6 && (
+                                <p style={{ marginTop: 4, fontSize: 11, color: "var(--text-secondary)" }}>
+                                  Mostrando 6 de {cenarios.length} cenários.
                                 </p>
                               )}
                             </div>
