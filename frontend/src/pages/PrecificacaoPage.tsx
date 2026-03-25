@@ -269,15 +269,29 @@ export function PrecificacaoPage(props?: PageProps) {
 
   useEffect(() => { if (editalId) loadLotes(editalId); }, [editalId, loadLotes]);
 
-  // ── Load camada when vinculo changes ──
+  // ── Load camada when vinculo changes → preencher campos do banco ──
   useEffect(() => {
     if (!vinculoId) { setCamada(null); return; }
     (async () => {
       try {
         const res = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
         const items = res.items as unknown as PrecoCamada[];
-        if (items.length > 0) setCamada(items[0]);
-        else setCamada(null);
+        if (items.length > 0) {
+          const c = items[0];
+          setCamada(c);
+          // Inicializar campos com valores salvos no banco
+          if (c.custo_unitario) setCustoUnit(String(Number(c.custo_unitario)));
+          if (c.markup_percentual) setMarkup(String(Number(c.markup_percentual)));
+          if (c.preco_base && !c.markup_percentual) setPrecoBaseManual(String(Number(c.preco_base)));
+          if (c.modo_preco_base) setModoPrecoBase(c.modo_preco_base);
+          if (c.valor_referencia_edital) setValorRef(String(Number(c.valor_referencia_edital)));
+          if (c.lance_inicial) setLanceInicial(String(Number(c.lance_inicial)));
+          if (c.lance_minimo) setLanceMinimo(String(Number(c.lance_minimo)));
+        } else {
+          setCamada(null);
+          setCustoUnit(""); setMarkup(""); setPrecoBaseManual(""); setValorRef(""); setPctSobreBase("");
+          setLanceInicial(""); setLanceMinimo("");
+        }
       } catch { setCamada(null); }
     })();
   }, [vinculoId]);
@@ -1718,7 +1732,7 @@ ${html}
                           )}
                           <div className="form-grid form-grid-3">
                             <FormField label="Custo Unitário (R$)">
-                              <TextInput value={custoUnit || String(camada?.custo_unitario || "")} onChange={setCustoUnit} placeholder="Custo de aquisição" />
+                              <TextInput value={custoUnit} onChange={setCustoUnit} placeholder="Custo de aquisição" />
                             </FormField>
                             <FormField label="NCM">
                               <TextInput value={camada?.ncm || ""} onChange={() => {}} placeholder="Automático do produto" />
@@ -1770,7 +1784,7 @@ ${html}
                             </FormField>
                             {modoPrecoBase === "markup" ? (
                               <FormField label="Markup (%)">
-                                <TextInput value={markup || String(camada?.markup_percentual || "")} onChange={setMarkup} placeholder="30" />
+                                <TextInput value={markup} onChange={setMarkup} placeholder="30" />
                               </FormField>
                             ) : modoPrecoBase === "upload" ? (
                               <FormField label="Tabela de Preços (.csv)">
@@ -1793,7 +1807,7 @@ ${html}
                               </FormField>
                             ) : (
                               <FormField label="Preço Base (R$)">
-                                <TextInput value={precoBaseManual || String(camada?.preco_base || "")} onChange={setPrecoBaseManual} placeholder="Preço de venda" />
+                                <TextInput value={precoBaseManual} onChange={setPrecoBaseManual} placeholder="Preço de venda" />
                               </FormField>
                             )}
                             <div className="form-field-actions">
@@ -1828,7 +1842,7 @@ ${html}
                           )}
                           <div className="form-grid form-grid-3">
                             <FormField label="Valor Referência (R$)" hint={camada?.valor_referencia_disponivel ? "Importado do edital" : "Não disponível no edital"}>
-                              <TextInput value={valorRef || String(camada?.valor_referencia_edital || "")} onChange={setValorRef} placeholder="Target estratégico" />
+                              <TextInput value={valorRef} onChange={setValorRef} placeholder="Target estratégico" />
                             </FormField>
                             <FormField label="OU % sobre Preço Base">
                               <TextInput value={pctSobreBase || String(camada?.percentual_sobre_base || "")} onChange={setPctSobreBase} placeholder="95" />
@@ -1910,7 +1924,7 @@ ${html}
                                 ]} />
                               </FormField>
                               <FormField label="Valor Inicial (R$)">
-                                <TextInput value={lanceInicial || String(camada?.lance_inicial || "")} onChange={setLanceInicial} placeholder="145.00" />
+                                <TextInput value={lanceInicial} onChange={setLanceInicial} placeholder="Valor do lance inicial" />
                               </FormField>
                             </div>
                             <div>
@@ -1923,7 +1937,7 @@ ${html}
                               </FormField>
                               {modoMinimo === "absoluto" ? (
                                 <FormField label="Valor Mínimo (R$)">
-                                  <TextInput value={lanceMinimo || String(camada?.lance_minimo || "")} onChange={setLanceMinimo} placeholder="95.00" />
+                                  <TextInput value={lanceMinimo} onChange={setLanceMinimo} placeholder="Valor mínimo aceitável" />
                                 </FormField>
                               ) : (
                                 <FormField label="Desconto Máximo (%)">
