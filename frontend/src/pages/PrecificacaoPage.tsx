@@ -666,22 +666,25 @@ export function PrecificacaoPage(props?: PageProps) {
     setLoading(true);
     try {
       const result = await _fetchPrecif(`/api/precificacao/${editalId}/estrategia`, { perfil });
-      // Normalizar cenários: pode vir como array ou objeto com cenario_1, cenario_2...
+      // Backend retorna: cenarios: [{item, cenario_1: {valor, margem, label}, cenario_2, cenario_3}]
       let cens: Record<string, unknown>[] = [];
       if (Array.isArray(result.cenarios)) {
-        cens = result.cenarios;
-      } else if (result.cenarios && typeof result.cenarios === "object") {
-        // Objeto com cenario_1, cenario_2, cenario_3...
-        cens = Object.entries(result.cenarios)
-          .filter(([k]) => k.startsWith("cenario"))
-          .map(([, v]) => v as Record<string, unknown>);
-      }
-      // Se veio como objeto direto com cenario_1 no result
-      if (cens.length === 0 && result.cenario_1) {
-        cens = [result.cenario_1, result.cenario_2, result.cenario_3].filter(Boolean) as Record<string, unknown>[];
+        // Cada elemento é um item com cenario_1/2/3 dentro
+        for (const itemCen of result.cenarios) {
+          const c1 = itemCen.cenario_1 as Record<string, unknown> | undefined;
+          const c2 = itemCen.cenario_2 as Record<string, unknown> | undefined;
+          const c3 = itemCen.cenario_3 as Record<string, unknown> | undefined;
+          if (c1) cens.push(c1);
+          if (c2) cens.push(c2);
+          if (c3) cens.push(c3);
+        }
       }
       setCenarios(cens);
-      alert("Simulação concluída!");
+      if (cens.length > 0) {
+        alert(`Simulação concluída! ${cens.length} cenários gerados.`);
+      } else {
+        alert("Simulação concluída, mas nenhum cenário gerado. Verifique se os custos e lances estão salvos.");
+      }
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao simular estratégia"); }
     finally { setLoading(false); }
   };
