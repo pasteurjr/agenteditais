@@ -1735,8 +1735,45 @@ ${html}
 
                     {vinculoId && (
                       <>
+                        {/* Explicação IA dos lances */}
+                        {insights && (insights as Record<string, unknown>).tem_dados && (
+                          <Card title="Sugestões IA para Lances" icon={<Sparkles size={18} />}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                              <div style={{ padding: "8px 12px", borderRadius: 6, backgroundColor: "#3b82f608", border: "1px solid #3b82f620", fontSize: 12 }}>
+                                <Sparkles size={12} style={{ display: "inline", marginRight: 4, color: "#3b82f6" }} />
+                                <strong>Lance Inicial sugerido: {fmt((insights.recomendacao as Record<string, unknown>).lance_inicial_sugerido as number)}</strong>
+                                <p style={{ margin: "4px 0 0", color: "var(--text-secondary)" }}>
+                                  Igual ao preço base sugerido. Valor de entrada no pregão.
+                                  {insights.recomendacao.faixa.agressivo && insights.recomendacao.faixa.conservador &&
+                                    ` Faixa: ${fmt(insights.recomendacao.faixa.agressivo)} (agressivo) a ${fmt(insights.recomendacao.faixa.conservador)} (conservador).`}
+                                </p>
+                              </div>
+                              <div style={{ padding: "8px 12px", borderRadius: 6, backgroundColor: "#3b82f608", border: "1px solid #3b82f620", fontSize: 12 }}>
+                                <Sparkles size={12} style={{ display: "inline", marginRight: 4, color: "#3b82f6" }} />
+                                <strong>Lance Mínimo sugerido: {fmt((insights.recomendacao as Record<string, unknown>).lance_minimo_sugerido as number)}</strong>
+                                <p style={{ margin: "4px 0 0", color: "var(--text-secondary)" }}>
+                                  Custo sugerido ({fmt(insights.recomendacao.custo_sugerido)}) + 10% de margem. Abaixo disso, prejuízo.
+                                </p>
+                              </div>
+                            </div>
+                            {insights.recomendacao.justificativa && (
+                              <details style={{ fontSize: 12 }}>
+                                <summary style={{ cursor: "pointer", color: "var(--text-secondary)", marginBottom: 6 }}>
+                                  Recomendação IA completa
+                                </summary>
+                                <div className="markdown-response" style={{ fontSize: 12, padding: "8px 12px", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)", border: "1px solid var(--border)", maxHeight: 200, overflowY: "auto" }}>
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{insights.recomendacao.justificativa}</ReactMarkdown>
+                                </div>
+                              </details>
+                            )}
+                            <div style={{ marginTop: 8 }}>
+                              <ActionButton icon={<FileText size={14} />} label="Relatório de Custos e Preços" variant="neutral" onClick={handleRelatorioCustoPreco} />
+                            </div>
+                          </Card>
+                        )}
+
                         {/* UC-P07: Lances D + E */}
-                        <Card title="Estrutura de Lances (UC-P07)" icon={<Target size={18} />}>
+                        <Card title="Estrutura de Lances" icon={<Target size={18} />}>
                           <div className="form-grid form-grid-2">
                             <div>
                               <h4 style={{ marginBottom: 8 }}>Valor Inicial do Lance</h4>
