@@ -199,6 +199,8 @@ export function PrecificacaoPage(props?: PageProps) {
   const [historico, setHistorico] = useState<HistoricoPreco[]>([]);
   const [histStats, setHistStats] = useState<{ media: number; min: number; max: number } | null>(null);
   const [comodatos, setComodatos] = useState<Comodato[]>([]);
+  // Visão consolidada: camadas de TODOS os vínculos do edital
+  const [todasCamadas, setTodasCamadas] = useState<Record<string, PrecoCamada>>({});
   const [comodatoNome, setComodatoNome] = useState("");
   const [comodatoValor, setComodatoValor] = useState("");
   const [comodatoMeses, setComodatoMeses] = useState("");
@@ -247,7 +249,17 @@ export function PrecificacaoPage(props?: PageProps) {
       const allItemIds = new Set(itensComIgnorado.map((i) => (i as Record<string, unknown>).id as string));
       const vRes = await crudList("edital-item-produto", { limit: 500 });
       const allVinculos = (vRes.items as unknown as Vinculo[]) || [];
-      setVinculos(allVinculos.filter(v => allItemIds.has(v.edital_item_id)));
+      const vinculosFiltrados = allVinculos.filter(v => allItemIds.has(v.edital_item_id));
+      setVinculos(vinculosFiltrados);
+      // Load camadas de TODOS os vínculos para visão consolidada
+      const camadasMap: Record<string, PrecoCamada> = {};
+      for (const v of vinculosFiltrados) {
+        try {
+          const pcRes = await crudList("preco-camadas", { edital_item_produto_id: v.id, limit: 1 });
+          if (pcRes.items?.length > 0) camadasMap[v.id] = pcRes.items[0] as unknown as PrecoCamada;
+        } catch { /* ignore */ }
+      }
+      setTodasCamadas(camadasMap);
       // Load comodatos
       const cRes = await crudList("comodatos", { parent_id: eid, limit: 50 });
       setComodatos((cRes.items as unknown as Comodato[]) || []);
@@ -547,17 +559,43 @@ export function PrecificacaoPage(props?: PageProps) {
     return data;
   };
 
+  // Helper: recarregar camada do banco e atualizar todasCamadas
+  const _recarregarCamada = async () => {
+    const res = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
+    if (res.items?.length > 0) {
+      const c = res.items[0] as PrecoCamada;
+      setCamada(c);
+      setTodasCamadas(prev => ({ ...prev, [vinculoId]: c }));
+      return c;
+    }
+    return null;
+  };
+
   const handleSalvarCustos = async () => {
     if (!vinculoId) return;
     setLoading(true);
     try {
-      const result = await _fetchPrecif(`/api/precificacao/${vinculoId}/custos`, {
+      await _fetchPrecif(`/api/precificacao/${vinculoId}/custos`, {
         custo_unitario: custoUnit ? parseFloat(custoUnit) : null,
       });
-      // Recarregar camada
-      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
-      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
-      alert("Custos salvos com sucesso!");
+      const c = await _recarregarCamada();
+      // CASCATA: recalcular B (se markup) e E (lance mínimo)
+      const msgs = ["Custos salvos."];
+      if (c?.custo_base_final) {
+        const custoFinal = Number(c.custo_base_final);
+        // B: se markup definido, recalcular preço base
+        const mk = markup ? parseFloat(markup) : (c.markup_percentual ? Number(c.markup_percentual) : null);
+        if (mk && mk > 0 && modoPrecoBase === "markup") {
+          const novoB = (custoFinal * (1 + mk / 100)).toFixed(2);
+          setPrecoBaseManual(novoB);
+          msgs.push(`Preço Base recalculado: R$ ${novoB}`);
+        }
+        // E: lance mínimo = custo + 10%
+        const novoE = (custoFinal * 1.10).toFixed(2);
+        setLanceMinimo(novoE);
+        msgs.push(`Lance Mínimo recalculado: R$ ${novoE}`);
+      }
+      alert(msgs.join(" "));
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar custos"); }
     finally { setLoading(false); }
   };
@@ -571,9 +609,23 @@ export function PrecificacaoPage(props?: PageProps) {
         markup_percentual: modoPrecoBase === "markup" && markup ? parseFloat(markup) : null,
         preco_base: modoPrecoBase !== "markup" && precoBaseManual ? parseFloat(precoBaseManual) : null,
       });
-      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
-      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
-      alert("Preço base salvo!");
+      const c = await _recarregarCamada();
+      // CASCATA: recalcular C (se % definido) e D (lance inicial)
+      const msgs = ["Preço Base salvo."];
+      if (c?.preco_base) {
+        const pb = Number(c.preco_base);
+        // C: se % sobre base definido, recalcular referência
+        const pct = pctSobreBase ? parseFloat(pctSobreBase) : (c.percentual_sobre_base ? Number(c.percentual_sobre_base) : null);
+        if (pct && pct > 0) {
+          const novoC = (pb * pct / 100).toFixed(2);
+          setValorRef(novoC);
+          msgs.push(`Referência recalculada: R$ ${novoC}`);
+        }
+        // D: lance inicial = preço base
+        setLanceInicial(pb.toFixed(2));
+        msgs.push(`Lance Inicial recalculado: R$ ${pb.toFixed(2)}`);
+      }
+      alert(msgs.join(" "));
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar preço base"); }
     finally { setLoading(false); }
   };
@@ -586,8 +638,7 @@ export function PrecificacaoPage(props?: PageProps) {
         valor_referencia: valorRef ? parseFloat(valorRef) : null,
         percentual_sobre_base: pctSobreBase ? parseFloat(pctSobreBase) : null,
       });
-      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
-      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      await _recarregarCamada();
       alert("Valor de referência salvo!");
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar referência"); }
     finally { setLoading(false); }
@@ -604,8 +655,7 @@ export function PrecificacaoPage(props?: PageProps) {
         modo_minimo: modoMinimo,
         desconto_maximo_pct: descontoMax ? parseFloat(descontoMax) : null,
       });
-      const camadas = await crudList("preco-camadas", { edital_item_produto_id: vinculoId, limit: 1 });
-      if (camadas.items?.length > 0) setCamada(camadas.items[0] as PrecoCamada);
+      await _recarregarCamada();
       alert("Lances salvos!");
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar lances"); }
     finally { setLoading(false); }
@@ -1295,6 +1345,64 @@ ${html}
                 {/* ═══════════════════ TAB: CUSTOS E PREÇOS (UC-P02 a UC-P06) ═══════════════════ */}
                 {activeTab === "camadas" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {/* Visão consolidada por lote */}
+                    {vinculos.length > 0 && (
+                      <Card title="Resumo de Precificação" icon={<BarChart3 size={18} />}>
+                        <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                              <th style={{ textAlign: "left", padding: 6 }}>Item</th>
+                              <th style={{ textAlign: "left", padding: 6 }}>Produto</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Qtd</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Custo (A)</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Base (B)</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Ref (C)</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Lance (D)</th>
+                              <th style={{ textAlign: "right", padding: 6 }}>Mín (E)</th>
+                              <th style={{ textAlign: "center", padding: 6 }}>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {vinculos.map(v => {
+                              const it = itensEdital.find(i => i.id === v.edital_item_id);
+                              const prod = produtos.find(p => p.id === v.produto_id);
+                              const pc = todasCamadas[v.id];
+                              const desc = it?.descricao || "";
+                              const parenM = desc.match(/\(([^)]{2,30})\)/);
+                              const tipoM = desc.match(/tipo de an[aá]lise:\s*([^,]{3,40})/i);
+                              const shortN = parenM ? parenM[1] : tipoM ? tipoM[1].trim() : desc.slice(0, 20);
+                              const completo = pc?.custo_unitario && pc?.preco_base && pc?.lance_inicial;
+                              const parcial = pc?.custo_unitario || pc?.preco_base;
+                              return (
+                                <tr key={v.id}
+                                  style={{ borderBottom: "1px solid var(--border-light, #eee)", cursor: "pointer", backgroundColor: v.id === vinculoId ? "#3b82f615" : "transparent" }}
+                                  onClick={() => setVinculoId(v.id)}
+                                >
+                                  <td style={{ padding: 6, fontWeight: 600 }}>{shortN}</td>
+                                  <td style={{ padding: 6, fontSize: 11 }}>{prod?.nome?.slice(0, 25) || "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{it?.quantidade || "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{pc?.custo_unitario ? fmt(Number(pc.custo_unitario)) : "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{pc?.preco_base ? fmt(Number(pc.preco_base)) : "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{pc?.target_referencia ? fmt(Number(pc.target_referencia)) : "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{pc?.lance_inicial ? fmt(Number(pc.lance_inicial)) : "—"}</td>
+                                  <td style={{ textAlign: "right", padding: 6 }}>{pc?.lance_minimo ? fmt(Number(pc.lance_minimo)) : "—"}</td>
+                                  <td style={{ textAlign: "center", padding: 6 }}>
+                                    {completo ? "✅" : parcial ? "⚠️" : "❌"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-secondary)", display: "flex", gap: 16 }}>
+                          <span>Itens precificados: <strong>{vinculos.filter(v => todasCamadas[v.id]?.lance_inicial).length}/{vinculos.length}</strong></span>
+                          {vinculos.some(v => todasCamadas[v.id]?.custo_unitario) && (
+                            <span>Total Custo: <strong>{fmt(vinculos.reduce((s, v) => s + (Number(todasCamadas[v.id]?.custo_unitario || 0) * Number(itensEdital.find(i => i.id === v.edital_item_id)?.quantidade || 0)), 0))}</strong></span>
+                          )}
+                        </div>
+                      </Card>
+                    )}
+
                     {/* Item-Produto selector */}
                     <Card title="Selecionar Item-Produto" icon={<Package size={18} />}>
                       <FormField label="Vínculo Item ↔ Produto">
