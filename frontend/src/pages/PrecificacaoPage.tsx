@@ -2013,16 +2013,16 @@ ${html}
                             {insights && insights.recomendacao?.faixa?.agressivo != null && insights.recomendacao?.faixa?.conservador != null && (
                               <div style={{
                                 marginTop: 12, padding: "10px 14px", borderRadius: 6,
-                                background: "var(--bg-primary-light, #eff6ff)", border: "1px solid var(--color-primary, #3b82f6)",
-                                fontSize: 13,
+                                background: "#1e3a5f", border: "1px solid #3b82f6",
+                                fontSize: 13, color: "#e2e8f0",
                               }}>
-                                <strong>💡 Insight histórico:</strong>{" "}
+                                <strong style={{ color: "#93c5fd" }}>💡 Insight histórico:</strong>{" "}
                                 Com base no histórico, lance entre{" "}
-                                <strong>{fmt(insights.recomendacao.faixa.agressivo)}</strong> e{" "}
-                                <strong>{fmt(insights.recomendacao.faixa.conservador)}</strong>{" "}
+                                <strong style={{ color: "#60a5fa" }}>{fmt(insights.recomendacao.faixa.agressivo)}</strong> e{" "}
+                                <strong style={{ color: "#60a5fa" }}>{fmt(insights.recomendacao.faixa.conservador)}</strong>{" "}
                                 tem maior chance de vitória.
                                 {insights.historico?.qtd_registros > 0 && (
-                                  <span style={{ marginLeft: 8, color: "var(--text-secondary)" }}>
+                                  <span style={{ marginLeft: 8, color: "#94a3b8" }}>
                                     ({insights.historico.qtd_registros} registros analisados)
                                   </span>
                                 )}
