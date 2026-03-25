@@ -660,6 +660,17 @@ export function PrecificacaoPage(props?: PageProps) {
 
   const handleSalvarLances = async () => {
     if (!vinculoId) return;
+    // Validação de prejuízo
+    const custoBase = camada?.custo_base_final ? Number(camada.custo_base_final) : 0;
+    const minVal = lanceMinimo ? parseFloat(lanceMinimo) : 0;
+    const iniVal = lanceInicial ? parseFloat(lanceInicial) : 0;
+    if (custoBase > 0 && minVal > 0 && minVal < custoBase) {
+      const margem = ((minVal - custoBase) / custoBase * 100).toFixed(1);
+      if (!window.confirm(`⚠️ ATENÇÃO: Lance mínimo (R$ ${minVal.toFixed(2)}) está ABAIXO do custo (R$ ${custoBase.toFixed(2)}).\nMargem: ${margem}% — PREJUÍZO!\n\nDeseja salvar mesmo assim?`)) return;
+    }
+    if (iniVal > 0 && minVal > 0 && minVal > iniVal) {
+      if (!window.confirm(`⚠️ Lance mínimo (R$ ${minVal.toFixed(2)}) é MAIOR que o lance inicial (R$ ${iniVal.toFixed(2)}).\n\nDeseja salvar mesmo assim?`)) return;
+    }
     setLoading(true);
     try {
       await _fetchPrecif(`/api/precificacao/${vinculoId}/lances`, {
@@ -2063,30 +2074,50 @@ ${html}
                                 if (!vinculoId || !insights) { alert("Selecione um vínculo e aguarde os insights da IA."); return; }
                                 setLoading(true);
                                 try {
-                                  const rec = insights.recomendacao;
-                                  const faixa = rec.faixa || {};
-                                  const custoSug = rec.custo_sugerido || 0;
-                                  const agressivo = Number(faixa.agressivo || 0);
-                                  const ideal = Number(faixa.ideal || 0);
-                                  const conservador = Number(faixa.conservador || 0);
+                                  // Usar custo REAL do banco, não da sugestão
+                                  const custoReal = camada?.custo_base_final ? Number(camada.custo_base_final) : (insights.recomendacao.custo_sugerido || 0);
+                                  // Usar lances REAIS do usuário
+                                  const lanceIniReal = lanceInicial ? parseFloat(lanceInicial) : Number(camada?.lance_inicial || 0);
+                                  const lanceMinReal = lanceMinimo ? parseFloat(lanceMinimo) : Number(camada?.lance_minimo || 0);
+                                  // Dados históricos
+                                  const pMin = insights.historico.preco_min ? Number(insights.historico.preco_min) : 0;
+                                  const pMed = insights.historico.preco_medio ? Number(insights.historico.preco_medio) : 0;
+
+                                  const _margem = (v: number) => custoReal > 0 ? ((v - custoReal) / custoReal * 100) : 0;
                                   const iaCens: Record<string, unknown>[] = [];
+
                                   if (perfil === "quero_ganhar") {
+                                    // Cenários baseados nos lances reais + histórico
+                                    const midPoint = (lanceIniReal + lanceMinReal) / 2;
                                     iaCens.push(
-                                      { label: "IA Agressivo", valor: agressivo, margem: custoSug > 0 ? ((agressivo - custoSug) / custoSug * 100) : 0 },
-                                      { label: "IA Ideal", valor: ideal, margem: custoSug > 0 ? ((ideal - custoSug) / custoSug * 100) : 0 },
-                                      { label: "IA Conservador", valor: conservador, margem: custoSug > 0 ? ((conservador - custoSug) / custoSug * 100) : 0 },
+                                      { label: "IA Seu Lance", valor: lanceIniReal, margem: _margem(lanceIniReal) },
+                                      { label: "IA Meio da Faixa", valor: midPoint, margem: _margem(midPoint) },
+                                      { label: "IA Seu Mínimo", valor: lanceMinReal, margem: _margem(lanceMinReal) },
                                     );
+                                    // Adicionar cenário histórico se disponível
+                                    if (pMin > 0) {
+                                      iaCens.push({ label: "IA Mín. Mercado", valor: pMin, margem: _margem(pMin) });
+                                    }
+                                    if (pMed > 0 && pMed !== lanceIniReal) {
+                                      iaCens.push({ label: "IA Média Mercado", valor: pMed, margem: _margem(pMed) });
+                                    }
                                   } else {
-                                    const minSug = Number((rec as Record<string, unknown>).lance_minimo_sugerido || custoSug * 1.1);
+                                    // "Não ganhei no mínimo" — reposicionamento
                                     iaCens.push(
-                                      { label: "IA Mínimo", valor: minSug, margem: custoSug > 0 ? ((minSug - custoSug) / custoSug * 100) : 0 },
-                                      { label: "IA Custo+5%", valor: custoSug * 1.05, margem: 5.0 },
-                                      { label: "IA Break-even", valor: custoSug, margem: 0 },
+                                      { label: "IA Seu Mínimo", valor: lanceMinReal, margem: _margem(lanceMinReal) },
+                                      { label: "IA Custo+5%", valor: custoReal * 1.05, margem: 5.0 },
+                                      { label: "IA Break-even", valor: custoReal, margem: 0 },
                                     );
                                   }
-                                  // Adicionar ao histórico de simulações
+
                                   setCenarios(prev => [...iaCens, ...prev]);
-                                  alert(`Simulação IA: ${iaCens.length} cenários baseados em ${insights.historico.qtd_registros} registros históricos.`);
+                                  // Alertar sobre prejuízo
+                                  const comPrejuizo = iaCens.filter(c => Number(c.margem) < 0);
+                                  if (comPrejuizo.length > 0) {
+                                    alert(`⚠️ Simulação IA: ${iaCens.length} cenários gerados. ATENÇÃO: ${comPrejuizo.length} cenário(s) com margem negativa (prejuízo)!`);
+                                  } else {
+                                    alert(`Simulação IA: ${iaCens.length} cenários baseados nos seus lances + ${insights.historico.qtd_registros} registros históricos.`);
+                                  }
                                 } catch (e) { alert(e instanceof Error ? e.message : "Erro na simulação IA"); }
                                 finally { setLoading(false); }
                               }}
