@@ -666,9 +666,23 @@ export function PrecificacaoPage(props?: PageProps) {
     setLoading(true);
     try {
       const result = await _fetchPrecif(`/api/precificacao/${editalId}/estrategia`, { perfil });
-      if (result.cenarios) setCenarios(result.cenarios);
-      alert("Estratégia salva!");
-    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao salvar estratégia"); }
+      // Normalizar cenários: pode vir como array ou objeto com cenario_1, cenario_2...
+      let cens: Record<string, unknown>[] = [];
+      if (Array.isArray(result.cenarios)) {
+        cens = result.cenarios;
+      } else if (result.cenarios && typeof result.cenarios === "object") {
+        // Objeto com cenario_1, cenario_2, cenario_3...
+        cens = Object.entries(result.cenarios)
+          .filter(([k]) => k.startsWith("cenario"))
+          .map(([, v]) => v as Record<string, unknown>);
+      }
+      // Se veio como objeto direto com cenario_1 no result
+      if (cens.length === 0 && result.cenario_1) {
+        cens = [result.cenario_1, result.cenario_2, result.cenario_3].filter(Boolean) as Record<string, unknown>[];
+      }
+      setCenarios(cens);
+      alert("Simulação concluída!");
+    } catch (e) { alert(e instanceof Error ? e.message : "Erro ao simular estratégia"); }
     finally { setLoading(false); }
   };
 
@@ -2027,12 +2041,30 @@ ${html}
                           </div>
                           {cenarios.length > 0 && (
                             <div style={{ marginTop: 12, fontSize: 13 }}>
-                              <h4>Cenários</h4>
-                              {cenarios.map((c, i) => (
-                                <div key={i} style={{ padding: 8, marginTop: 4, background: "var(--bg-secondary, #f5f5f5)", borderRadius: 6 }}>
-                                  {JSON.stringify(c)}
-                                </div>
-                              ))}
+                              <h4 style={{ marginBottom: 8 }}>Cenários de Disputa</h4>
+                              <div style={{ display: "grid", gridTemplateColumns: `repeat(${cenarios.length}, 1fr)`, gap: 8 }}>
+                                {cenarios.map((c, i) => {
+                                  const label = String(c.label || `Cenário ${i + 1}`);
+                                  const valor = Number(c.valor || 0);
+                                  const margem = Number(c.margem || 0);
+                                  const isNeg = margem < 0;
+                                  return (
+                                    <div key={i} style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", textAlign: "center", backgroundColor: i === 1 ? "#3b82f610" : "transparent" }}>
+                                      <p style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>{label}</p>
+                                      <p style={{ fontSize: 20, fontWeight: 700 }}>{valor > 0 ? fmt(valor) : "—"}</p>
+                                      <p style={{ fontSize: 11, color: isNeg ? "#ef4444" : "#22c55e", marginTop: 4 }}>
+                                        Margem: {margem.toFixed(1)}%
+                                        {isNeg && " ⚠️ Prejuízo"}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {cenarios.some(c => Number(c.margem || 0) < 0) && (
+                                <p style={{ marginTop: 8, fontSize: 12, color: "#ef4444" }}>
+                                  ⚠️ Alguns cenários resultam em prejuízo. Revise o custo base e os lances.
+                                </p>
+                              )}
                             </div>
                           )}
                         </Card>
