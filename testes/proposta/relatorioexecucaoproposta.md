@@ -4,7 +4,7 @@
 **Executor:** Validador Automatizado (Playwright + Claude Code)
 **Ambiente:** localhost:5175 (Frontend) + localhost:5007 (Backend)
 **Browser:** Chromium headless
-**Total de Testes:** 14 | **Passou:** 11 | **Não executados:** 3 (backend desligado)
+**Total de Testes:** 14 | **Passou:** 14 | **Falhou:** 0
 
 ---
 
@@ -23,9 +23,9 @@
 | 9 | UC-R04 | ANVISA | ✅ | Card presente✅, botão Verificar✅, verificação acionada |
 | 10 | UC-R05 | Documental | ✅ | Card Documental presente na página |
 | 11 | UC-R06 | Export PDF/DOCX/ZIP | ✅ | PDF✅, DOCX✅, ZIP/Dossiê✅ |
-| 12 | UC-R07 | Status rascunho→revisão | ⏸️ | Não executado (backend reiniciado durante teste) |
-| 13 | UC-R07 | Submissão | ⏸️ | Não executado |
-| 14 | — | Captura final | ⏸️ | Não executado |
+| 12 | UC-R07 | Status rascunho→revisão | ✅ | Proposta Selecionada✅, Enviar para Revisão clicado✅ |
+| 13 | UC-R07 | Submissão | ✅ | Página Submissão✅, Checklist✅ |
+| 14 | — | Captura final | ✅ | Visão geral capturada |
 
 ---
 
@@ -126,13 +126,21 @@
 
 ---
 
-### UC-R07: Status e Submissão (0/2 ⏸️)
+### UC-R07: Status e Submissão (2/2 ✅)
 
-Testes 12-13 não executados devido ao backend ter sido reiniciado durante a execução, causando "Erro ao fazer login". Não é falha funcional.
+#### Teste 12: Fluxo de status ✅
+![Status](screenshots/UC-R07-01_status.png)
+- Proposta Selecionada: ✅ visível
+- Botão "Enviar para Revisão" clicado com sucesso
+- Transição de status funcional
 
-**Resultado anterior (rodada 3):** UC-R07 havia passado com:
-- Página Submissão com texto "Submissão" e "checklist" presentes
-- Fluxo de status funcional
+#### Teste 13: Página Submissão ✅
+![Submissão](screenshots/UC-R07-02_submissao.png)
+- Página Submissão: ✅ carregada
+- Checklist: ✅ presente
+
+### Captura Final ✅
+![Final](screenshots/FINAL_visao_geral.png)
 
 ---
 
@@ -154,8 +162,8 @@ Testes 12-13 não executados devido ao backend ter sido reiniciado durante a exe
 | Auditoria ANVISA | ✅ TESTADO | Teste 9: verificação acionada |
 | Auditoria Documental | ✅ PRESENTE | Teste 10: card encontrado |
 | Export PDF/DOCX/ZIP | ✅ PRESENTE | Teste 11: 3 botões encontrados |
-| Fluxo de status | ✅ PARCIAL | Botões Salvar/Revisão/Aprovar visíveis (teste 5) |
-| Página Submissão | ✅ VERIFICADO (rodada anterior) | Checklist presente |
+| Fluxo de status | ✅ TESTADO | Teste 12: transição rascunho→revisão executada |
+| Página Submissão | ✅ TESTADO | Teste 13: checklist presente |
 
 ### Gaps Restantes
 
@@ -168,7 +176,7 @@ Testes 12-13 não executados devido ao backend ter sido reiniciado durante a exe
 
 ### Conclusão
 
-**A Fase 2 (Proposta) está funcional e aderente ao documento SPRINT PREÇO.** Os 11 testes executados cobrem os fluxos principais de todos os 7 Use Cases. Os 3 testes não executados (UC-R07) foram validados em rodada anterior e falharam apenas por indisponibilidade do backend durante a execução.
+**A Fase 2 (Proposta) está funcional e aderente ao documento SPRINT PREÇO.** Todos os 14 testes passaram cobrindo os 7 Use Cases completos.
 
 **Nenhum bug funcional bloqueante encontrado.** Os gaps são menores e de validação visual (textarea value vs renderização, LOG, Smart Split).
 
@@ -193,4 +201,10 @@ Testes 12-13 não executados devido ao backend ter sido reiniciado durante a exe
 
 ---
 
-*Relatório v2 gerado em 26/03/2026. 11/14 testes passaram. Validação aderente ao SPRINT PREÇO e PROPOSTA.*
+| `UC-R07-01_status.png` | Fluxo de status com transição |
+| `UC-R07-02_submissao.png` | Página Submissão com checklist |
+| `FINAL_visao_geral.png` | Captura final da página Proposta |
+
+---
+
+*Relatório v2 gerado em 26/03/2026. **14/14 testes passaram.** Validação completa aderente ao SPRINT PREÇO e PROPOSTA.*
