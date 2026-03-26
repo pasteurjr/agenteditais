@@ -1064,8 +1064,8 @@ ${html}
   // ── Tabs ──
   const tabs = [
     { id: "lotes", label: `Lotes ${lotes.length > 0 ? (lotes.some(l => (l as Record<string,unknown>).status === "configurado") ? "✅" : "⚠️") : "❌"}`, icon: <Layers size={16} /> },
-    { id: "camadas", label: `Custos e Preços ${camada ? (camada.preco_base ? "✅" : "⚠️") : "❌"}`, icon: <DollarSign size={16} /> },
-    { id: "lances", label: `Lances ${camada?.lance_inicial ? "✅" : "❌"}`, icon: <Target size={16} /> },
+    { id: "camadas", label: `Custos e Preços ${Object.values(todasCamadas).some(c => c.preco_base) ? "✅" : Object.values(todasCamadas).some(c => c.custo_unitario) ? "⚠️" : vinculos.length > 0 ? "⚠️" : "❌"}`, icon: <DollarSign size={16} /> },
+    { id: "lances", label: `Lances ${Object.values(todasCamadas).some(c => c.lance_inicial) ? "✅" : "❌"}`, icon: <Target size={16} /> },
     { id: "historico", label: "Histórico", icon: <History size={16} /> },
   ];
 
