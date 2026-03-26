@@ -162,6 +162,9 @@ export function PropostaPage(props?: PageProps) {
   const [statusFilter, setStatusFilter] = useState("todas");
   const [selectedProposta, setSelectedProposta] = useState<Proposta | null>(null);
   const [showGerarModal, setShowGerarModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // --- State: Listas para selects ---
@@ -707,6 +710,12 @@ export function PropostaPage(props?: PageProps) {
             variant="primary"
             onClick={() => setShowGerarModal(true)}
           />
+          <ActionButton
+            icon={<Download size={16} />}
+            label="Upload Proposta Externa"
+            variant="neutral"
+            onClick={() => setShowUploadModal(true)}
+          />
         </div>
       </div>
 
@@ -1165,6 +1174,76 @@ export function PropostaPage(props?: PageProps) {
           </div>
         </FormField>
         <FormField label="Quantidade" required>
+          <TextInput value={novaQuantidade} onChange={setNovaQuantidade} type="number" />
+        </FormField>
+      </Modal>
+
+      {/* ── Modal: Upload Proposta Externa ───────────────────────────────── */}
+      <Modal
+        isOpen={showUploadModal}
+        onClose={() => { setShowUploadModal(false); setUploadFile(null); }}
+        title="Upload de Proposta Externa"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>Cancelar</button>
+            <button className="btn btn-primary" disabled={uploadLoading || !novoEdital || !novoProduto || !uploadFile}
+              onClick={async () => {
+                if (!uploadFile || !novoEdital || !novoProduto) return;
+                setUploadLoading(true);
+                try {
+                  const token = localStorage.getItem("editais_ia_access_token");
+                  const formData = new FormData();
+                  formData.append("file", uploadFile);
+                  formData.append("edital_id", novoEdital);
+                  formData.append("produto_id", novoProduto);
+                  formData.append("preco_unitario", novoPreco || "0");
+                  formData.append("quantidade", novaQuantidade || "1");
+                  if (novoLote) formData.append("lote_id", novoLote);
+                  const res = await fetch("/api/propostas/upload", {
+                    method: "POST",
+                    headers: { Authorization: token ? `Bearer ${token}` : "" },
+                    body: formData,
+                  });
+                  const data = await res.json();
+                  if (data.success || data.id) {
+                    alert("Proposta importada com sucesso!");
+                    setShowUploadModal(false);
+                    setUploadFile(null);
+                    // Recarregar lista
+                    try {
+                      const listRes = await crudList("propostas", { limit: 50 });
+                      setPropostas(((listRes.items || []) as Record<string, unknown>[]).map(mapCrudToProposta));
+                    } catch { /* */ }
+                  } else {
+                    alert(data.error || "Erro ao importar proposta");
+                  }
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : "Erro no upload");
+                } finally {
+                  setUploadLoading(false);
+                }
+              }}
+            >
+              {uploadLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}{" "}
+              Importar
+            </button>
+          </>
+        }
+      >
+        <FormField label="Edital" required>
+          <SelectInput value={novoEdital} onChange={setNovoEdital} options={editalOptions} />
+        </FormField>
+        <FormField label="Produto" required>
+          <SelectInput value={novoProduto} onChange={setNovoProduto} options={produtoOptions} />
+        </FormField>
+        <FormField label="Arquivo da Proposta (.docx, .pdf)" required>
+          <input type="file" accept=".docx,.pdf" style={{ fontSize: 13 }}
+            onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
+        </FormField>
+        <FormField label="Preco Unitario">
+          <TextInput value={novoPreco} onChange={setNovoPreco} type="number" prefix="R$" />
+        </FormField>
+        <FormField label="Quantidade">
           <TextInput value={novaQuantidade} onChange={setNovaQuantidade} type="number" />
         </FormField>
       </Modal>

@@ -1,0 +1,1537 @@
+{
+  "config": {
+    "configFile": "/mnt/data1/progpython/agenteditais/playwright.config.ts",
+    "rootDir": "/mnt/data1/progpython/agenteditais/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/mnt/data1/progpython/agenteditais/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/mnt/data1/progpython/agenteditais/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "tests/results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "validacao_sprint3.spec.ts",
+      "file": "validacao_sprint3.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "GRUPO 1 — PRECIFICACAO (T-01 a T-08)",
+          "file": "validacao_sprint3.spec.ts",
+          "line": 106,
+          "column": 15,
+          "specs": [
+            {
+              "title": "T-01 — Pagina de Precificacao carrega",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2858,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:25.947Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--2dee1-ina-de-Precificacao-carrega-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-465013060464d69648f7",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 119,
+              "column": 7
+            },
+            {
+              "title": "T-02 — Busca de precos no PNCP",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9224,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:33.753Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--505df-2-—-Busca-de-precos-no-PNCP-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-169cd267a3645193246c",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 143,
+              "column": 7
+            },
+            {
+              "title": "T-03 — Estatisticas de precos",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2878,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:42.984Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--30601-03-—-Estatisticas-de-precos-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-9eeb7f91daedf68ca912",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 176,
+              "column": 7
+            },
+            {
+              "title": "T-04 — Recomendacao de preco",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9737,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:45.871Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--da0d5--04-—-Recomendacao-de-preco-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-a2fe613d9fc444207dbf",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 195,
+              "column": 7
+            },
+            {
+              "title": "T-05 — Historico de precos carrega",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2863,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:55.614Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--a0ee5-Historico-de-precos-carrega-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-bfc317a23bdac486c825",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 243,
+              "column": 7
+            },
+            {
+              "title": "T-06 — Botao Ver Todos funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5885,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T17:59:58.489Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--c811d--—-Botao-Ver-Todos-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-7d61101a11595d9be87e",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 255,
+              "column": 7
+            },
+            {
+              "title": "T-07 — Botao Exportar CSV funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 12878,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:04.379Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--b48ac-Botao-Exportar-CSV-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-78f37a07e37204d4a14e",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 269,
+              "column": 7
+            },
+            {
+              "title": "T-08 — Grafico de evolucao de precos",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2879,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:17.263Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-1--5d92d-afico-de-evolucao-de-precos-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-2b6a6d24020ca4599057",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 294,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "GRUPO 2 — PROPOSTA (T-09 a T-17)",
+          "file": "validacao_sprint3.spec.ts",
+          "line": 319,
+          "column": 15,
+          "specs": [
+            {
+              "title": "T-09 — Pagina Proposta carrega",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2855,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:20.158Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--53ea9-9-—-Pagina-Proposta-carrega-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-9e4d1052b7f583e9f974",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 332,
+              "column": 7
+            },
+            {
+              "title": "T-10 — Formulario com selects de Edital e Produto",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2877,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:27.897Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--67e6a-selects-de-Edital-e-Produto-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-3929ec097ac3493bb164",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 350,
+              "column": 7
+            },
+            {
+              "title": "T-11 — Criar proposta via formulario",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9824,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:30.779Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--65d72-iar-proposta-via-formulario-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-bcb680e241d0dd01bfd5",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 365,
+              "column": 7
+            },
+            {
+              "title": "T-12 — Tabela de propostas lista registros",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2878,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:40.610Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--7b860-e-propostas-lista-registros-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-f7e73b1946bec2a6992a",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 406,
+              "column": 7
+            },
+            {
+              "title": "T-13 — Filtro por status funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4890,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:43.494Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--de544--Filtro-por-status-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-6a9eaa87fd3922954663",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 428,
+              "column": 7
+            },
+            {
+              "title": "T-14 — Visualizar preview da proposta",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4884,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:48.389Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--bf454-ualizar-preview-da-proposta-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-240e005f41b3146e67ae",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 450,
+              "column": 7
+            },
+            {
+              "title": "T-15 — Botao Baixar PDF funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2876,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:53.280Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--dee1f-—-Botao-Baixar-PDF-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-cb7ced1d56fe8e40643e",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 476,
+              "column": 7
+            },
+            {
+              "title": "T-16 — Botao Baixar DOCX funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2875,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:56.163Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--78b19--Botao-Baixar-DOCX-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-a08e98e39d2a1ddefcdd",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 494,
+              "column": 7
+            },
+            {
+              "title": "T-17 — Botao Enviar por Email funciona",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2873,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:00:59.043Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-2--e0811-o-Enviar-por-Email-funciona-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-1488d5788127bacb0e25",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 512,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "GRUPO 3 — SUBMISSAO (T-18 a T-25)",
+          "file": "validacao_sprint3.spec.ts",
+          "line": 535,
+          "column": 15,
+          "specs": [
+            {
+              "title": "T-18 — Pagina Submissao carrega",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2833,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:01.927Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--f46f2--—-Pagina-Submissao-carrega-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-e6dc081b6cd2c2994af9",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 548,
+              "column": 7
+            },
+            {
+              "title": "T-19 — Tabela de propostas para envio",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2864,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:09.614Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--d4196-ela-de-propostas-para-envio-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-6d89b91061f28f9e5365",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 563,
+              "column": 7
+            },
+            {
+              "title": "T-20 — Checklist aparece ao selecionar proposta",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4872,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:12.482Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--dd53f-rece-ao-selecionar-proposta-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-2809a2c1d7d0a88bbb85",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 581,
+              "column": 7
+            },
+            {
+              "title": "T-21 — Itens do checklist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2884,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:17.359Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--40b81-5-T-21-—-Itens-do-checklist-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-0c19a39afe1f45253342",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 608,
+              "column": 7
+            },
+            {
+              "title": "T-22 — Botao Anexar Documento",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2828,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:20.248Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--482ef-22-—-Botao-Anexar-Documento-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-bfb6bb87a0f80d31b461",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 639,
+              "column": 7
+            },
+            {
+              "title": "T-23 — Botao Marcar como Enviada",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2855,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:23.081Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--a6e18-—-Botao-Marcar-como-Enviada-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-f0e9f5f70da83dce82c9",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 673,
+              "column": 7
+            },
+            {
+              "title": "T-24 — Botao Aprovar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2850,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:25.940Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--89708-a-T-25-T-24-—-Botao-Aprovar-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-1417122f09c95859ff2c",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 691,
+              "column": 7
+            },
+            {
+              "title": "T-25 — Botao Abrir Portal PNCP",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2857,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:28.795Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-3--b7ec1-5-—-Botao-Abrir-Portal-PNCP-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-ffb90ba0e335fc474e54",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 709,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "GRUPO 4 — CHAT INTEGRATION (T-26 a T-30)",
+          "file": "validacao_sprint3.spec.ts",
+          "line": 731,
+          "column": 15,
+          "specs": [
+            {
+              "title": "T-26 — Prompt dropdown: Buscar precos de mercado",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2852,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:31.664Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-4--73066-wn-Buscar-precos-de-mercado-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-a617c723454781f982d7",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 743,
+              "column": 7
+            },
+            {
+              "title": "T-27 — Prompt dropdown: Gerar proposta tecnica",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2871,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:37.069Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-4--025dc-down-Gerar-proposta-tecnica-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-f9bab63eca9055e31e1b",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 766,
+              "column": 7
+            },
+            {
+              "title": "T-28 — Prompt dropdown: Listar propostas",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2875,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:39.946Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-4--bdf03-t-dropdown-Listar-propostas-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-d7a15526b8a6f874ca24",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 786,
+              "column": 7
+            },
+            {
+              "title": "T-29 — Prompt dropdown: Excluir proposta",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2879,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:42.826Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-4--3b918-t-dropdown-Excluir-proposta-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-8cf6ff38ef19b58385c8",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 806,
+              "column": 7
+            },
+            {
+              "title": "T-30 — Prompt dropdown: Total de propostas (MindsDB)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2880,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:45.709Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-4--438d3-Total-de-propostas-MindsDB--chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-13f938b191ed43a3da0f",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 826,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "GRUPO 5 — INTEGRACAO E2E (T-31 a T-35)",
+          "file": "validacao_sprint3.spec.ts",
+          "line": 850,
+          "column": 15,
+          "specs": [
+            {
+              "title": "T-31 — Endpoint API precos historico",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3054,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:48.606Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-5--8ed8d-dpoint-API-precos-historico-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-2c0e7ddcdc6ba1842f1c",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 873,
+              "column": 7
+            },
+            {
+              "title": "T-32 — Endpoint API propostas",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3071,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:54.183Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-5--98076-32-—-Endpoint-API-propostas-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-1932e36ba9d3248a370e",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 894,
+              "column": 7
+            },
+            {
+              "title": "T-33 — Endpoint dedicado status proposta",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3029,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:01:57.260Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-5--8acf4-nt-dedicado-status-proposta-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-bb9170d5aed95ec0821d",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 915,
+              "column": 7
+            },
+            {
+              "title": "T-34 — Navegacao Precificacao → Proposta → Submissao",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 11482,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:02:00.293Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-5--e2c3e-acao-→-Proposta-→-Submissao-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-905b3db6bbb39ffd2b49",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 957,
+              "column": 7
+            },
+            {
+              "title": "T-35 — Dashboard mostra metricas Sprint 3",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4991,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "\n📊 Resultados salvos em /mnt/data1/progpython/agenteditais/tests/results/sprint3_results.json\n"
+                        },
+                        {
+                          "text": "Total: 35 testes\n"
+                        },
+                        {
+                          "text": "PASS: 20\n"
+                        },
+                        {
+                          "text": "PARTIAL: 14\n"
+                        },
+                        {
+                          "text": "FAIL: 1\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-02T18:02:11.782Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/mnt/data1/progpython/agenteditais/test-results/validacao_sprint3-GRUPO-5--40b1d-rd-mostra-metricas-Sprint-3-chromium/test-finished-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d262a730ac67d1281412-199acedce5eed12a312d",
+              "file": "validacao_sprint3.spec.ts",
+              "line": 980,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-02T17:59:25.201Z",
+    "duration": 171623.014,
+    "expected": 35,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
