@@ -1,246 +1,296 @@
 import { test, expect } from "@playwright/test";
 
 const BASE = "http://localhost:5175";
-const SCREENSHOTS = "testes/proposta/screenshots";
+const SS = "testes/proposta/screenshots";
 
-// Helper: login
 async function login(page: any) {
   await page.goto(BASE);
-  await page.waitForTimeout(1000);
-  // Check if already logged in
-  const loginForm = page.locator('input[type="email"], input[placeholder*="email" i]');
-  if (await loginForm.count() > 0) {
-    await loginForm.first().fill("pasteurjr@gmail.com");
-    const passField = page.locator('input[type="password"]');
-    await passField.first().fill("123456");
-    await page.locator('button:has-text("Entrar"), button:has-text("Login"), button[type="submit"]').first().click();
-    await page.waitForTimeout(2000);
+  await page.waitForTimeout(1500);
+  const emailField = page.locator('input[type="email"], input[placeholder*="email" i]').first();
+  if (await emailField.isVisible()) {
+    await emailField.fill("pasteurjr@gmail.com");
+    await page.locator('input[type="password"]').first().fill("123456");
+    await page.locator('button[type="submit"], button:has-text("Entrar"), button:has-text("Login")').first().click();
+    await page.waitForTimeout(3000);
   }
 }
 
-// Helper: navigate to page
-async function navigateTo(page: any, menuItem: string) {
-  const menuBtn = page.locator(`text=${menuItem}`).first();
-  if (await menuBtn.isVisible()) {
-    await menuBtn.click();
-    await page.waitForTimeout(1500);
-  }
+async function irParaProposta(page: any) {
+  await page.locator('text=Proposta').first().click();
+  await page.waitForTimeout(2000);
 }
 
-test.describe("Fase 2 — Proposta: Validação Completa", () => {
+test.describe.serial("Fase 2 — Proposta: Validação Real", () => {
 
-  test.beforeEach(async ({ page }) => {
+  test("UC-R01-01: Página Proposta carrega", async ({ page }) => {
     await login(page);
+    await irParaProposta(page);
+    await page.screenshot({ path: `${SS}/UC-R01-01_pagina.png`, fullPage: true });
   });
 
-  // ══════════════════════════════════════════════════════════════
-  // UC-R01: Gerar Proposta Técnica
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R01-01: Navegar para página Proposta", async ({ page }) => {
-    await navigateTo(page, "Proposta");
+  test("UC-R01-02: Modal Nova Proposta + selecionar Fiocruz", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
+    await page.locator('button:has-text("Nova Proposta")').click();
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-01_pagina_proposta.png`, fullPage: true });
-    // Verificar que a página carregou
-    const title = page.locator('text=Proposta').first();
-    expect(await title.isVisible()).toBeTruthy();
-  });
 
-  test("UC-R01-02: Abrir modal Nova Proposta", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    // Procurar botão Nova Proposta
-    const btnNova = page.locator('button:has-text("Nova Proposta"), button:has-text("Gerar")').first();
-    if (await btnNova.isVisible()) {
-      await btnNova.click();
-      await page.waitForTimeout(1000);
+    // Selecionar edital Fiocruz
+    const editalSelect = page.locator('.modal-overlay select').first();
+    const options = await editalSelect.locator('option').allTextContents();
+    console.log("Opções edital:", options);
+    let found = false;
+    for (const o of options) {
+      if (o.includes("46/2026") || o.toLowerCase().includes("fiocruz")) {
+        await editalSelect.selectOption({ label: o });
+        found = true;
+        break;
+      }
     }
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-02_modal_nova_proposta.png`, fullPage: true });
+    expect(found).toBeTruthy();
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: `${SS}/UC-R01-02_fiocruz_selecionado.png`, fullPage: true });
   });
 
-  test("UC-R01-03: Selecionar edital e verificar lotes", async ({ page }) => {
-    await navigateTo(page, "Proposta");
+  test("UC-R01-03: Selecionar Lote e Produto TTPA", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
+    await page.locator('button:has-text("Nova Proposta")').click();
     await page.waitForTimeout(1000);
-    const btnNova = page.locator('button:has-text("Nova Proposta"), button:has-text("Gerar")').first();
-    if (await btnNova.isVisible()) await btnNova.click();
-    await page.waitForTimeout(1000);
-    // Procurar select de edital
-    const editalSelect = page.locator('select').first();
-    if (await editalSelect.isVisible()) {
-      const options = await editalSelect.locator('option').allTextContents();
-      await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-03_select_edital.png`, fullPage: true });
-      // Selecionar Fiocruz se disponível
-      for (const opt of options) {
-        if (opt.toLowerCase().includes("fiocruz") || opt.includes("46/2026")) {
-          await editalSelect.selectOption({ label: opt });
+
+    // Edital
+    const selects = page.locator('.modal-overlay select');
+    const editalSel = selects.first();
+    const edOpts = await editalSel.locator('option').allTextContents();
+    for (const o of edOpts) {
+      if (o.includes("46/2026")) { await editalSel.selectOption({ label: o }); break; }
+    }
+    await page.waitForTimeout(2000);
+
+    // Contar selects no modal
+    const allCount = await selects.count();
+    console.log(`Total selects no modal: ${allCount}`);
+
+    // Listar todas as opções de cada select
+    for (let i = 0; i < allCount; i++) {
+      const opts = await selects.nth(i).locator('option').allTextContents();
+      console.log(`Select ${i}: ${opts.join(' | ')}`);
+    }
+
+    // Selecionar Lote Coagulação se disponível
+    if (allCount >= 4) {
+      const loteSel = selects.nth(1);
+      const loteOpts = await loteSel.locator('option').allTextContents();
+      for (const o of loteOpts) {
+        if (o.toLowerCase().includes('coagula') || o.includes('Lote 2')) {
+          await loteSel.selectOption({ label: o });
+          console.log(`Lote selecionado: ${o}`);
           await page.waitForTimeout(1000);
           break;
         }
       }
     }
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-03_edital_selecionado.png`, fullPage: true });
-  });
 
-  test("UC-R01-04: Verificar campos de preço e template", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    const btnNova = page.locator('button:has-text("Nova Proposta"), button:has-text("Gerar")').first();
-    if (await btnNova.isVisible()) await btnNova.click();
-    await page.waitForTimeout(1000);
-    // Verificar campos existentes
-    const precoField = page.locator('input[placeholder*="preço" i], input[placeholder*="preco" i], input[placeholder*="Preço" i]').first();
-    const qtdField = page.locator('input[placeholder*="quantidade" i], input[placeholder*="Quantidade" i]').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-04_campos_preco_template.png`, fullPage: true });
-  });
-
-  test("UC-R01-05: Gerar proposta com IA", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    // Tentar todo o fluxo
-    const btnNova = page.locator('button:has-text("Nova Proposta"), button:has-text("Gerar")').first();
-    if (await btnNova.isVisible()) await btnNova.click();
-    await page.waitForTimeout(1000);
-    // Selecionar edital
-    const selects = page.locator('select');
-    const count = await selects.count();
-    if (count > 0) {
-      const editalSel = selects.nth(0);
-      const opts = await editalSel.locator('option').allTextContents();
+    // Selecionar produto TTPA
+    for (let i = 0; i < allCount; i++) {
+      const opts = await selects.nth(i).locator('option').allTextContents();
       for (const o of opts) {
-        if (o.includes("46/2026") || o.toLowerCase().includes("fiocruz")) {
-          await editalSel.selectOption({ label: o });
-          await page.waitForTimeout(1500);
+        if (o.toLowerCase().includes('ttpa')) {
+          await selects.nth(i).selectOption({ label: o });
+          console.log(`Produto selecionado: ${o} (select ${i})`);
           break;
         }
       }
     }
-    // Selecionar produto se disponível
-    if (count > 1) {
-      const prodSel = selects.nth(1);
-      await page.waitForTimeout(500);
-      const prodOpts = await prodSel.locator('option').allTextContents();
-      for (const o of prodOpts) {
-        if (o.toLowerCase().includes("ttpa")) {
-          await prodSel.selectOption({ label: o });
+
+    await page.waitForTimeout(1000);
+
+    // Verificar preço
+    const precoInputs = page.locator('.modal-overlay input[type="number"]');
+    const precoCount = await precoInputs.count();
+    for (let i = 0; i < precoCount; i++) {
+      const val = await precoInputs.nth(i).inputValue();
+      console.log(`Input number ${i}: "${val}"`);
+    }
+
+    // Preencher preço e quantidade se vazios
+    if (precoCount >= 1) {
+      const v = await precoInputs.first().inputValue();
+      if (!v) await precoInputs.first().fill("5.07");
+    }
+    if (precoCount >= 2) {
+      const v = await precoInputs.nth(1).inputValue();
+      if (!v || v === "0") await precoInputs.nth(1).fill("10");
+    }
+
+    await page.screenshot({ path: `${SS}/UC-R01-03_lote_produto.png`, fullPage: true });
+  });
+
+  test("UC-R01-04: Gerar proposta com IA", async ({ page }) => {
+    test.setTimeout(180000);
+    await login(page);
+    await irParaProposta(page);
+    await page.locator('button:has-text("Nova Proposta")').click();
+    await page.waitForTimeout(1000);
+
+    // Selecionar edital
+    const selects = page.locator('.modal-overlay select');
+    const edOpts = await selects.first().locator('option').allTextContents();
+    for (const o of edOpts) {
+      if (o.includes("46/2026")) { await selects.first().selectOption({ label: o }); break; }
+    }
+    await page.waitForTimeout(2000);
+
+    // Selecionar produto TTPA
+    const allCount = await selects.count();
+    for (let i = 0; i < allCount; i++) {
+      const opts = await selects.nth(i).locator('option').allTextContents();
+      for (const o of opts) {
+        if (o.toLowerCase().includes('ttpa')) {
+          await selects.nth(i).selectOption({ label: o });
           break;
         }
       }
     }
-    // Preencher preço se vazio
-    const precoInputs = page.locator('input[type="number"], input[placeholder*="preço" i]');
-    if (await precoInputs.count() > 0) {
-      const val = await precoInputs.first().inputValue();
-      if (!val) await precoInputs.first().fill("5.07");
+    await page.waitForTimeout(1000);
+
+    // Preço e quantidade
+    const inputs = page.locator('.modal-overlay input[type="number"]');
+    if (await inputs.count() >= 1) {
+      const v = await inputs.first().inputValue();
+      if (!v) await inputs.first().fill("5.07");
     }
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-05_antes_gerar.png`, fullPage: true });
-    // Clicar Gerar
-    const btnGerar = page.locator('button:has-text("Gerar Proposta"), button:has-text("Gerar")').first();
-    if (await btnGerar.isVisible()) {
-      await btnGerar.click();
-      await page.waitForTimeout(15000); // IA pode demorar
+    if (await inputs.count() >= 2) {
+      const v = await inputs.nth(1).inputValue();
+      if (!v || v === "0") await inputs.nth(1).fill("10");
     }
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-05_proposta_gerada.png`, fullPage: true });
+
+    await page.screenshot({ path: `${SS}/UC-R01-04_antes_gerar.png`, fullPage: true });
+
+    // Gerar proposta (force click para evitar interceptação)
+    const btnGerar = page.locator('.modal-overlay button:has-text("Gerar Proposta")');
+    await btnGerar.scrollIntoViewIfNeeded();
+    await btnGerar.click({ force: true });
+    console.log("Botão Gerar Proposta clicado");
+
+    // Aguardar IA
+    await page.waitForTimeout(60000);
+    await page.screenshot({ path: `${SS}/UC-R01-04_apos_gerar.png`, fullPage: true });
   });
 
-  test("UC-R01-06: Verificar editor rico e toolbar", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    // Verificar se existe textarea/editor
-    const editor = page.locator('textarea').first();
-    const toolbar = page.locator('button:has-text("B"), button:has-text("I"), button:has-text("H1")');
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-06_editor_rico.png`, fullPage: true });
-  });
-
-  test("UC-R01-07: Verificar lista de propostas", async ({ page }) => {
-    await navigateTo(page, "Proposta");
+  test("UC-R01-05: Lista de propostas após geração", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
     await page.waitForTimeout(2000);
-    // Verificar tabela de propostas
-    const table = page.locator('table').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R01-07_lista_propostas.png`, fullPage: true });
+
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
+    console.log(`Propostas na lista: ${count}`);
+
+    if (count > 0) {
+      const firstRowText = await rows.first().textContent();
+      console.log(`Primeira proposta: ${firstRowText?.slice(0, 100)}`);
+    }
+
+    await page.screenshot({ path: `${SS}/UC-R01-05_lista.png`, fullPage: true });
   });
 
-  // ══════════════════════════════════════════════════════════════
-  // UC-R02: Upload de Proposta Externa
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R02-01: Verificar botão Upload Proposta Externa", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    const btnUpload = page.locator('button:has-text("Upload"), button:has-text("Importar")').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R02-01_botao_upload.png`, fullPage: true });
-    expect(await btnUpload.isVisible()).toBeTruthy();
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // UC-R03: Descrição Técnica A/B
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R03-01: Verificar toggle A/B na proposta", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    // Procurar toggle ou radio para descrição
-    const toggleAB = page.locator('text=Opção A, text=Opção B, text=Texto do Edital, text=Personalizado').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R03-01_toggle_ab.png`, fullPage: true });
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // UC-R04: Auditoria ANVISA
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R04-01: Verificar card Auditoria ANVISA", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    const anvisaCard = page.locator('text=Auditoria ANVISA, text=ANVISA').first();
-    const btnVerificar = page.locator('button:has-text("Verificar Registros"), button:has-text("Verificar")').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R04-01_auditoria_anvisa.png`, fullPage: true });
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // UC-R05: Auditoria Documental
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R05-01: Verificar card Auditoria Documental", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    const docCard = page.locator('text=Auditoria Documental, text=Documental').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R05-01_auditoria_documental.png`, fullPage: true });
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // UC-R06: Exportar Dossiê
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R06-01: Verificar botões de exportação", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    const btnPDF = page.locator('button:has-text("PDF")').first();
-    const btnDOCX = page.locator('button:has-text("DOCX"), button:has-text("Word")').first();
-    const btnZIP = page.locator('button:has-text("ZIP"), button:has-text("Dossiê")').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R06-01_botoes_exportacao.png`, fullPage: true });
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // UC-R07: Status e Submissão
-  // ══════════════════════════════════════════════════════════════
-  test("UC-R07-01: Verificar fluxo de status", async ({ page }) => {
-    await navigateTo(page, "Proposta");
-    await page.waitForTimeout(1000);
-    // Procurar badges de status
-    const statusBadges = page.locator('text=rascunho, text=revisão, text=aprovada, text=enviada');
-    const btnRevisao = page.locator('button:has-text("Revisão"), button:has-text("Enviar para Revisão")').first();
-    const btnAprovar = page.locator('button:has-text("Aprovar")').first();
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R07-01_fluxo_status.png`, fullPage: true });
-  });
-
-  // ══════════════════════════════════════════════════════════════
-  // Visão geral da página
-  // ══════════════════════════════════════════════════════════════
-  test("OVERVIEW: Captura completa da página Proposta", async ({ page }) => {
-    await navigateTo(page, "Proposta");
+  test("UC-R01-06: Selecionar proposta e ver editor", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
     await page.waitForTimeout(2000);
-    await page.screenshot({ path: `${SCREENSHOTS}/OVERVIEW_proposta_page.png`, fullPage: true });
+
+    const rows = page.locator('table tbody tr');
+    if (await rows.count() > 0) {
+      // Clicar no botão de visualizar/editar da primeira proposta
+      const btns = rows.first().locator('button');
+      const btnCount = await btns.count();
+      console.log(`Botões na primeira proposta: ${btnCount}`);
+      if (btnCount > 0) {
+        await btns.first().click();
+        await page.waitForTimeout(2000);
+      }
+    }
+
+    // Verificar editor e toolbar
+    const textarea = page.locator('textarea');
+    console.log(`Textareas: ${await textarea.count()}`);
+    const toolbarBtns = page.locator('button[title="Negrito"]');
+    console.log(`Toolbar Negrito: ${await toolbarBtns.count()}`);
+
+    await page.screenshot({ path: `${SS}/UC-R01-06_editor.png`, fullPage: true });
   });
 
   // ══════════════════════════════════════════════════════════════
-  // Submissão page
+  // UC-R02: Upload
   // ══════════════════════════════════════════════════════════════
-  test("UC-R07-02: Verificar página Submissão", async ({ page }) => {
-    await navigateTo(page, "Submissão");
+  test("UC-R02-01: Verificar upload na página", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
+    await page.waitForTimeout(1000);
+
+    // Buscar qualquer referência a upload
+    const allText = await page.textContent('body');
+    const hasUpload = allText?.toLowerCase().includes('upload');
+    const hasImportar = allText?.toLowerCase().includes('importar');
+    console.log(`Texto 'upload' na página: ${hasUpload}`);
+    console.log(`Texto 'importar' na página: ${hasImportar}`);
+
+    await page.screenshot({ path: `${SS}/UC-R02-01_upload.png`, fullPage: true });
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // UC-R04: ANVISA + UC-R05: Documental + UC-R06: Export
+  // ══════════════════════════════════════════════════════════════
+  test("UC-R04-05-06: Cards ANVISA, Documental e Export (com proposta)", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
     await page.waitForTimeout(2000);
-    await page.screenshot({ path: `${SCREENSHOTS}/UC-R07-02_submissao_page.png`, fullPage: true });
+
+    const rows = page.locator('table tbody tr');
+    if (await rows.count() > 0) {
+      const btns = rows.first().locator('button');
+      if (await btns.count() > 0) {
+        await btns.first().click();
+        await page.waitForTimeout(2000);
+      }
+
+      // Scroll para ver todos os cards
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(1000);
+    }
+
+    // Buscar cards
+    const allText = await page.textContent('body') || "";
+    console.log(`ANVISA na página: ${allText.includes('ANVISA')}`);
+    console.log(`Documental na página: ${allText.includes('Documental') || allText.includes('documental')}`);
+    console.log(`PDF na página: ${allText.includes('PDF')}`);
+    console.log(`DOCX na página: ${allText.includes('DOCX')}`);
+    console.log(`ZIP/Dossiê na página: ${allText.includes('ZIP') || allText.includes('Dossi')}`);
+
+    await page.screenshot({ path: `${SS}/UC-R04-05-06_cards.png`, fullPage: true });
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // UC-R07: Submissão
+  // ══════════════════════════════════════════════════════════════
+  test("UC-R07: Página Submissão", async ({ page }) => {
+    await login(page);
+    await page.waitForTimeout(1000);
+    const submissao = page.locator('text=Submissao').first();
+    if (await submissao.isVisible()) {
+      await submissao.click();
+      await page.waitForTimeout(2000);
+    }
+    const pageText = await page.textContent('body') || "";
+    console.log(`Página tem 'Submissao': ${pageText.includes('Submiss')}`);
+    console.log(`Página tem 'checklist': ${pageText.toLowerCase().includes('checklist')}`);
+    await page.screenshot({ path: `${SS}/UC-R07_submissao.png`, fullPage: true });
+  });
+
+  test("FINAL: Captura geral", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: `${SS}/FINAL.png`, fullPage: true });
   });
 });

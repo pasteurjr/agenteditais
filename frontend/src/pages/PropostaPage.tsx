@@ -226,7 +226,14 @@ export function PropostaPage(props?: PageProps) {
       }
 
       try {
-        setEditais(await getEditais("salvo"));
+        // Carregar editais de qualquer status (não só "salvo")
+        const editaisSalvos = await getEditais("salvo");
+        if (editaisSalvos.length > 0) {
+          setEditais(editaisSalvos);
+        } else {
+          // Fallback: carregar todos os editais
+          setEditais(await getEditais());
+        }
       } catch {
         setEditais([]);
       }
