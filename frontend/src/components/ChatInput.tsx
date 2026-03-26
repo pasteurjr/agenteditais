@@ -195,6 +195,16 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "precif_comodato", nome: "✅ 🔧 Registrar comodato", prompt: "Registre comodato: equipamento [NOME], valor R$ [VALOR], prazo [MESES] meses" },
 
   // =============================================================================
+  // 10.3 PROPOSTAS AVANCADAS - Fase 2
+  // =============================================================================
+  { id: "sep_10_3", nome: "━━━ 10.3 PROPOSTAS AVANCADAS ━━━", prompt: "" },
+  { id: "gerar_proposta_lote", nome: "📝 Gerar proposta por lote", prompt: "Gere proposta para o edital [NUM] lote [LOTE] com produto [PROD]" },
+  { id: "verificar_anvisa_proposta", nome: "🔬 Verificar ANVISA da proposta", prompt: "Verifique registros ANVISA da proposta [ID]" },
+  { id: "auditoria_docs_proposta", nome: "📋 Auditoria documental", prompt: "Faca auditoria documental da proposta [ID]" },
+  { id: "exportar_dossie", nome: "📦 Exportar dossie completo", prompt: "Exporte dossie completo da proposta [ID]" },
+  { id: "listar_templates", nome: "📄 Listar templates", prompt: "Liste templates de proposta disponiveis" },
+
+  // =============================================================================
   // 11. FONTES DE EDITAIS
   // =============================================================================
   { id: "sep_11", nome: "━━━ 11. FONTES DE EDITAIS ━━━", prompt: "" },

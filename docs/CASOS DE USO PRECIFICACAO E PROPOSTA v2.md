@@ -1414,15 +1414,15 @@ rascunho → revisao → aprovada → enviada
 | UC-P10 | PRECIFICACAO | ⚙️ PARCIAL | CRUD + amortizacao, sem IA |
 | UC-P11 | PRECIFICACAO | ✅ IMPLEMENTADO | Pipeline IA: historico + atas PNCP + justificativa + pre-preenche A-E |
 | UC-P12 | PRECIFICACAO | ✅ IMPLEMENTADO | Relatorio MD com 9 secoes + download MD/PDF |
-| UC-R01 | PROPOSTA | ⚙️ PARCIAL | Motor basico existe. Faltam lotes, camadas, templates, editor rico |
-| UC-R02 | PROPOSTA | ❌ NAO IMPLEMENTADO | Nao existe upload de proposta externa |
-| UC-R03 | PROPOSTA | ❌ NAO IMPLEMENTADO | Nao existe A/B com backup |
-| UC-R04 | PROPOSTA | ❌ NAO IMPLEMENTADO | Campos ANVISA existem sem semaforo/bloqueio |
-| UC-R05 | PROPOSTA | ❌ NAO IMPLEMENTADO | Checklist basico existe sem Smart Split |
-| UC-R06 | PROPOSTA | ⚙️ PARCIAL | Export PDF/DOCX existe. Falta dossie completo |
-| UC-R07 | PROPOSTA | ✅ IMPLEMENTADO | SubmissaoPage com checklist e fluxo de status |
+| UC-R01 | PROPOSTA | ✅ IMPLEMENTADO | Motor completo com lotes, camadas, templates, editor rico |
+| UC-R02 | PROPOSTA | ✅ IMPLEMENTADO | Upload de proposta externa (.docx) com extracao de texto |
+| UC-R03 | PROPOSTA | ✅ IMPLEMENTADO | Descricao Tecnica A/B com toggle e backup do original |
+| UC-R04 | PROPOSTA | ✅ IMPLEMENTADO | Semaforo ANVISA com bloqueio por validade |
+| UC-R05 | PROPOSTA | ✅ IMPLEMENTADO | Auditoria documental completa com Smart Split |
+| UC-R06 | PROPOSTA | ✅ IMPLEMENTADO | Export PDF/DOCX + dossie ZIP completo |
+| UC-R07 | PROPOSTA | ✅ IMPLEMENTADO | SubmissaoPage com checklist dinamico e fluxo de status melhorado |
 
-**Totais:** 10 implementados + 4 parciais + 5 nao implementados = **19 casos de uso**
+**Totais:** 17 implementados + 2 parciais + 0 nao implementados = **19 casos de uso**
 
 ---
 

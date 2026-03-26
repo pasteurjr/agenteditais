@@ -21,6 +21,9 @@ from models import (
     # FASE 1 Precificação
     Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
     EstrategiaEdital, BeneficioFiscalNcm,
+    # FASE 2 Proposta
+    PropostaLog, PropostaTemplate, AnvisaValidacao,
+    DocumentoNecessario, EmpresaDocumento,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -3046,9 +3049,10 @@ Exemplo:
 
 
 def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
-                        preco: float = None) -> Dict[str, Any]:
+                        preco: float = None, lote_id: str = None) -> Dict[str, Any]:
     """
     Gera uma proposta técnica para um edital.
+    Se lote_id fornecido, busca dados de precificação (PrecoCamada) do vínculo item-produto.
     """
     db = get_db()
     try:
@@ -3107,6 +3111,42 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
         # Combinar requisitos e análise
         requisitos_e_analise = requisitos_texto + analise_texto
 
+        # FASE 2: Buscar dados de precificação se lote_id fornecido
+        preco_camada_texto = ""
+        if lote_id:
+            # Buscar vínculos item-produto do lote para este produto
+            from sqlalchemy import and_
+            vinculos = (
+                db.query(EditalItemProduto)
+                .join(LoteItem, LoteItem.edital_item_id == EditalItemProduto.edital_item_id)
+                .filter(
+                    LoteItem.lote_id == lote_id,
+                    EditalItemProduto.produto_id == produto_id,
+                    EditalItemProduto.user_id == user_id
+                ).all()
+            )
+            for vinculo in vinculos:
+                camada = db.query(PrecoCamada).filter(
+                    PrecoCamada.edital_item_produto_id == vinculo.id,
+                    PrecoCamada.user_id == user_id
+                ).first()
+                if camada:
+                    custo = float(camada.custo_base_final) if camada.custo_base_final else None
+                    preco_base = float(camada.preco_base) if camada.preco_base else None
+                    lance_ini = float(camada.lance_inicial) if camada.lance_inicial else None
+                    preco_camada_texto += f"\n\nDADOS DE PRECIFICAÇÃO:"
+                    if custo:
+                        preco_camada_texto += f"\n- Custo base (Camada A): R$ {custo:,.4f}"
+                    if preco_base:
+                        preco_camada_texto += f"\n- Preço base (Camada B): R$ {preco_base:,.4f}"
+                    if lance_ini:
+                        preco_camada_texto += f"\n- Lance inicial (Camada D): R$ {lance_ini:,.4f}"
+                    if camada.markup_percentual:
+                        preco_camada_texto += f"\n- Markup: {float(camada.markup_percentual):.2f}%"
+                    # Usar lance_inicial como preço se não definido
+                    if not preco and lance_ini:
+                        preco = lance_ini
+
         # Formatar preço
         preco_formatado = f"{preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if preco else "A definir"
 
@@ -3119,7 +3159,7 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
             fabricante=produto.fabricante or "N/A",
             modelo=produto.modelo or "N/A",
             especificacoes=specs_texto or "Especificações não cadastradas",
-            analise_requisitos=requisitos_e_analise,
+            analise_requisitos=requisitos_e_analise + preco_camada_texto,
             preco=preco_formatado
         )
 
@@ -3136,7 +3176,8 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
             preco_unitario=Decimal(str(preco)) if preco else None,
             preco_total=Decimal(str(preco)) if preco else None,
             quantidade=1,
-            status='rascunho'
+            status='rascunho',
+            lote_id=lote_id,
         )
         db.add(proposta)
         db.commit()
@@ -3147,7 +3188,8 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
             "edital": edital.numero,
             "produto": produto.nome,
             "texto_proposta": texto_proposta,
-            "status": "rascunho"
+            "status": "rascunho",
+            "lote_id": lote_id,
         }
 
     except Exception as e:
@@ -9766,4 +9808,288 @@ Responda em português, direto ao ponto, sem enrolação."""
 
 
 TOOLS_MAP["insights_precificacao"] = tool_insights_precificacao
+
+
+# =============================================================================
+# FASE 2 — PROPOSTA: Novas tools (UC-R01 a UC-R07)
+# =============================================================================
+
+def tool_verificar_anvisa_proposta(proposta_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Verifica status ANVISA do produto vinculado à proposta.
+    Calcula semáforo: valido (verde), atencao (amarelo <6 meses), vencido (vermelho), sem_registro.
+    Salva registro AnvisaValidacao.
+    """
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+        if not proposta:
+            return {"success": False, "error": "Proposta não encontrada"}
+
+        produto = db.query(Produto).filter(Produto.id == proposta.produto_id).first()
+        if not produto:
+            return {"success": False, "error": "Produto não encontrado"}
+
+        # Determinar status baseado nos campos do produto
+        registro = produto.registro_anvisa
+        anvisa_status_produto = produto.anvisa_status  # ativo, em_analise, cancelado, null
+
+        status = 'sem_registro'
+        log_lines = []
+        validade_date = None
+
+        if not registro:
+            status = 'sem_registro'
+            log_lines.append("Produto sem registro ANVISA cadastrado.")
+        elif anvisa_status_produto == 'cancelado':
+            status = 'vencido'
+            log_lines.append(f"Registro ANVISA {registro} com status CANCELADO.")
+        elif anvisa_status_produto == 'em_analise':
+            status = 'atencao'
+            log_lines.append(f"Registro ANVISA {registro} em análise/renovação.")
+        elif anvisa_status_produto == 'ativo':
+            status = 'valido'
+            log_lines.append(f"Registro ANVISA {registro} ATIVO.")
+        else:
+            # Status desconhecido — tratar como atenção
+            status = 'atencao'
+            log_lines.append(f"Registro ANVISA {registro} com status indefinido ({anvisa_status_produto}).")
+
+        log_texto = "\n".join(log_lines)
+
+        # Salvar/atualizar AnvisaValidacao
+        validacao = db.query(AnvisaValidacao).filter(
+            AnvisaValidacao.proposta_id == proposta_id,
+            AnvisaValidacao.produto_id == produto.id
+        ).first()
+
+        if validacao:
+            validacao.registro = registro
+            validacao.validade = validade_date
+            validacao.status = status
+            validacao.data_verificacao = datetime.now()
+            validacao.log_texto = log_texto
+        else:
+            validacao = AnvisaValidacao(
+                proposta_id=proposta_id,
+                produto_id=produto.id,
+                registro=registro,
+                validade=validade_date,
+                status=status,
+                log_texto=log_texto,
+            )
+            db.add(validacao)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "proposta_id": proposta_id,
+            "produto_id": produto.id,
+            "produto_nome": produto.nome,
+            "registro_anvisa": registro,
+            "status": status,
+            "log": log_texto,
+            "validacao_id": validacao.id,
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["verificar_anvisa_proposta"] = tool_verificar_anvisa_proposta
+
+
+def tool_auditoria_documental(proposta_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Audita documentos necessários para a proposta.
+    Compara documentos exigidos (DocumentoNecessario) com documentos disponíveis do produto e empresa.
+    Verifica tamanho de arquivos (limite 25MB).
+    Retorna checklist com status por documento.
+    """
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+        if not proposta:
+            return {"success": False, "error": "Proposta não encontrada"}
+
+        produto = db.query(Produto).filter(Produto.id == proposta.produto_id).first()
+        empresa = db.query(Empresa).filter(Empresa.id == proposta.empresa_id).first() if proposta.empresa_id else None
+
+        # Buscar documentos necessários ativos
+        docs_necessarios = db.query(DocumentoNecessario).filter(
+            DocumentoNecessario.ativo == True
+        ).order_by(DocumentoNecessario.ordem).all()
+
+        # Buscar documentos do produto
+        docs_produto = db.query(ProdutoDocumento).filter(
+            ProdutoDocumento.produto_id == proposta.produto_id
+        ).all() if produto else []
+
+        # Buscar documentos da empresa
+        docs_empresa = db.query(EmpresaDocumento).filter(
+            EmpresaDocumento.empresa_id == proposta.empresa_id
+        ).all() if empresa else []
+
+        # Mapear documentos disponíveis por tipo
+        docs_disponiveis = {}
+        for d in docs_produto:
+            docs_disponiveis[d.tipo] = {
+                "nome": d.nome_arquivo,
+                "path": d.path_arquivo,
+                "fonte": "produto",
+            }
+        for d in docs_empresa:
+            docs_disponiveis[d.tipo] = {
+                "nome": d.nome_arquivo,
+                "path": d.path_arquivo,
+                "fonte": "empresa",
+            }
+
+        # Montar checklist
+        checklist = []
+        MAX_SIZE_MB = 25
+        total_ok = 0
+        total_faltando = 0
+        total_alerta = 0
+
+        for doc_req in docs_necessarios:
+            item = {
+                "documento": doc_req.nome,
+                "tipo_chave": doc_req.tipo_chave,
+                "obrigatorio": doc_req.obrigatorio,
+                "status": "faltando",
+                "arquivo": None,
+                "tamanho_mb": None,
+                "alerta_tamanho": False,
+            }
+
+            # Tentar encontrar documento correspondente
+            doc_encontrado = docs_disponiveis.get(doc_req.tipo_chave)
+            if doc_encontrado:
+                item["status"] = "ok"
+                item["arquivo"] = doc_encontrado["nome"]
+                # Verificar tamanho do arquivo
+                path = doc_encontrado["path"]
+                if path and os.path.exists(path):
+                    size_mb = os.path.getsize(path) / (1024 * 1024)
+                    item["tamanho_mb"] = round(size_mb, 2)
+                    if size_mb > MAX_SIZE_MB:
+                        item["alerta_tamanho"] = True
+                        item["status"] = "alerta"
+                        total_alerta += 1
+                    else:
+                        total_ok += 1
+                else:
+                    total_ok += 1
+            else:
+                total_faltando += 1
+
+            checklist.append(item)
+
+        return {
+            "success": True,
+            "proposta_id": proposta_id,
+            "produto": produto.nome if produto else None,
+            "empresa": empresa.razao_social if empresa else None,
+            "checklist": checklist,
+            "resumo": {
+                "total": len(checklist),
+                "ok": total_ok,
+                "faltando": total_faltando,
+                "alerta_tamanho": total_alerta,
+            },
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["auditoria_documental"] = tool_auditoria_documental
+
+
+def tool_smart_split_pdf(file_path: str, max_size_mb: float = 25) -> Dict[str, Any]:
+    """
+    Divide um PDF em partes menores que max_size_mb.
+    Usa PyPDF2 para leitura e escrita de páginas.
+    Retorna lista de caminhos dos arquivos gerados.
+    """
+    try:
+        if not os.path.exists(file_path):
+            return {"success": False, "error": f"Arquivo não encontrado: {file_path}"}
+
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb <= max_size_mb:
+            return {
+                "success": True,
+                "message": f"Arquivo já está dentro do limite ({file_size_mb:.2f} MB <= {max_size_mb} MB)",
+                "arquivos": [file_path],
+                "dividido": False,
+            }
+
+        try:
+            from PyPDF2 import PdfReader, PdfWriter
+        except ImportError:
+            return {"success": False, "error": "PyPDF2 não instalado. Execute: pip install PyPDF2"}
+
+        reader = PdfReader(file_path)
+        total_pages = len(reader.pages)
+
+        if total_pages <= 1:
+            return {
+                "success": False,
+                "error": f"PDF tem apenas 1 página ({file_size_mb:.2f} MB). Não é possível dividir."
+            }
+
+        # Estimar páginas por parte baseado no tamanho
+        pages_per_part = max(1, int(total_pages * max_size_mb / file_size_mb))
+
+        base_name = os.path.splitext(file_path)[0]
+        ext = os.path.splitext(file_path)[1]
+        arquivos_gerados = []
+        part_num = 1
+        page_idx = 0
+
+        while page_idx < total_pages:
+            writer = PdfWriter()
+            end_idx = min(page_idx + pages_per_part, total_pages)
+            for i in range(page_idx, end_idx):
+                writer.add_page(reader.pages[i])
+
+            part_path = f"{base_name}_parte{part_num}{ext}"
+            with open(part_path, 'wb') as f:
+                writer.write(f)
+
+            part_size = os.path.getsize(part_path) / (1024 * 1024)
+            arquivos_gerados.append({
+                "path": part_path,
+                "tamanho_mb": round(part_size, 2),
+                "paginas": f"{page_idx + 1}-{end_idx}",
+            })
+
+            page_idx = end_idx
+            part_num += 1
+
+        return {
+            "success": True,
+            "dividido": True,
+            "arquivo_original": file_path,
+            "tamanho_original_mb": round(file_size_mb, 2),
+            "total_partes": len(arquivos_gerados),
+            "arquivos": arquivos_gerados,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+TOOLS_MAP["smart_split_pdf"] = tool_smart_split_pdf
 

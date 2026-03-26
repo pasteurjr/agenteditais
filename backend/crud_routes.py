@@ -26,6 +26,8 @@ from models import (
     # FASE 1 Precificação
     Lote, LoteItem, EditalItemProduto, PrecoCamada, Lance, Comodato,
     BeneficioFiscalNcm,
+    # FASE 2 Proposta
+    PropostaLog, PropostaTemplate, AnvisaValidacao,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -517,6 +519,34 @@ CRUD_TABLES = {
         "search_fields": ["nome_equipamento"],
         "label": "Comodato",
         "required": ["edital_id", "nome_equipamento"],
+    },
+    # === FASE 2 — Proposta ===
+    "proposta-templates": {
+        "model": PropostaTemplate,
+        "user_scoped": False,
+        "empresa_scoped": True,
+        "search_fields": ["nome"],
+        "label": "Template de Proposta",
+        "required": ["nome"],
+    },
+    "proposta-logs": {
+        "model": PropostaLog,
+        "user_scoped": True,
+        "parent_fk": "proposta_id",
+        "parent_model": Proposta,
+        "search_fields": ["campo"],
+        "label": "Log de Proposta",
+        "required": ["proposta_id", "campo"],
+        "read_only": True,
+    },
+    "anvisa-validacoes": {
+        "model": AnvisaValidacao,
+        "user_scoped": False,
+        "parent_fk": "proposta_id",
+        "parent_model": Proposta,
+        "search_fields": ["registro", "status"],
+        "label": "Validação ANVISA",
+        "required": ["proposta_id", "produto_id"],
     },
 }
 

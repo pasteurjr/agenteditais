@@ -114,6 +114,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
         items: [
           { id: "crud-analises", icon: <BarChart2 size={14} />, label: "Analises", page: "crud:analises" },
           { id: "crud-propostas", icon: <Send size={14} />, label: "Propostas", page: "crud:propostas" },
+          { id: "crud-proposta-templates", icon: <FileText size={14} />, label: "Templates Proposta", page: "crud:proposta-templates" },
         ],
       },
       {

@@ -7,7 +7,7 @@ import json
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa
+from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa, PropostaLog, PropostaTemplate, AnvisaValidacao, ProdutoDocumento
 from llm import call_deepseek
 from tools import (
     _web_search, tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -18,7 +18,8 @@ from tools import (
     tool_reprocessar_produto, tool_atualizar_produto,
     tool_buscar_links_editais,
     execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS,
-    tool_calcular_scores_validacao, tool_atualizar_status_proposta
+    tool_calcular_scores_validacao, tool_atualizar_status_proposta,
+    tool_verificar_anvisa_proposta, tool_auditoria_documental, tool_smart_split_pdf,
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
 
@@ -8587,6 +8588,188 @@ def get_proposta(proposta_id):
             return jsonify({"error": "Proposta não encontrada"}), 404
 
         return jsonify(proposta.to_dict())
+    finally:
+        db.close()
+
+
+# =============================================================================
+# FASE 2 — Proposta: Novos endpoints (UC-R01 a UC-R07)
+# =============================================================================
+
+@app.route("/api/propostas/upload", methods=["POST"])
+@require_auth
+def upload_proposta():
+    """Upload de proposta via arquivo (.docx ou .pdf) + dados do formulário."""
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        edital_id = request.form.get("edital_id")
+        produto_id = request.form.get("produto_id")
+        preco = request.form.get("preco")
+        quantidade = request.form.get("quantidade", 1)
+        lote_id = request.form.get("lote_id")
+
+        if not edital_id or not produto_id:
+            return jsonify({"error": "edital_id e produto_id são obrigatórios"}), 400
+
+        file = request.files.get("file")
+        texto_tecnico = None
+        arquivo_path = None
+
+        if file:
+            filename = file.filename
+            save_dir = os.path.join(UPLOAD_FOLDER, "propostas")
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f"{uuid.uuid4()}_{filename}")
+            file.save(save_path)
+            arquivo_path = save_path
+
+            # Se .docx, extrair texto
+            if filename.lower().endswith('.docx'):
+                try:
+                    from docx import Document as DocxDocument
+                    doc = DocxDocument(save_path)
+                    texto_tecnico = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                except ImportError:
+                    texto_tecnico = "[python-docx não instalado — texto não extraído]"
+                except Exception as ex:
+                    texto_tecnico = f"[Erro ao extrair texto: {ex}]"
+
+        from decimal import Decimal as _Dec
+        proposta = Proposta(
+            edital_id=edital_id,
+            produto_id=produto_id,
+            user_id=user_id,
+            empresa_id=empresa_id,
+            texto_tecnico=texto_tecnico,
+            preco_unitario=_Dec(str(preco)) if preco else None,
+            preco_total=_Dec(str(float(preco) * int(quantidade))) if preco else None,
+            quantidade=int(quantidade),
+            arquivo_path=arquivo_path,
+            lote_id=lote_id,
+            status='rascunho',
+        )
+        db.add(proposta)
+        db.commit()
+
+        return jsonify({"success": True, "proposta": proposta.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/propostas/<proposta_id>/anvisa", methods=["GET"])
+@require_auth
+def verificar_anvisa(proposta_id):
+    """Verifica status ANVISA do produto da proposta."""
+    user_id = get_current_user_id()
+    result = tool_verificar_anvisa_proposta(proposta_id, user_id)
+    if result.get("success"):
+        return jsonify(result)
+    return jsonify(result), 404 if "não encontrad" in result.get("error", "") else 500
+
+
+@app.route("/api/propostas/<proposta_id>/auditoria-docs", methods=["GET"])
+@require_auth
+def auditoria_documental(proposta_id):
+    """Auditoria documental da proposta — checklist de documentos."""
+    user_id = get_current_user_id()
+    result = tool_auditoria_documental(proposta_id, user_id)
+    if result.get("success"):
+        return jsonify(result)
+    return jsonify(result), 404 if "não encontrad" in result.get("error", "") else 500
+
+
+@app.route("/api/propostas/<proposta_id>/smart-split", methods=["POST"])
+@require_auth
+def smart_split(proposta_id):
+    """Divide PDF da proposta em partes menores que 25MB."""
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+        if not proposta:
+            return jsonify({"error": "Proposta não encontrada"}), 404
+        if not proposta.arquivo_path:
+            return jsonify({"error": "Proposta não possui arquivo anexado"}), 400
+
+        data = request.get_json(silent=True) or {}
+        max_size = data.get("max_size_mb", 25)
+
+        result = tool_smart_split_pdf(proposta.arquivo_path, max_size_mb=max_size)
+        return jsonify(result)
+    finally:
+        db.close()
+
+
+@app.route("/api/propostas/<proposta_id>/dossie", methods=["GET"])
+@require_auth
+def gerar_dossie(proposta_id):
+    """Gera ZIP com dossiê completo da proposta: texto + documentos validados."""
+    import zipfile
+    import io
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        proposta = db.query(Proposta).filter(
+            Proposta.id == proposta_id,
+            Proposta.user_id == user_id
+        ).first()
+        if not proposta:
+            return jsonify({"error": "Proposta não encontrada"}), 404
+
+        # Criar ZIP em memória
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # 1. Texto da proposta como .txt
+            if proposta.texto_tecnico:
+                zf.writestr("proposta_tecnica.txt", proposta.texto_tecnico)
+
+            # 2. Arquivo original da proposta (PDF/DOCX)
+            if proposta.arquivo_path and os.path.exists(proposta.arquivo_path):
+                nome_arq = os.path.basename(proposta.arquivo_path)
+                zf.write(proposta.arquivo_path, f"proposta_{nome_arq}")
+
+            # 3. Documentos do produto
+            docs_produto = db.query(ProdutoDocumento).filter(
+                ProdutoDocumento.produto_id == proposta.produto_id
+            ).all()
+            for doc in docs_produto:
+                if doc.path_arquivo and os.path.exists(doc.path_arquivo):
+                    zf.write(doc.path_arquivo, f"documentos/{doc.tipo}_{doc.nome_arquivo}")
+
+            # 4. Resultado ANVISA se houver
+            validacoes = db.query(AnvisaValidacao).filter(
+                AnvisaValidacao.proposta_id == proposta_id
+            ).all()
+            if validacoes:
+                anvisa_txt = "VALIDAÇÃO ANVISA\n" + "=" * 40 + "\n\n"
+                for v in validacoes:
+                    anvisa_txt += f"Registro: {v.registro or 'N/A'}\n"
+                    anvisa_txt += f"Status: {v.status}\n"
+                    anvisa_txt += f"Data verificação: {v.data_verificacao}\n"
+                    anvisa_txt += f"Log: {v.log_texto or ''}\n\n"
+                zf.writestr("anvisa_validacao.txt", anvisa_txt)
+
+        buffer.seek(0)
+        edital = db.query(Edital).filter(Edital.id == proposta.edital_id).first()
+        numero = (edital.numero or "sem_numero").replace("/", "-").replace(" ", "_") if edital else "sem_edital"
+        filename = f"dossie_proposta_{numero}_{proposta_id[:8]}.zip"
+
+        return send_file(
+            buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 

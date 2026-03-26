@@ -1266,12 +1266,12 @@ Cada registro: usuario, data, hora, acao, valor anterior, valor novo. **Imutavel
 | RF-039-14 | Pipeline IA de Precificacao | PRECIFICACAO | ✅ IMPLEMENTADO | Implementacao Sprint 3 |
 | RF-039-15 | Relatorio de Custos e Precos | PRECIFICACAO | ✅ IMPLEMENTADO | Implementacao Sprint 3 |
 | RF-039-16 | Persistencia da Analise IA | PRECIFICACAO | ✅ IMPLEMENTADO | Implementacao Sprint 3 |
-| RF-040-01 | Motor Proposta | PROPOSTA | ⚙️ PARCIAL | JPEG-4 + PDF-REVISADA |
-| RF-040-02 | Alternativas Entrada | PROPOSTA | ❌ NAO IMPLEMENTADO | PDF-REVISADA |
-| RF-040-03 | Descricao Tecnica A/B | PROPOSTA | ❌ NAO IMPLEMENTADO | JPEG-4 + PDF-REVISADA |
-| RF-040-04 | Auditoria ANVISA | PROPOSTA | ❌ NAO IMPLEMENTADO | JPEG-5 + PDF-REVISADA |
-| RF-040-05 | Auditoria Documental | PROPOSTA | ❌ NAO IMPLEMENTADO | JPEG-5 + PDF-REVISADA |
-| RF-041-01 | Exportacao Completa | SUBMISSAO | ⚙️ PARCIAL | JPEG-6 + PDF-REVISADA |
+| RF-040-01 | Motor Proposta | PROPOSTA | ✅ IMPLEMENTADO | JPEG-4 + PDF-REVISADA |
+| RF-040-02 | Alternativas Entrada | PROPOSTA | ✅ IMPLEMENTADO | PDF-REVISADA |
+| RF-040-03 | Descricao Tecnica A/B | PROPOSTA | ✅ IMPLEMENTADO | JPEG-4 + PDF-REVISADA |
+| RF-040-04 | Auditoria ANVISA | PROPOSTA | ✅ IMPLEMENTADO | JPEG-5 + PDF-REVISADA |
+| RF-040-05 | Auditoria Documental | PROPOSTA | ✅ IMPLEMENTADO | JPEG-5 + PDF-REVISADA |
+| RF-041-01 | Exportacao Completa | SUBMISSAO | ✅ IMPLEMENTADO | JPEG-6 + PDF-REVISADA |
 | RF-041-02 | Rastreabilidade Completa | TRANSVERSAL | ⚙️ PARCIAL | JPEG-5/6 + PDF-REVISADA |
 
 **Totais Sprint 3:** 10 IMPLEMENTADOS + 1 PLANEJADO + 5 PARCIAIS + 4 NAO IMPLEMENTADOS + 3 NOVOS (RF-039-14 a RF-039-16)

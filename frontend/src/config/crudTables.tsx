@@ -1159,6 +1159,17 @@ export const propostasConfig: CrudPageConfig = {
   ],
 };
 
+export const propostaTemplatesConfig: CrudPageConfig = {
+  table: "proposta-templates",
+  title: "Templates de Proposta",
+  icon: <FileText size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "conteudo_md", label: "Conteudo (Markdown)", type: "textarea", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+  ],
+};
+
 // === 7. CONCORRÊNCIA ===
 
 export const orgaosPerfilConfig: CrudPageConfig = {
@@ -1574,6 +1585,7 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "editais-itens": editaisItensConfig,
   "analises": analisesConfig,
   "propostas": propostasConfig,
+  "proposta-templates": propostaTemplatesConfig,
   "orgaos-perfil": orgaosPerfilConfig,
   "atas-consultadas": atasConsultadasConfig,
   "concorrentes": concorrentesConfig,

@@ -728,10 +728,18 @@ class Proposta(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
+    # FASE 2 — Proposta: campos adicionais
+    lote_id = Column(String(36), ForeignKey('lotes.id', ondelete='SET NULL'), nullable=True)
+    descricao_modo = Column(Enum('edital', 'personalizada'), default='edital')
+    descricao_personalizada = Column(Text, nullable=True)
+
     edital = relationship("Edital", back_populates="propostas")
     produto = relationship("Produto", back_populates="propostas")
     analise = relationship("Analise", back_populates="propostas")
     user = relationship("User", back_populates="propostas")
+    lote = relationship("Lote", backref="propostas")
+    logs = relationship("PropostaLog", back_populates="proposta", cascade="all, delete-orphan")
+    anvisa_validacoes = relationship("AnvisaValidacao", back_populates="proposta", cascade="all, delete-orphan")
 
     def to_dict(self):
         result = {
@@ -747,6 +755,9 @@ class Proposta(Base):
             "arquivo_path": self.arquivo_path,
             "documentos_anexados": self.documentos_anexados or 0,
             "documentos_total": self.documentos_total or 3,
+            "lote_id": self.lote_id,
+            "descricao_modo": self.descricao_modo,
+            "descricao_personalizada": self.descricao_personalizada,
             "numero_edital": None,
             "nome_produto": None,
             "orgao": None,
@@ -758,6 +769,90 @@ class Proposta(Base):
         if self.produto:
             result["nome_produto"] = getattr(self.produto, 'nome', None)
         return result
+
+
+# ==================== FASE 2: PROPOSTA — TABELAS AUXILIARES ====================
+
+class PropostaLog(Base):
+    """Log de alterações em propostas (auditoria de campos)"""
+    __tablename__ = 'proposta_logs'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    proposta_id = Column(String(36), ForeignKey('propostas.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    campo = Column(String(100), nullable=False)
+    valor_anterior = Column(Text, nullable=True)
+    valor_novo = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    proposta = relationship("Proposta", back_populates="logs")
+    user = relationship("User", backref="proposta_logs")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "proposta_id": self.proposta_id,
+            "user_id": self.user_id,
+            "campo": self.campo,
+            "valor_anterior": self.valor_anterior,
+            "valor_novo": self.valor_novo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PropostaTemplate(Base):
+    """Templates reutilizáveis de proposta por empresa"""
+    __tablename__ = 'proposta_templates'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    conteudo_md = Column(Text, nullable=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='SET NULL'), nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", backref="proposta_templates")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "conteudo_md": self.conteudo_md,
+            "empresa_id": self.empresa_id,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class AnvisaValidacao(Base):
+    """Resultado de validação ANVISA por produto em proposta"""
+    __tablename__ = 'anvisa_validacoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    proposta_id = Column(String(36), ForeignKey('propostas.id', ondelete='CASCADE'), nullable=False)
+    produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
+    registro = Column(String(50), nullable=True)
+    validade = Column(Date, nullable=True)
+    status = Column(Enum('valido', 'atencao', 'vencido', 'sem_registro'), default='sem_registro')
+    data_verificacao = Column(DateTime, default=datetime.now)
+    log_texto = Column(Text, nullable=True)
+
+    proposta = relationship("Proposta", back_populates="anvisa_validacoes")
+    produto = relationship("Produto", backref="anvisa_validacoes")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "proposta_id": self.proposta_id,
+            "produto_id": self.produto_id,
+            "registro": self.registro,
+            "validade": self.validade.isoformat() if self.validade else None,
+            "status": self.status,
+            "data_verificacao": self.data_verificacao.isoformat() if self.data_verificacao else None,
+            "log_texto": self.log_texto,
+        }
 
 
 # ==================== CONCORRENTES E PREÇOS HISTÓRICOS ====================
@@ -2406,6 +2501,10 @@ def init_db():
             "ALTER TABLE preco_camadas ADD COLUMN analise_ia_json LONGTEXT NULL",
             "ALTER TABLE preco_camadas ADD COLUMN analise_ia_data DATETIME NULL",
             "ALTER TABLE preco_camadas ADD COLUMN analise_ia_termo VARCHAR(255) NULL",
+            # FASE 2 Proposta: campos adicionais na tabela propostas
+            "ALTER TABLE propostas ADD COLUMN lote_id VARCHAR(36) NULL",
+            "ALTER TABLE propostas ADD COLUMN descricao_modo VARCHAR(20) DEFAULT 'edital'",
+            "ALTER TABLE propostas ADD COLUMN descricao_personalizada LONGTEXT NULL",
         ]
         for stmt in alter_stmts:
             try:
