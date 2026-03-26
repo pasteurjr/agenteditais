@@ -2165,57 +2165,88 @@ ${html}
                           </div>
                           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                             <ActionButton icon={<TrendingUp size={16} />} label="Simular (Fórmula)" variant="primary" onClick={handleSimularEstrategia} />
-                            <ActionButton icon={<Sparkles size={16} />} label="Simular com IA" variant="neutral" loading={insightsLoading}
+                            <ActionButton icon={<Sparkles size={16} />} label="Simular com IA" variant="neutral" loading={cenarioExplicacaoLoading}
                               onClick={async () => {
-                                if (!vinculoId || !insights) { alert("Selecione um vínculo e aguarde os insights da IA."); return; }
-                                setLoading(true);
+                                if (!vinculoId) { alert("Selecione um vínculo."); return; }
+                                setCenarios([]);
+                                setCenarioExplicacaoIA(null);
+                                setCenarioExplicacaoLoading(true);
                                 try {
-                                  // Usar custo REAL do banco, não da sugestão
-                                  const custoReal = camada?.custo_base_final ? Number(camada.custo_base_final) : (insights.recomendacao.custo_sugerido || 0);
-                                  // Usar lances REAIS do usuário
+                                  const prod = produtos.find(p => p.id === vinculos.find(v => v.id === vinculoId)?.produto_id);
+                                  const custoReal = camada?.custo_base_final ? Number(camada.custo_base_final) : 0;
                                   const lanceIniReal = lanceInicial ? parseFloat(lanceInicial) : Number(camada?.lance_inicial || 0);
                                   const lanceMinReal = lanceMinimo ? parseFloat(lanceMinimo) : Number(camada?.lance_minimo || 0);
-                                  // Dados históricos
-                                  const pMin = insights.historico.preco_min ? Number(insights.historico.preco_min) : 0;
-                                  const pMed = insights.historico.preco_medio ? Number(insights.historico.preco_medio) : 0;
+                                  const histInfo = insights ? `Histórico: ${insights.historico.qtd_registros} registros, mín R$ ${insights.historico.preco_min}, média R$ ${insights.historico.preco_medio}, máx R$ ${insights.historico.preco_max}` : "Sem histórico disponível";
+                                  const concInfo = insights?.concorrentes?.length ? insights.concorrentes.map(c => `${c.nome} (preço médio: R$ ${c.preco_medio})`).join(", ") : "Sem concorrentes identificados";
 
-                                  const _margem = (v: number) => custoReal > 0 ? ((v - custoReal) / custoReal * 100) : 0;
-                                  const iaCens: Record<string, unknown>[] = [];
+                                  const prompt = `Você é um especialista em licitações públicas. Analise a situação e gere cenários de disputa de lances.
 
-                                  if (perfil === "quero_ganhar") {
-                                    // Cenários baseados nos lances reais + histórico
-                                    const midPoint = (lanceIniReal + lanceMinReal) / 2;
-                                    iaCens.push(
-                                      { label: "IA Seu Lance", valor: lanceIniReal, margem: _margem(lanceIniReal) },
-                                      { label: "IA Meio da Faixa", valor: midPoint, margem: _margem(midPoint) },
-                                      { label: "IA Seu Mínimo", valor: lanceMinReal, margem: _margem(lanceMinReal) },
-                                    );
-                                    // Adicionar cenário histórico se disponível
-                                    if (pMin > 0) {
-                                      iaCens.push({ label: "IA Mín. Mercado", valor: pMin, margem: _margem(pMin) });
-                                    }
-                                    if (pMed > 0 && pMed !== lanceIniReal) {
-                                      iaCens.push({ label: "IA Média Mercado", valor: pMed, margem: _margem(pMed) });
-                                    }
-                                  } else {
-                                    // "Não ganhei no mínimo" — reposicionamento
-                                    iaCens.push(
-                                      { label: "IA Seu Mínimo", valor: lanceMinReal, margem: _margem(lanceMinReal) },
-                                      { label: "IA Custo+5%", valor: custoReal * 1.05, margem: 5.0 },
-                                      { label: "IA Break-even", valor: custoReal, margem: 0 },
-                                    );
+PRODUTO: ${prod?.nome || "Produto"}
+CUSTO BASE: R$ ${custoReal.toFixed(2)}
+LANCE INICIAL DEFINIDO: R$ ${lanceIniReal.toFixed(2)}
+LANCE MÍNIMO DEFINIDO: R$ ${lanceMinReal.toFixed(2)}
+ESTRATÉGIA: ${perfil === "quero_ganhar" ? "QUERO GANHAR — disputa agressiva até o mínimo" : "NÃO GANHEI NO MÍNIMO — reposicionar para melhor colocação"}
+${histInfo}
+CONCORRENTES: ${concInfo}
+${insights?.recomendacao?.justificativa ? `\nCONTEXTO:\n${insights.recomendacao.justificativa.slice(0, 800)}` : ""}
+
+Gere EXATAMENTE 3 cenários de lance em formato JSON seguido de explicação detalhada.
+
+PRIMEIRO, retorne um bloco JSON com os cenários:
+\`\`\`json
+[
+  {"label": "Nome do cenário", "valor": 99.99, "margem": 15.5},
+  {"label": "Nome do cenário", "valor": 88.88, "margem": 8.2},
+  {"label": "Nome do cenário", "valor": 77.77, "margem": 2.1}
+]
+\`\`\`
+
+DEPOIS, explique cada cenário em detalhes:
+## Cenário 1: [nome]
+- O que significa esse lance
+- Margem e viabilidade
+- Riscos e vantagens
+- Quando usar
+
+## Cenário 2: [nome]
+...
+
+## Cenário 3: [nome]
+...
+
+## Recomendação Final
+Qual cenário é mais adequado e por quê.`;
+
+                                  const session = await createSession("simulacao-ia-lances") as Record<string, unknown>;
+                                  const sid = String(session.session_id || session.id);
+                                  const resp = await sendMessage(sid, prompt);
+                                  const respText = resp.response || "";
+
+                                  // Extrair JSON dos cenários
+                                  const jsonMatch = respText.match(/```json\s*([\s\S]*?)```/);
+                                  if (jsonMatch) {
+                                    try {
+                                      const parsed = JSON.parse(jsonMatch[1]) as Record<string, unknown>[];
+                                      const iaCens = parsed.map(c => ({
+                                        label: `🤖 ${c.label}`,
+                                        valor: Number(c.valor || 0),
+                                        margem: Number(c.margem || 0),
+                                      }));
+                                      setCenarios(iaCens);
+                                    } catch { /* JSON parse failed, cenários ficam vazios */ }
                                   }
 
-                                  setCenarios(iaCens);
-                                  gerarExplicacaoCenarios(iaCens);
-                                  const comPrejuizo = iaCens.filter(c => Number(c.margem) < 0);
-                                  if (comPrejuizo.length > 0) {
-                                    alert(`⚠️ Simulação IA: ${iaCens.length} cenários gerados. ATENÇÃO: ${comPrejuizo.length} cenário(s) com margem negativa (prejuízo)!`);
-                                  } else {
-                                    alert(`Simulação IA: ${iaCens.length} cenários baseados nos seus lances + ${insights.historico.qtd_registros} registros históricos.`);
-                                  }
-                                } catch (e) { alert(e instanceof Error ? e.message : "Erro na simulação IA"); }
-                                finally { setLoading(false); }
+                                  // A explicação é tudo depois do JSON (ou tudo se não teve JSON)
+                                  const explicacao = jsonMatch
+                                    ? respText.slice(respText.indexOf("```", respText.indexOf("```json") + 7) + 3).trim()
+                                    : respText;
+                                  setCenarioExplicacaoIA(explicacao || respText);
+                                } catch (e) {
+                                  console.error("[SIMULACAO IA]", e);
+                                  setCenarioExplicacaoIA(`Erro: ${e instanceof Error ? e.message : "Falha na simulação IA"}`);
+                                } finally {
+                                  setCenarioExplicacaoLoading(false);
+                                }
                               }}
                             />
                           </div>
