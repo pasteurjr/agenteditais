@@ -708,8 +708,9 @@ export function PrecificacaoPage(props?: PageProps) {
       }
       // Substituir cenários (nova simulação limpa os anteriores)
       setCenarios(cens);
+      setCenarioExplicacaoIA(null); // Limpar explicação anterior
       if (cens.length > 0) {
-        gerarExplicacaoCenarios(cens);
+        alert(`Simulação concluída! ${cens.length} cenários. Use "Simular com IA" para análise detalhada.`);
       } else {
         alert("Nenhum cenário gerado. Verifique se custos e lances estão salvos na aba Custos e Preços.");
       }
