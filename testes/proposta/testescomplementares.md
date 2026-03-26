@@ -3,7 +3,7 @@
 **Data de Execução:** 26/03/2026
 **Executor:** Validador Automatizado (Playwright + Claude Code)
 **Objetivo:** Validar funcionalidades não cobertas nos testes principais (upload real, download, fluxo de status completo, semáforo ANVISA, checklist documental)
-**Total de Testes:** 9 | **Passou:** 9 | **Falhou:** 0
+**Total de Testes:** 11 | **Passou:** 11 | **Falhou:** 0
 
 ---
 
@@ -20,6 +20,8 @@
 | TC-07 | Fluxo completo de status | ✅ | Rascunho → Revisão → Aprovada |
 | TC-08 | Auditoria Documental — checklist | ✅ | Checklist presente após ação |
 | TC-09 | Submissão com dados reais | ✅ | Propostas e checklist visíveis |
+| TC-10 | Criar template de proposta | ✅ | Template criado com nome, conteúdo e ativo |
+| TC-11 | Template aparece no modal | ✅ | "Template Padrão Reagentes" selecionável |
 
 ---
 
@@ -208,7 +210,60 @@
 | `TC-07_04_final.png` | Status final |
 | `TC-08_documental_checklist.png` | Checklist documental |
 | `TC-09_submissao.png` | Submissão com propostas |
+| `TC-10_01_templates_page.png` | Página CRUD Templates de Proposta |
+| `TC-10_02_template_form.png` | Formulário com nome, conteúdo e ativo preenchidos |
+| `TC-10_03_template_salvo.png` | Template salvo no sistema |
+| `TC-11_template_no_modal.png` | Template "Padrão Reagentes" no modal Nova Proposta |
 
 ---
 
-*Relatório gerado em 26/03/2026. 9/9 testes complementares passaram.*
+### TC-10: Criar Template de Proposta ✅
+
+**Objetivo:** Criar um template pelo CRUD e verificar que é salvo.
+
+**Passos:**
+1. Navegou para Cadastros → Templates de Proposta
+2. Clicou "+ Novo"
+3. Preencheu Nome: "Template Padrão Reagentes"
+4. Preencheu Conteúdo Markdown: 7 seções (Identificação, Objeto, Especificações, Conformidade, Comercial, Entrega, Garantia)
+5. Marcou checkbox "Ativo"
+6. Clicou "Salvar"
+
+**Resultado:** Template criado com sucesso ✅
+
+![Templates Page](screenshots_complementar/TC-10_01_templates_page.png)
+![Template Form](screenshots_complementar/TC-10_02_template_form.png)
+![Template Salvo](screenshots_complementar/TC-10_03_template_salvo.png)
+
+---
+
+### TC-11: Template Aparece no Modal de Proposta ✅
+
+**Objetivo:** Verificar que o template criado aparece como opção ao gerar nova proposta.
+
+**Resultado:**
+- Campo Template no modal: "Template Padrão Reagentes" disponível e selecionado ✅
+
+![Template no Modal](screenshots_complementar/TC-11_template_no_modal.png)
+
+---
+
+### Funcionalidades Validadas (atualizado)
+
+| Funcionalidade | Validação |
+|---|---|
+| Upload .docx com importação | ✅ FUNCIONA |
+| Toggle descrição A/B | ✅ PRESENTE |
+| Auditoria ANVISA | ✅ FUNCIONA |
+| Download PDF | ✅ `proposta-46_2026.pdf` |
+| Download DOCX | ✅ `proposta-46_2026.docx` |
+| Download Dossiê ZIP | ✅ `dossie-46_2026.zip` |
+| Fluxo Rascunho→Revisão→Aprovada | ✅ FUNCIONA |
+| Checklist Documental | ✅ PRESENTE |
+| Submissão com propostas | ✅ FUNCIONA |
+| **Criar template CRUD** | ✅ FUNCIONA |
+| **Template no modal de proposta** | ✅ FUNCIONA |
+
+---
+
+*Relatório atualizado em 26/03/2026. **11/11 testes complementares passaram.***

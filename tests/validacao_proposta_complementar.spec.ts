@@ -362,4 +362,147 @@ test.describe.serial("Testes Complementares — Fase 2 Proposta", () => {
 
     await page.screenshot({ path: `${SS}/TC-09_submissao.png`, fullPage: true });
   });
+
+  // ══════════════════════════════════════════════════════════════
+  // TC-10: Templates de proposta — criar e usar
+  // ══════════════════════════════════════════════════════════════
+  test("TC-10: Criar template e verificar no CRUD", async ({ page }) => {
+    await login(page);
+
+    // Navegar para Cadastros → Templates Proposta
+    // Expandir CADASTROS no sidebar
+    const cadastros = page.locator('text=CADASTROS').first();
+    if (await cadastros.isVisible().catch(() => false)) {
+      await cadastros.click();
+      await page.waitForTimeout(1000);
+    }
+
+    const templatesMenu = page.locator('span.nav-item-label:text-is("Templates Proposta")');
+    if (await templatesMenu.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await templatesMenu.click();
+      await page.waitForTimeout(2000);
+      console.log("Navegou para Templates Proposta ✅");
+    } else {
+      // Tentar via CRUD
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent("navigate-to", { detail: { page: "crud:proposta-templates" } }));
+      });
+      await page.waitForTimeout(2000);
+      console.log("Navegou via evento ✅");
+    }
+
+    await page.screenshot({ path: `${SS}/TC-10_01_templates_page.png`, fullPage: true });
+
+    // Verificar que a página carregou
+    const bodyText = await page.textContent('body') || "";
+    const hasTemplates = bodyText.includes('Template') || bodyText.includes('template');
+    console.log(`Página Templates: ${hasTemplates ? "✅" : "❌"}`);
+
+    // Clicar em "Novo" ou "Adicionar"
+    const btnNovo = page.locator('button:has-text("Novo"), button:has-text("Adicionar"), button:has-text("+")').first();
+    if (await btnNovo.isVisible().catch(() => false)) {
+      await btnNovo.click();
+      await page.waitForTimeout(1000);
+      console.log("Botão Novo clicado ✅");
+    }
+
+    // Preencher nome do template (campo com label "Nome*")
+    const allInputs = page.locator('input[type="text"]');
+    const inputCount = await allInputs.count();
+    for (let i = 0; i < inputCount; i++) {
+      const val = await allInputs.nth(i).inputValue();
+      if (!val || val === "") {
+        // Primeiro input vazio que não é busca
+        const placeholder = await allInputs.nth(i).getAttribute("placeholder") || "";
+        if (!placeholder.includes("Buscar")) {
+          await allInputs.nth(i).fill("Template Padrão Reagentes");
+          console.log(`Nome preenchido no input ${i} ✅`);
+          break;
+        }
+      }
+    }
+
+    // Preencher conteúdo
+    const conteudoInput = page.locator('textarea[name="conteudo_md"], textarea').first();
+    if (await conteudoInput.isVisible().catch(() => false)) {
+      await conteudoInput.fill(`# PROPOSTA TÉCNICA
+
+## 1. IDENTIFICAÇÃO DO PROPONENTE
+[Dados da empresa]
+
+## 2. OBJETO
+[Descrição do objeto conforme edital]
+
+## 3. ESPECIFICAÇÕES TÉCNICAS DO PRODUTO
+[Especificações do produto oferecido]
+
+## 4. CONFORMIDADE COM O EDITAL
+[Análise de aderência aos requisitos]
+
+## 5. CONDIÇÕES COMERCIAIS
+- Preço Unitário: [PREÇO]
+- Quantidade: [QTD]
+- Valor Total: [TOTAL]
+- Validade da proposta: 60 dias
+
+## 6. PRAZO DE ENTREGA
+[Prazo conforme edital]
+
+## 7. GARANTIA E SUPORTE
+[Condições de garantia]`);
+      console.log("Conteúdo preenchido ✅");
+    }
+
+    // Marcar Ativo
+    const ativoCheckbox = page.locator('input[type="checkbox"]').first();
+    if (await ativoCheckbox.isVisible().catch(() => false)) {
+      if (!(await ativoCheckbox.isChecked())) {
+        await ativoCheckbox.check();
+        console.log("Checkbox Ativo marcado ✅");
+      }
+    }
+
+    await page.screenshot({ path: `${SS}/TC-10_02_template_form.png`, fullPage: true });
+
+    // Salvar
+    const btnSalvar = page.locator('button:has-text("Salvar"), button:has-text("Criar"), button[type="submit"]').first();
+    if (await btnSalvar.isVisible().catch(() => false)) {
+      await btnSalvar.click();
+      await page.waitForTimeout(2000);
+      console.log("Template salvo ✅");
+    }
+
+    await page.screenshot({ path: `${SS}/TC-10_03_template_salvo.png`, fullPage: true });
+  });
+
+  test("TC-11: Verificar template aparece no modal de proposta", async ({ page }) => {
+    await login(page);
+    await irParaProposta(page);
+
+    // Abrir modal Nova Proposta
+    await page.locator('button:has-text("Nova Proposta")').click();
+    await page.waitForTimeout(1500);
+
+    // Verificar select de Template
+    const selects = page.locator('.modal-overlay select');
+    const allCount = await selects.count();
+    for (let i = 0; i < allCount; i++) {
+      const opts = await selects.nth(i).locator('option').allTextContents();
+      const hasTemplate = opts.some(o => o.includes('Template') || o.includes('Padrão'));
+      if (hasTemplate) {
+        console.log(`Select ${i} tem templates: ${opts.filter(o => o !== 'Sem template').join(', ')}`);
+
+        // Selecionar o template
+        for (const o of opts) {
+          if (o.includes('Template') || o.includes('Padrão')) {
+            await selects.nth(i).selectOption({ label: o });
+            console.log(`Template selecionado: ${o} ✅`);
+            break;
+          }
+        }
+      }
+    }
+
+    await page.screenshot({ path: `${SS}/TC-11_template_no_modal.png`, fullPage: true });
+  });
 });

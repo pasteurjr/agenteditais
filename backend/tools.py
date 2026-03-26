@@ -3049,10 +3049,12 @@ Exemplo:
 
 
 def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
-                        preco: float = None, lote_id: str = None) -> Dict[str, Any]:
+                        preco: float = None, lote_id: str = None,
+                        template_id: str = None) -> Dict[str, Any]:
     """
     Gera uma proposta técnica para um edital.
     Se lote_id fornecido, busca dados de precificação (PrecoCamada) do vínculo item-produto.
+    Se template_id fornecido, usa o template como base para a estrutura da proposta.
     """
     db = get_db()
     try:
@@ -3150,6 +3152,16 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
         # Formatar preço
         preco_formatado = f"{preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if preco else "A definir"
 
+        # Buscar template se fornecido
+        template_instrucao = ""
+        if template_id:
+            template = db.query(PropostaTemplate).filter(
+                PropostaTemplate.id == template_id,
+                PropostaTemplate.ativo == True
+            ).first()
+            if template and template.conteudo_md:
+                template_instrucao = f"\n\nIMPORTANTE — USE O SEGUINTE TEMPLATE COMO BASE PARA A ESTRUTURA DA PROPOSTA:\n\n{template.conteudo_md}\n\nAdapte o template acima com os dados reais do edital e produto. Mantenha a estrutura e seções do template.\n"
+
         # Gerar proposta com IA
         prompt = PROMPT_GERAR_PROPOSTA.format(
             numero_edital=edital.numero or "S/N",
@@ -3163,8 +3175,11 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
             preco=preco_formatado
         )
 
+        # Adicionar template ao prompt se disponível
+        prompt_final = prompt + template_instrucao
+
         # Usar max_tokens maior para proposta completa
-        texto_proposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=32000)
+        texto_proposta = call_deepseek([{"role": "user", "content": prompt_final}], max_tokens=32000)
 
         # Salvar proposta
         proposta = Proposta(

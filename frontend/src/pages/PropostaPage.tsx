@@ -402,6 +402,8 @@ export function PropostaPage(props?: PageProps) {
 
       if (onSendToChat) {
         const loteInfo = novoLote ? `\n- Lote: ${lotes.find((l) => l.id === novoLote)?.nome ?? novoLote}` : "";
+        const tpl = novoTemplate ? templates.find((t) => t.id === novoTemplate) : null;
+        const templateInfo = tpl?.conteudo_md ? `\n\nUSE O SEGUINTE TEMPLATE COMO BASE:\n${tpl.conteudo_md}\n` : "";
         onSendToChat(
           `Gere uma proposta tecnica completa para:\n` +
           `- Edital: ${editalDesc}\n` +
@@ -409,7 +411,7 @@ export function PropostaPage(props?: PageProps) {
           `- Preco Unitario: R$ ${preco.toFixed(2)}\n` +
           `- Quantidade: ${qtd}\n` +
           `- Valor Total: R$ ${(preco * qtd).toFixed(2)}${loteInfo}\n\n` +
-          `Inclua: identificacao da empresa, objeto, especificacoes tecnicas, prazo de entrega e validade da proposta.`
+          `Inclua: identificacao da empresa, objeto, especificacoes tecnicas, prazo de entrega e validade da proposta.${templateInfo}`
         );
       }
 
