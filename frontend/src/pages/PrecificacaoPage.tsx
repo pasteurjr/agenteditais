@@ -817,16 +817,39 @@ ${html}
   const handleBuscarHistorico = async () => {
     if (!termoBusca) return;
     setLoading(true);
+    setHistStats(null);
+    setHistorico([]);
     try {
+      // Tentar busca no CRUD (empresa_vencedora)
       const res = await crudList("precos-historicos", { q: termoBusca, limit: 50 });
-      const items = res.items as Record<string, unknown>[];
+      let items = (res.items || []) as Record<string, unknown>[];
+
+      // Se não encontrou, buscar todos e filtrar localmente pelo termo
+      if (items.length === 0) {
+        const allRes = await crudList("precos-historicos", { limit: 200 });
+        const allItems = (allRes.items || []) as Record<string, unknown>[];
+        const termoLower = termoBusca.toLowerCase();
+        items = allItems.filter(it => {
+          const venc = String(it.empresa_vencedora || "").toLowerCase();
+          const fonte = String(it.fonte || "").toLowerCase();
+          const edObj = String(it.edital_objeto || it.edital || "").toLowerCase();
+          return venc.includes(termoLower) || fonte.includes(termoLower) || edObj.includes(termoLower);
+        });
+      }
+
+      // Se AINDA não encontrou, buscar todos do edital atual
+      if (items.length === 0 && editalId) {
+        const edRes = await crudList("precos-historicos", { parent_id: editalId, limit: 200 });
+        items = (edRes.items || []) as Record<string, unknown>[];
+      }
+
       const mapped: HistoricoPreco[] = items.map((item) => ({
         id: String(item.id ?? ""),
-        produto: String(item.produto ?? item.nome_produto ?? ""),
-        preco: Number(item.preco ?? item.preco_ofertado ?? 0),
-        data: String(item.data ?? item.data_licitacao ?? ""),
-        edital: String(item.edital ?? item.numero_edital ?? ""),
-        resultado: (item.resultado === "ganho" ? "ganho" : "perdido") as "ganho" | "perdido",
+        produto: String(item.empresa_vencedora ?? item.produto ?? ""),
+        preco: Number(item.preco_vencedor ?? item.preco ?? 0),
+        data: String(item.data_homologacao ?? item.data_registro ?? item.data ?? ""),
+        edital: String(item.edital_objeto ?? item.edital ?? ""),
+        resultado: (item.resultado === "vitoria" ? "ganho" : "perdido") as "ganho" | "perdido",
       }));
       setHistorico(mapped);
       const vals = mapped.map(h => h.preco).filter(v => v > 0);
@@ -836,6 +859,8 @@ ${html}
           min: Math.min(...vals),
           max: Math.max(...vals),
         });
+      } else {
+        alert(`Nenhum registro encontrado para "${termoBusca}". Tente: coagulação, reagente, ou o nome do concorrente.`);
       }
     } catch {
       if (onSendToChat) onSendToChat(`busque preços históricos de ${termoBusca} no PNCP`);

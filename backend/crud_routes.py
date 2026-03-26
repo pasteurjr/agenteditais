@@ -301,7 +301,7 @@ CRUD_TABLES = {
         "model": PrecoHistorico,
         "user_scoped": True,
         "empresa_scoped": True,
-        "search_fields": ["empresa_vencedora", "cnpj_vencedor"],
+        "search_fields": ["empresa_vencedora", "cnpj_vencedor", "fonte"],
         "label": "Preço Histórico",
         "required": [],
     },
