@@ -10879,6 +10879,91 @@ def precif_simular_ia():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/precificacao/simular-disputa", methods=["POST"])
+@require_auth
+def precif_simular_disputa():
+    """Simula disputa de lances rodada a rodada usando IA (DeepSeek)."""
+    from llm import call_deepseek
+    data = request.get_json() or {}
+
+    lance_inicial = data.get("lance_inicial", 0)
+    lance_minimo = data.get("lance_minimo", 0)
+    custo = data.get("custo", 0)
+    perfil = data.get("perfil", "quero_ganhar")
+    concorrentes = data.get("concorrentes", [])
+    historico = data.get("historico", {})
+    produto = data.get("produto", "Produto")
+
+    conc_desc = ""
+    for c in concorrentes:
+        precos = c.get("precos_historicos", [])
+        precos_str = ", ".join([f"R$ {p:.2f}" for p in precos[:5]]) if precos else "sem dados"
+        conc_desc += f"- {c['nome']}: preço médio R$ {c.get('preco_medio', 0):.2f}, preços homologados: [{precos_str}]\n"
+
+    estrategia_desc = "QUERO GANHAR — disputa agressiva: reduzir lances até o mínimo para vencer" if perfil == "quero_ganhar" else "NÃO GANHEI NO MÍNIMO — chegou ao piso e não venceu, reposicionar para melhor colocação possível (2º, 3º lugar)"
+
+    prompt = f"""Você é um simulador de disputa de licitação pública (pregão eletrônico brasileiro).
+
+DADOS DA NOSSA EMPRESA:
+- Produto: {produto}
+- Lance inicial de abertura: R$ {lance_inicial:.2f}
+- Lance mínimo (piso, abaixo disso prejuízo): R$ {lance_minimo:.2f}
+- Custo base do produto: R$ {custo:.2f}
+- Estratégia: {estrategia_desc}
+
+CONCORRENTES IDENTIFICADOS (baseados em atas reais do PNCP):
+{conc_desc or "Nenhum concorrente identificado — simule com 2 concorrentes genéricos"}
+
+HISTÓRICO DE MERCADO:
+- Preço mínimo homologado: R$ {historico.get('preco_min', 0):.2f}
+- Preço médio homologado: R$ {historico.get('preco_medio', 0):.2f}
+- Preço máximo homologado: R$ {historico.get('preco_max', 0):.2f}
+
+REGRAS DO PREGÃO ELETRÔNICO (LANCE ABERTO):
+- Rodada 1: cada empresa apresenta seu lance inicial
+- Rodadas seguintes: empresas podem reduzir lance ou desistir
+- Cada concorrente reduz baseado no seu padrão histórico (empresas com preços médios mais baixos são mais agressivas)
+- Uma empresa desiste quando o próximo lance ficaria abaixo do seu custo estimado
+- A cada rodada, o menor lance lidera
+- A disputa termina quando resta só um competidor OU todos chegam ao limite
+
+{"Se a nossa empresa chegar ao lance mínimo e NÃO vencer, mostre o reposicionamento: nosso lance fica no mínimo e indicamos a posição final (2º, 3º lugar)." if perfil == "nao_ganhei_minimo" else "Nossa empresa vai reduzir progressivamente do lance inicial até o mínimo para tentar vencer."}
+
+SIMULE a disputa rodada a rodada. Use valores realistas baseados nos preços históricos dos concorrentes.
+
+RETORNE em formato markdown:
+
+## Simulação de Disputa — Lance Aberto
+
+### Tabela de Rodadas
+
+| Rodada | Nossa Empresa | {" | ".join([c["nome"][:20] for c in concorrentes[:3]]) or "Concorrente A | Concorrente B"} | Observação |
+|--------|--------------|{"---|".join(["---" for _ in range(min(len(concorrentes), 3) or 2)])}|------------|
+(preencha as rodadas com valores decrescentes realistas)
+
+### Resultado Final
+- Resultado: VITÓRIA ou DERROTA
+- Lance final: R$ X,XX
+- Posição: 1º, 2º ou 3º
+- Margem final sobre custo: X%
+
+### Análise do Comportamento dos Concorrentes
+(explique como cada concorrente se comportou e por que desistiu ou continuou)
+
+### Recomendação
+(diga se o lance mínimo está adequado ou se deveria ser ajustado)"""
+
+    try:
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=3000,
+            model_override="deepseek-chat"
+        )
+        return jsonify({"success": True, "simulacao_md": resposta})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/precificacao/<eip_id>/insights", methods=["GET"])
 @require_auth
 def precif_insights(eip_id):

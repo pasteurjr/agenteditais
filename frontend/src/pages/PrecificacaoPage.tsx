@@ -195,6 +195,8 @@ export function PrecificacaoPage(props?: PageProps) {
   const [cenarios, setCenarios] = useState<Record<string, unknown>[]>([]);
   const [cenarioExplicacaoIA, setCenarioExplicacaoIA] = useState<string | null>(null);
   const [cenarioExplicacaoLoading, setCenarioExplicacaoLoading] = useState(false);
+  const [disputaSimulacaoMD, setDisputaSimulacaoMD] = useState<string | null>(null);
+  const [disputaLoading, setDisputaLoading] = useState(false);
 
   // ── Tab: Histórico (UC-P09) + Comodato (UC-P10) ──
   const [termoBusca, setTermoBusca] = useState("");
@@ -710,7 +712,7 @@ export function PrecificacaoPage(props?: PageProps) {
       setCenarios(cens);
       setCenarioExplicacaoIA(null); // Limpar explicação anterior
       if (cens.length > 0) {
-        alert(`Simulação concluída! ${cens.length} cenários. Use "Simular com IA" para análise detalhada.`);
+        alert(`Simulação concluída! ${cens.length} cenários. Use "Análise por IA" para análise detalhada.`);
       } else {
         alert("Nenhum cenário gerado. Verifique se custos e lances estão salvos na aba Custos e Preços.");
       }
@@ -2165,8 +2167,8 @@ ${html}
                             </div>
                           </div>
                           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                            <ActionButton icon={<TrendingUp size={16} />} label="Simular (Fórmula)" variant="primary" onClick={handleSimularEstrategia} />
-                            <ActionButton icon={<Sparkles size={16} />} label="Simular com IA" variant="neutral" loading={cenarioExplicacaoLoading}
+                            <ActionButton icon={<TrendingUp size={16} />} label="Análise de Lances" variant="primary" onClick={handleSimularEstrategia} />
+                            <ActionButton icon={<Sparkles size={16} />} label="Análise por IA" variant="neutral" loading={cenarioExplicacaoLoading}
                               onClick={async () => {
                                 if (!vinculoId) { alert("Selecione um vínculo."); return; }
                                 setCenarios([]);
@@ -2256,6 +2258,63 @@ Qual cenário é mais adequado e por quê.`;
                                 }
                               }}
                             />
+                            <ActionButton icon={<Target size={16} />} label="Simulador de Disputa" variant="neutral" loading={disputaLoading}
+                              onClick={async () => {
+                                if (!vinculoId) { alert("Selecione um vínculo."); return; }
+                                setDisputaSimulacaoMD(null);
+                                setDisputaLoading(true);
+                                try {
+                                  const lanceIniReal = lanceInicial ? parseFloat(lanceInicial) : Number(camada?.lance_inicial || 0);
+                                  const lanceMinReal = lanceMinimo ? parseFloat(lanceMinimo) : Number(camada?.lance_minimo || 0);
+                                  const custoReal = camada?.custo_base_final ? Number(camada.custo_base_final) : 0;
+                                  const prod = produtos.find(p => p.id === vinculos.find(v => v.id === vinculoId)?.produto_id);
+
+                                  // Montar dados dos concorrentes
+                                  const concs = (insights?.concorrentes || []).map(c => ({
+                                    nome: c.nome,
+                                    preco_medio: c.preco_medio,
+                                    precos_historicos: [] as number[],
+                                  }));
+                                  // Enriquecer com preços detalhados dos vencedores
+                                  const vencDet = (insights as Record<string, unknown>)?.vencedores_detalhes as Array<Record<string, unknown>> | undefined;
+                                  if (vencDet) {
+                                    for (const ata of vencDet) {
+                                      for (const v of ((ata.vencedores || []) as Array<Record<string, unknown>>)) {
+                                        const nome = String(v.vencedor || "");
+                                        const preco = Number(v.valor_homologado || 0);
+                                        if (nome && preco > 0) {
+                                          const conc = concs.find(c => nome.includes(c.nome.split(" ")[0]));
+                                          if (conc) conc.precos_historicos.push(preco);
+                                        }
+                                      }
+                                    }
+                                  }
+
+                                  const token = localStorage.getItem("editais_ia_access_token");
+                                  const res = await fetch("/api/precificacao/simular-disputa", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+                                    body: JSON.stringify({
+                                      lance_inicial: lanceIniReal,
+                                      lance_minimo: lanceMinReal,
+                                      custo: custoReal,
+                                      perfil,
+                                      concorrentes: concs,
+                                      historico: insights?.historico || {},
+                                      produto: prod?.nome || "Produto",
+                                    }),
+                                  });
+                                  const resp = await res.json();
+                                  if (!resp.success) throw new Error(resp.error || "Erro na simulação");
+                                  setDisputaSimulacaoMD(resp.simulacao_md || "Simulação sem resultado.");
+                                } catch (e) {
+                                  console.error("[DISPUTA]", e);
+                                  setDisputaSimulacaoMD(`Erro: ${e instanceof Error ? e.message : "Falha na simulação de disputa"}`);
+                                } finally {
+                                  setDisputaLoading(false);
+                                }
+                              }}
+                            />
                           </div>
                           {cenarios.length > 0 && (
                             <div style={{ marginTop: 12, fontSize: 13 }}>
@@ -2316,6 +2375,37 @@ Qual cenário é mais adequado e por quê.`;
                               </div>
                               <div className="markdown-response" style={{ fontSize: 12, padding: "12px", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)", border: "1px solid var(--border)", maxHeight: 400, overflowY: "auto" }}>
                                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{cenarioExplicacaoIA}</ReactMarkdown>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Simulador de Disputa */}
+                          {disputaLoading && (
+                            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, color: "#f59e0b", fontSize: 13 }}>
+                              <Loader2 size={14} className="spin" /> Simulando disputa de lances com IA...
+                            </div>
+                          )}
+                          {disputaSimulacaoMD && !disputaLoading && (
+                            <div style={{ marginTop: 16 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                <h4 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <Target size={14} style={{ color: "#f59e0b" }} /> Simulação de Disputa
+                                </h4>
+                                <ActionButton icon={<FileText size={12} />} label="Relatório MD/PDF" variant="neutral" onClick={() => {
+                                  const now = new Date();
+                                  const dataHora = now.toLocaleString("pt-BR");
+                                  const prod = vinculoId ? produtos.find(p => p.id === vinculos.find(v => v.id === vinculoId)?.produto_id) : null;
+                                  const ed = editais.find(e => (e.id ?? e.numero) === editalId);
+                                  let md = `# Simulação de Disputa de Lances\n\n**Data:** ${dataHora}\n**Edital:** ${ed?.numero || ""} — ${ed?.orgao || ""}\n**Produto:** ${prod?.nome || ""}\n**Estratégia:** ${perfil === "quero_ganhar" ? "Quero Ganhar" : "Não Ganhei no Mínimo"}\n\n---\n\n${disputaSimulacaoMD}`;
+                                  const tableRegex = /(\|.+\|\n)+/g;
+                                  let html = md.replace(tableRegex, (tb) => { const rows = tb.trim().split('\n').filter(r => r.trim()); if (rows.length < 2) return tb; let t = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#334155;margin:8px 0;width:100%;font-size:13px;">\n'; rows.forEach((row, ri) => { if (ri === 1 && row.match(/^\|[\s-|]+\|$/)) return; const cells = row.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => c.trim()); const tag = ri === 0 ? 'th' : 'td'; const bg = ri === 0 ? ' style="background:#1e293b;color:#94a3b8;text-align:left;"' : ''; t += '<tr>' + cells.map(c => `<${tag}${bg}>${c}</${tag}>`).join('') + '</tr>\n'; }); t += '</table>\n'; return t; });
+                                  html = html.replace(/^### (.+)$/gm, '<h3 style="color:#818cf8;margin:24px 0 12px;">$1</h3>').replace(/^## (.+)$/gm, '<h2 style="color:#a78bfa;margin:32px 0 16px;">$1</h2>').replace(/^# (.+)$/gm, '<h1 style="color:#e2e8f0;margin:0 0 24px;">$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 16px;">• $1</div>').replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;"/>');
+                                  const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Simulação de Disputa — ${dataHora}</title><style>body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;max-width:1100px;margin:0 auto;padding:64px 24px 32px;line-height:1.6}table{font-size:13px}th{font-weight:600}td,th{padding:6px 10px;border:1px solid #334155}tr:nth-child(even){background:#1e293b}strong{color:#f1f5f9}@media print{body{background:white;color:#1e293b;padding-top:0}h1,h2,h3,strong{color:#1e293b}td,th{border-color:#cbd5e1}tr:nth-child(even){background:#f1f5f9}.toolbar{display:none!important}}.toolbar{position:fixed;top:0;left:0;right:0;z-index:1000;background:#1e293b;border-bottom:2px solid #334155;padding:10px 24px;display:flex;gap:12px;align-items:center}.toolbar button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}.btn-md{background:#3b82f6;color:white}.btn-pdf{background:#8b5cf6;color:white}.toolbar span{color:#94a3b8;font-size:13px;margin-left:auto}</style></head><body><div class="toolbar"><button class="btn-md" onclick="baixarMD()">📥 Baixar MD</button><button class="btn-pdf" onclick="window.print()">📄 Baixar PDF</button><span>${dataHora}</span></div>${html}<script>var mdContent=${JSON.stringify(md)};function baixarMD(){var b=new Blob(['\\uFEFF'+mdContent],{type:'text/markdown;charset=utf-8;'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='simulacao_disputa_${now.toISOString().slice(0, 10)}.md';a.click()}</script></body></html>`;
+                                  window.open(URL.createObjectURL(new Blob([fullHtml], { type: 'text/html;charset=utf-8' })), '_blank');
+                                }} />
+                              </div>
+                              <div className="markdown-response" style={{ fontSize: 12, padding: "12px", borderRadius: 8, backgroundColor: "#1e293b", border: "1px solid #f59e0b40", maxHeight: 500, overflowY: "auto" }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{disputaSimulacaoMD}</ReactMarkdown>
                               </div>
                             </div>
                           )}
