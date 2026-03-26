@@ -706,9 +706,8 @@ export function PrecificacaoPage(props?: PageProps) {
           if (c3) cens.push(c3);
         }
       }
-      // Acumular cenários (novos no topo)
-      const novosCenarios = [...cens, ...cenarios];
-      setCenarios(novosCenarios);
+      // Substituir cenários (nova simulação limpa os anteriores)
+      setCenarios(cens);
       if (cens.length > 0) {
         gerarExplicacaoCenarios(cens);
       } else {
@@ -2207,7 +2206,7 @@ ${html}
                                     );
                                   }
 
-                                  setCenarios(prev => [...iaCens, ...prev]);
+                                  setCenarios(iaCens);
                                   gerarExplicacaoCenarios(iaCens);
                                   const comPrejuizo = iaCens.filter(c => Number(c.margem) < 0);
                                   if (comPrejuizo.length > 0) {
@@ -2226,8 +2225,8 @@ ${html}
                                 <h4>Simulações ({cenarios.length} cenários)</h4>
                                 <button onClick={() => setCenarios([])} style={{ fontSize: 11, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}>Limpar</button>
                               </div>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                                {cenarios.slice(0, 6).map((c, i) => {
+                              <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(cenarios.length, 3)}, 1fr)`, gap: 8 }}>
+                                {cenarios.map((c, i) => {
                                   const label = String(c.label || `Cenário ${i + 1}`);
                                   const valor = Number(c.valor || 0);
                                   const margem = Number(c.margem || 0);
