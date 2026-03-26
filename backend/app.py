@@ -10859,6 +10859,26 @@ def precif_estrategia(edital_id):
     return jsonify(resultado)
 
 
+@app.route("/api/precificacao/simular-ia", methods=["POST"])
+@require_auth
+def precif_simular_ia():
+    """Simula cenários de lance usando IA (DeepSeek) — sem passar pelo chat."""
+    from llm import call_deepseek
+    data = request.get_json() or {}
+    prompt = data.get("prompt", "")
+    if not prompt:
+        return jsonify({"success": False, "error": "Prompt vazio"}), 400
+    try:
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=2000,
+            model_override="deepseek-chat"
+        )
+        return jsonify({"success": True, "response": resposta})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/precificacao/<eip_id>/insights", methods=["GET"])
 @require_auth
 def precif_insights(eip_id):

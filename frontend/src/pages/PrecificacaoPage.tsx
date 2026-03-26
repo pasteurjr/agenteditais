@@ -2218,9 +2218,15 @@ DEPOIS, explique cada cenário em detalhes:
 ## Recomendação Final
 Qual cenário é mais adequado e por quê.`;
 
-                                  const session = await createSession("simulacao-ia-lances") as Record<string, unknown>;
-                                  const sid = String(session.session_id || session.id);
-                                  const resp = await sendMessage(sid, prompt);
+                                  // Chamar endpoint dedicado (não o chat, que intercepta keywords)
+                                  const token = localStorage.getItem("editais_ia_access_token");
+                                  const res = await fetch("/api/precificacao/simular-ia", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+                                    body: JSON.stringify({ prompt }),
+                                  });
+                                  const resp = await res.json();
+                                  if (!resp.success) throw new Error(resp.error || "Erro na simulação IA");
                                   const respText = resp.response || "";
 
                                   // Extrair JSON dos cenários
