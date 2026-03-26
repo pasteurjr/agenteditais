@@ -193,6 +193,8 @@ export function PrecificacaoPage(props?: PageProps) {
   // UC-P08: Estratégia
   const [perfil, setPerfil] = useState("quero_ganhar");
   const [cenarios, setCenarios] = useState<Record<string, unknown>[]>([]);
+  const [cenarioExplicacaoIA, setCenarioExplicacaoIA] = useState<string | null>(null);
+  const [cenarioExplicacaoLoading, setCenarioExplicacaoLoading] = useState(false);
 
   // ── Tab: Histórico (UC-P09) + Comodato (UC-P10) ──
   const [termoBusca, setTermoBusca] = useState("");
@@ -705,14 +707,109 @@ export function PrecificacaoPage(props?: PageProps) {
         }
       }
       // Acumular cenários (novos no topo)
-      setCenarios(prev => [...cens, ...prev]);
+      const novosCenarios = [...cens, ...cenarios];
+      setCenarios(novosCenarios);
       if (cens.length > 0) {
-        alert(`Simulação concluída! ${cens.length} cenários gerados.`);
+        gerarExplicacaoCenarios(cens);
       } else {
         alert("Nenhum cenário gerado. Verifique se custos e lances estão salvos na aba Custos e Preços.");
       }
     } catch (e) { alert(e instanceof Error ? e.message : "Erro ao simular estratégia"); }
     finally { setLoading(false); }
+  };
+
+  // Gerar explicação IA dos cenários
+  const gerarExplicacaoCenarios = async (cens: Record<string, unknown>[]) => {
+    if (cens.length === 0) return;
+    setCenarioExplicacaoLoading(true);
+    setCenarioExplicacaoIA(null);
+    try {
+      const prod = vinculoId ? produtos.find(p => p.id === vinculos.find(v => v.id === vinculoId)?.produto_id) : null;
+      const custoBase = camada?.custo_base_final ? Number(camada.custo_base_final) : 0;
+      const cenDescricao = cens.map(c => `- ${c.label}: R$ ${Number(c.valor || 0).toFixed(2)} (margem: ${Number(c.margem || 0).toFixed(1)}%)`).join("\n");
+      const prompt = `Analise os seguintes cenários de disputa de lances para o produto "${prod?.nome || 'Produto'}" e explique cada um em detalhes.
+
+CUSTO BASE: R$ ${custoBase.toFixed(2)}
+ESTRATÉGIA: ${perfil === "quero_ganhar" ? "Quero Ganhar (agressiva)" : "Não Ganhei no Mínimo (reposicionamento)"}
+
+CENÁRIOS:
+${cenDescricao}
+
+${insights?.recomendacao?.justificativa ? `CONTEXTO DE MERCADO:\n${insights.recomendacao.justificativa.slice(0, 500)}` : ""}
+
+Explique para cada cenário:
+1. O que significa esse valor de lance
+2. Qual a margem de lucro e se é viável
+3. Riscos e vantagens
+4. Em que situação usar esse cenário
+
+No final, dê uma RECOMENDAÇÃO clara de qual cenário é o mais adequado e por quê.
+Responda em português, formato markdown com títulos ##.`;
+
+      const session = await createSession("simulacao-lances") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const resp = await sendMessage(sid, prompt);
+      setCenarioExplicacaoIA(resp.response || "Análise não disponível.");
+    } catch (err) {
+      console.error("[CENARIOS IA] Erro:", err);
+      setCenarioExplicacaoIA("Erro ao gerar explicação IA.");
+    } finally {
+      setCenarioExplicacaoLoading(false);
+    }
+  };
+
+  // Abrir explicação em nova aba (MD/PDF)
+  const handleExportarExplicacaoCenarios = () => {
+    if (!cenarioExplicacaoIA) return;
+    const now = new Date();
+    const dataHora = now.toLocaleString("pt-BR");
+    const prod = vinculoId ? produtos.find(p => p.id === vinculos.find(v => v.id === vinculoId)?.produto_id) : null;
+    const ed = editais.find(e => (e.id ?? e.numero) === editalId);
+
+    let md = `# Análise de Cenários de Disputa\n\n`;
+    md += `**Data:** ${dataHora}\n`;
+    md += `**Edital:** ${ed?.numero || editalId} — ${ed?.orgao || ""}\n`;
+    md += `**Produto:** ${prod?.nome || ""}\n`;
+    md += `**Estratégia:** ${perfil === "quero_ganhar" ? "Quero Ganhar" : "Não Ganhei no Mínimo"}\n\n`;
+    md += `---\n\n`;
+    md += `## Cenários\n\n`;
+    md += `| Cenário | Valor | Margem |\n|---|---|---|\n`;
+    for (const c of cenarios.slice(0, 6)) {
+      md += `| ${c.label} | R$ ${Number(c.valor || 0).toFixed(2)} | ${Number(c.margem || 0).toFixed(1)}% |\n`;
+    }
+    md += `\n---\n\n`;
+    md += cenarioExplicacaoIA;
+
+    const tableRegex = /(\|.+\|\n)+/g;
+    let html = md.replace(tableRegex, (tableBlock) => {
+      const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+      if (rows.length < 2) return tableBlock;
+      let t = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#334155;margin:8px 0;width:100%;font-size:13px;">\n';
+      rows.forEach((row, ri) => {
+        if (ri === 1 && row.match(/^\|[\s-|]+\|$/)) return;
+        const cells = row.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => c.trim());
+        const tag = ri === 0 ? 'th' : 'td';
+        const bg = ri === 0 ? ' style="background:#1e293b;color:#94a3b8;text-align:left;"' : '';
+        t += '<tr>' + cells.map(c => `<${tag}${bg}>${c}</${tag}>`).join('') + '</tr>\n';
+      });
+      t += '</table>\n';
+      return t;
+    });
+    html = html
+      .replace(/^### (.+)$/gm, '<h3 style="color:#818cf8;margin:24px 0 12px;">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 style="color:#a78bfa;margin:32px 0 16px;">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 style="color:#e2e8f0;margin:0 0 24px;">$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 16px;">• $1</div>')
+      .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;"/>')
+      .replace(/\n/g, '<br/>');
+
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Análise de Cenários — ${dataHora}</title>
+<style>body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;max-width:1100px;margin:0 auto;padding:64px 24px 32px;line-height:1.6}table{font-size:13px}th{font-weight:600}td,th{padding:6px 10px;border:1px solid #334155}tr:nth-child(even){background:#1e293b}strong{color:#f1f5f9}@media print{body{background:white;color:#1e293b;padding-top:0}h1,h2,h3,strong{color:#1e293b}td,th{border-color:#cbd5e1}tr:nth-child(even){background:#f1f5f9}.toolbar{display:none!important}}.toolbar{position:fixed;top:0;left:0;right:0;z-index:1000;background:#1e293b;border-bottom:2px solid #334155;padding:10px 24px;display:flex;gap:12px;align-items:center}.toolbar button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}.btn-md{background:#3b82f6;color:white}.btn-pdf{background:#8b5cf6;color:white}.toolbar span{color:#94a3b8;font-size:13px;margin-left:auto}</style></head><body>
+<div class="toolbar"><button class="btn-md" onclick="baixarMD()">📥 Baixar MD</button><button class="btn-pdf" onclick="window.print()">📄 Baixar PDF</button><span>${dataHora}</span></div>
+${html}
+<script>var mdContent=${JSON.stringify(md)};function baixarMD(){var b=new Blob(['\\uFEFF'+mdContent],{type:'text/markdown;charset=utf-8;'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='analise_cenarios_${now.toISOString().slice(0, 10)}.md';a.click()}</script></body></html>`;
+    window.open(URL.createObjectURL(new Blob([fullHtml], { type: 'text/html;charset=utf-8' })), '_blank');
   };
 
   const handleBuscarHistorico = async () => {
@@ -2111,7 +2208,7 @@ ${html}
                                   }
 
                                   setCenarios(prev => [...iaCens, ...prev]);
-                                  // Alertar sobre prejuízo
+                                  gerarExplicacaoCenarios(iaCens);
                                   const comPrejuizo = iaCens.filter(c => Number(c.margem) < 0);
                                   if (comPrejuizo.length > 0) {
                                     alert(`⚠️ Simulação IA: ${iaCens.length} cenários gerados. ATENÇÃO: ${comPrejuizo.length} cenário(s) com margem negativa (prejuízo)!`);
@@ -2163,6 +2260,26 @@ ${html}
                                   Mostrando 6 de {cenarios.length} cenários.
                                 </p>
                               )}
+                            </div>
+                          )}
+
+                          {/* Explicação IA dos cenários */}
+                          {cenarioExplicacaoLoading && (
+                            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, color: "#60a5fa", fontSize: 13 }}>
+                              <Loader2 size={14} className="spin" /> Gerando análise IA dos cenários...
+                            </div>
+                          )}
+                          {cenarioExplicacaoIA && !cenarioExplicacaoLoading && (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                <h4 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <Sparkles size={14} style={{ color: "#8b5cf6" }} /> Análise IA dos Cenários
+                                </h4>
+                                <ActionButton icon={<FileText size={12} />} label="Relatório MD/PDF" variant="neutral" onClick={handleExportarExplicacaoCenarios} />
+                              </div>
+                              <div className="markdown-response" style={{ fontSize: 12, padding: "12px", borderRadius: 8, backgroundColor: "var(--bg-secondary, #f5f5f5)", border: "1px solid var(--border)", maxHeight: 400, overflowY: "auto" }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{cenarioExplicacaoIA}</ReactMarkdown>
+                              </div>
                             </div>
                           )}
                         </Card>
