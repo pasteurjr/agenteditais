@@ -398,22 +398,34 @@ export function PropostaPage(props?: PageProps) {
 
       const created = await crudCreate("propostas", data);
       const novaProposta = mapCrudToProposta(created);
-      setPropostas([novaProposta, ...propostas]);
 
-      if (onSendToChat) {
-        const loteInfo = novoLote ? `\n- Lote: ${lotes.find((l) => l.id === novoLote)?.nome ?? novoLote}` : "";
+      // Gerar texto com IA direto (sem abrir chat)
+      try {
+        const loteInfo = novoLote ? ` do Lote ${lotes.find((l) => l.id === novoLote)?.nome ?? ""}` : "";
         const tpl = novoTemplate ? templates.find((t) => t.id === novoTemplate) : null;
-        const templateInfo = tpl?.conteudo_md ? `\n\nUSE O SEGUINTE TEMPLATE COMO BASE:\n${tpl.conteudo_md}\n` : "";
-        onSendToChat(
-          `Gere uma proposta tecnica completa para:\n` +
-          `- Edital: ${editalDesc}\n` +
-          `- Produto: ${produtoDesc}\n` +
-          `- Preco Unitario: R$ ${preco.toFixed(2)}\n` +
-          `- Quantidade: ${qtd}\n` +
-          `- Valor Total: R$ ${(preco * qtd).toFixed(2)}${loteInfo}\n\n` +
-          `Inclua: identificacao da empresa, objeto, especificacoes tecnicas, prazo de entrega e validade da proposta.${templateInfo}`
-        );
+        const templateInfo = tpl?.conteudo_md ? `\n\nUSE O SEGUINTE TEMPLATE COMO BASE:\n${tpl.conteudo_md}` : "";
+        const prompt = `Gere uma proposta tecnica completa para:\n- Edital: ${editalDesc}\n- Produto: ${produtoDesc}${loteInfo}\n- Preco Unitario: R$ ${preco.toFixed(2)}\n- Quantidade: ${qtd}\n- Valor Total: R$ ${(preco * qtd).toFixed(2)}\n\nInclua: identificacao da empresa, objeto, especificacoes tecnicas do produto, analise de conformidade com o edital, condicoes comerciais, prazo de entrega e validade da proposta.${templateInfo}`;
+
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/precificacao/simular-ia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+          body: JSON.stringify({ prompt }),
+        });
+        const iaResult = await res.json();
+        if (iaResult.success && iaResult.response) {
+          // Salvar texto gerado na proposta
+          await crudUpdate("propostas", novaProposta.id, { texto_tecnico: iaResult.response });
+          novaProposta.conteudo = iaResult.response;
+        }
+      } catch (iaErr) {
+        console.error("[GERAR PROPOSTA IA]", iaErr);
+        // Proposta criada mas sem texto IA — usuário pode editar manualmente
       }
+
+      setPropostas([novaProposta, ...propostas]);
+      setSelectedProposta(novaProposta);
+      setEditorContent(novaProposta.conteudo || "");
 
       setShowGerarModal(false);
       setNovoEdital("");
