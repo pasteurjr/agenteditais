@@ -2003,6 +2003,78 @@ Monitoramento de entregas atrasadas em contratos ativos.
 
 ---
 
+### RF-046-EXT-01: Gestao de Aditivos Contratuais (NOVO — Inferido via Pesquisa Lei 14.133/2021)
+
+**Origem:** Art. 124-126, Lei 14.133/2021 — Pesquisa complementar Sprint 5
+**Pagina Workflow:** ProducaoPage > Detalhe do Contrato > Aba "Aditivos"
+
+**Descricao:**
+Controle de aditivos contratuais (valor, prazo, escopo) com validacao dos limites legais da Lei 14.133/2021. O sistema deve alertar quando o percentual acumulado de aditivos se aproximar dos limites (25% para obras, 50% para casos especiais — Art. 125).
+
+**Criterios de aceite:**
+1. Tabela de aditivos por contrato: tipo (valor/prazo/escopo), justificativa, valor original, valor do aditivo, percentual, data, fundamentacao legal
+2. Barra de progresso mostrando percentual acumulado de aditivos em relacao ao valor original do contrato
+3. Alerta visual (badge vermelho) quando percentual acumulado >= 80% do limite legal aplicavel
+4. Bloqueio com confirmacao quando aditivo excede limite legal (Art. 125)
+5. Historico de todos os aditivos com auditoria de quem registrou e quando
+6. Modal para registrar novo aditivo com campos obrigatorios: tipo, valor, justificativa e fundamentacao legal
+7. Depende de RF-046 (Execucao de Contrato)
+
+---
+
+### RF-046-EXT-02: Designacao de Gestor e Fiscal de Contrato (NOVO — Inferido via Pesquisa Lei 14.133/2021)
+
+**Origem:** Art. 117, Lei 14.133/2021 — Pesquisa complementar Sprint 5
+**Pagina Workflow:** ProducaoPage > Detalhe do Contrato > Aba "Gestor/Fiscal"
+
+**Descricao:**
+A Lei 14.133/2021 (Art. 117) torna obrigatoria a designacao de gestor e fiscais (tecnico e administrativo) para cada contrato. O sistema deve registrar as designacoes com dados da portaria e manter log de atividades de fiscalizacao (atesto, medicao, parecer).
+
+**Criterios de aceite:**
+1. Cards de designacao para cada papel: Gestor, Fiscal Tecnico, Fiscal Administrativo
+2. Campos por designacao: nome, cargo, numero da portaria, data inicio, data fim, status (ativo/inativo)
+3. Tabela de atividades do fiscal: tipo (atesto/medicao/parecer), data, descricao, arquivo anexo
+4. Alerta quando designacao esta vencida (data_fim ultrapassada) ou quando contrato nao possui designacao
+5. Depende de RF-046 (Execucao de Contrato)
+
+---
+
+### RF-046-EXT-03: Saldo de ARP e Controle de Carona (NOVO — Inferido via Pesquisa Lei 14.133/2021)
+
+**Origem:** Art. 82-86, Lei 14.133/2021 — Pesquisa complementar Sprint 5
+**Pagina Workflow:** AtasPage > Aba "Saldo ARP"
+
+**Descricao:**
+Controle de saldo de Atas de Registro de Precos (ARP) por item, com rastreamento de quantidades consumidas pelo participante original e por adesao (carona). Valida os limites da Lei 14.133: 50% das quantidades registradas por adesao individual e o dobro do total como limite global (Art. 86).
+
+**Criterios de aceite:**
+1. Tabela de saldo por item da ARP: descricao, quantidade registrada, consumido pelo participante, consumido por carona, saldo disponivel
+2. Barra de consumo visual por item (verde/amarelo/vermelho conforme % consumido)
+3. Tabela de solicitacoes de carona: orgao solicitante, CNPJ, item, quantidade, status (pendente/autorizado/negado), datas
+4. Validacao automatica: bloqueia carona quando quantidade excede 50% do registrado (individual) ou 2x o total (global)
+5. Alertas de vigencia da ARP (1 ano, prorrogavel por mais 1 — Art. 84) com notificacao em 30/15/7 dias
+6. Depende de RF-035 (Atas de Pregao)
+
+---
+
+### RF-052-EXT-01: Alertas de Vencimento Multi-tier (NOVO — Inferido via Pesquisa de Boas Praticas)
+
+**Origem:** Pesquisa de boas praticas em gestao contratual (Contraktor, Contratos.gov.br, SIGARP) — Sprint 5
+**Pagina Workflow:** ContratadoRealizadoPage > Secao "Proximos Vencimentos"
+
+**Descricao:**
+Sistema de alertas configuraveis com multiplos niveis de antecedencia e canais de notificacao. Cobre: vencimento de contrato, vencimento de ARP, vencimento de garantia e prazos de entrega. Permite escalonamento: primeiro notificacao no sistema, depois email, depois WhatsApp conforme a urgencia.
+
+**Criterios de aceite:**
+1. Tipos de alerta configuraveis: contrato_vencimento, arp_vencimento, garantia_vencimento, entrega_prazo
+2. Thresholds configuraveis por tipo: 30, 15, 7 e 1 dia(s) antes do vencimento
+3. Canais de notificacao por threshold: sistema (todos), email (15d+), WhatsApp (7d+)
+4. Dashboard de vencimentos proximos agrupados por tipo e urgencia (vermelho/amarelo/verde)
+5. Historico de alertas disparados com data/hora e canal utilizado
+6. Depende de RF-046 (Execucao de Contrato) e RF-052 (Pedidos em Atraso)
+
+---
+
 ### RF-053: Perdas
 
 **Pagina Workflow:** Layout geral (pagina 1) — indicador direito
