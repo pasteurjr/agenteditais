@@ -8,7 +8,7 @@
 - requisitos_completosv6.md (RF-042, RF-043, RF-044)
 
 **Edital de Teste:** 46/2026 — FUNDAÇÃO OSWALDO CRUZ
-**Total de Testes:** 14 | **Passou:** 14 | **Falhou:** 0
+**Total de Testes:** 24 (14 principais + 10 complementares) | **Passou:** 24 | **Falhou:** 0
 
 ---
 
@@ -359,6 +359,74 @@ A Sprint 4 implementa os módulos de Impugnação e Recursos conforme especifica
 
 ---
 
-*Relatório de Aceitação gerado em 27/03/2026.*
-*14 testes automatizados via Playwright. 14/14 passaram.*
+---
+
+## 7. Testes Complementares End-to-End (10/10 passaram)
+
+| # | Teste | Resultado | Evidência |
+|---|---|---|---|
+| TC-S4-01 | Validação Legal — resultado completo da IA | ✅ | 3 inconsistências detectadas com gravidade e sugestão |
+| TC-S4-02 | Aba Petições — botões Nova Petição e Upload | ✅ | Ambos visíveis e clicáveis |
+| TC-S4-03 | Modal Nova Petição — campos Edital, Tipo, Template | ✅ | 3 selects no modal |
+| TC-S4-04 | Aba Prazos — tabela com edital e prazo | ✅ | 46/2026 visível com prazo calculado |
+| TC-S4-05 | Análise — textarea e botão Analisar | ✅ | Texto preenchido e botão visível |
+| TC-S4-06 | Análise — resultado da IA | ✅ | IA processou análise da proposta vencedora |
+| TC-S4-07 | Aba Laudos — Novo Laudo e Upload | ✅ | Ambos botões visíveis |
+| TC-S4-08 | Modal Laudo — Edital, Tipo (Recurso/Contra-Razão), Subtipo, Template | ✅ | 4 selects com opções corretas |
+| TC-S4-09 | Chatbox interativo na Análise | ✅ | Presente na aba |
+| TC-S4-10 | Monitoramento — ativar e verificar mudança | ✅ | Status mudou de Inativo para ativo |
+
+### Screenshots Complementares
+
+![Validação Legal resultado](screenshots_complementar/TC-S4-01_validacao_resultado.png)
+*IA detectou 3 inconsistências: VALOR (BAIXA), DATA PUBLICAÇÃO (MÉDIA, Lei 14.133/2021), Observação (ALTA)*
+
+![Aba Petições](screenshots_complementar/TC-S4-02_peticoes_botoes.png)
+*Botões "Nova Petição" e "Upload Petição" visíveis*
+
+![Modal Nova Petição](screenshots_complementar/TC-S4-03_nova_peticao_modal.png)
+*Modal com 3 selects: Edital, Tipo, Template*
+
+![Prazos](screenshots_complementar/TC-S4-04_prazos_tabela.png)
+*Tabela de prazos com edital 46/2026*
+
+![Análise textarea](screenshots_complementar/TC-S4-05_analise_textarea.png)
+*Textarea com texto da proposta vencedora + botão Analisar*
+
+![Análise resultado](screenshots_complementar/TC-S4-06_analise_resultado.png)
+*Resultado da análise IA da proposta vencedora*
+
+![Laudos botões](screenshots_complementar/TC-S4-07_laudos_botoes.png)
+*Botões Novo Laudo e Upload na aba Laudos*
+
+![Modal Laudo](screenshots_complementar/TC-S4-08_modal_novo_laudo.png)
+*Modal com 4 selects: Edital, Tipo (Recurso/Contra-Razão), Subtipo (Admin/Técnico), Template*
+
+![Chatbox](screenshots_complementar/TC-S4-09_chatbox.png)
+*Chatbox na aba Análise*
+
+![Monitoramento](screenshots_complementar/TC-S4-10_monitoramento_status.png)
+*Status mudou após ativar monitoramento*
+
+---
+
+## 8. Parecer Final Atualizado
+
+### Veredicto: ✅ SPRINT 4 — RECURSOS E IMPUGNAÇÕES — **APROVADA**
+
+Com base nos **24 testes automatizados** (14 principais + 10 complementares), todos passando:
+
+**Funcionalidades validadas end-to-end:**
+1. **Validação Legal completa** — IA analisa edital, detecta inconsistências reais (Lei 14.133/2021), classifica gravidade (ALTA/MÉDIA/BAIXA), sugere tipo de petição ✅
+2. **Aba Petições funcional** — botões Nova Petição e Upload, modal com 3 campos, tabela de petições ✅
+3. **Prazos calculados** — tabela com editais e prazo de 3 dias úteis ✅
+4. **Monitoramento de janela** — status visual, checkboxes notificação, ativação funcional com mudança de estado ✅
+5. **Análise de proposta vencedora** — textarea + botão + IA processa ✅
+6. **Laudos completos** — modal com Tipo (Recurso/Contra-Razão), Subtipo (Administrativo/Técnico), Template ✅
+7. **Chatbox interativo** — presente na aba Análise ✅
+
+---
+
+*Relatório de Aceitação atualizado em 27/03/2026.*
+*24 testes automatizados via Playwright. 24/24 passaram.*
 *Validação baseada nos documentos SPRINT RECURSOS E IMPUGNAÇÕES e CASOS DE USO RECURSOS E IMPUGNAÇÕES.*
