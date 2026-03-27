@@ -10,6 +10,7 @@ import { PrecificacaoPage } from "./pages/PrecificacaoPage";
 import { PropostaPage } from "./pages/PropostaPage";
 import { SubmissaoPage } from "./pages/SubmissaoPage";
 import { LancesPage } from "./pages/LancesPage";
+import { RecursosPage } from "./pages/RecursosPage";
 import { FollowupPage } from "./pages/FollowupPage";
 import { ImpugnacaoPage } from "./pages/ImpugnacaoPage";
 import { ProducaoPage } from "./pages/ProducaoPage";
@@ -159,6 +160,8 @@ function AppContent() {
         return <SubmissaoPage onSendToChat={handleSendToChat} />;
       case "lances":
         return <LancesPage onSendToChat={handleSendToChat} />;
+      case "recursos":
+        return <RecursosPage onSendToChat={handleSendToChat} />;
       case "followup":
         return <FollowupPage onSendToChat={handleSendToChat} />;
       case "impugnacao":

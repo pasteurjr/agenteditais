@@ -2469,6 +2469,174 @@ class Comodato(Base):
         }
 
 
+# ==================== SPRINT 4: RECURSOS E IMPUGNAÇÕES (Detalhado) ====================
+
+class Impugnacao(Base):
+    """Impugnações e pedidos de esclarecimento sobre editais"""
+    __tablename__ = 'impugnacoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id'), nullable=True)
+    tipo = Column(Enum('esclarecimento', 'impugnacao'), default='impugnacao')
+    status = Column(Enum('rascunho', 'revisao', 'enviada', 'respondida'), default='rascunho')
+    texto = Column(LONGTEXT, nullable=True)  # Conteúdo da petição
+    inconsistencias_json = Column(Text, nullable=True)  # JSON das inconsistências detectadas
+    prazo_limite = Column(DateTime, nullable=True)  # 3 dias úteis antes da abertura
+    template_id = Column(String(36), nullable=True)
+    arquivo_path = Column(String(500), nullable=True)  # Upload externo
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", backref="impugnacoes")
+    user = relationship("User", backref="impugnacoes")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "status": self.status,
+            "texto": self.texto,
+            "inconsistencias_json": self.inconsistencias_json,
+            "prazo_limite": self.prazo_limite.isoformat() if self.prazo_limite else None,
+            "template_id": self.template_id,
+            "arquivo_path": self.arquivo_path,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class RecursoDetalhado(Base):
+    """Recursos e contra-razões detalhados (Sprint 4)"""
+    __tablename__ = 'recursos_detalhados'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id'), nullable=True)
+    tipo = Column(Enum('recurso', 'contra_razao'), default='recurso')
+    subtipo = Column(Enum('administrativo', 'tecnico'), nullable=True)
+    status = Column(Enum('rascunho', 'revisao', 'enviado', 'aceito', 'rejeitado'), default='rascunho')
+    texto_juridico = Column(LONGTEXT, nullable=True)
+    texto_tecnico = Column(LONGTEXT, nullable=True)
+    inconsistencias_json = Column(Text, nullable=True)
+    motivacoes_json = Column(Text, nullable=True)
+    empresa_alvo = Column(String(255), nullable=True)  # Para contra-razão
+    template_id = Column(String(36), nullable=True)
+    arquivo_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", backref="recursos_detalhados")
+    user = relationship("User", backref="recursos_detalhados")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "subtipo": self.subtipo,
+            "status": self.status,
+            "texto_juridico": self.texto_juridico,
+            "texto_tecnico": self.texto_tecnico,
+            "inconsistencias_json": self.inconsistencias_json,
+            "motivacoes_json": self.motivacoes_json,
+            "empresa_alvo": self.empresa_alvo,
+            "template_id": self.template_id,
+            "arquivo_path": self.arquivo_path,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class RecursoTemplate(Base):
+    """Templates reutilizáveis para impugnações, recursos e contra-razões"""
+    __tablename__ = 'recurso_templates'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome = Column(String(255), nullable=False)
+    tipo = Column(Enum('impugnacao', 'recurso', 'contra_razao'), nullable=False)
+    conteudo_md = Column(LONGTEXT, nullable=True)
+    empresa_id = Column(String(36), ForeignKey('empresas.id'), nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "tipo": self.tipo,
+            "conteudo_md": self.conteudo_md,
+            "empresa_id": self.empresa_id,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class MonitoramentoJanela(Base):
+    """Monitoramento de janelas de recurso/impugnação"""
+    __tablename__ = 'monitoramento_janelas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    status = Column(Enum('aguardando', 'aberta', 'encerrada'), default='aguardando')
+    data_abertura = Column(DateTime, nullable=True)
+    data_encerramento = Column(DateTime, nullable=True)
+    notificar_whatsapp = Column(Boolean, default=True)
+    notificar_email = Column(Boolean, default=True)
+    notificar_sistema = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    edital = relationship("Edital", backref="monitoramento_janelas")
+    user = relationship("User", backref="monitoramento_janelas")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "status": self.status,
+            "data_abertura": self.data_abertura.isoformat() if self.data_abertura else None,
+            "data_encerramento": self.data_encerramento.isoformat() if self.data_encerramento else None,
+            "notificar_whatsapp": self.notificar_whatsapp,
+            "notificar_email": self.notificar_email,
+            "notificar_sistema": self.notificar_sistema,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ValidacaoLegal(Base):
+    """Log de análise/validação legal de editais"""
+    __tablename__ = 'validacoes_legais'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    inconsistencias_json = Column(LONGTEXT, nullable=True)  # [{trecho, lei_violada, gravidade, sugestao}]
+    analise_ia = Column(LONGTEXT, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    edital = relationship("Edital", backref="validacoes_legais")
+    user = relationship("User", backref="validacoes_legais")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "inconsistencias_json": self.inconsistencias_json,
+            "analise_ia": self.analise_ia,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 # ==================== DATABASE ====================
 
 engine = create_engine(MYSQL_URI, pool_pre_ping=True, pool_recycle=3600)

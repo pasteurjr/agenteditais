@@ -7,7 +7,14 @@ import json
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
-from models import init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao, Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento, ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto, Empresa, PropostaLog, PropostaTemplate, AnvisaValidacao, ProdutoDocumento
+from models import (
+    init_db, get_db, User, Session, Message, RefreshToken, Produto, ProdutoEspecificacao,
+    Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento,
+    ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto,
+    Empresa, PropostaLog, PropostaTemplate, AnvisaValidacao, ProdutoDocumento,
+    # Sprint 4: Recursos e Impugnações
+    Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
+)
 from llm import call_deepseek
 from tools import (
     _web_search, tool_web_search, tool_download_arquivo, tool_processar_upload,
@@ -20,6 +27,9 @@ from tools import (
     execute_tool, _extrair_info_produto, PROMPT_EXTRAIR_SPECS,
     tool_calcular_scores_validacao, tool_atualizar_status_proposta,
     tool_verificar_anvisa_proposta, tool_auditoria_documental, tool_smart_split_pdf,
+    # Sprint 4: Recursos e Impugnações
+    tool_validacao_legal_edital, tool_gerar_peticao_impugnacao,
+    tool_analisar_proposta_vencedora, tool_gerar_laudo_recurso,
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
 
@@ -13027,6 +13037,431 @@ def reprocessar_todos_metadados():
         processar_metadados_produto(pid)
 
     return jsonify({"success": True, "total": len(ids)})
+
+
+# =============================================================================
+# SPRINT 4: RECURSOS E IMPUGNAÇÕES — Endpoints (UC-I01 a UC-RE05)
+# =============================================================================
+
+@app.route("/api/editais/<edital_id>/validacao-legal", methods=["POST"])
+@require_auth
+def validacao_legal_edital(edital_id):
+    """UC-I01: Validação legal do edital via IA."""
+    from tools import tool_validacao_legal_edital
+    user_id = get_current_user_id()
+    resultado = tool_validacao_legal_edital(edital_id=edital_id, user_id=user_id)
+    if resultado.get("success"):
+        return jsonify(resultado)
+    return jsonify(resultado), 400 if resultado.get("sem_pdf") else 500
+
+
+@app.route("/api/editais/<edital_id>/sugerir-peticao", methods=["POST"])
+@require_auth
+def sugerir_peticao_edital(edital_id):
+    """UC-I02: Sugere petição de impugnação ou esclarecimento."""
+    from tools import tool_gerar_peticao_impugnacao
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+    inconsistencias = data.get("inconsistencias")
+    template_id = data.get("template_id")
+    tipo = data.get("tipo", "impugnacao")
+
+    resultado = tool_gerar_peticao_impugnacao(
+        edital_id=edital_id,
+        user_id=user_id,
+        inconsistencias=inconsistencias,
+        template_id=template_id,
+        tipo=tipo,
+    )
+    if resultado.get("success"):
+        return jsonify(resultado)
+    return jsonify(resultado), 500
+
+
+@app.route("/api/impugnacoes", methods=["POST"])
+@require_auth
+def criar_impugnacao():
+    """UC-I03: Criar/salvar impugnação manualmente."""
+    from models import get_db, Impugnacao, Edital
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    data = request.get_json(silent=True) or {}
+
+    edital_id = data.get("edital_id")
+    if not edital_id:
+        return jsonify({"error": "edital_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        impugnacao = Impugnacao(
+            edital_id=edital_id,
+            user_id=user_id,
+            empresa_id=empresa_id or edital.empresa_id,
+            tipo=data.get("tipo", "impugnacao"),
+            status=data.get("status", "rascunho"),
+            texto=data.get("texto"),
+            inconsistencias_json=json.dumps(data.get("inconsistencias", []), ensure_ascii=False) if data.get("inconsistencias") else data.get("inconsistencias_json"),
+            prazo_limite=data.get("prazo_limite"),
+            template_id=data.get("template_id"),
+        )
+        db.add(impugnacao)
+        db.commit()
+
+        return jsonify({"success": True, "impugnacao": impugnacao.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/impugnacoes/upload", methods=["POST"])
+@require_auth
+def upload_impugnacao():
+    """UC-I04: Upload de arquivo externo de impugnação."""
+    from models import get_db, Impugnacao, Edital
+    user_id = get_current_user_id()
+
+    if 'arquivo' not in request.files:
+        return jsonify({"error": "Arquivo não fornecido"}), 400
+
+    arquivo = request.files['arquivo']
+    edital_id = request.form.get("edital_id")
+    impugnacao_id = request.form.get("impugnacao_id")
+
+    if not edital_id:
+        return jsonify({"error": "edital_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        # Salvar arquivo
+        upload_dir = os.path.join(UPLOAD_FOLDER, "impugnacoes", edital_id)
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f"{uuid.uuid4()}_{arquivo.filename}"
+        filepath = os.path.join(upload_dir, filename)
+        arquivo.save(filepath)
+
+        if impugnacao_id:
+            # Atualizar impugnação existente
+            impugnacao = db.query(Impugnacao).filter(
+                Impugnacao.id == impugnacao_id,
+                Impugnacao.user_id == user_id
+            ).first()
+            if impugnacao:
+                impugnacao.arquivo_path = filepath
+                impugnacao.updated_at = datetime.now()
+                db.commit()
+                return jsonify({"success": True, "impugnacao": impugnacao.to_dict()})
+            return jsonify({"error": "Impugnação não encontrada"}), 404
+        else:
+            # Criar nova impugnação com arquivo
+            empresa_id = get_current_empresa_id()
+            impugnacao = Impugnacao(
+                edital_id=edital_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+                tipo=request.form.get("tipo", "impugnacao"),
+                status="rascunho",
+                arquivo_path=filepath,
+            )
+            db.add(impugnacao)
+            db.commit()
+            return jsonify({"success": True, "impugnacao": impugnacao.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/prazo-impugnacao", methods=["GET"])
+@require_auth
+def prazo_impugnacao_edital(edital_id):
+    """UC-I05: Calcula prazo de impugnação (3 dias úteis antes da abertura)."""
+    from models import get_db, Edital
+    user_id = get_current_user_id()
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        if not edital.data_abertura:
+            return jsonify({
+                "edital_id": edital_id,
+                "prazo_limite": None,
+                "message": "Edital sem data de abertura definida",
+                "dias_restantes": None,
+            })
+
+        # Calcular 3 dias úteis antes da abertura
+        prazo = edital.data_abertura
+        dias_uteis = 0
+        while dias_uteis < 3:
+            prazo -= timedelta(days=1)
+            if prazo.weekday() < 5:  # Seg-Sex
+                dias_uteis += 1
+
+        agora = datetime.now()
+        dias_restantes = (prazo - agora).days if prazo > agora else 0
+        expirado = prazo <= agora
+
+        return jsonify({
+            "edital_id": edital_id,
+            "edital_numero": edital.numero,
+            "data_abertura": edital.data_abertura.isoformat(),
+            "prazo_limite": prazo.isoformat(),
+            "dias_restantes": dias_restantes,
+            "expirado": expirado,
+            "status": "expirado" if expirado else ("urgente" if dias_restantes <= 1 else "aberto"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/monitorar-janela", methods=["POST"])
+@require_auth
+def monitorar_janela_recurso(edital_id):
+    """UC-RE01: Cadastrar monitoramento de janela de recurso."""
+    from models import get_db, Edital, MonitoramentoJanela
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        # Verificar se já existe monitoramento
+        existente = db.query(MonitoramentoJanela).filter(
+            MonitoramentoJanela.edital_id == edital_id,
+            MonitoramentoJanela.user_id == user_id,
+            MonitoramentoJanela.status != 'encerrada'
+        ).first()
+
+        if existente:
+            # Atualizar existente
+            existente.notificar_whatsapp = data.get("notificar_whatsapp", existente.notificar_whatsapp)
+            existente.notificar_email = data.get("notificar_email", existente.notificar_email)
+            existente.notificar_sistema = data.get("notificar_sistema", existente.notificar_sistema)
+            if data.get("data_abertura"):
+                existente.data_abertura = data["data_abertura"]
+            if data.get("data_encerramento"):
+                existente.data_encerramento = data["data_encerramento"]
+            db.commit()
+            return jsonify({"success": True, "monitoramento": existente.to_dict(), "atualizado": True})
+
+        # Calcular datas automáticas (janela de recurso geralmente abre após resultado)
+        data_abertura = data.get("data_abertura")
+        data_encerramento = data.get("data_encerramento")
+
+        # Se edital tem data_recursos, usar como referência
+        if not data_abertura and edital.data_recursos:
+            data_abertura = edital.data_recursos.isoformat() if hasattr(edital.data_recursos, 'isoformat') else edital.data_recursos
+
+        monitoramento = MonitoramentoJanela(
+            edital_id=edital_id,
+            user_id=user_id,
+            status='aguardando',
+            data_abertura=data_abertura,
+            data_encerramento=data_encerramento,
+            notificar_whatsapp=data.get("notificar_whatsapp", True),
+            notificar_email=data.get("notificar_email", True),
+            notificar_sistema=data.get("notificar_sistema", True),
+        )
+        db.add(monitoramento)
+        db.commit()
+
+        return jsonify({"success": True, "monitoramento": monitoramento.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/editais/<edital_id>/analisar-vencedora", methods=["POST"])
+@require_auth
+def analisar_vencedora_edital(edital_id):
+    """UC-RE02: Analisar proposta vencedora contra edital."""
+    from tools import tool_analisar_proposta_vencedora
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+    proposta_texto = data.get("proposta_vencedora_texto")
+
+    resultado = tool_analisar_proposta_vencedora(
+        edital_id=edital_id,
+        user_id=user_id,
+        proposta_vencedora_texto=proposta_texto,
+    )
+    if resultado.get("success"):
+        return jsonify(resultado)
+    return jsonify(resultado), 500
+
+
+@app.route("/api/recursos", methods=["POST"])
+@require_auth
+def criar_recurso_detalhado():
+    """UC-RE04/RE05: Criar recurso ou contra-razão via IA."""
+    from tools import tool_gerar_laudo_recurso
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+
+    edital_id = data.get("edital_id")
+    if not edital_id:
+        return jsonify({"error": "edital_id é obrigatório"}), 400
+
+    resultado = tool_gerar_laudo_recurso(
+        edital_id=edital_id,
+        user_id=user_id,
+        tipo=data.get("tipo", "recurso"),
+        inconsistencias=data.get("inconsistencias"),
+        template_id=data.get("template_id"),
+        empresa_alvo=data.get("empresa_alvo"),
+    )
+    if resultado.get("success"):
+        return jsonify(resultado), 201
+    return jsonify(resultado), 500
+
+
+@app.route("/api/recursos/upload", methods=["POST"])
+@require_auth
+def upload_recurso():
+    """Upload de laudo externo de recurso."""
+    from models import get_db, RecursoDetalhado, Edital
+    user_id = get_current_user_id()
+
+    if 'arquivo' not in request.files:
+        return jsonify({"error": "Arquivo não fornecido"}), 400
+
+    arquivo = request.files['arquivo']
+    edital_id = request.form.get("edital_id")
+    recurso_id = request.form.get("recurso_id")
+
+    if not edital_id:
+        return jsonify({"error": "edital_id é obrigatório"}), 400
+
+    db = get_db()
+    try:
+        # Salvar arquivo
+        upload_dir = os.path.join(UPLOAD_FOLDER, "recursos", edital_id)
+        os.makedirs(upload_dir, exist_ok=True)
+        filename = f"{uuid.uuid4()}_{arquivo.filename}"
+        filepath = os.path.join(upload_dir, filename)
+        arquivo.save(filepath)
+
+        if recurso_id:
+            # Atualizar recurso existente
+            recurso = db.query(RecursoDetalhado).filter(
+                RecursoDetalhado.id == recurso_id,
+                RecursoDetalhado.user_id == user_id
+            ).first()
+            if recurso:
+                recurso.arquivo_path = filepath
+                recurso.updated_at = datetime.now()
+                db.commit()
+                return jsonify({"success": True, "recurso": recurso.to_dict()})
+            return jsonify({"error": "Recurso não encontrado"}), 404
+        else:
+            # Criar novo recurso com arquivo
+            empresa_id = get_current_empresa_id()
+            recurso = RecursoDetalhado(
+                edital_id=edital_id,
+                user_id=user_id,
+                empresa_id=empresa_id,
+                tipo=request.form.get("tipo", "recurso"),
+                status="rascunho",
+                arquivo_path=filepath,
+            )
+            db.add(recurso)
+            db.commit()
+            return jsonify({"success": True, "recurso": recurso.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/recursos", methods=["GET"])
+@require_auth
+def listar_recursos_detalhados():
+    """Listar recursos/contra-razões de um edital."""
+    from models import get_db, RecursoDetalhado
+    user_id = get_current_user_id()
+    edital_id = request.args.get("edital_id")
+
+    db = get_db()
+    try:
+        query = db.query(RecursoDetalhado).filter(RecursoDetalhado.user_id == user_id)
+        if edital_id:
+            query = query.filter(RecursoDetalhado.edital_id == edital_id)
+        query = query.order_by(RecursoDetalhado.created_at.desc())
+
+        recursos = query.all()
+        return jsonify({
+            "success": True,
+            "recursos": [r.to_dict() for r in recursos],
+            "total": len(recursos),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/recursos/<recurso_id>/status", methods=["PUT"])
+@require_auth
+def atualizar_status_recurso(recurso_id):
+    """Atualizar status de um recurso."""
+    from models import get_db, RecursoDetalhado
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+    novo_status = data.get("status")
+
+    if not novo_status:
+        return jsonify({"error": "status é obrigatório"}), 400
+
+    status_validos = ['rascunho', 'revisao', 'enviado', 'aceito', 'rejeitado']
+    if novo_status not in status_validos:
+        return jsonify({"error": f"Status inválido. Valores aceitos: {status_validos}"}), 400
+
+    db = get_db()
+    try:
+        recurso = db.query(RecursoDetalhado).filter(
+            RecursoDetalhado.id == recurso_id,
+            RecursoDetalhado.user_id == user_id
+        ).first()
+        if not recurso:
+            return jsonify({"error": "Recurso não encontrado"}), 404
+
+        recurso.status = novo_status
+        recurso.updated_at = datetime.now()
+        db.commit()
+
+        return jsonify({"success": True, "recurso": recurso.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 
 # =============================================================================

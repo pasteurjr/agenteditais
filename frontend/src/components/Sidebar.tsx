@@ -53,6 +53,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
       { id: "proposta", icon: <FileText size={16} />, label: "Proposta", page: "proposta" },
       { id: "submissao", icon: <Send size={16} />, label: "Submissao", page: "submissao" },
       { id: "lances", icon: <Gavel size={16} />, label: "Disputa Lances", page: "lances" },
+      { id: "recursos", icon: <Shield size={16} />, label: "Recursos", page: "recursos" },
       { id: "followup", icon: <Clock size={16} />, label: "Followup", page: "followup" },
       { id: "crm", icon: <Users size={16} />, label: "CRM", page: "crm" },
       { id: "producao", icon: <Package size={16} />, label: "Execucao Contrato", page: "producao" },
@@ -153,6 +154,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
         label: "Recursos",
         items: [
           { id: "crud-recursos", icon: <Gavel size={14} />, label: "Recursos/Impugnacoes", page: "crud:recursos" },
+          { id: "crud-recurso-templates", icon: <FileText size={14} />, label: "Templates Recursos", page: "crud:recurso-templates" },
         ],
       },
       {

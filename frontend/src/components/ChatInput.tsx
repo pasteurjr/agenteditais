@@ -214,9 +214,19 @@ const PROMPTS_PRONTOS: PromptPronto[] = [
   { id: "desativar_fonte", nome: "✅ ❌ Desativar fonte", prompt: "Desative a fonte [NOME]" },
 
   // =============================================================================
-  // 12. CONSULTAS ANALÍTICAS (MindsDB)
+  // 12. RECURSOS E IMPUGNAÇÕES
   // =============================================================================
-  { id: "sep_12", nome: "━━━ 12. CONSULTAS ANALÍTICAS (MindsDB) ━━━", prompt: "" },
+  { id: "sep_12", nome: "━━━ 12. RECURSOS E IMPUGNAÇÕES ━━━", prompt: "" },
+  { id: "validacao_legal", nome: "⚖️ Validação legal do edital", prompt: "Analise a conformidade legal do edital [NUM]" },
+  { id: "gerar_impugnacao", nome: "📜 Gerar petição de impugnação", prompt: "Gere uma petição de impugnação para o edital [NUM]" },
+  { id: "analisar_vencedora", nome: "🔍 Analisar proposta vencedora", prompt: "Analise as inconsistências da proposta vencedora do edital [NUM]" },
+  { id: "gerar_recurso", nome: "📋 Gerar laudo de recurso", prompt: "Gere um laudo de recurso para o edital [NUM]" },
+  { id: "gerar_contra_razao", nome: "🛡️ Gerar contra-razão", prompt: "Gere uma contra-razão para o edital [NUM]" },
+
+  // =============================================================================
+  // 13. CONSULTAS ANALÍTICAS (MindsDB)
+  // =============================================================================
+  { id: "sep_13_analytics", nome: "━━━ 13. CONSULTAS ANALÍTICAS (MindsDB) ━━━", prompt: "" },
   { id: "mindsdb_totais", nome: "✅ 📊 Quantos produtos e editais?", prompt: "Quantos produtos e editais existem no banco?" },
   { id: "mindsdb_editais_novos", nome: "✅ 📊 Editais com status novo", prompt: "Quais editais estão com status novo?" },
   { id: "mindsdb_editais_orgao", nome: "✅ 📊 Editais por órgão", prompt: "Liste editais do [ORGAO]" },

@@ -1,0 +1,951 @@
+import { useState, useEffect, useCallback } from "react";
+import type { PageProps } from "../types";
+import {
+  Gavel, Eye, Search, Upload, Download, Send, Loader2, Plus,
+  Clock, CheckCircle, AlertTriangle, Shield, FileText, Edit3,
+  Trash2, Save, MessageSquare, Timer, Bell, Mail, Smartphone,
+  XCircle, Activity,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  Card, DataTable, ActionButton, FormField, TextInput, TextArea,
+  SelectInput, Modal, TabPanel, Checkbox,
+} from "../components/common";
+import type { Column } from "../components/common";
+import { getEditais, createSession, sendMessage } from "../api/client";
+import type { Edital } from "../api/client";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type JanelaStatus = "aguardando" | "aberta" | "encerrada";
+
+interface MonitoramentoState {
+  editalId: string;
+  status: JanelaStatus;
+  alertaWhatsapp: boolean;
+  alertaEmail: boolean;
+  alertaSistema: boolean;
+  ativado: boolean;
+  tempoRestante: string;
+}
+
+interface InconsistenciaVencedora {
+  id: number;
+  item: string;
+  inconsistencia: string;
+  motivacao: string;
+  gravidade: "ALTA" | "MEDIA" | "BAIXA";
+}
+
+interface ChatMsg {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Laudo {
+  id: string;
+  edital_id: string;
+  edital_numero: string;
+  tipo: "recurso" | "contra_razao";
+  subtipo: "administrativo" | "tecnico";
+  empresa_alvo: string;
+  template_id: string;
+  status: "rascunho" | "revisao" | "protocolado" | "deferido" | "indeferido";
+  conteudo: string;
+  data_criacao: string;
+}
+
+interface TemplateOption {
+  id: string;
+  nome: string;
+  conteudo_md: string;
+  tipo: string;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function RecursosPage(props?: PageProps) {
+  const { onSendToChat } = props ?? {};
+
+  // ── Shared state ──
+  const [editais, setEditais] = useState<Edital[]>([]);
+  const [editalId, setEditalId] = useState("");
+  const [loadingEditais, setLoadingEditais] = useState(false);
+
+  // ── Tab: Monitoramento ──
+  const [monitoramento, setMonitoramento] = useState<MonitoramentoState>({
+    editalId: "",
+    status: "aguardando",
+    alertaWhatsapp: false,
+    alertaEmail: true,
+    alertaSistema: true,
+    ativado: false,
+    tempoRestante: "",
+  });
+  const [monitorLoading, setMonitorLoading] = useState(false);
+
+  // ── Tab: Analise ──
+  const [analiseEditalId, setAnaliseEditalId] = useState("");
+  const [propostaVencedoraTexto, setPropostaVencedoraTexto] = useState("");
+  const [analiseLoading, setAnaliseLoading] = useState(false);
+  const [inconsistenciasVencedora, setInconsistenciasVencedora] = useState<InconsistenciaVencedora[]>([]);
+  const [analiseResultadoMd, setAnaliseResultadoMd] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSessionId, setChatSessionId] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+
+  // ── Tab: Laudos ──
+  const [laudos, setLaudos] = useState<Laudo[]>([]);
+  const [selectedLaudo, setSelectedLaudo] = useState<Laudo | null>(null);
+  const [showNovoLaudoModal, setShowNovoLaudoModal] = useState(false);
+  const [showUploadLaudoModal, setShowUploadLaudoModal] = useState(false);
+  const [laudoEditalId, setLaudoEditalId] = useState("");
+  const [laudoTipo, setLaudoTipo] = useState<"recurso" | "contra_razao">("recurso");
+  const [laudoSubtipo, setLaudoSubtipo] = useState<"administrativo" | "tecnico">("administrativo");
+  const [laudoEmpresaAlvo, setLaudoEmpresaAlvo] = useState("");
+  const [laudoTemplateId, setLaudoTemplateId] = useState("");
+  const [laudoConteudo, setLaudoConteudo] = useState("");
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadEditalId, setUploadEditalId] = useState("");
+  const [laudosSaving, setLaudosSaving] = useState(false);
+
+  // ── Load data ──
+  useEffect(() => {
+    loadEditais();
+    loadTemplates();
+    loadLaudos();
+  }, []);
+
+  const loadEditais = async () => {
+    setLoadingEditais(true);
+    try {
+      const data = await getEditais();
+      setEditais(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar editais:", err);
+    } finally {
+      setLoadingEditais(false);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const data = await crudList("recurso-templates");
+      if (Array.isArray(data)) {
+        setTemplates(data.filter((t: Record<string, unknown>) => t.ativo !== false).map((t: Record<string, unknown>) => ({
+          id: String(t.id),
+          nome: String(t.nome || ""),
+          conteudo_md: String(t.conteudo_md || ""),
+          tipo: String(t.tipo || "recurso"),
+        })));
+      }
+    } catch {
+      setTemplates([]);
+    }
+  };
+
+  const loadLaudos = async () => {
+    try {
+      const data = await crudList("recursos");
+      if (Array.isArray(data)) {
+        setLaudos(data
+          .filter((r: Record<string, unknown>) => r.tipo === "recurso" || r.tipo === "contra_razao")
+          .map((r: Record<string, unknown>) => ({
+            id: String(r.id),
+            edital_id: String(r.edital_id || ""),
+            edital_numero: String(r.edital_numero || r.edital_id || ""),
+            tipo: (r.tipo === "contra_razao" ? "contra_razao" : "recurso") as "recurso" | "contra_razao",
+            subtipo: (r.subtipo as Laudo["subtipo"]) || "administrativo",
+            empresa_alvo: String(r.empresa_alvo || ""),
+            template_id: String(r.template_id || ""),
+            status: (r.status as Laudo["status"]) || "rascunho",
+            conteudo: String(r.texto_minuta || ""),
+            data_criacao: r.created_at ? new Date(String(r.created_at)).toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR"),
+          })));
+      }
+    } catch {
+      setLaudos([]);
+    }
+  };
+
+  // ── Edital options ──
+  const editalOptions = editais.map(e => ({
+    value: e.id || "",
+    label: `${e.numero} - ${e.orgao}`,
+  }));
+
+  // ── Monitoramento handlers ──
+
+  const handleAtivarMonitoramento = useCallback(async () => {
+    if (!editalId) return;
+    setMonitorLoading(true);
+    try {
+      const session = await createSession("monitorar-janela") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const edital = editais.find(e => e.id === editalId);
+      const prompt = `Monitore a janela de recurso do edital ${edital?.numero || editalId}. Informe o status atual: se a janela de recurso esta aberta, aguardando ou encerrada. Se houver prazo, informe.`;
+      const resp = await sendMessage(sid, prompt);
+      setMonitoramento(prev => ({
+        ...prev,
+        editalId,
+        ativado: true,
+        status: "aguardando",
+      }));
+    } catch (err) {
+      console.error("Erro ao ativar monitoramento:", err);
+    } finally {
+      setMonitorLoading(false);
+    }
+  }, [editalId, editais]);
+
+  const handleRegistrarIntencao = useCallback(async () => {
+    if (!editalId) return;
+    if (onSendToChat) {
+      const edital = editais.find(e => e.id === editalId);
+      onSendToChat(`Registre intencao de recurso para o edital ${edital?.numero || editalId}`);
+    }
+  }, [editalId, editais, onSendToChat]);
+
+  // ── Analise handlers ──
+
+  const handleAnalisarVencedora = useCallback(async () => {
+    if (!analiseEditalId) return;
+    setAnaliseLoading(true);
+    setInconsistenciasVencedora([]);
+    setAnaliseResultadoMd("");
+    setChatMessages([]);
+    setChatSessionId("");
+    try {
+      const session = await createSession("analise-vencedora") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      setChatSessionId(sid);
+      const edital = editais.find(e => e.id === analiseEditalId);
+      let prompt = `Analise a proposta vencedora do edital ${edital?.numero || analiseEditalId}.`;
+      if (propostaVencedoraTexto.trim()) {
+        prompt += ` Texto da proposta vencedora:\n\n${propostaVencedoraTexto}\n\n`;
+      }
+      prompt += `Identifique inconsistencias, irregularidades e motivacoes para recurso. Para cada item encontrado, indique: item analisado, inconsistencia, motivacao para recurso e gravidade (ALTA/MEDIA/BAIXA). Apresente em tabela markdown e ao final faca uma analise geral.`;
+      const resp = await sendMessage(sid, prompt);
+      setAnaliseResultadoMd(resp.response || "");
+      // Try parsing table
+      const parsed = parseInconsistenciasVencedora(resp.response || "");
+      if (parsed.length > 0) {
+        setInconsistenciasVencedora(parsed);
+      }
+      setChatMessages([
+        { role: "user", content: prompt },
+        { role: "assistant", content: resp.response || "" },
+      ]);
+    } catch (err) {
+      console.error("Erro ao analisar proposta:", err);
+      setAnaliseResultadoMd("Erro ao analisar proposta vencedora.");
+    } finally {
+      setAnaliseLoading(false);
+    }
+  }, [analiseEditalId, propostaVencedoraTexto, editais]);
+
+  const handleChatSend = useCallback(async () => {
+    if (!chatInput.trim() || !chatSessionId) return;
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    setChatLoading(true);
+    try {
+      const resp = await sendMessage(chatSessionId, userMsg);
+      setChatMessages(prev => [...prev, { role: "assistant", content: resp.response || "" }]);
+    } catch (err) {
+      console.error("Erro no chat:", err);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Erro ao processar pergunta." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  }, [chatInput, chatSessionId]);
+
+  function parseInconsistenciasVencedora(text: string): InconsistenciaVencedora[] {
+    const results: InconsistenciaVencedora[] = [];
+    const lines = text.split("\n");
+    let counter = 0;
+    for (const line of lines) {
+      const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+      if (cells.length >= 3) {
+        const first = cells[0].replace(/^#+\s*/, "").trim();
+        if (first === "#" || first === "---" || first.startsWith("-") || first === "Item") continue;
+        const num = parseInt(first);
+        if (isNaN(num) && counter === 0) continue;
+        counter++;
+        const gravidade = cells.length >= 4
+          ? (cells[3].toUpperCase().includes("ALTA") ? "ALTA" : cells[3].toUpperCase().includes("MEDIA") || cells[3].toUpperCase().includes("MÉDIA") ? "MEDIA" : "BAIXA")
+          : "MEDIA";
+        results.push({
+          id: counter,
+          item: cells[0] || String(counter),
+          inconsistencia: cells[1] || "",
+          motivacao: cells[2] || "",
+          gravidade: gravidade as "ALTA" | "MEDIA" | "BAIXA",
+        });
+      }
+    }
+    return results;
+  }
+
+  // ── Laudos handlers ──
+
+  const handleNovoLaudo = async () => {
+    if (!laudoEditalId) return;
+    setLaudosSaving(true);
+    try {
+      let conteudo = laudoConteudo;
+      if (laudoTemplateId && !conteudo) {
+        const tmpl = templates.find(t => t.id === laudoTemplateId);
+        conteudo = tmpl?.conteudo_md || "";
+      }
+      // Add mandatory sections if empty
+      if (!conteudo && laudoTipo === "recurso") {
+        conteudo = `## SECAO JURIDICA\n\n[Fundamentacao legal]\n\n## SECAO TECNICA\n\n[Analise tecnica]\n\n`;
+      }
+      if (!conteudo && laudoTipo === "contra_razao") {
+        conteudo = `## SECAO JURIDICA\n\n[Fundamentacao legal]\n\n## SECAO TECNICA\n\n[Analise tecnica]\n\n## DEFESA\n\n[Argumentos de defesa]\n\n## ATAQUE\n\n[Contra-argumentos]\n\n`;
+      }
+      await crudCreate("recursos", {
+        edital_id: laudoEditalId,
+        tipo: laudoTipo,
+        subtipo: laudoSubtipo,
+        empresa_alvo: laudoEmpresaAlvo,
+        template_id: laudoTemplateId || null,
+        motivo: laudoTipo === "recurso" ? "Recurso administrativo" : "Contra-razao",
+        texto_minuta: conteudo,
+        status: "rascunho",
+        prazo_limite: new Date().toISOString(),
+      });
+      setShowNovoLaudoModal(false);
+      setLaudoEditalId("");
+      setLaudoTipo("recurso");
+      setLaudoSubtipo("administrativo");
+      setLaudoEmpresaAlvo("");
+      setLaudoTemplateId("");
+      setLaudoConteudo("");
+      loadLaudos();
+    } catch (err) {
+      console.error("Erro ao criar laudo:", err);
+    } finally {
+      setLaudosSaving(false);
+    }
+  };
+
+  const handleUploadLaudo = async () => {
+    if (!uploadFile || !uploadEditalId) return;
+    setLaudosSaving(true);
+    try {
+      const text = await uploadFile.text();
+      await crudCreate("recursos", {
+        edital_id: uploadEditalId,
+        tipo: "recurso",
+        motivo: `Upload: ${uploadFile.name}`,
+        texto_minuta: text,
+        status: "rascunho",
+        prazo_limite: new Date().toISOString(),
+        arquivo_path: uploadFile.name,
+      });
+      setShowUploadLaudoModal(false);
+      setUploadFile(null);
+      setUploadEditalId("");
+      loadLaudos();
+    } catch (err) {
+      console.error("Erro ao fazer upload:", err);
+    } finally {
+      setLaudosSaving(false);
+    }
+  };
+
+  const handleSalvarLaudo = async () => {
+    if (!selectedLaudo) return;
+    setLaudosSaving(true);
+    try {
+      await crudUpdate("recursos", selectedLaudo.id, {
+        texto_minuta: selectedLaudo.conteudo,
+        status: "rascunho",
+      });
+      loadLaudos();
+    } catch (err) {
+      console.error("Erro ao salvar laudo:", err);
+    } finally {
+      setLaudosSaving(false);
+    }
+  };
+
+  const handleEnviarLaudoRevisao = async () => {
+    if (!selectedLaudo) return;
+    setLaudosSaving(true);
+    try {
+      await crudUpdate("recursos", selectedLaudo.id, {
+        texto_minuta: selectedLaudo.conteudo,
+        status: "protocolado",
+      });
+      loadLaudos();
+      setSelectedLaudo(null);
+    } catch (err) {
+      console.error("Erro ao enviar laudo:", err);
+    } finally {
+      setLaudosSaving(false);
+    }
+  };
+
+  const handleExportLaudoPDF = () => {
+    if (!selectedLaudo) return;
+    if (onSendToChat) {
+      onSendToChat(`Exporte em PDF o laudo de recurso do edital ${selectedLaudo.edital_numero}`);
+    }
+  };
+
+  const handleExportLaudoDOCX = () => {
+    if (!selectedLaudo) return;
+    if (onSendToChat) {
+      onSendToChat(`Exporte em DOCX o laudo de recurso do edital ${selectedLaudo.edital_numero}`);
+    }
+  };
+
+  const handleDeleteLaudo = async (id: string) => {
+    try {
+      await crudDelete("recursos", id);
+      if (selectedLaudo?.id === id) setSelectedLaudo(null);
+      loadLaudos();
+    } catch (err) {
+      console.error("Erro ao excluir laudo:", err);
+    }
+  };
+
+  // ── Columns ──
+
+  const inconsVencedoraColumns: Column<InconsistenciaVencedora>[] = [
+    { key: "id", header: "#", width: "50px" },
+    { key: "item", header: "Item" },
+    { key: "inconsistencia", header: "Inconsistencia" },
+    { key: "motivacao", header: "Motivacao Recurso" },
+    {
+      key: "gravidade",
+      header: "Gravidade",
+      width: "110px",
+      render: (item) => {
+        const cls = item.gravidade === "ALTA" ? "status-badge-error"
+          : item.gravidade === "MEDIA" ? "status-badge-warning"
+          : "status-badge-info";
+        return <span className={`status-badge ${cls}`}>{item.gravidade}</span>;
+      },
+    },
+  ];
+
+  const laudosColumns: Column<Laudo>[] = [
+    { key: "edital_numero", header: "Edital", sortable: true },
+    {
+      key: "tipo",
+      header: "Tipo",
+      render: (l) => l.tipo === "recurso" ? "Recurso" : "Contra-Razao",
+    },
+    {
+      key: "subtipo",
+      header: "Subtipo",
+      render: (l) => l.subtipo === "tecnico" ? "Tecnico" : "Administrativo",
+    },
+    { key: "empresa_alvo", header: "Empresa Alvo" },
+    {
+      key: "status",
+      header: "Status",
+      render: (l) => {
+        switch (l.status) {
+          case "rascunho":
+            return <span className="status-badge status-badge-neutral"><Edit3 size={12} /> Rascunho</span>;
+          case "revisao":
+            return <span className="status-badge status-badge-warning"><Eye size={12} /> Revisao</span>;
+          case "protocolado":
+            return <span className="status-badge status-badge-info"><Send size={12} /> Protocolado</span>;
+          case "deferido":
+            return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Deferido</span>;
+          case "indeferido":
+            return <span className="status-badge status-badge-error"><XCircle size={12} /> Indeferido</span>;
+          default:
+            return <span className="status-badge status-badge-neutral">{l.status}</span>;
+        }
+      },
+    },
+    { key: "data_criacao", header: "Data", sortable: true },
+    {
+      key: "acoes",
+      header: "Acoes",
+      width: "160px",
+      render: (l) => (
+        <div style={{ display: "flex", gap: 4 }}>
+          <ActionButton
+            icon={<Eye size={14} />}
+            label="Ver"
+            onClick={() => setSelectedLaudo(l)}
+          />
+          <ActionButton
+            icon={<Trash2 size={14} />}
+            label=""
+            variant="danger"
+            onClick={() => handleDeleteLaudo(l.id)}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  // ── Status card for monitoring ──
+  const getMonitorStatusIcon = (status: JanelaStatus) => {
+    switch (status) {
+      case "aguardando": return <Clock size={32} />;
+      case "aberta": return <AlertTriangle size={32} />;
+      case "encerrada": return <CheckCircle size={32} />;
+    }
+  };
+
+  const getMonitorStatusLabel = (status: JanelaStatus) => {
+    switch (status) {
+      case "aguardando": return "Aguardando";
+      case "aberta": return "JANELA ABERTA";
+      case "encerrada": return "Encerrada";
+    }
+  };
+
+  const getMonitorStatusColor = (status: JanelaStatus) => {
+    switch (status) {
+      case "aguardando": return "#f59e0b";
+      case "aberta": return "#ef4444";
+      case "encerrada": return "#22c55e";
+    }
+  };
+
+  // ── Tabs ──
+  const tabs = [
+    { id: "monitoramento", label: "Monitoramento", icon: <Eye size={16} /> },
+    { id: "analise", label: "Analise", icon: <Search size={16} /> },
+    { id: "laudos", label: "Laudos", icon: <FileText size={16} />, badge: laudos.length || undefined },
+  ];
+
+  return (
+    <div className="page-container">
+      <div className="page-header">
+        <div className="page-header-left">
+          <Gavel size={24} />
+          <div>
+            <h1>Recursos e Contra-Razoes</h1>
+            <p>Monitoramento de janela, analise de proposta vencedora e gestao de laudos (UC-RE01 a UC-RE06)</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="page-content">
+        <TabPanel tabs={tabs} defaultTab="monitoramento">
+          {(activeTab) => {
+            // ─── Tab: Monitoramento ──────────────────────────────────────
+            if (activeTab === "monitoramento") {
+              return (
+                <>
+                  <Card title="Monitoramento de Janela de Recurso" icon={<Eye size={18} />}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <FormField label="Selecione o Edital">
+                          <SelectInput
+                            value={editalId}
+                            onChange={setEditalId}
+                            options={editalOptions}
+                            placeholder="Selecione um edital..."
+                            disabled={loadingEditais}
+                          />
+                        </FormField>
+                      </div>
+                    </div>
+
+                    {editalId && (
+                      <>
+                        {/* Status card */}
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: 16, padding: 20,
+                          background: "var(--card-bg, #1e293b)", borderRadius: 8, marginBottom: 16,
+                          border: `2px solid ${getMonitorStatusColor(monitoramento.status)}`,
+                        }}>
+                          <div style={{ color: getMonitorStatusColor(monitoramento.status) }}>
+                            {getMonitorStatusIcon(monitoramento.status)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: getMonitorStatusColor(monitoramento.status) }}>
+                              {monitoramento.ativado ? getMonitorStatusLabel(monitoramento.status) : "Monitoramento Inativo"}
+                            </div>
+                            <div style={{ fontSize: 13, color: "#94a3b8" }}>
+                              {monitoramento.ativado
+                                ? monitoramento.status === "aberta"
+                                  ? `Tempo restante: ${monitoramento.tempoRestante || "Verificando..."}`
+                                  : "Monitorando janela de recurso..."
+                                : "Ative o monitoramento para receber alertas"
+                              }
+                            </div>
+                          </div>
+                          {monitoramento.ativado && monitoramento.status === "aberta" && (
+                            <div style={{ marginLeft: "auto" }}>
+                              <ActionButton
+                                icon={<Gavel size={14} />}
+                                label="Registrar Intencao de Recurso"
+                                variant="danger"
+                                onClick={handleRegistrarIntencao}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Alert preferences */}
+                        <div style={{ display: "flex", gap: 24, marginBottom: 16 }}>
+                          <Checkbox
+                            checked={monitoramento.alertaWhatsapp}
+                            onChange={(v) => setMonitoramento(prev => ({ ...prev, alertaWhatsapp: v }))}
+                            label="WhatsApp"
+                          />
+                          <Checkbox
+                            checked={monitoramento.alertaEmail}
+                            onChange={(v) => setMonitoramento(prev => ({ ...prev, alertaEmail: v }))}
+                            label="Email"
+                          />
+                          <Checkbox
+                            checked={monitoramento.alertaSistema}
+                            onChange={(v) => setMonitoramento(prev => ({ ...prev, alertaSistema: v }))}
+                            label="Alerta no sistema"
+                          />
+                        </div>
+
+                        <ActionButton
+                          icon={<Activity size={16} />}
+                          label={monitoramento.ativado ? "Monitoramento Ativo" : "Ativar Monitoramento"}
+                          variant={monitoramento.ativado ? "success" : "primary"}
+                          onClick={handleAtivarMonitoramento}
+                          loading={monitorLoading}
+                          disabled={monitoramento.ativado || monitorLoading}
+                        />
+                      </>
+                    )}
+                  </Card>
+                </>
+              );
+            }
+
+            // ─── Tab: Analise ────────────────────────────────────────────
+            if (activeTab === "analise") {
+              return (
+                <>
+                  <Card title="Analise de Proposta Vencedora" icon={<Search size={18} />}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <FormField label="Selecione o Edital">
+                          <SelectInput
+                            value={analiseEditalId}
+                            onChange={setAnaliseEditalId}
+                            options={editalOptions}
+                            placeholder="Selecione um edital..."
+                            disabled={loadingEditais}
+                          />
+                        </FormField>
+                      </div>
+                    </div>
+
+                    <FormField label="Texto da Proposta Vencedora (cole aqui)">
+                      <TextArea
+                        value={propostaVencedoraTexto}
+                        onChange={setPropostaVencedoraTexto}
+                        rows={6}
+                        placeholder="Cole aqui o texto da proposta vencedora para analise..."
+                      />
+                    </FormField>
+
+                    <div style={{ marginTop: 12 }}>
+                      <ActionButton
+                        icon={<Search size={16} />}
+                        label="Analisar Proposta Vencedora"
+                        variant="primary"
+                        onClick={handleAnalisarVencedora}
+                        loading={analiseLoading}
+                        disabled={!analiseEditalId || analiseLoading}
+                      />
+                    </div>
+                  </Card>
+
+                  {analiseLoading && (
+                    <Card>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, color: "#94a3b8" }}>
+                        <Loader2 size={16} className="spin" />
+                        <span>Analisando proposta vencedora...</span>
+                      </div>
+                    </Card>
+                  )}
+
+                  {inconsistenciasVencedora.length > 0 && (
+                    <Card title="Inconsistencias Identificadas" icon={<AlertTriangle size={18} />}>
+                      <DataTable
+                        data={inconsistenciasVencedora}
+                        columns={inconsVencedoraColumns}
+                        idKey="id"
+                        emptyMessage="Nenhuma inconsistencia"
+                      />
+                    </Card>
+                  )}
+
+                  {analiseResultadoMd && !analiseLoading && (
+                    <Card title="Analise Detalhada" icon={<Shield size={18} />}>
+                      <div className="markdown-content" style={{ padding: 16 }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{analiseResultadoMd}</ReactMarkdown>
+                      </div>
+                    </Card>
+                  )}
+
+                  {chatSessionId && !analiseLoading && (
+                    <Card title="Perguntas sobre a Analise" icon={<MessageSquare size={18} />}>
+                      <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12, padding: "0 8px" }}>
+                        {chatMessages.filter((_, i) => i > 1).map((msg, idx) => (
+                          <div key={idx} style={{
+                            marginBottom: 8,
+                            padding: 12,
+                            borderRadius: 8,
+                            background: msg.role === "user" ? "var(--primary-bg, #3b82f6)" : "var(--card-bg, #1e293b)",
+                            textAlign: msg.role === "user" ? "right" : "left",
+                          }}>
+                            {msg.role === "assistant" ? (
+                              <div className="markdown-content">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                              </div>
+                            ) : (
+                              <span>{msg.content}</span>
+                            )}
+                          </div>
+                        ))}
+                        {chatLoading && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, color: "#94a3b8" }}>
+                            <Loader2 size={14} className="spin" />
+                            <span>Pensando...</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <TextInput
+                          value={chatInput}
+                          onChange={setChatInput}
+                          placeholder="Faca uma pergunta sobre a analise..."
+                        />
+                        <ActionButton
+                          icon={<Send size={14} />}
+                          label="Enviar"
+                          variant="primary"
+                          onClick={handleChatSend}
+                          loading={chatLoading}
+                          disabled={!chatInput.trim() || chatLoading}
+                        />
+                      </div>
+                    </Card>
+                  )}
+                </>
+              );
+            }
+
+            // ─── Tab: Laudos ─────────────────────────────────────────────
+            if (activeTab === "laudos") {
+              return (
+                <>
+                  <Card
+                    title="Laudos de Recurso e Contra-Razao"
+                    icon={<FileText size={18} />}
+                    actions={
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <ActionButton
+                          icon={<Plus size={14} />}
+                          label="Novo Laudo"
+                          variant="primary"
+                          onClick={() => setShowNovoLaudoModal(true)}
+                        />
+                        <ActionButton
+                          icon={<Upload size={14} />}
+                          label="Upload Laudo"
+                          onClick={() => setShowUploadLaudoModal(true)}
+                        />
+                      </div>
+                    }
+                  >
+                    <DataTable
+                      data={laudos}
+                      columns={laudosColumns}
+                      idKey="id"
+                      emptyMessage="Nenhum laudo cadastrado"
+                    />
+                  </Card>
+
+                  {selectedLaudo && (
+                    <Card
+                      title={`Editando: ${selectedLaudo.edital_numero} - ${selectedLaudo.tipo === "recurso" ? "Recurso" : "Contra-Razao"} (${selectedLaudo.subtipo})`}
+                      icon={<Edit3 size={18} />}
+                      actions={
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <ActionButton
+                            icon={<Download size={14} />}
+                            label="PDF"
+                            onClick={handleExportLaudoPDF}
+                          />
+                          <ActionButton
+                            icon={<Download size={14} />}
+                            label="DOCX"
+                            onClick={handleExportLaudoDOCX}
+                          />
+                        </div>
+                      }
+                    >
+                      {/* Section hints */}
+                      <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 0", borderBottom: "1px solid var(--border-color, #334155)" }}>
+                        Secoes obrigatorias: ## SECAO JURIDICA, ## SECAO TECNICA
+                        {selectedLaudo.tipo === "contra_razao" && " | Adicionais: ## DEFESA, ## ATAQUE"}
+                      </div>
+                      <TextArea
+                        value={selectedLaudo.conteudo}
+                        onChange={(val) => setSelectedLaudo({ ...selectedLaudo, conteudo: val })}
+                        rows={20}
+                        placeholder="Conteudo do laudo..."
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+                        <ActionButton
+                          icon={<Save size={14} />}
+                          label="Salvar Rascunho"
+                          onClick={handleSalvarLaudo}
+                          loading={laudosSaving}
+                        />
+                        <ActionButton
+                          icon={<Send size={14} />}
+                          label="Enviar para Revisao"
+                          variant="primary"
+                          onClick={handleEnviarLaudoRevisao}
+                          loading={laudosSaving}
+                        />
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Modal: Novo Laudo */}
+                  <Modal
+                    isOpen={showNovoLaudoModal}
+                    onClose={() => setShowNovoLaudoModal(false)}
+                    title="Novo Laudo"
+                    size="large"
+                    footer={
+                      <>
+                        <button className="btn btn-secondary" onClick={() => setShowNovoLaudoModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleNovoLaudo} disabled={!laudoEditalId || laudosSaving}>
+                          {laudosSaving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Criar
+                        </button>
+                      </>
+                    }
+                  >
+                    <FormField label="Edital" required>
+                      <SelectInput
+                        value={laudoEditalId}
+                        onChange={setLaudoEditalId}
+                        options={editalOptions}
+                        placeholder="Selecione o edital..."
+                      />
+                    </FormField>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <FormField label="Tipo" required>
+                          <SelectInput
+                            value={laudoTipo}
+                            onChange={(v) => setLaudoTipo(v as "recurso" | "contra_razao")}
+                            options={[
+                              { value: "recurso", label: "Recurso" },
+                              { value: "contra_razao", label: "Contra-Razao" },
+                            ]}
+                          />
+                        </FormField>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <FormField label="Subtipo" required>
+                          <SelectInput
+                            value={laudoSubtipo}
+                            onChange={(v) => setLaudoSubtipo(v as "administrativo" | "tecnico")}
+                            options={[
+                              { value: "administrativo", label: "Administrativo" },
+                              { value: "tecnico", label: "Tecnico" },
+                            ]}
+                          />
+                        </FormField>
+                      </div>
+                    </div>
+                    <FormField label="Template">
+                      <SelectInput
+                        value={laudoTemplateId}
+                        onChange={(v) => {
+                          setLaudoTemplateId(v);
+                          const tmpl = templates.find(t => t.id === v);
+                          if (tmpl) setLaudoConteudo(tmpl.conteudo_md);
+                        }}
+                        options={[
+                          { value: "", label: "Nenhum (em branco)" },
+                          ...templates
+                            .filter(t => t.tipo === laudoTipo || t.tipo === "recurso")
+                            .map(t => ({ value: t.id, label: t.nome })),
+                        ]}
+                      />
+                    </FormField>
+                    <FormField label="Empresa Alvo">
+                      <TextInput
+                        value={laudoEmpresaAlvo}
+                        onChange={setLaudoEmpresaAlvo}
+                        placeholder="Nome da empresa alvo do recurso..."
+                      />
+                    </FormField>
+                    <FormField label="Conteudo Inicial">
+                      <TextArea
+                        value={laudoConteudo}
+                        onChange={setLaudoConteudo}
+                        rows={8}
+                        placeholder="Conteudo do laudo (opcional se usar template)..."
+                      />
+                    </FormField>
+                  </Modal>
+
+                  {/* Modal: Upload Laudo */}
+                  <Modal
+                    isOpen={showUploadLaudoModal}
+                    onClose={() => setShowUploadLaudoModal(false)}
+                    title="Upload de Laudo"
+                    footer={
+                      <>
+                        <button className="btn btn-secondary" onClick={() => setShowUploadLaudoModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleUploadLaudo} disabled={!uploadFile || !uploadEditalId || laudosSaving}>
+                          {laudosSaving ? <Loader2 size={14} className="spin" /> : <Upload size={14} />} Upload
+                        </button>
+                      </>
+                    }
+                  >
+                    <FormField label="Edital" required>
+                      <SelectInput
+                        value={uploadEditalId}
+                        onChange={setUploadEditalId}
+                        options={editalOptions}
+                        placeholder="Selecione o edital..."
+                      />
+                    </FormField>
+                    <FormField label="Arquivo" required>
+                      <input
+                        type="file"
+                        accept=".docx,.pdf,.doc"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        className="text-input"
+                      />
+                    </FormField>
+                  </Modal>
+                </>
+              );
+            }
+
+            return null;
+          }}
+        </TabPanel>
+      </div>
+    </div>
+  );
+}

@@ -1,179 +1,525 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { AlertTriangle, FileText, Lightbulb, Save, Clock, CheckCircle } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, TextInput, TextArea, SelectInput, Modal } from "../components/common";
+import {
+  AlertTriangle, FileText, Lightbulb, Save, Clock, CheckCircle,
+  Scale, Search, Upload, Download, Send, Eye, Loader2, Plus,
+  AlertCircle, Shield, XCircle, Trash2, Edit3,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  Card, DataTable, ActionButton, FormField, TextInput, TextArea,
+  SelectInput, Modal, TabPanel, ActionBar,
+} from "../components/common";
 import type { Column } from "../components/common";
+import { getEditais, createSession, sendMessage } from "../api/client";
+import type { Edital } from "../api/client";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 
-interface EditalImpugnacao {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Inconsistencia {
+  id: number;
+  trecho: string;
+  lei_violada: string;
+  gravidade: "ALTA" | "MEDIA" | "BAIXA";
+  sugestao: "Esclarecimento" | "Impugnacao";
+}
+
+interface Peticao {
   id: string;
-  edital: string;
+  edital_id: string;
+  edital_numero: string;
+  tipo: "esclarecimento" | "impugnacao";
+  template_id: string;
+  status: "rascunho" | "revisao" | "enviada";
+  conteudo: string;
+  data_criacao: string;
+}
+
+interface PrazoEdital {
+  id: string;
+  numero: string;
   orgao: string;
-  prazoImpugnacao: string;
-  diasRestantes: number;
-  status: "pendente" | "criada" | "enviada";
+  data_abertura: string;
+  prazo_limite: string;
+  dias_restantes: number;
+  status: "ativo" | "expirado";
 }
 
-interface Impugnacao {
+interface TemplateOption {
   id: string;
-  edital: string;
-  tipo: "impugnacao" | "recurso";
-  motivo: string;
-  dataCriacao: string;
-  status: "rascunho" | "pronta" | "enviada";
-  texto?: string;
+  nome: string;
+  conteudo_md: string;
 }
 
-// Dados mock
-const mockEditais: EditalImpugnacao[] = [
-  { id: "1", edital: "PE-001/2026", orgao: "UFMG", prazoImpugnacao: "12/02/2026", diasRestantes: 2, status: "pendente" },
-  { id: "2", edital: "PE-045/2026", orgao: "CEMIG", prazoImpugnacao: "18/02/2026", diasRestantes: 8, status: "pendente" },
-  { id: "3", edital: "CC-012/2026", orgao: "Pref. BH", prazoImpugnacao: "22/02/2026", diasRestantes: 12, status: "criada" },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const mockImpugnacoes: Impugnacao[] = [
-  { id: "1", edital: "CC-012/2026", tipo: "impugnacao", motivo: "Especificacao restritiva", dataCriacao: "05/02/2026", status: "rascunho", texto: "Ilustrissimo Senhor Pregoeiro..." },
-  { id: "2", edital: "PE-050/2025", tipo: "recurso", motivo: "Desclassificacao indevida", dataCriacao: "01/02/2026", status: "enviada" },
-];
+function calcularPrazoLimite(dataAbertura: string): { prazoLimite: string; diasRestantes: number; status: "ativo" | "expirado" } {
+  if (!dataAbertura) return { prazoLimite: "--", diasRestantes: 0, status: "expirado" };
+  const abertura = new Date(dataAbertura);
+  // 3 dias uteis antes = subtrair dias uteis
+  let diasUteis = 3;
+  const prazo = new Date(abertura);
+  while (diasUteis > 0) {
+    prazo.setDate(prazo.getDate() - 1);
+    const dia = prazo.getDay();
+    if (dia !== 0 && dia !== 6) diasUteis--;
+  }
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  prazo.setHours(0, 0, 0, 0);
+  const diffMs = prazo.getTime() - hoje.getTime();
+  const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return {
+    prazoLimite: prazo.toLocaleDateString("pt-BR"),
+    diasRestantes: diffDias,
+    status: diffDias < 0 ? "expirado" : "ativo",
+  };
+}
 
-export function ImpugnacaoPage(_props?: PageProps) {
-  const [editais] = useState<EditalImpugnacao[]>(mockEditais);
-  const [impugnacoes, setImpugnacoes] = useState<Impugnacao[]>(mockImpugnacoes);
-  const [selectedEdital, setSelectedEdital] = useState<EditalImpugnacao | null>(null);
-  const [showCriarModal, setShowCriarModal] = useState(false);
-  const [loading, setLoading] = useState(false);
+function getGravidadeBadgeClass(g: string): string {
+  switch (g) {
+    case "ALTA": return "status-badge-error";
+    case "MEDIA": return "status-badge-warning";
+    case "BAIXA": return "status-badge-info";
+    default: return "status-badge-neutral";
+  }
+}
 
-  // Form
-  const [tipo, setTipo] = useState<"impugnacao" | "recurso">("impugnacao");
-  const [motivo, setMotivo] = useState("");
-  const [fundamentacao, setFundamentacao] = useState("");
-  const [textoGerado, setTextoGerado] = useState("");
+function getPrazoColor(dias: number): string {
+  if (dias < 0) return "text-danger";
+  if (dias < 3) return "text-danger";
+  if (dias <= 5) return "text-warning";
+  return "text-success";
+}
 
-  const handleCriarImpugnacao = (edital: EditalImpugnacao) => {
-    setSelectedEdital(edital);
-    setShowCriarModal(true);
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function ImpugnacaoPage(props?: PageProps) {
+  const { onSendToChat } = props ?? {};
+
+  // ── Shared state ──
+  const [editais, setEditais] = useState<Edital[]>([]);
+  const [editalId, setEditalId] = useState("");
+  const [loadingEditais, setLoadingEditais] = useState(false);
+
+  // ── Tab: Validacao Legal ──
+  const [inconsistencias, setInconsistencias] = useState<Inconsistencia[]>([]);
+  const [validacaoLoading, setValidacaoLoading] = useState(false);
+  const [validacaoStatus, setValidacaoStatus] = useState("");
+  const [peticaoSugerida, setPeticaoSugerida] = useState("");
+  const [peticaoLoading, setPeticaoLoading] = useState(false);
+
+  // ── Tab: Peticoes ──
+  const [peticoes, setPeticoes] = useState<Peticao[]>([]);
+  const [selectedPeticao, setSelectedPeticao] = useState<Peticao | null>(null);
+  const [showNovaPeticaoModal, setShowNovaPeticaoModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [peticaoTipo, setPeticaoTipo] = useState<"esclarecimento" | "impugnacao">("esclarecimento");
+  const [peticaoTemplateId, setPeticaoTemplateId] = useState("");
+  const [peticaoEditalId, setPeticaoEditalId] = useState("");
+  const [peticaoConteudo, setPeticaoConteudo] = useState("");
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadEditalId, setUploadEditalId] = useState("");
+  const [peticoesSaving, setPeticoesSaving] = useState(false);
+
+  // ── Tab: Prazos ──
+  const [prazos, setPrazos] = useState<PrazoEdital[]>([]);
+
+  // ── Load editais ──
+  useEffect(() => {
+    loadEditais();
+    loadTemplates();
+    loadPeticoes();
+  }, []);
+
+  const loadEditais = async () => {
+    setLoadingEditais(true);
+    try {
+      const data = await getEditais();
+      setEditais(data || []);
+      // Build prazos from editais
+      const prazosList: PrazoEdital[] = (data || [])
+        .filter((e: Edital) => e.data_abertura)
+        .map((e: Edital) => {
+          const { prazoLimite, diasRestantes, status } = calcularPrazoLimite(e.data_abertura || "");
+          return {
+            id: e.id || "",
+            numero: e.numero,
+            orgao: e.orgao,
+            data_abertura: e.data_abertura ? new Date(e.data_abertura).toLocaleDateString("pt-BR") : "--",
+            prazo_limite: prazoLimite,
+            dias_restantes: diasRestantes,
+            status,
+          };
+        })
+        .sort((a: PrazoEdital, b: PrazoEdital) => a.dias_restantes - b.dias_restantes);
+      setPrazos(prazosList);
+    } catch (err) {
+      console.error("Erro ao carregar editais:", err);
+    } finally {
+      setLoadingEditais(false);
+    }
   };
 
-  const handleGerarTexto = async () => {
-    if (!motivo) return;
-    // TODO: Chamar API para gerar texto com IA
-    // Prompts: chat_impugnacao, chat_recurso
-    setLoading(true);
-    setTimeout(() => {
-      setTextoGerado(`IMPUGNACAO AO EDITAL
-
-Ilustrissimo Senhor Pregoeiro,
-
-${selectedEdital?.orgao.toUpperCase()} - PREGAO ELETRONICO N. ${selectedEdital?.edital}
-
-A empresa AQUILA DIAGNOSTICO LTDA, inscrita no CNPJ sob o numero XX.XXX.XXX/0001-XX, vem, respeitosamente, a presenca de Vossa Senhoria, apresentar IMPUGNACAO ao edital em epigrafe, pelos motivos de fato e de direito a seguir expostos:
-
-I - DO MOTIVO
-${motivo}
-
-II - DA FUNDAMENTACAO
-${fundamentacao || "Conforme disposto na Lei 14.133/2021..."}
-
-III - DO PEDIDO
-Diante do exposto, requer-se a Vossa Senhoria:
-a) O recebimento e processamento da presente impugnacao;
-b) A modificacao do edital para correcao das irregularidades apontadas;
-c) A republicacao do edital com novo prazo para apresentacao de propostas.
-
-Nestes termos, pede deferimento.
-
-${new Date().toLocaleDateString("pt-BR")}
-
-AQUILA DIAGNOSTICO LTDA`);
-      setLoading(false);
-    }, 2000);
+  const loadTemplates = async () => {
+    try {
+      const data = await crudList("recurso-templates");
+      if (Array.isArray(data)) {
+        setTemplates(data.filter((t: Record<string, unknown>) => t.ativo !== false).map((t: Record<string, unknown>) => ({
+          id: String(t.id),
+          nome: String(t.nome || ""),
+          conteudo_md: String(t.conteudo_md || ""),
+        })));
+      }
+    } catch {
+      // Templates table may not exist yet - graceful fallback
+      setTemplates([]);
+    }
   };
 
-  const handleSalvarRascunho = () => {
-    if (!selectedEdital) return;
-    const novaImpugnacao: Impugnacao = {
-      id: String(impugnacoes.length + 1),
-      edital: selectedEdital.edital,
-      tipo,
-      motivo,
-      dataCriacao: new Date().toLocaleDateString("pt-BR"),
-      status: "rascunho",
-      texto: textoGerado,
-    };
-    setImpugnacoes([novaImpugnacao, ...impugnacoes]);
-    setShowCriarModal(false);
-    // Reset
-    setTipo("impugnacao");
-    setMotivo("");
-    setFundamentacao("");
-    setTextoGerado("");
-    setSelectedEdital(null);
+  const loadPeticoes = async () => {
+    try {
+      const data = await crudList("recursos");
+      if (Array.isArray(data)) {
+        setPeticoes(data.map((r: Record<string, unknown>) => ({
+          id: String(r.id),
+          edital_id: String(r.edital_id || ""),
+          edital_numero: String(r.edital_numero || r.edital_id || ""),
+          tipo: (r.tipo === "impugnacao" ? "impugnacao" : "esclarecimento") as "esclarecimento" | "impugnacao",
+          template_id: String(r.template_id || ""),
+          status: (r.status as Peticao["status"]) || "rascunho",
+          conteudo: String(r.texto_minuta || ""),
+          data_criacao: r.created_at ? new Date(String(r.created_at)).toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR"),
+        })));
+      }
+    } catch {
+      setPeticoes([]);
+    }
   };
 
-  const editaisColumns: Column<EditalImpugnacao>[] = [
-    { key: "edital", header: "Edital", sortable: true },
-    { key: "orgao", header: "Orgao" },
-    { key: "prazoImpugnacao", header: "Prazo Impugnacao", sortable: true },
+  // ── Validacao Legal handlers ──
+
+  const handleAnalisarEdital = useCallback(async () => {
+    if (!editalId) return;
+    setValidacaoLoading(true);
+    setValidacaoStatus("Analisando conformidade legal do edital...");
+    setInconsistencias([]);
+    setPeticaoSugerida("");
+    try {
+      const session = await createSession("validacao-legal") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const edital = editais.find(e => e.id === editalId);
+      const prompt = `Analise a conformidade legal do edital ${edital?.numero || editalId}. Identifique inconsistencias, trechos que violam a Lei 14.133/2021 ou outras normas. Para cada inconsistencia retorne: o trecho exato, a lei violada, a gravidade (ALTA/MEDIA/BAIXA) e se recomenda Esclarecimento ou Impugnacao. Responda em formato de tabela markdown com colunas: #, Trecho, Lei Violada, Gravidade, Sugestao.`;
+      const resp = await sendMessage(sid, prompt);
+      setValidacaoStatus("");
+      // Parse the response into inconsistencies if possible, or display as-is
+      const parsed = parseInconsistencias(resp.response || "");
+      if (parsed.length > 0) {
+        setInconsistencias(parsed);
+      } else {
+        // Fallback: show as a single entry
+        setPeticaoSugerida(resp.response || "Nenhuma inconsistencia encontrada.");
+      }
+    } catch (err) {
+      console.error("Erro na validacao legal:", err);
+      setValidacaoStatus("Erro ao analisar edital.");
+    } finally {
+      setValidacaoLoading(false);
+    }
+  }, [editalId, editais]);
+
+  const handleGerarPeticao = useCallback(async () => {
+    if (!editalId) return;
+    setPeticaoLoading(true);
+    try {
+      const session = await createSession("gerar-peticao") as Record<string, unknown>;
+      const sid = String(session.session_id || session.id);
+      const edital = editais.find(e => e.id === editalId);
+      const incons = inconsistencias.map(i => `- ${i.trecho} (${i.lei_violada})`).join("\n");
+      const prompt = `Gere uma peticao de impugnacao para o edital ${edital?.numero || editalId} com base nas seguintes inconsistencias:\n${incons || "Inconsistencias identificadas na analise anterior."}\n\nUse formato formal de peticao com: Cabecalho, Dos Fatos, Do Direito, Do Pedido, e encerramento. Responda em markdown.`;
+      const resp = await sendMessage(sid, prompt);
+      setPeticaoSugerida(resp.response || "");
+    } catch (err) {
+      console.error("Erro ao gerar peticao:", err);
+    } finally {
+      setPeticaoLoading(false);
+    }
+  }, [editalId, editais, inconsistencias]);
+
+  // Parse IA response into structured inconsistencies
+  function parseInconsistencias(text: string): Inconsistencia[] {
+    const results: Inconsistencia[] = [];
+    const lines = text.split("\n");
+    let counter = 0;
+    for (const line of lines) {
+      const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+      if (cells.length >= 4) {
+        // Skip header row
+        const first = cells[0].replace(/^#+\s*/, "").trim();
+        if (first === "#" || first === "---" || first.startsWith("-")) continue;
+        const num = parseInt(first);
+        if (isNaN(num) && counter === 0) continue;
+        counter++;
+        const gravidade = cells.length >= 4
+          ? (cells[3].toUpperCase().includes("ALTA") ? "ALTA" : cells[3].toUpperCase().includes("MEDIA") || cells[3].toUpperCase().includes("MÉDIA") ? "MEDIA" : "BAIXA")
+          : "BAIXA";
+        const sugestao = cells.length >= 5
+          ? (cells[4].toUpperCase().includes("IMPUGNAC") ? "Impugnacao" as const : "Esclarecimento" as const)
+          : "Esclarecimento" as const;
+        results.push({
+          id: counter,
+          trecho: cells[1] || "",
+          lei_violada: cells[2] || "",
+          gravidade,
+          sugestao,
+        });
+      }
+    }
+    return results;
+  }
+
+  // ── Peticoes handlers ──
+
+  const handleNovaPeticao = async () => {
+    if (!peticaoEditalId) return;
+    setPeticoesSaving(true);
+    try {
+      const edital = editais.find(e => e.id === peticaoEditalId);
+      let conteudo = peticaoConteudo;
+      if (peticaoTemplateId && !conteudo) {
+        const tmpl = templates.find(t => t.id === peticaoTemplateId);
+        conteudo = tmpl?.conteudo_md || "";
+      }
+      await crudCreate("recursos", {
+        edital_id: peticaoEditalId,
+        tipo: peticaoTipo,
+        motivo: peticaoTipo === "impugnacao" ? "Impugnacao ao edital" : "Pedido de esclarecimento",
+        texto_minuta: conteudo,
+        status: "rascunho",
+        prazo_limite: new Date().toISOString(),
+      });
+      setShowNovaPeticaoModal(false);
+      setPeticaoTipo("esclarecimento");
+      setPeticaoTemplateId("");
+      setPeticaoEditalId("");
+      setPeticaoConteudo("");
+      loadPeticoes();
+    } catch (err) {
+      console.error("Erro ao criar peticao:", err);
+    } finally {
+      setPeticoesSaving(false);
+    }
+  };
+
+  const handleUploadPeticao = async () => {
+    if (!uploadFile || !uploadEditalId) return;
+    setPeticoesSaving(true);
+    try {
+      // Read file contents
+      const text = await uploadFile.text();
+      await crudCreate("recursos", {
+        edital_id: uploadEditalId,
+        tipo: "impugnacao",
+        motivo: `Upload: ${uploadFile.name}`,
+        texto_minuta: text,
+        status: "rascunho",
+        prazo_limite: new Date().toISOString(),
+        arquivo_path: uploadFile.name,
+      });
+      setShowUploadModal(false);
+      setUploadFile(null);
+      setUploadEditalId("");
+      loadPeticoes();
+    } catch (err) {
+      console.error("Erro ao fazer upload:", err);
+    } finally {
+      setPeticoesSaving(false);
+    }
+  };
+
+  const handleSalvarRascunho = async () => {
+    if (!selectedPeticao) return;
+    setPeticoesSaving(true);
+    try {
+      await crudUpdate("recursos", selectedPeticao.id, {
+        texto_minuta: selectedPeticao.conteudo,
+        status: "rascunho",
+      });
+      loadPeticoes();
+    } catch (err) {
+      console.error("Erro ao salvar:", err);
+    } finally {
+      setPeticoesSaving(false);
+    }
+  };
+
+  const handleEnviarRevisao = async () => {
+    if (!selectedPeticao) return;
+    setPeticoesSaving(true);
+    try {
+      await crudUpdate("recursos", selectedPeticao.id, {
+        texto_minuta: selectedPeticao.conteudo,
+        status: "protocolado",
+      });
+      loadPeticoes();
+      setSelectedPeticao(null);
+    } catch (err) {
+      console.error("Erro ao enviar para revisao:", err);
+    } finally {
+      setPeticoesSaving(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (!selectedPeticao) return;
+    if (onSendToChat) {
+      onSendToChat(`Exporte em PDF a peticao do edital ${selectedPeticao.edital_numero}`);
+    }
+  };
+
+  const handleExportDOCX = () => {
+    if (!selectedPeticao) return;
+    if (onSendToChat) {
+      onSendToChat(`Exporte em DOCX a peticao do edital ${selectedPeticao.edital_numero}`);
+    }
+  };
+
+  const handleDeletePeticao = async (id: string) => {
+    try {
+      await crudDelete("recursos", id);
+      if (selectedPeticao?.id === id) setSelectedPeticao(null);
+      loadPeticoes();
+    } catch (err) {
+      console.error("Erro ao excluir peticao:", err);
+    }
+  };
+
+  // ── Edital options ──
+  const editalOptions = editais.map(e => ({
+    value: e.id || "",
+    label: `${e.numero} - ${e.orgao}`,
+  }));
+
+  // ── Columns ──
+
+  const inconsistenciasColumns: Column<Inconsistencia>[] = [
+    { key: "id", header: "#", width: "50px" },
+    { key: "trecho", header: "Trecho" },
+    { key: "lei_violada", header: "Lei Violada" },
     {
-      key: "diasRestantes",
+      key: "gravidade",
+      header: "Gravidade",
+      width: "120px",
+      render: (item) => (
+        <span className={`status-badge ${getGravidadeBadgeClass(item.gravidade)}`}>
+          {item.gravidade}
+        </span>
+      ),
+    },
+    {
+      key: "sugestao",
+      header: "Sugestao",
+      width: "140px",
+      render: (item) => (
+        <span className={`status-badge ${item.sugestao === "Impugnacao" ? "status-badge-error" : "status-badge-info"}`}>
+          {item.sugestao}
+        </span>
+      ),
+    },
+  ];
+
+  const peticoesColumns: Column<Peticao>[] = [
+    { key: "edital_numero", header: "Edital", sortable: true },
+    {
+      key: "tipo",
+      header: "Tipo",
+      render: (p) => p.tipo === "impugnacao" ? "Impugnacao" : "Esclarecimento",
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (p) => {
+        switch (p.status) {
+          case "rascunho":
+            return <span className="status-badge status-badge-neutral"><Edit3 size={12} /> Rascunho</span>;
+          case "revisao":
+            return <span className="status-badge status-badge-warning"><Eye size={12} /> Em Revisao</span>;
+          case "enviada":
+            return <span className="status-badge status-badge-success"><Send size={12} /> Enviada</span>;
+          default:
+            return <span className="status-badge status-badge-neutral">{p.status}</span>;
+        }
+      },
+    },
+    { key: "data_criacao", header: "Data", sortable: true },
+    {
+      key: "acoes",
+      header: "Acoes",
+      width: "160px",
+      render: (p) => (
+        <div style={{ display: "flex", gap: 4 }}>
+          <ActionButton
+            icon={<Eye size={14} />}
+            label="Ver"
+            onClick={() => setSelectedPeticao(p)}
+          />
+          <ActionButton
+            icon={<Trash2 size={14} />}
+            label=""
+            variant="danger"
+            onClick={() => handleDeletePeticao(p.id)}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  const prazosColumns: Column<PrazoEdital>[] = [
+    { key: "numero", header: "Edital", sortable: true },
+    { key: "orgao", header: "Orgao" },
+    { key: "data_abertura", header: "Data Abertura", sortable: true },
+    { key: "prazo_limite", header: "Prazo Limite (3d uteis)", sortable: true },
+    {
+      key: "dias_restantes",
       header: "Dias Restantes",
-      render: (e) => (
-        <span className={e.diasRestantes <= 3 ? "text-danger" : e.diasRestantes <= 7 ? "text-warning" : ""}>
-          {e.diasRestantes} dias
+      sortable: true,
+      render: (p) => (
+        <span className={getPrazoColor(p.dias_restantes)} style={{ fontWeight: 600 }}>
+          {p.status === "expirado" ? (
+            <span className="status-badge status-badge-error"><XCircle size={12} /> EXPIRADO</span>
+          ) : (
+            `${p.dias_restantes} dias`
+          )}
         </span>
       ),
     },
     {
       key: "status",
       header: "Status",
-      render: (e) => {
-        switch (e.status) {
-          case "pendente":
-            return <span className="status-badge status-badge-warning"><Clock size={12} /> Pendente</span>;
-          case "criada":
-            return <span className="status-badge status-badge-info"><FileText size={12} /> Criada</span>;
-          case "enviada":
-            return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Enviada</span>;
+      render: (p) => {
+        if (p.status === "expirado") {
+          return <span className="status-badge status-badge-error">Expirado</span>;
         }
+        if (p.dias_restantes > 5) {
+          return <span className="status-badge status-badge-success">OK</span>;
+        }
+        if (p.dias_restantes >= 3) {
+          return <span className="status-badge status-badge-warning">Atencao</span>;
+        }
+        return <span className="status-badge status-badge-error">Urgente</span>;
       },
-    },
-    {
-      key: "acoes",
-      header: "Acoes",
-      width: "120px",
-      render: (e) => (
-        <ActionButton
-          icon={<AlertTriangle size={14} />}
-          label="Criar"
-          onClick={() => handleCriarImpugnacao(e)}
-          disabled={e.status === "enviada"}
-        />
-      ),
     },
   ];
 
-  const impugnacoesColumns: Column<Impugnacao>[] = [
-    { key: "edital", header: "Edital", sortable: true },
-    {
-      key: "tipo",
-      header: "Tipo",
-      render: (i) => i.tipo === "impugnacao" ? "Impugnacao" : "Recurso",
-    },
-    { key: "motivo", header: "Motivo" },
-    { key: "dataCriacao", header: "Data", sortable: true },
-    {
-      key: "status",
-      header: "Status",
-      render: (i) => {
-        switch (i.status) {
-          case "rascunho":
-            return <span className="status-badge status-badge-neutral">Rascunho</span>;
-          case "pronta":
-            return <span className="status-badge status-badge-success">Pronta</span>;
-          case "enviada":
-            return <span className="status-badge status-badge-info">Enviada</span>;
-        }
-      },
-    },
+  // ─── Tabs ──────────────────────────────────────────────────────────────────
+
+  const tabs = [
+    { id: "validacao", label: "Validacao Legal", icon: <Scale size={16} /> },
+    { id: "peticoes", label: "Peticoes", icon: <FileText size={16} />, badge: peticoes.length || undefined },
+    { id: "prazos", label: "Prazos", icon: <Clock size={16} />, badge: prazos.filter(p => p.dias_restantes <= 5 && p.status !== "expirado").length || undefined },
   ];
 
   return (
@@ -182,108 +528,279 @@ AQUILA DIAGNOSTICO LTDA`);
         <div className="page-header-left">
           <AlertTriangle size={24} />
           <div>
-            <h1>Impugnacoes e Recursos</h1>
-            <p>Gerenciamento de impugnacoes e recursos administrativos</p>
+            <h1>Impugnacoes e Esclarecimentos</h1>
+            <p>Validacao legal, peticoes e controle de prazos (UC-I01 a UC-I05)</p>
           </div>
         </div>
       </div>
 
       <div className="page-content">
-        <Card title="Editais com Prazo de Impugnacao" icon={<Clock size={18} />}>
-          <DataTable
-            data={editais}
-            columns={editaisColumns}
-            idKey="id"
-            emptyMessage="Nenhum edital com prazo de impugnacao"
-          />
-        </Card>
+        <TabPanel tabs={tabs} defaultTab="validacao">
+          {(activeTab) => {
+            // ─── Tab: Validacao Legal ────────────────────────────────────
+            if (activeTab === "validacao") {
+              return (
+                <>
+                  <Card title="Analise de Conformidade Legal" icon={<Scale size={18} />}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <FormField label="Selecione o Edital">
+                          <SelectInput
+                            value={editalId}
+                            onChange={setEditalId}
+                            options={editalOptions}
+                            placeholder="Selecione um edital..."
+                            disabled={loadingEditais}
+                          />
+                        </FormField>
+                      </div>
+                      <ActionButton
+                        icon={<Search size={16} />}
+                        label="Analisar Edital"
+                        variant="primary"
+                        onClick={handleAnalisarEdital}
+                        loading={validacaoLoading}
+                        disabled={!editalId || validacaoLoading}
+                      />
+                    </div>
 
-        <Card title="Minhas Impugnacoes e Recursos" icon={<FileText size={18} />}>
-          <DataTable
-            data={impugnacoes}
-            columns={impugnacoesColumns}
-            idKey="id"
-            emptyMessage="Nenhuma impugnacao ou recurso criado"
-          />
-        </Card>
+                    {validacaoLoading && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, color: "#94a3b8" }}>
+                        <Loader2 size={16} className="spin" />
+                        <span>{validacaoStatus || "Analisando..."}</span>
+                      </div>
+                    )}
+
+                    {inconsistencias.length > 0 && (
+                      <>
+                        <DataTable
+                          data={inconsistencias}
+                          columns={inconsistenciasColumns}
+                          idKey="id"
+                          emptyMessage="Nenhuma inconsistencia encontrada"
+                        />
+                        <div style={{ marginTop: 12 }}>
+                          <ActionButton
+                            icon={<Lightbulb size={16} />}
+                            label="Gerar Peticao"
+                            variant="primary"
+                            onClick={handleGerarPeticao}
+                            loading={peticaoLoading}
+                            disabled={peticaoLoading}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {peticaoSugerida && (
+                      <Card title="Resultado da Analise" icon={<Shield size={18} />}>
+                        <div className="markdown-content" style={{ padding: 16 }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{peticaoSugerida}</ReactMarkdown>
+                        </div>
+                      </Card>
+                    )}
+                  </Card>
+                </>
+              );
+            }
+
+            // ─── Tab: Peticoes ───────────────────────────────────────────
+            if (activeTab === "peticoes") {
+              return (
+                <>
+                  <Card
+                    title="Peticoes"
+                    icon={<FileText size={18} />}
+                    actions={
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <ActionButton
+                          icon={<Plus size={14} />}
+                          label="Nova Peticao"
+                          variant="primary"
+                          onClick={() => setShowNovaPeticaoModal(true)}
+                        />
+                        <ActionButton
+                          icon={<Upload size={14} />}
+                          label="Upload Peticao"
+                          onClick={() => setShowUploadModal(true)}
+                        />
+                      </div>
+                    }
+                  >
+                    <DataTable
+                      data={peticoes}
+                      columns={peticoesColumns}
+                      idKey="id"
+                      emptyMessage="Nenhuma peticao cadastrada"
+                    />
+                  </Card>
+
+                  {selectedPeticao && (
+                    <Card
+                      title={`Editando: ${selectedPeticao.edital_numero} - ${selectedPeticao.tipo === "impugnacao" ? "Impugnacao" : "Esclarecimento"}`}
+                      icon={<Edit3 size={18} />}
+                      actions={
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <ActionButton
+                            icon={<Download size={14} />}
+                            label="PDF"
+                            onClick={handleExportPDF}
+                          />
+                          <ActionButton
+                            icon={<Download size={14} />}
+                            label="DOCX"
+                            onClick={handleExportDOCX}
+                          />
+                        </div>
+                      }
+                    >
+                      {/* Simple rich editor toolbar */}
+                      <div style={{ display: "flex", gap: 4, padding: "8px 0", borderBottom: "1px solid var(--border-color, #334155)" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setPeticaoConteudo(selectedPeticao.conteudo)} title="Copiar para edicao" style={{ fontSize: 12, padding: "4px 8px" }}>
+                          Editar
+                        </button>
+                      </div>
+                      <TextArea
+                        value={selectedPeticao.conteudo}
+                        onChange={(val) => setSelectedPeticao({ ...selectedPeticao, conteudo: val })}
+                        rows={18}
+                        placeholder="Conteudo da peticao..."
+                      />
+                      <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+                        <ActionButton
+                          icon={<Save size={14} />}
+                          label="Salvar Rascunho"
+                          onClick={handleSalvarRascunho}
+                          loading={peticoesSaving}
+                        />
+                        <ActionButton
+                          icon={<Send size={14} />}
+                          label="Enviar para Revisao"
+                          variant="primary"
+                          onClick={handleEnviarRevisao}
+                          loading={peticoesSaving}
+                        />
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Modal: Nova Peticao */}
+                  <Modal
+                    isOpen={showNovaPeticaoModal}
+                    onClose={() => setShowNovaPeticaoModal(false)}
+                    title="Nova Peticao"
+                    size="large"
+                    footer={
+                      <>
+                        <button className="btn btn-secondary" onClick={() => setShowNovaPeticaoModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleNovaPeticao} disabled={!peticaoEditalId || peticoesSaving}>
+                          {peticoesSaving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Criar
+                        </button>
+                      </>
+                    }
+                  >
+                    <FormField label="Edital" required>
+                      <SelectInput
+                        value={peticaoEditalId}
+                        onChange={setPeticaoEditalId}
+                        options={editalOptions}
+                        placeholder="Selecione o edital..."
+                      />
+                    </FormField>
+                    <FormField label="Tipo" required>
+                      <SelectInput
+                        value={peticaoTipo}
+                        onChange={(v) => setPeticaoTipo(v as "esclarecimento" | "impugnacao")}
+                        options={[
+                          { value: "esclarecimento", label: "Esclarecimento" },
+                          { value: "impugnacao", label: "Impugnacao" },
+                        ]}
+                      />
+                    </FormField>
+                    <FormField label="Template">
+                      <SelectInput
+                        value={peticaoTemplateId}
+                        onChange={(v) => {
+                          setPeticaoTemplateId(v);
+                          const tmpl = templates.find(t => t.id === v);
+                          if (tmpl) setPeticaoConteudo(tmpl.conteudo_md);
+                        }}
+                        options={[
+                          { value: "", label: "Nenhum (em branco)" },
+                          ...templates.map(t => ({ value: t.id, label: t.nome })),
+                        ]}
+                      />
+                    </FormField>
+                    <FormField label="Conteudo">
+                      <TextArea
+                        value={peticaoConteudo}
+                        onChange={setPeticaoConteudo}
+                        rows={8}
+                        placeholder="Conteudo da peticao (opcional se usar template)..."
+                      />
+                    </FormField>
+                  </Modal>
+
+                  {/* Modal: Upload Peticao */}
+                  <Modal
+                    isOpen={showUploadModal}
+                    onClose={() => setShowUploadModal(false)}
+                    title="Upload de Peticao"
+                    footer={
+                      <>
+                        <button className="btn btn-secondary" onClick={() => setShowUploadModal(false)}>Cancelar</button>
+                        <button className="btn btn-primary" onClick={handleUploadPeticao} disabled={!uploadFile || !uploadEditalId || peticoesSaving}>
+                          {peticoesSaving ? <Loader2 size={14} className="spin" /> : <Upload size={14} />} Upload
+                        </button>
+                      </>
+                    }
+                  >
+                    <FormField label="Edital" required>
+                      <SelectInput
+                        value={uploadEditalId}
+                        onChange={setUploadEditalId}
+                        options={editalOptions}
+                        placeholder="Selecione o edital..."
+                      />
+                    </FormField>
+                    <FormField label="Arquivo (.docx / .pdf)" required>
+                      <input
+                        type="file"
+                        accept=".docx,.pdf,.doc"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        className="text-input"
+                      />
+                    </FormField>
+                  </Modal>
+                </>
+              );
+            }
+
+            // ─── Tab: Prazos ────────────────────────────────────────────
+            if (activeTab === "prazos") {
+              return (
+                <Card title="Prazos de Impugnacao e Esclarecimento" icon={<Clock size={18} />}>
+                  {loadingEditais ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, color: "#94a3b8" }}>
+                      <Loader2 size={16} className="spin" />
+                      <span>Carregando prazos...</span>
+                    </div>
+                  ) : (
+                    <DataTable
+                      data={prazos}
+                      columns={prazosColumns}
+                      idKey="id"
+                      emptyMessage="Nenhum edital com data de abertura definida"
+                    />
+                  )}
+                </Card>
+              );
+            }
+
+            return null;
+          }}
+        </TabPanel>
       </div>
-
-      <Modal
-        isOpen={showCriarModal}
-        onClose={() => setShowCriarModal(false)}
-        title={`Criar Impugnacao/Recurso: ${selectedEdital?.edital}`}
-        size="large"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setShowCriarModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSalvarRascunho} disabled={!textoGerado}>
-              <Save size={14} /> Salvar Rascunho
-            </button>
-          </>
-        }
-      >
-        <div className="impugnacao-form">
-          <FormField label="Tipo">
-            <div className="radio-group">
-              <label className="radio-wrapper">
-                <input
-                  type="radio"
-                  checked={tipo === "impugnacao"}
-                  onChange={() => setTipo("impugnacao")}
-                />
-                <span>Impugnacao do Edital</span>
-              </label>
-              <label className="radio-wrapper">
-                <input
-                  type="radio"
-                  checked={tipo === "recurso"}
-                  onChange={() => setTipo("recurso")}
-                />
-                <span>Recurso Administrativo</span>
-              </label>
-            </div>
-          </FormField>
-
-          <FormField label="Motivo" required>
-            <TextInput
-              value={motivo}
-              onChange={setMotivo}
-              placeholder="Ex: Especificacao restritiva, Preco inexequivel..."
-            />
-          </FormField>
-
-          <FormField label="Fundamentacao">
-            <TextArea
-              value={fundamentacao}
-              onChange={setFundamentacao}
-              rows={4}
-              placeholder="Descreva os fundamentos legais e faticos..."
-            />
-          </FormField>
-
-          <div className="form-actions">
-            <ActionButton
-              icon={<Lightbulb size={16} />}
-              label="Gerar Texto com IA"
-              variant="primary"
-              onClick={handleGerarTexto}
-              loading={loading}
-              disabled={!motivo}
-            />
-          </div>
-
-          {textoGerado && (
-            <div className="texto-gerado">
-              <h4>Texto Gerado</h4>
-              <TextArea
-                value={textoGerado}
-                onChange={setTextoGerado}
-                rows={15}
-              />
-            </div>
-          )}
-        </div>
-      </Modal>
     </div>
   );
 }

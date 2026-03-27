@@ -24,6 +24,8 @@ from models import (
     # FASE 2 Proposta
     PropostaLog, PropostaTemplate, AnvisaValidacao,
     DocumentoNecessario, EmpresaDocumento,
+    # SPRINT 4 Recursos e Impugnações
+    Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -10107,4 +10109,535 @@ def tool_smart_split_pdf(file_path: str, max_size_mb: float = 25) -> Dict[str, A
 
 
 TOOLS_MAP["smart_split_pdf"] = tool_smart_split_pdf
+
+
+# =============================================================================
+# SPRINT 4 — RECURSOS E IMPUGNAÇÕES: Novas tools (UC-I01 a UC-RE05)
+# =============================================================================
+
+def tool_validacao_legal_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    UC-I01: Validação legal do edital.
+    Lê o texto do PDF do edital, envia ao DeepSeek para identificar inconsistências
+    com a Lei 14.133/2021, decretos e normas aplicáveis.
+    Retorna lista de inconsistências com {trecho, lei_violada, gravidade, sugestao_tipo}.
+    Salva registro ValidacaoLegal.
+    """
+    from models import get_db, Edital, EditalDocumento, ValidacaoLegal
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Buscar texto do PDF do edital
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.texto_extraido != None
+        ).first()
+
+        if not doc or not doc.texto_extraido or len(doc.texto_extraido) < 200:
+            return {
+                "success": False,
+                "error": "Edital não possui PDF com texto extraído. Baixe o PDF primeiro.",
+                "sem_pdf": True,
+            }
+
+        texto_edital = doc.texto_extraido[:15000]  # Limitar para caber no contexto
+
+        prompt_validacao = f"""Você é um especialista em licitações públicas brasileiras.
+Analise o texto do edital abaixo e identifique INCONSISTÊNCIAS LEGAIS comparando com:
+- Lei 14.133/2021 (Nova Lei de Licitações)
+- Lei 8.666/1993 (se aplicável por transição)
+- Decretos regulamentadores (Decreto 11.462/2023, etc.)
+- IN SEGES/ME nº 73/2022
+- Jurisprudência do TCU
+
+Para cada inconsistência encontrada, retorne um JSON com a estrutura:
+[
+  {{
+    "trecho": "Trecho do edital com o problema (citação direta)",
+    "lei_violada": "Lei/Artigo/Inciso violado",
+    "gravidade": "alta|media|baixa",
+    "sugestao_tipo": "impugnacao|esclarecimento",
+    "fundamentacao": "Explicação jurídica detalhada do porquê é inconsistente",
+    "sugestao_correcao": "Como deveria estar redigido"
+  }}
+]
+
+Se não encontrar inconsistências, retorne um array vazio [].
+Foque em: cláusulas restritivas de competição, prazos inadequados, exigências desproporcionais,
+falta de fundamentação legal, critérios de julgamento irregulares, qualificação técnica excessiva.
+
+TEXTO DO EDITAL:
+{texto_edital}
+
+Responda APENAS com o JSON, sem texto adicional."""
+
+        resposta_ia = call_deepseek(
+            [{"role": "user", "content": prompt_validacao}],
+            max_tokens=4000,
+            model_override="deepseek-chat"
+        )
+
+        # Parsear resposta
+        inconsistencias = []
+        analise_texto = resposta_ia
+        try:
+            # Tentar extrair JSON da resposta
+            json_match = re.search(r'\[.*\]', resposta_ia, re.DOTALL)
+            if json_match:
+                inconsistencias = json.loads(json_match.group())
+        except (json.JSONDecodeError, AttributeError):
+            print(f"[VALIDACAO-LEGAL] Não conseguiu parsear JSON da IA: {resposta_ia[:200]}")
+
+        # Salvar registro ValidacaoLegal
+        validacao = ValidacaoLegal(
+            edital_id=edital_id,
+            user_id=user_id,
+            inconsistencias_json=json.dumps(inconsistencias, ensure_ascii=False),
+            analise_ia=analise_texto,
+        )
+        db.add(validacao)
+        db.commit()
+
+        return {
+            "success": True,
+            "edital_id": edital_id,
+            "validacao_id": validacao.id,
+            "total_inconsistencias": len(inconsistencias),
+            "inconsistencias": inconsistencias,
+            "edital_numero": edital.numero,
+            "edital_orgao": edital.orgao,
+        }
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["validacao_legal_edital"] = tool_validacao_legal_edital
+
+
+def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, inconsistencias: list = None,
+                                   template_id: str = None, tipo: str = 'impugnacao') -> Dict[str, Any]:
+    """
+    UC-I02/I03: Gera petição de impugnação ou pedido de esclarecimento.
+    Utiliza inconsistências detectadas (ou fornecidas) para gerar texto jurídico.
+    Cria registro Impugnacao.
+    """
+    from models import get_db, Edital, EditalDocumento, Impugnacao, RecursoTemplate, ValidacaoLegal, Empresa
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Se não foram fornecidas inconsistências, buscar da última validação legal
+        if not inconsistencias:
+            validacao = db.query(ValidacaoLegal).filter(
+                ValidacaoLegal.edital_id == edital_id,
+                ValidacaoLegal.user_id == user_id
+            ).order_by(ValidacaoLegal.created_at.desc()).first()
+            if validacao and validacao.inconsistencias_json:
+                try:
+                    inconsistencias = json.loads(validacao.inconsistencias_json)
+                except json.JSONDecodeError:
+                    inconsistencias = []
+
+        if not inconsistencias:
+            return {"success": False, "error": "Nenhuma inconsistência encontrada. Execute a validação legal primeiro."}
+
+        # Buscar template se fornecido
+        template_conteudo = None
+        if template_id:
+            template = db.query(RecursoTemplate).filter(
+                RecursoTemplate.id == template_id,
+                RecursoTemplate.ativo == True
+            ).first()
+            if template:
+                template_conteudo = template.conteudo_md
+
+        # Buscar dados da empresa
+        empresa = None
+        if edital.empresa_id:
+            empresa = db.query(Empresa).filter(Empresa.id == edital.empresa_id).first()
+
+        empresa_info = ""
+        if empresa:
+            empresa_info = f"""
+DADOS DA IMPUGNANTE:
+- Razão Social: {empresa.razao_social}
+- CNPJ: {empresa.cnpj}
+- Endereço: {empresa.endereco or 'N/I'}
+- Cidade/UF: {empresa.cidade or 'N/I'}/{empresa.uf or 'N/I'}
+"""
+
+        inconsistencias_texto = json.dumps(inconsistencias, ensure_ascii=False, indent=2)
+
+        tipo_label = "IMPUGNAÇÃO AO EDITAL" if tipo == 'impugnacao' else "PEDIDO DE ESCLARECIMENTO"
+
+        prompt_peticao = f"""Você é um advogado especialista em licitações públicas.
+Gere uma petição formal de {tipo_label} com base nas inconsistências identificadas.
+
+DADOS DO EDITAL:
+- Número: {edital.numero}
+- Órgão: {edital.orgao}
+- Objeto: {edital.objeto[:500] if edital.objeto else 'N/I'}
+- Data de Abertura: {edital.data_abertura.strftime('%d/%m/%Y') if edital.data_abertura else 'N/I'}
+{empresa_info}
+
+INCONSISTÊNCIAS IDENTIFICADAS:
+{inconsistencias_texto}
+
+{f'USE ESTE TEMPLATE COMO BASE:{chr(10)}{template_conteudo}' if template_conteudo else ''}
+
+A petição deve conter:
+1. **ENDEREÇAMENTO** ao pregoeiro/comissão de licitação
+2. **QUALIFICAÇÃO** da empresa impugnante
+3. **DOS FATOS** — descrição do edital e contexto
+4. **DAS INCONSISTÊNCIAS** — detalhamento de cada ponto com citação do trecho do edital
+5. **DO DIREITO** — fundamentação legal (Lei 14.133/2021, jurisprudência TCU)
+6. **DO PEDIDO** — solicitação específica (alteração do edital, suspensão, esclarecimento)
+7. **FECHO** — local, data e assinatura
+
+Use linguagem jurídica formal. Cite artigos de lei e jurisprudência pertinentes.
+Formate em Markdown."""
+
+        texto_peticao = call_deepseek(
+            [{"role": "user", "content": prompt_peticao}],
+            max_tokens=6000,
+            model_override="deepseek-chat"
+        )
+
+        # Calcular prazo limite (3 dias úteis antes da abertura)
+        prazo_limite = None
+        if edital.data_abertura:
+            from datetime import timedelta
+            prazo = edital.data_abertura
+            dias_uteis = 0
+            while dias_uteis < 3:
+                prazo -= timedelta(days=1)
+                if prazo.weekday() < 5:  # Seg-Sex
+                    dias_uteis += 1
+            prazo_limite = prazo
+
+        # Criar registro Impugnacao
+        impugnacao = Impugnacao(
+            edital_id=edital_id,
+            user_id=user_id,
+            empresa_id=edital.empresa_id,
+            tipo=tipo,
+            status='rascunho',
+            texto=texto_peticao,
+            inconsistencias_json=json.dumps(inconsistencias, ensure_ascii=False),
+            prazo_limite=prazo_limite,
+            template_id=template_id,
+        )
+        db.add(impugnacao)
+        db.commit()
+
+        return {
+            "success": True,
+            "impugnacao_id": impugnacao.id,
+            "tipo": tipo,
+            "texto": texto_peticao,
+            "prazo_limite": prazo_limite.isoformat() if prazo_limite else None,
+            "total_inconsistencias": len(inconsistencias),
+            "edital_numero": edital.numero,
+        }
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["gerar_peticao_impugnacao"] = tool_gerar_peticao_impugnacao
+
+
+def tool_analisar_proposta_vencedora(edital_id: str, user_id: str,
+                                      proposta_vencedora_texto: str = None) -> Dict[str, Any]:
+    """
+    UC-RE02: Analisa proposta vencedora contra requisitos do edital e leis.
+    Retorna lista de inconsistências + motivações sugeridas para recurso.
+    """
+    from models import get_db, Edital, EditalDocumento, EditalRequisito
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Buscar requisitos do edital
+        requisitos = db.query(EditalRequisito).filter(
+            EditalRequisito.edital_id == edital_id
+        ).all()
+        requisitos_texto = "\n".join([
+            f"- [{r.tipo}] {r.descricao}" for r in requisitos
+        ]) if requisitos else "Nenhum requisito extraído do edital."
+
+        # Buscar texto do edital para contexto
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.texto_extraido != None
+        ).first()
+        contexto_edital = ""
+        if doc and doc.texto_extraido:
+            contexto_edital = doc.texto_extraido[:8000]
+
+        if not proposta_vencedora_texto:
+            proposta_vencedora_texto = "(Texto da proposta vencedora não fornecido — analise baseada nos requisitos do edital)"
+
+        prompt_analise = f"""Você é um especialista em licitações públicas brasileiras.
+Analise a proposta vencedora comparando com os requisitos do edital e a legislação vigente.
+
+DADOS DO EDITAL:
+- Número: {edital.numero}
+- Órgão: {edital.orgao}
+- Objeto: {edital.objeto[:500] if edital.objeto else 'N/I'}
+
+REQUISITOS DO EDITAL:
+{requisitos_texto}
+
+CONTEXTO DO EDITAL:
+{contexto_edital[:5000]}
+
+PROPOSTA VENCEDORA:
+{proposta_vencedora_texto[:5000]}
+
+Identifique:
+1. Inconsistências da proposta vencedora com os requisitos do edital
+2. Possíveis violações legais (Lei 14.133/2021)
+3. Pontos que podem ser questionados via recurso
+
+Retorne um JSON com a estrutura:
+{{
+  "inconsistencias": [
+    {{
+      "descricao": "Descrição da inconsistência",
+      "requisito_violado": "Requisito do edital não atendido",
+      "base_legal": "Lei/artigo aplicável",
+      "gravidade": "alta|media|baixa",
+      "tipo": "tecnico|documental|juridico"
+    }}
+  ],
+  "motivacoes_recurso": [
+    {{
+      "titulo": "Título da motivação",
+      "fundamentacao": "Fundamentação jurídica detalhada",
+      "tipo": "administrativo|tecnico"
+    }}
+  ],
+  "parecer_geral": "Resumo da análise e recomendação"
+}}
+
+Responda APENAS com o JSON."""
+
+        resposta_ia = call_deepseek(
+            [{"role": "user", "content": prompt_analise}],
+            max_tokens=4000,
+            model_override="deepseek-chat"
+        )
+
+        # Parsear resposta
+        resultado = {"inconsistencias": [], "motivacoes_recurso": [], "parecer_geral": ""}
+        try:
+            json_match = re.search(r'\{.*\}', resposta_ia, re.DOTALL)
+            if json_match:
+                resultado = json.loads(json_match.group())
+        except (json.JSONDecodeError, AttributeError):
+            resultado["parecer_geral"] = resposta_ia
+
+        return {
+            "success": True,
+            "edital_id": edital_id,
+            "edital_numero": edital.numero,
+            "inconsistencias": resultado.get("inconsistencias", []),
+            "motivacoes_recurso": resultado.get("motivacoes_recurso", []),
+            "parecer_geral": resultado.get("parecer_geral", ""),
+            "total_inconsistencias": len(resultado.get("inconsistencias", [])),
+            "total_motivacoes": len(resultado.get("motivacoes_recurso", [])),
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["analisar_proposta_vencedora"] = tool_analisar_proposta_vencedora
+
+
+def tool_gerar_laudo_recurso(edital_id: str, user_id: str, tipo: str = 'recurso',
+                              inconsistencias: list = None, template_id: str = None,
+                              empresa_alvo: str = None) -> Dict[str, Any]:
+    """
+    UC-RE04/RE05: Gera laudo de recurso ou contra-razão.
+    Laudo com seções: JURÍDICA + TÉCNICA (e DEFESA + ATAQUE para contra-razão).
+    Cria registro RecursoDetalhado.
+    """
+    from models import get_db, Edital, EditalDocumento, RecursoDetalhado, RecursoTemplate, Empresa
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(
+            Edital.id == edital_id,
+            Edital.user_id == user_id
+        ).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Buscar template se fornecido
+        template_conteudo = None
+        if template_id:
+            template = db.query(RecursoTemplate).filter(
+                RecursoTemplate.id == template_id,
+                RecursoTemplate.ativo == True
+            ).first()
+            if template:
+                template_conteudo = template.conteudo_md
+
+        # Buscar dados da empresa
+        empresa = None
+        if edital.empresa_id:
+            empresa = db.query(Empresa).filter(Empresa.id == edital.empresa_id).first()
+
+        empresa_info = ""
+        if empresa:
+            empresa_info = f"""
+DADOS DA RECORRENTE:
+- Razão Social: {empresa.razao_social}
+- CNPJ: {empresa.cnpj}
+"""
+
+        # Buscar texto do edital
+        doc = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.texto_extraido != None
+        ).first()
+        contexto_edital = ""
+        if doc and doc.texto_extraido:
+            contexto_edital = doc.texto_extraido[:8000]
+
+        inconsistencias_texto = ""
+        if inconsistencias:
+            inconsistencias_texto = json.dumps(inconsistencias, ensure_ascii=False, indent=2)
+
+        tipo_label = "RECURSO ADMINISTRATIVO" if tipo == 'recurso' else "CONTRA-RAZÕES AO RECURSO"
+
+        secoes_contra_razao = ""
+        if tipo == 'contra_razao':
+            secoes_contra_razao = f"""
+5. **SEÇÃO DE DEFESA** — Argumentos defendendo a decisão original
+6. **SEÇÃO DE ATAQUE** — Contra-argumentos às razões do recorrente ({empresa_alvo or 'empresa recorrente'})
+"""
+
+        prompt_laudo = f"""Você é um advogado e perito técnico especialista em licitações públicas.
+Gere um laudo completo de {tipo_label} com seções JURÍDICA e TÉCNICA.
+
+DADOS DO EDITAL:
+- Número: {edital.numero}
+- Órgão: {edital.orgao}
+- Objeto: {edital.objeto[:500] if edital.objeto else 'N/I'}
+{empresa_info}
+
+{f'EMPRESA ALVO (recorrente):{chr(10)}{empresa_alvo}' if empresa_alvo else ''}
+
+CONTEXTO DO EDITAL:
+{contexto_edital[:5000]}
+
+{f'INCONSISTÊNCIAS IDENTIFICADAS:{chr(10)}{inconsistencias_texto}' if inconsistencias_texto else ''}
+
+{f'USE ESTE TEMPLATE COMO BASE:{chr(10)}{template_conteudo}' if template_conteudo else ''}
+
+O laudo DEVE conter as seguintes seções:
+
+1. **ENDEREÇAMENTO** — ao pregoeiro/comissão de licitação
+2. **QUALIFICAÇÃO** — identificação da empresa recorrente
+3. **SEÇÃO JURÍDICA** — fundamentação legal completa:
+   - Artigos da Lei 14.133/2021
+   - Decretos regulamentadores
+   - Jurisprudência do TCU (Acórdãos relevantes)
+   - Jurisprudência do STJ se aplicável
+4. **SEÇÃO TÉCNICA** — análise técnica detalhada:
+   - Comparação técnica com requisitos do edital
+   - Laudo técnico sobre atendimento/não atendimento
+   - Evidências técnicas
+{secoes_contra_razao}
+5. **DO PEDIDO** — requerimento específico
+6. **FECHO** — local, data e assinatura
+
+Use linguagem jurídica formal e técnica precisa. Formate em Markdown.
+Separe claramente a seção JURÍDICA da seção TÉCNICA com delimitadores."""
+
+        resposta_ia = call_deepseek(
+            [{"role": "user", "content": prompt_laudo}],
+            max_tokens=8000,
+            model_override="deepseek-chat"
+        )
+
+        # Separar seções jurídica e técnica
+        texto_juridico = resposta_ia
+        texto_tecnico = ""
+
+        # Tentar separar seções
+        secao_tecnica_markers = ["## SEÇÃO TÉCNICA", "## 4.", "**SEÇÃO TÉCNICA**", "# SEÇÃO TÉCNICA"]
+        for marker in secao_tecnica_markers:
+            idx = resposta_ia.upper().find(marker.upper())
+            if idx > 0:
+                texto_juridico = resposta_ia[:idx].strip()
+                texto_tecnico = resposta_ia[idx:].strip()
+                break
+
+        # Criar registro RecursoDetalhado
+        recurso = RecursoDetalhado(
+            edital_id=edital_id,
+            user_id=user_id,
+            empresa_id=edital.empresa_id,
+            tipo=tipo,
+            subtipo='administrativo',
+            status='rascunho',
+            texto_juridico=texto_juridico,
+            texto_tecnico=texto_tecnico,
+            inconsistencias_json=json.dumps(inconsistencias or [], ensure_ascii=False),
+            empresa_alvo=empresa_alvo,
+            template_id=template_id,
+        )
+        db.add(recurso)
+        db.commit()
+
+        return {
+            "success": True,
+            "recurso_id": recurso.id,
+            "tipo": tipo,
+            "texto_juridico": texto_juridico,
+            "texto_tecnico": texto_tecnico,
+            "texto_completo": resposta_ia,
+            "edital_numero": edital.numero,
+        }
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["gerar_laudo_recurso"] = tool_gerar_laudo_recurso
 

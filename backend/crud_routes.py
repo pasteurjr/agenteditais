@@ -28,6 +28,8 @@ from models import (
     BeneficioFiscalNcm,
     # FASE 2 Proposta
     PropostaLog, PropostaTemplate, AnvisaValidacao,
+    # SPRINT 4 Recursos e Impugnações
+    Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -547,6 +549,52 @@ CRUD_TABLES = {
         "search_fields": ["registro", "status"],
         "label": "Validação ANVISA",
         "required": ["proposta_id", "produto_id"],
+    },
+    # === SPRINT 4 — Recursos e Impugnações ===
+    "impugnacoes": {
+        "model": Impugnacao,
+        "user_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["texto", "tipo", "status"],
+        "label": "Impugnação",
+        "required": ["edital_id"],
+    },
+    "recursos-detalhados": {
+        "model": RecursoDetalhado,
+        "user_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["texto_juridico", "texto_tecnico", "empresa_alvo"],
+        "label": "Recurso Detalhado",
+        "required": ["edital_id"],
+    },
+    "recurso-templates": {
+        "model": RecursoTemplate,
+        "user_scoped": False,
+        "empresa_scoped": True,
+        "search_fields": ["nome", "tipo"],
+        "label": "Template de Recurso",
+        "required": ["nome", "tipo"],
+    },
+    "monitoramento-janelas": {
+        "model": MonitoramentoJanela,
+        "user_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["status"],
+        "label": "Monitoramento de Janela",
+        "required": ["edital_id"],
+    },
+    "validacoes-legais": {
+        "model": ValidacaoLegal,
+        "user_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["analise_ia"],
+        "label": "Validação Legal",
+        "required": ["edital_id"],
+        "read_only": True,
     },
 }
 

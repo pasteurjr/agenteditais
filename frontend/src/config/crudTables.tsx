@@ -1397,6 +1397,20 @@ export const recursosConfig: CrudPageConfig = {
   ],
 };
 
+// === 10b. TEMPLATES DE RECURSOS ===
+
+export const recursoTemplatesConfig: CrudPageConfig = {
+  table: "recurso-templates",
+  title: "Templates de Recursos",
+  icon: <FileText size={24} />,
+  fields: [
+    { name: "nome", label: "Nome", type: "text", required: true, width: "half" },
+    { name: "tipo", label: "Tipo", type: "select", required: true, options: enumOpts(["impugnacao", "recurso", "contra_razao"]), width: "half" },
+    { name: "conteudo_md", label: "Conteudo (Markdown)", type: "textarea", width: "full" },
+    { name: "ativo", label: "Ativo", type: "boolean", width: "half" },
+  ],
+};
+
 // === 11. CRM ===
 
 export const leadsCrmConfig: CrudPageConfig = {
@@ -1598,6 +1612,7 @@ export const ALL_CRUD_CONFIGS: Record<string, CrudPageConfig> = {
   "contratos": contratosConfig,
   "contrato-entregas": contratoEntregasConfig,
   "recursos": recursosConfig,
+  "recurso-templates": recursoTemplatesConfig,
   "leads-crm": leadsCrmConfig,
   "acoes-pos-perda": acoesPosePerdaConfig,
   "auditoria-log": auditoriaLogConfig,
