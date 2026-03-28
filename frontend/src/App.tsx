@@ -14,6 +14,7 @@ import { RecursosPage } from "./pages/RecursosPage";
 import { FollowupPage } from "./pages/FollowupPage";
 import { ImpugnacaoPage } from "./pages/ImpugnacaoPage";
 import { ProducaoPage } from "./pages/ProducaoPage";
+import { AtasPage } from "./pages/AtasPage";
 import { FlagsPage } from "./pages/FlagsPage";
 import { MonitoriaPage } from "./pages/MonitoriaPage";
 import { ConcorrenciaPage } from "./pages/ConcorrenciaPage";
@@ -168,6 +169,8 @@ function AppContent() {
         return <ImpugnacaoPage onSendToChat={handleSendToChat} />;
       case "producao":
         return <ProducaoPage onSendToChat={handleSendToChat} />;
+      case "atas":
+        return <AtasPage onSendToChat={handleSendToChat} />;
       case "crm":
         return <CRMPage onSendToChat={handleSendToChat} />;
       case "flags":

@@ -57,6 +57,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
       { id: "followup", icon: <Clock size={16} />, label: "Followup", page: "followup" },
       { id: "crm", icon: <Users size={16} />, label: "CRM", page: "crm" },
       { id: "producao", icon: <Package size={16} />, label: "Execucao Contrato", page: "producao" },
+      { id: "atas", icon: <FileText size={16} />, label: "Atas de Pregao", page: "atas" },
     ]
   },
   {

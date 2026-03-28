@@ -30,6 +30,9 @@ from models import (
     PropostaLog, PropostaTemplate, AnvisaValidacao,
     # SPRINT 4 Recursos e Impugnações
     Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
+    # SPRINT 5 Gestão Contratual
+    ContratoAditivo, ContratoDesignacao, AtividadeFiscal, ARPSaldo, SolicitacaoCarona,
+    AlertaVencimentoRegra,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -595,6 +598,59 @@ CRUD_TABLES = {
         "label": "Validação Legal",
         "required": ["edital_id"],
         "read_only": True,
+    },
+    # === SPRINT 5 — Gestão Contratual ===
+    "contrato-aditivos": {
+        "model": ContratoAditivo,
+        "user_scoped": True,
+        "parent_fk": "contrato_id",
+        "parent_model": Contrato,
+        "search_fields": ["tipo", "justificativa", "fundamentacao_legal"],
+        "label": "Aditivos Contratuais",
+        "required": ["contrato_id", "tipo", "justificativa"],
+    },
+    "contrato-designacoes": {
+        "model": ContratoDesignacao,
+        "user_scoped": True,
+        "parent_fk": "contrato_id",
+        "parent_model": Contrato,
+        "search_fields": ["nome", "cargo", "tipo", "portaria_numero"],
+        "label": "Designações de Contrato",
+        "required": ["contrato_id", "tipo", "nome"],
+    },
+    "atividades-fiscais": {
+        "model": AtividadeFiscal,
+        "user_scoped": True,
+        "parent_fk": "designacao_id",
+        "parent_model": ContratoDesignacao,
+        "search_fields": ["tipo", "descricao"],
+        "label": "Atividades Fiscais",
+        "required": ["designacao_id", "tipo", "descricao"],
+    },
+    "arp-saldos": {
+        "model": ARPSaldo,
+        "user_scoped": True,
+        "parent_fk": "ata_id",
+        "parent_model": AtaConsultada,
+        "search_fields": ["item_descricao", "catmat_catser"],
+        "label": "Saldos ARP",
+        "required": ["ata_id", "item_descricao", "quantidade_registrada"],
+    },
+    "solicitacoes-carona": {
+        "model": SolicitacaoCarona,
+        "user_scoped": True,
+        "parent_fk": "arp_saldo_id",
+        "parent_model": ARPSaldo,
+        "search_fields": ["orgao_solicitante", "cnpj_solicitante"],
+        "label": "Solicitações de Carona",
+        "required": ["arp_saldo_id", "orgao_solicitante", "quantidade_solicitada"],
+    },
+    "alerta-regras": {
+        "model": AlertaVencimentoRegra,
+        "user_scoped": True,
+        "search_fields": ["tipo_entidade"],
+        "label": "Regras de Alerta de Vencimento",
+        "required": ["tipo_entidade"],
     },
 }
 

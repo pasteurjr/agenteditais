@@ -9,7 +9,7 @@ import uuid
 import requests
 import fitz  # PyMuPDF
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from models import (
@@ -26,6 +26,10 @@ from models import (
     DocumentoNecessario, EmpresaDocumento,
     # SPRINT 4 Recursos e Impugnações
     Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
+    # SPRINT 5 Pós-Licitação
+    Contrato, ContratoEntrega, AtaConsultada, Alerta,
+    ContratoAditivo, ContratoDesignacao, AtividadeFiscal,
+    ARPSaldo, SolicitacaoCarona, AlertaVencimentoRegra,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -10640,4 +10644,443 @@ Separe claramente a seção JURÍDICA da seção TÉCNICA com delimitadores."""
 
 
 TOOLS_MAP["gerar_laudo_recurso"] = tool_gerar_laudo_recurso
+
+
+# ==================== SPRINT 5 — PÓS-LICITAÇÃO ====================
+
+
+def tool_calcular_score_logistico(edital_id, user_id, db=None):
+    """Calcula score logístico de viabilidade para um edital (RF-011)"""
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+    try:
+        edital = db.session.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        if not edital:
+            return {"erro": "Edital não encontrado"}
+
+        empresa = db.session.query(Empresa).filter_by(user_id=user_id).first()
+        origem_uf = empresa.uf if empresa and hasattr(empresa, 'uf') and empresa.uf else 'SP'
+        destino_uf = edital.uf if hasattr(edital, 'uf') and edital.uf else ''
+
+        regioes = {
+            'Norte': ['AC', 'AM', 'AP', 'PA', 'RO', 'RR', 'TO'],
+            'Nordeste': ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE'],
+            'Centro-Oeste': ['DF', 'GO', 'MS', 'MT'],
+            'Sudeste': ['ES', 'MG', 'RJ', 'SP'],
+            'Sul': ['PR', 'RS', 'SC']
+        }
+
+        def get_regiao(uf):
+            for r, ufs in regioes.items():
+                if uf in ufs:
+                    return r
+            return None
+
+        # Dimensão 1: Distância (30%)
+        if origem_uf == destino_uf:
+            distance_score = 100
+        elif get_regiao(origem_uf) == get_regiao(destino_uf):
+            distance_score = 65
+        else:
+            distance_score = 35
+
+        # Dimensão 2: Histórico de entregas (25%)
+        entregas_count = db.session.query(ContratoEntrega).join(Contrato).filter(
+            Contrato.user_id == user_id,
+            ContratoEntrega.status == 'entregue'
+        ).count()
+        if entregas_count > 10:
+            history_score = 100
+        elif entregas_count > 3:
+            history_score = 75
+        elif entregas_count > 0:
+            history_score = 50
+        else:
+            history_score = 20
+
+        # Dimensão 3: Custo de frete estimado (25%)
+        if origem_uf == destino_uf:
+            freight_score = 90
+        elif get_regiao(origem_uf) == get_regiao(destino_uf):
+            freight_score = 60
+        else:
+            freight_score = 30
+
+        # Dimensão 4: Prazo disponível (20%)
+        if hasattr(edital, 'data_abertura') and edital.data_abertura:
+            dias = (edital.data_abertura - datetime.now()).days
+            if dias > 60:
+                timeline_score = 100
+            elif dias > 30:
+                timeline_score = 80
+            elif dias > 15:
+                timeline_score = 60
+            else:
+                timeline_score = 40
+        else:
+            timeline_score = 60
+
+        score = round(distance_score * 0.30 + history_score * 0.25 + freight_score * 0.25 + timeline_score * 0.20)
+
+        if score >= 70:
+            recomendacao = "VIAVEL"
+        elif score >= 40:
+            recomendacao = "PARCIAL"
+        else:
+            recomendacao = "INVIAVEL"
+
+        return {
+            "score": score,
+            "recomendacao": recomendacao,
+            "dimensoes": [
+                {"nome": "Distância", "peso": 30, "score": distance_score, "contribuicao": round(distance_score * 0.30)},
+                {"nome": "Histórico Entregas", "peso": 25, "score": history_score, "contribuicao": round(history_score * 0.25)},
+                {"nome": "Custo Frete", "peso": 25, "score": freight_score, "contribuicao": round(freight_score * 0.25)},
+                {"nome": "Prazo Disponível", "peso": 20, "score": timeline_score, "contribuicao": round(timeline_score * 0.20)}
+            ],
+            "detalhes": {
+                "origem_uf": origem_uf,
+                "destino_uf": destino_uf,
+                "entregas_anteriores": entregas_count
+            }
+        }
+    except Exception as e:
+        return {"erro": str(e)}
+    finally:
+        if close_db and db:
+            db.close()
+
+
+TOOLS_MAP["calcular_score_logistico"] = tool_calcular_score_logistico
+
+
+def tool_registrar_resultado_api(data, user_id, db=None):
+    """Registra resultado de licitação via API direta — vitória/derrota/cancelado (RF-017)"""
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+    try:
+        edital_id = data.get('edital_id')
+        tipo = data.get('tipo', '').lower()  # vitoria, derrota, cancelado
+        valor_final = data.get('valor_final')
+        vencedor = data.get('vencedor', '')
+        motivo_derrota = data.get('motivo_derrota', '')
+        observacoes = data.get('observacoes', '')
+
+        edital = db.session.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        contrato_id = None
+
+        if tipo == 'vitoria':
+            edital.status = 'ganho'
+            # Auto-gerar número do contrato
+            ano = datetime.now().year
+            count = db.session.query(Contrato).filter_by(user_id=user_id).count() + 1
+            numero_contrato = f"CT-{ano}/{count:03d}"
+
+            contrato = Contrato(
+                user_id=user_id,
+                edital_id=edital.id,
+                numero_contrato=numero_contrato,
+                orgao=edital.orgao if hasattr(edital, 'orgao') else '',
+                objeto=edital.objeto if hasattr(edital, 'objeto') else '',
+                valor_total=float(valor_final) if valor_final else 0,
+                status='vigente',
+                data_assinatura=datetime.now(),
+                data_inicio=datetime.now(),
+            )
+            if hasattr(edital, 'proposta_id'):
+                contrato.proposta_id = edital.proposta_id
+            db.session.add(contrato)
+            db.session.flush()
+            contrato_id = contrato.id
+
+            # Salvar no histórico de preços
+            if valor_final:
+                preco = PrecoHistorico(
+                    user_id=user_id,
+                    edital_id=edital.id,
+                    valor=float(valor_final),
+                    fonte='manual',
+                    descricao=f"Resultado licitação - Vitória {edital.numero if hasattr(edital, 'numero') else ''}",
+                )
+                db.session.add(preco)
+
+        elif tipo == 'derrota':
+            edital.status = 'perdido'
+            if vencedor:
+                concorrente = Concorrente(
+                    user_id=user_id,
+                    edital_id=edital.id,
+                    nome=vencedor,
+                    valor_proposta=float(valor_final) if valor_final else None,
+                    resultado='vencedor',
+                    observacoes=f"Motivo derrota: {motivo_derrota}",
+                )
+                db.session.add(concorrente)
+            if valor_final:
+                preco = PrecoHistorico(
+                    user_id=user_id,
+                    edital_id=edital.id,
+                    valor=float(valor_final),
+                    fonte='manual',
+                    descricao=f"Resultado licitação - Derrota {edital.numero if hasattr(edital, 'numero') else ''} - Vencedor: {vencedor}",
+                )
+                db.session.add(preco)
+
+        elif tipo == 'cancelado':
+            edital.status = 'cancelado'
+
+        if observacoes:
+            edital.observacoes = (edital.observacoes or '') + f"\n[Resultado] {observacoes}"
+
+        db.session.commit()
+        return {
+            "success": True,
+            "tipo": tipo,
+            "edital_id": edital_id,
+            "contrato_id": contrato_id,
+            "message": f"Resultado '{tipo}' registrado com sucesso"
+        }
+    except Exception as e:
+        db.session.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        if close_db and db:
+            db.close()
+
+
+TOOLS_MAP["registrar_resultado_api"] = tool_registrar_resultado_api
+
+
+def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_id=None, orgao=None):
+    """Agrega dados de contratado vs realizado para dashboard (RF-051)"""
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+    try:
+        query = db.session.query(Contrato).filter_by(user_id=user_id)
+
+        # Filtro período
+        if periodo and periodo != 'tudo':
+            meses = {'1m': 1, '3m': 3, '6m': 6, '12m': 12}
+            m = meses.get(periodo, 6)
+            data_inicio = datetime.now() - timedelta(days=m * 30)
+            query = query.filter(Contrato.created_at >= data_inicio)
+
+        if orgao:
+            query = query.filter(Contrato.orgao.ilike(f'%{orgao}%'))
+
+        contratos = query.all()
+
+        contratos_data = []
+        total_contratado = 0
+        total_realizado = 0
+        atrasos = []
+
+        for c in contratos:
+            valor_contratado = float(c.valor_total) if c.valor_total else 0
+            total_contratado += valor_contratado
+
+            entregas = db.session.query(ContratoEntrega).filter_by(contrato_id=c.id).all()
+            valor_realizado = sum(
+                float(e.valor_total) if e.valor_total else 0
+                for e in entregas if e.status == 'entregue'
+            )
+            total_realizado += valor_realizado
+
+            variacao = round(((valor_realizado - valor_contratado) / valor_contratado) * 100, 2) if valor_contratado > 0 else 0
+
+            contratos_data.append({
+                "contrato_id": c.id,
+                "numero": c.numero_contrato,
+                "orgao": c.orgao,
+                "objeto": c.objeto[:80] if c.objeto else '',
+                "valor_contratado": valor_contratado,
+                "valor_realizado": valor_realizado,
+                "variacao_pct": variacao,
+                "status": c.status,
+                "data_fim": c.data_fim.isoformat() if c.data_fim else None,
+            })
+
+            # Identificar atrasos
+            for e in entregas:
+                if e.data_prevista and e.status != 'entregue' and e.data_prevista < datetime.now():
+                    dias_atraso = (datetime.now() - e.data_prevista).days
+                    if dias_atraso > 30:
+                        severidade = 'HIGH'
+                    elif dias_atraso > 15:
+                        severidade = 'MEDIUM'
+                    else:
+                        severidade = 'LOW'
+                    atrasos.append({
+                        "contrato_id": c.id,
+                        "contrato_numero": c.numero_contrato,
+                        "orgao": c.orgao,
+                        "entrega": e.descricao,
+                        "data_prevista": e.data_prevista.isoformat(),
+                        "dias_atraso": dias_atraso,
+                        "severidade": severidade,
+                        "valor": float(e.valor_total) if e.valor_total else 0,
+                    })
+
+        # Próximos vencimentos (contratos com data_fim nos próximos 90 dias)
+        data_limite = datetime.now() + timedelta(days=90)
+        vencimentos = db.session.query(Contrato).filter(
+            Contrato.user_id == user_id,
+            Contrato.data_fim != None,
+            Contrato.data_fim <= data_limite,
+            Contrato.data_fim >= datetime.now(),
+            Contrato.status == 'vigente'
+        ).all()
+
+        proximos_vencimentos = [{
+            "contrato_id": v.id,
+            "numero": v.numero_contrato,
+            "orgao": v.orgao,
+            "data_fim": v.data_fim.isoformat(),
+            "dias_restantes": (v.data_fim - datetime.now()).days,
+            "valor": float(v.valor_total) if v.valor_total else 0,
+        } for v in vencimentos]
+
+        variacao_global = round(((total_realizado - total_contratado) / total_contratado) * 100, 2) if total_contratado > 0 else 0
+        avg_var = sum(abs(c['variacao_pct']) for c in contratos_data) / len(contratos_data) if contratos_data else 0
+
+        if avg_var < 5:
+            saude = 'saudavel'
+        elif avg_var < 10:
+            saude = 'atencao'
+        else:
+            saude = 'critico'
+
+        return {
+            "totais": {
+                "contratado": total_contratado,
+                "realizado": total_realizado,
+                "variacao_pct": variacao_global,
+                "contratos_ativos": len([c for c in contratos if c.status == 'vigente']),
+            },
+            "contratos": contratos_data,
+            "atrasos": sorted(atrasos, key=lambda x: x['dias_atraso'], reverse=True),
+            "proximos_vencimentos": sorted(proximos_vencimentos, key=lambda x: x['dias_restantes']),
+            "saude_portfolio": saude,
+        }
+    except Exception as e:
+        return {"erro": str(e)}
+    finally:
+        if close_db and db:
+            db.close()
+
+
+TOOLS_MAP["dashboard_contratado_realizado"] = tool_dashboard_contratado_realizado
+
+
+def tool_alertas_vencimento_multi_tier(user_id, db=None):
+    """Consolida vencimentos de contratos, atas e entregas com urgência multi-tier (RF-052-EXT-01)"""
+    close_db = False
+    if db is None:
+        db = get_db()
+        close_db = True
+    try:
+        vencimentos = []
+        agora = datetime.now()
+        limite_90d = agora + timedelta(days=90)
+        limite_30d = agora + timedelta(days=30)
+
+        # Contratos com vencimento próximo
+        contratos = db.session.query(Contrato).filter(
+            Contrato.user_id == user_id,
+            Contrato.data_fim != None,
+            Contrato.data_fim <= limite_90d,
+            Contrato.data_fim >= agora,
+            Contrato.status == 'vigente'
+        ).all()
+        for c in contratos:
+            dias = (c.data_fim - agora).days
+            vencimentos.append({
+                "tipo_entidade": "contrato",
+                "nome": f"{c.numero_contrato} — {c.orgao}",
+                "data_vencimento": c.data_fim.isoformat(),
+                "dias_restantes": dias,
+                "valor": float(c.valor_total) if c.valor_total else 0,
+                "entity_id": c.id,
+            })
+
+        # Atas com vigência próxima do fim
+        atas = db.session.query(AtaConsultada).filter(
+            AtaConsultada.user_id == user_id,
+            AtaConsultada.data_vigencia_fim != None,
+            AtaConsultada.data_vigencia_fim <= limite_90d,
+            AtaConsultada.data_vigencia_fim >= agora,
+        ).all()
+        for a in atas:
+            dias = (a.data_vigencia_fim - agora).days
+            vencimentos.append({
+                "tipo_entidade": "arp",
+                "nome": f"{a.titulo} — {a.orgao}",
+                "data_vencimento": a.data_vigencia_fim.isoformat(),
+                "dias_restantes": dias,
+                "valor": None,
+                "entity_id": a.id,
+            })
+
+        # Entregas pendentes com prazo próximo
+        entregas = db.session.query(ContratoEntrega).join(Contrato).filter(
+            Contrato.user_id == user_id,
+            ContratoEntrega.status == 'pendente',
+            ContratoEntrega.data_prevista != None,
+            ContratoEntrega.data_prevista <= limite_30d,
+            ContratoEntrega.data_prevista >= agora,
+        ).all()
+        for e in entregas:
+            dias = (e.data_prevista - agora).days
+            vencimentos.append({
+                "tipo_entidade": "entrega",
+                "nome": f"{e.descricao}",
+                "data_vencimento": e.data_prevista.isoformat(),
+                "dias_restantes": dias,
+                "valor": float(e.valor_total) if e.valor_total else 0,
+                "entity_id": e.id,
+            })
+
+        # Atribuir urgência
+        for v in vencimentos:
+            dias = v['dias_restantes']
+            if dias <= 7:
+                v['urgencia'] = 'vermelho'
+            elif dias <= 15:
+                v['urgencia'] = 'laranja'
+            elif dias <= 30:
+                v['urgencia'] = 'amarelo'
+            else:
+                v['urgencia'] = 'verde'
+
+        vencimentos.sort(key=lambda x: x['dias_restantes'])
+
+        resumo = {
+            "total": len(vencimentos),
+            "vermelho": len([v for v in vencimentos if v['urgencia'] == 'vermelho']),
+            "laranja": len([v for v in vencimentos if v['urgencia'] == 'laranja']),
+            "amarelo": len([v for v in vencimentos if v['urgencia'] == 'amarelo']),
+            "verde": len([v for v in vencimentos if v['urgencia'] == 'verde']),
+        }
+
+        return {
+            "vencimentos": vencimentos,
+            "resumo": resumo,
+        }
+    except Exception as e:
+        return {"erro": str(e)}
+    finally:
+        if close_db and db:
+            db.close()
+
+
+TOOLS_MAP["alertas_vencimento_multi_tier"] = tool_alertas_vencimento_multi_tier
 

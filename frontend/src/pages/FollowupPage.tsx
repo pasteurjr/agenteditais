@@ -1,265 +1,331 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { ClipboardList, Phone, Bell, Trophy, XCircle, Ban, Clock } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal } from "../components/common";
+import { Trophy, XCircle, Ban, Clock, Loader2, Bell } from "lucide-react";
+import { Card, DataTable, ActionButton, FormField, TextInput, TextArea, SelectInput, Modal, TabPanel } from "../components/common";
 import type { Column } from "../components/common";
 
-interface EditalAguardando {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface EditalPendente {
   id: string;
-  edital: string;
+  numero: string;
   orgao: string;
-  dataSubmissao: string;
-  diasAguardando: number;
-  valorProposto: number;
+  data_abertura: string | null;
+  valor_referencia: number | null;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-interface Resultado {
+interface EditalResultado {
   id: string;
-  edital: string;
+  numero: string;
   orgao: string;
-  resultado: "vitoria" | "derrota" | "cancelado";
-  valorFinal?: number;
-  vencedor?: string;
-  motivo?: string;
-  data: string;
+  status: string;
+  valor_referencia: number | null;
+  updated_at: string | null;
 }
 
-// Dados mock
-const mockAguardando: EditalAguardando[] = [
-  { id: "1", edital: "PE-001/2026", orgao: "UFMG", dataSubmissao: "15/02/2026", diasAguardando: 5, valorProposto: 55000 },
-  { id: "2", edital: "PE-045/2026", orgao: "CEMIG", dataSubmissao: "12/02/2026", diasAguardando: 8, valorProposto: 42500 },
-  { id: "3", edital: "CC-012/2026", orgao: "Pref. BH", dataSubmissao: "08/02/2026", diasAguardando: 12, valorProposto: 30000 },
-];
-
-const mockResultados: Resultado[] = [
-  { id: "1", edital: "PE-032/2026", orgao: "USP", resultado: "vitoria", valorFinal: 28000, data: "01/02/2026" },
-  { id: "2", edital: "PE-050/2026", orgao: "UFMG", resultado: "derrota", valorFinal: 43500, vencedor: "Lab Solutions", motivo: "Preco", data: "05/02/2026" },
-  { id: "3", edital: "PE-018/2026", orgao: "UNICAMP", resultado: "cancelado", data: "03/02/2026" },
-];
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function FollowupPage(_props?: PageProps) {
-  const [aguardando] = useState<EditalAguardando[]>(mockAguardando);
-  const [resultados, setResultados] = useState<Resultado[]>(mockResultados);
-  const [showRegistrarModal, setShowRegistrarModal] = useState(false);
-  const [selectedEdital, setSelectedEdital] = useState<EditalAguardando | null>(null);
+  const [pendentes, setPendentes] = useState<EditalPendente[]>([]);
+  const [resultados, setResultados] = useState<EditalResultado[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedEdital, setSelectedEdital] = useState<EditalPendente | null>(null);
 
-  // Form de registro de resultado
-  const [tipoResultado, setTipoResultado] = useState<"vitoria" | "derrota" | "cancelado">("vitoria");
+  // Form state
+  const [tipo, setTipo] = useState<"vitoria" | "derrota" | "cancelado">("vitoria");
   const [valorFinal, setValorFinal] = useState("");
   const [vencedor, setVencedor] = useState("");
   const [motivo, setMotivo] = useState("");
+  const [justificativa, setJustificativa] = useState("");
+  const [observacoes, setObservacoes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleAbrirRegistro = (edital: EditalAguardando) => {
-    setSelectedEdital(edital);
-    setShowRegistrarModal(true);
+  const token = localStorage.getItem("token");
+  const headers: Record<string, string> = { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [pendRes, resRes] = await Promise.all([
+        fetch("/api/followup/pendentes", { headers }),
+        fetch("/api/followup/resultados", { headers }),
+      ]);
+      if (pendRes.ok) setPendentes(await pendRes.json());
+      if (resRes.ok) setResultados(await resRes.json());
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, []);
+
+  // Alertas state
+  const [alertaRegras, setAlertaRegras] = useState<Array<{id:string; tipo_entidade:string; dias_30:boolean; dias_15:boolean; dias_7:boolean; dias_1:boolean; canal_email:boolean; canal_push:boolean; ativo:boolean}>>([]);
+  const [vencimentos, setVencimentos] = useState<Array<{tipo_entidade:string; nome:string; data_vencimento:string; dias_restantes:number; urgencia:string}>>([]);
+  const [vencResumo, setVencResumo] = useState({ total: 0, vermelho: 0, laranja: 0, amarelo: 0, verde: 0 });
+
+  const fetchAlertas = useCallback(async () => {
+    try {
+      const [regrasRes, consRes] = await Promise.all([
+        fetch("/api/alertas-vencimento/regras", { headers }),
+        fetch("/api/alertas-vencimento/consolidado", { headers }),
+      ]);
+      if (regrasRes.ok) setAlertaRegras(await regrasRes.json());
+      if (consRes.ok) { const d = await consRes.json(); setVencimentos(d.vencimentos || []); setVencResumo(d.resumo || { total: 0, vermelho: 0, laranja: 0, amarelo: 0, verde: 0 }); }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  useEffect(() => { fetchData(); fetchAlertas(); }, [fetchData, fetchAlertas]);
+
+  const handleRegistrar = async () => {
+    if (!selectedEdital) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/followup/registrar-resultado", {
+        method: "POST", headers,
+        body: JSON.stringify({
+          edital_id: selectedEdital.id,
+          tipo,
+          valor_final: valorFinal ? parseFloat(valorFinal) : null,
+          vencedor,
+          motivo_derrota: motivo,
+          observacoes: tipo === "cancelado" ? justificativa : observacoes,
+        }),
+      });
+      if (res.ok) {
+        setShowModal(false);
+        resetForm();
+        fetchData();
+      }
+    } catch (e) { console.error(e); }
+    setSubmitting(false);
   };
 
-  const handleRegistrarResultado = () => {
-    if (!selectedEdital) return;
-    // TODO: Chamar API para registrar resultado
-    // Prompts: registrar_vitoria, registrar_derrota, registrar_cancelado
-    const novoResultado: Resultado = {
-      id: String(resultados.length + 1),
-      edital: selectedEdital.edital,
-      orgao: selectedEdital.orgao,
-      resultado: tipoResultado,
-      valorFinal: valorFinal ? Number(valorFinal) : undefined,
-      vencedor: tipoResultado === "derrota" ? vencedor : undefined,
-      motivo: tipoResultado === "derrota" ? motivo : undefined,
-      data: new Date().toLocaleDateString("pt-BR"),
-    };
-    setResultados([novoResultado, ...resultados]);
-    setShowRegistrarModal(false);
-    // Reset form
-    setTipoResultado("vitoria");
-    setValorFinal("");
-    setVencedor("");
-    setMotivo("");
+  const resetForm = () => {
+    setTipo("vitoria"); setValorFinal(""); setVencedor(""); setMotivo(""); setJustificativa(""); setObservacoes("");
     setSelectedEdital(null);
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  const openModal = (edital: EditalPendente) => {
+    setSelectedEdital(edital);
+    setValorFinal(edital.valor_referencia ? String(edital.valor_referencia) : "");
+    setShowModal(true);
   };
 
-  const getResultadoBadge = (resultado: Resultado["resultado"]) => {
-    switch (resultado) {
-      case "vitoria":
-        return <span className="status-badge status-badge-success"><Trophy size={12} /> Vitoria</span>;
-      case "derrota":
-        return <span className="status-badge status-badge-error"><XCircle size={12} /> Derrota</span>;
-      case "cancelado":
-        return <span className="status-badge status-badge-neutral"><Ban size={12} /> Cancelado</span>;
-    }
-  };
+  // Stats
+  const vitorias = resultados.filter(r => r.status === "ganho").length;
+  const derrotas = resultados.filter(r => r.status === "perdido").length;
+  const taxa = vitorias + derrotas > 0 ? Math.round((vitorias / (vitorias + derrotas)) * 100) : 0;
 
-  const aguardandoColumns: Column<EditalAguardando>[] = [
-    { key: "edital", header: "Edital", sortable: true },
-    { key: "orgao", header: "Orgao" },
-    { key: "dataSubmissao", header: "Submetido em", sortable: true },
-    {
-      key: "diasAguardando",
-      header: "Aguardando",
-      render: (e) => (
-        <span className={e.diasAguardando > 10 ? "text-warning" : ""}>
-          {e.diasAguardando} dias
-        </span>
-      ),
-    },
-    { key: "valorProposto", header: "Valor Proposto", render: (e) => formatCurrency(e.valorProposto) },
-    {
-      key: "acoes",
-      header: "Acoes",
-      width: "150px",
-      render: (e) => (
-        <div className="table-actions">
-          <button title="Contato" onClick={() => {}}><Phone size={16} /></button>
-          <button title="Lembrete" onClick={() => {}}><Bell size={16} /></button>
-          <ActionButton
-            label="Registrar"
-            onClick={() => handleAbrirRegistro(e)}
-          />
+  const fmt = (v: number | null) => v != null ? `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
+
+  const pendCols: Column<EditalPendente>[] = [
+    { key: "numero", header: "Edital" },
+    { key: "orgao", header: "Órgão" },
+    { key: "created_at", header: "Data Submissão", render: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString("pt-BR") : "—" },
+    { key: "valor_referencia", header: "Valor Proposta", render: (r) => fmt(r.valor_referencia) },
+    { key: "id", header: "Ação", render: (r) => <ActionButton label="Registrar" onClick={() => openModal(r)} size="sm" /> },
+  ];
+
+  const resCols: Column<EditalResultado>[] = [
+    { key: "numero", header: "Edital" },
+    { key: "orgao", header: "Órgão" },
+    { key: "status", header: "Resultado", render: (r) => {
+      const colors: Record<string, string> = { ganho: "#16a34a", perdido: "#dc2626", cancelado: "#6b7280" };
+      const labels: Record<string, string> = { ganho: "Vitória", perdido: "Derrota", cancelado: "Cancelado" };
+      return <span style={{ background: colors[r.status] || "#6b7280", color: "#fff", padding: "2px 10px", borderRadius: 12, fontSize: 12 }}>{labels[r.status] || r.status}</span>;
+    }},
+    { key: "valor_referencia", header: "Valor Final", render: (r) => fmt(r.valor_referencia) },
+    { key: "updated_at", header: "Data", render: (r) => r.updated_at ? new Date(r.updated_at).toLocaleDateString("pt-BR") : "—" },
+  ];
+
+  const tabResultados = (
+    <div>
+      {/* Stats Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        {[
+          { label: "Pendentes", value: pendentes.length, color: "#3b82f6", icon: <Clock size={20} /> },
+          { label: "Vitórias", value: vitorias, color: "#16a34a", icon: <Trophy size={20} /> },
+          { label: "Derrotas", value: derrotas, color: "#dc2626", icon: <XCircle size={20} /> },
+          { label: "Taxa de Sucesso", value: `${taxa}%`, color: "#eab308", icon: <Ban size={20} /> },
+        ].map((s, i) => (
+          <Card key={i}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ background: s.color + "20", color: s.color, borderRadius: 8, padding: 8 }}>{s.icon}</div>
+              <div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>{s.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 700 }}>{s.value}</div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <h3 style={{ marginBottom: 12 }}>Editais Pendentes de Resultado</h3>
+        {loading ? <Loader2 className="animate-spin" /> : <DataTable columns={pendCols} data={pendentes} />}
+      </Card>
+
+      <div style={{ marginTop: 20 }}>
+        <Card>
+          <h3 style={{ marginBottom: 12 }}>Resultados Registrados</h3>
+          <DataTable columns={resCols} data={resultados} />
+        </Card>
+      </div>
+    </div>
+  );
+
+  const tabAlertas = (
+    <div>
+      {/* Resumo de vencimentos */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "Total", value: vencResumo.total, color: "#3b82f6" },
+          { label: "Crítico (<7d)", value: vencResumo.vermelho, color: "#dc2626" },
+          { label: "Urgente (7-15d)", value: vencResumo.laranja, color: "#f97316" },
+          { label: "Atenção (15-30d)", value: vencResumo.amarelo, color: "#eab308" },
+          { label: "Normal (>30d)", value: vencResumo.verde, color: "#16a34a" },
+        ].map((s, i) => (
+          <Card key={i}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>{s.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Próximos vencimentos */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3><Bell size={18} style={{ display: "inline", marginRight: 8 }} />Próximos Vencimentos</h3>
+          <ActionButton label="Atualizar" onClick={fetchAlertas} size="sm" variant="secondary" />
         </div>
-      ),
-    },
-  ];
+        {vencimentos.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 20, color: "#6b7280" }}>Nenhum vencimento nos próximos 90 dias</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: "2px solid #374151" }}>
+              <th style={{ padding: 8, textAlign: "left" }}>Tipo</th>
+              <th style={{ padding: 8, textAlign: "left" }}>Nome</th>
+              <th style={{ padding: 8, textAlign: "center" }}>Data</th>
+              <th style={{ padding: 8, textAlign: "center" }}>Dias</th>
+              <th style={{ padding: 8, textAlign: "center" }}>Urgência</th>
+            </tr></thead>
+            <tbody>{vencimentos.map((v, i) => {
+              const urgColors: Record<string,{bg:string;fg:string}> = { vermelho:{bg:"#fee2e2",fg:"#991b1b"}, laranja:{bg:"#ffedd5",fg:"#9a3412"}, amarelo:{bg:"#fef3c7",fg:"#92400e"}, verde:{bg:"#dcfce7",fg:"#166534"} };
+              const c = urgColors[v.urgencia] || urgColors.verde;
+              return (
+                <tr key={i} style={{ borderBottom: "1px solid #1f2937" }}>
+                  <td style={{ padding: 8 }}><span style={{ background: v.tipo_entidade === "contrato" ? "#3b82f620" : v.tipo_entidade === "arp" ? "#8b5cf620" : "#f59e0b20", color: v.tipo_entidade === "contrato" ? "#3b82f6" : v.tipo_entidade === "arp" ? "#8b5cf6" : "#f59e0b", padding: "2px 8px", borderRadius: 8, fontSize: 11 }}>{v.tipo_entidade}</span></td>
+                  <td style={{ padding: 8 }}>{v.nome}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{new Date(v.data_vencimento).toLocaleDateString("pt-BR")}</td>
+                  <td style={{ padding: 8, textAlign: "center", fontWeight: 700 }}>{v.dias_restantes}d</td>
+                  <td style={{ padding: 8, textAlign: "center" }}><span style={{ background: c.bg, color: c.fg, padding: "2px 10px", borderRadius: 12, fontSize: 12 }}>{v.urgencia}</span></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        )}
+      </Card>
 
-  const resultadosColumns: Column<Resultado>[] = [
-    { key: "edital", header: "Edital", sortable: true },
-    { key: "orgao", header: "Orgao" },
-    { key: "data", header: "Data", sortable: true },
-    { key: "resultado", header: "Resultado", render: (r) => getResultadoBadge(r.resultado) },
-    {
-      key: "valorFinal",
-      header: "Valor Final",
-      render: (r) => r.valorFinal ? formatCurrency(r.valorFinal) : "-",
-    },
-    { key: "vencedor", header: "Vencedor", render: (r) => r.vencedor || "-" },
-    { key: "motivo", header: "Motivo", render: (r) => r.motivo || "-" },
-  ];
+      {/* Regras configuradas */}
+      <div style={{ marginTop: 16 }}>
+        <Card>
+          <h3 style={{ marginBottom: 12 }}>Regras de Alerta Configuradas</h3>
+          {alertaRegras.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: "#6b7280" }}>Nenhuma regra configurada. Use o dashboard Contratado x Realizado para configurar.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr style={{ borderBottom: "2px solid #374151" }}>
+                <th style={{ padding: 8, textAlign: "left" }}>Tipo</th>
+                <th style={{ padding: 8, textAlign: "center" }}>30d</th>
+                <th style={{ padding: 8, textAlign: "center" }}>15d</th>
+                <th style={{ padding: 8, textAlign: "center" }}>7d</th>
+                <th style={{ padding: 8, textAlign: "center" }}>1d</th>
+                <th style={{ padding: 8, textAlign: "center" }}>Email</th>
+                <th style={{ padding: 8, textAlign: "center" }}>Push</th>
+                <th style={{ padding: 8, textAlign: "center" }}>Ativo</th>
+              </tr></thead>
+              <tbody>{alertaRegras.map((r, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid #1f2937" }}>
+                  <td style={{ padding: 8 }}>{r.tipo_entidade}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.dias_30 ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.dias_15 ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.dias_7 ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.dias_1 ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.canal_email ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.canal_push ? "✅" : "—"}</td>
+                  <td style={{ padding: 8, textAlign: "center" }}>{r.ativo ? "✅" : "❌"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div className="page-header-left">
-          <ClipboardList size={24} />
-          <div>
-            <h1>Followup Pos-Submissao</h1>
-            <p>Acompanhamento de editais submetidos</p>
+    <div style={{ padding: 24 }}>
+      <h2 style={{ marginBottom: 20, fontSize: 22, fontWeight: 700 }}>Follow-up de Resultados</h2>
+      <TabPanel tabs={[
+        { id: "resultados", label: "Resultados" },
+        { id: "alertas", label: "Alertas" },
+      ]}>
+        {(activeTab) => activeTab === "resultados" ? tabResultados : tabAlertas}
+      </TabPanel>
+
+      {showModal && selectedEdital && (
+        <Modal title={`Registrar Resultado — ${selectedEdital.numero}`} onClose={() => { setShowModal(false); resetForm(); }}>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+            {(["vitoria", "derrota", "cancelado"] as const).map(t => (
+              <label key={t} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="radio" checked={tipo === t} onChange={() => setTipo(t)} />
+                <span style={{ fontWeight: tipo === t ? 700 : 400 }}>{t === "vitoria" ? "Vitória" : t === "derrota" ? "Derrota" : "Cancelado"}</span>
+              </label>
+            ))}
           </div>
-        </div>
-      </div>
 
-      <div className="page-content">
-        <Card title="Aguardando Resultado" icon={<Clock size={18} />}>
-          <DataTable
-            data={aguardando}
-            columns={aguardandoColumns}
-            idKey="id"
-            emptyMessage="Nenhum edital aguardando resultado"
-          />
-        </Card>
-
-        <Card title="Resultados Registrados" icon={<ClipboardList size={18} />}>
-          <DataTable
-            data={resultados}
-            columns={resultadosColumns}
-            idKey="id"
-            emptyMessage="Nenhum resultado registrado"
-          />
-        </Card>
-      </div>
-
-      <Modal
-        isOpen={showRegistrarModal}
-        onClose={() => setShowRegistrarModal(false)}
-        title={`Registrar Resultado: ${selectedEdital?.edital}`}
-        size="medium"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setShowRegistrarModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleRegistrarResultado}>
-              Registrar Resultado
-            </button>
-          </>
-        }
-      >
-        <div className="resultado-form">
-          <FormField label="Resultado">
-            <div className="radio-group">
-              <label className="radio-wrapper">
-                <input
-                  type="radio"
-                  checked={tipoResultado === "vitoria"}
-                  onChange={() => setTipoResultado("vitoria")}
-                />
-                <span><Trophy size={14} /> Vitoria</span>
-              </label>
-              <label className="radio-wrapper">
-                <input
-                  type="radio"
-                  checked={tipoResultado === "derrota"}
-                  onChange={() => setTipoResultado("derrota")}
-                />
-                <span><XCircle size={14} /> Derrota</span>
-              </label>
-              <label className="radio-wrapper">
-                <input
-                  type="radio"
-                  checked={tipoResultado === "cancelado"}
-                  onChange={() => setTipoResultado("cancelado")}
-                />
-                <span><Ban size={14} /> Cancelado</span>
-              </label>
-            </div>
-          </FormField>
-
-          {tipoResultado === "vitoria" && (
-            <FormField label="Valor Final">
-              <TextInput
-                value={valorFinal}
-                onChange={setValorFinal}
-                type="number"
-                prefix="R$"
-              />
+          {tipo !== "cancelado" && (
+            <FormField label="Valor Final (R$)">
+              <TextInput value={valorFinal} onChange={setValorFinal} placeholder="0,00" />
             </FormField>
           )}
 
-          {tipoResultado === "derrota" && (
+          {tipo === "derrota" && (
             <>
-              <FormField label="Vencedor">
-                <TextInput
-                  value={vencedor}
-                  onChange={setVencedor}
-                  placeholder="Nome do vencedor"
-                />
-              </FormField>
-              <FormField label="Valor Vencedor">
-                <TextInput
-                  value={valorFinal}
-                  onChange={setValorFinal}
-                  type="number"
-                  prefix="R$"
-                />
+              <FormField label="Empresa Vencedora">
+                <TextInput value={vencedor} onChange={setVencedor} placeholder="Nome da empresa" />
               </FormField>
               <FormField label="Motivo da Derrota">
-                <SelectInput
-                  value={motivo}
-                  onChange={setMotivo}
-                  options={[
-                    { value: "", label: "Selecione..." },
-                    { value: "Preco", label: "Preco" },
-                    { value: "Tecnico", label: "Requisito Tecnico" },
-                    { value: "Documentacao", label: "Documentacao" },
-                    { value: "Prazo", label: "Prazo de Entrega" },
-                    { value: "Outro", label: "Outro" },
-                  ]}
-                />
+                <SelectInput value={motivo} onChange={setMotivo} options={[
+                  { value: "", label: "Selecione..." },
+                  { value: "Preço", label: "Preço" }, { value: "Técnico", label: "Técnico" },
+                  { value: "Documental", label: "Documental" }, { value: "Recurso", label: "Recurso" },
+                  { value: "ME-EPP", label: "ME/EPP" }, { value: "Outro", label: "Outro" },
+                ]} />
               </FormField>
             </>
           )}
-        </div>
-      </Modal>
+
+          {tipo === "cancelado" && (
+            <FormField label="Justificativa do Cancelamento">
+              <TextArea value={justificativa} onChange={setJustificativa} placeholder="Motivo do cancelamento..." />
+            </FormField>
+          )}
+
+          <FormField label="Observações">
+            <TextArea value={observacoes} onChange={setObservacoes} placeholder="Observações adicionais..." />
+          </FormField>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
+            <ActionButton label="Cancelar" onClick={() => { setShowModal(false); resetForm(); }} variant="secondary" />
+            <ActionButton label={submitting ? "Salvando..." : "Registrar"} onClick={handleRegistrar} disabled={submitting} />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

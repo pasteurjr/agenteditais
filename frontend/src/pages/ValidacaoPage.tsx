@@ -725,6 +725,21 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         );
         console.log(`[SCORES] Score geral: ${scoreGeral}, Scores:`, novosScores);
 
+        // Sprint 5: enriquecer com score logístico detalhado (4 dimensões)
+        try {
+          const token = localStorage.getItem("token");
+          const logRes = await fetch(`/api/validacao/score-logistico/${alvo.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (logRes.ok) {
+            const logData = await logRes.json();
+            if (logData.score != null) {
+              novosScores.logistico = logData.score;
+              console.log(`[SCORES] Score logístico detalhado: ${logData.score} (${logData.recomendacao})`);
+            }
+          }
+        } catch { /* score logístico detalhado é opcional */ }
+
         const atualizado: Partial<Edital> = {
           scores: novosScores,
           score: scoreGeral,

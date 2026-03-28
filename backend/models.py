@@ -1070,7 +1070,7 @@ class Alerta(Base):
     edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
 
     # Tipo de alerta
-    tipo = Column(Enum('abertura', 'impugnacao', 'recursos', 'proposta', 'personalizado'), nullable=False, default='abertura')
+    tipo = Column(Enum('abertura', 'impugnacao', 'recursos', 'proposta', 'personalizado', 'contrato_vencimento', 'arp_vencimento', 'garantia_vencimento', 'entrega_prazo'), nullable=False, default='abertura')
 
     # Quando disparar
     data_disparo = Column(DateTime, nullable=False)
@@ -1724,6 +1724,242 @@ class ContratoEntrega(Base):
             "status": self.status,
             "observacoes": self.observacoes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== SPRINT 5 — PÓS-LICITAÇÃO ====================
+
+class ContratoAditivo(Base):
+    """Aditivos contratuais — Lei 14.133/2021 Arts. 124-126"""
+    __tablename__ = 'contrato_aditivos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contrato_id = Column(String(36), ForeignKey('contratos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(String(50), nullable=False)  # acrescimo, supressao, prazo, escopo
+    justificativa = Column(Text, nullable=False)
+    valor_original = Column(Float, nullable=True)
+    valor_aditivo = Column(Float, nullable=True)
+    percentual = Column(Float, nullable=True)
+    data_aditivo = Column(DateTime, nullable=True)
+    nova_data_fim = Column(DateTime, nullable=True)
+    fundamentacao_legal = Column(String(200), nullable=True)
+    arquivo_path = Column(String(500), nullable=True)
+    status = Column(String(30), default='rascunho')  # rascunho, vigente, encerrado
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    contrato = relationship('Contrato', backref='aditivos')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "contrato_id": self.contrato_id,
+            "user_id": self.user_id,
+            "tipo": self.tipo,
+            "justificativa": self.justificativa,
+            "valor_original": float(self.valor_original) if self.valor_original else None,
+            "valor_aditivo": float(self.valor_aditivo) if self.valor_aditivo else None,
+            "percentual": float(self.percentual) if self.percentual else None,
+            "data_aditivo": self.data_aditivo.isoformat() if self.data_aditivo else None,
+            "nova_data_fim": self.nova_data_fim.isoformat() if self.nova_data_fim else None,
+            "fundamentacao_legal": self.fundamentacao_legal,
+            "arquivo_path": self.arquivo_path,
+            "status": self.status,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContratoDesignacao(Base):
+    """Designação de Gestor e Fiscal — Lei 14.133/2021 Art. 117"""
+    __tablename__ = 'contrato_designacoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contrato_id = Column(String(36), ForeignKey('contratos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(String(50), nullable=False)  # gestor, fiscal_tecnico, fiscal_administrativo
+    nome = Column(String(200), nullable=False)
+    cargo = Column(String(200), nullable=True)
+    cpf = Column(String(14), nullable=True)
+    portaria_numero = Column(String(100), nullable=True)
+    data_inicio = Column(DateTime, nullable=True)
+    data_fim = Column(DateTime, nullable=True)
+    ativo = Column(Boolean, default=True)
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    contrato = relationship('Contrato', backref='designacoes')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "contrato_id": self.contrato_id,
+            "user_id": self.user_id,
+            "tipo": self.tipo,
+            "nome": self.nome,
+            "cargo": self.cargo,
+            "cpf": self.cpf,
+            "portaria_numero": self.portaria_numero,
+            "data_inicio": self.data_inicio.isoformat() if self.data_inicio else None,
+            "data_fim": self.data_fim.isoformat() if self.data_fim else None,
+            "ativo": self.ativo,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class AtividadeFiscal(Base):
+    """Atividades de fiscalização de contrato"""
+    __tablename__ = 'atividades_fiscais'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    designacao_id = Column(String(36), ForeignKey('contrato_designacoes.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(String(50), nullable=False)  # medicao, vistoria, atesto, parecer, notificacao
+    descricao = Column(Text, nullable=False)
+    data_atividade = Column(DateTime, nullable=True)
+    arquivo_path = Column(String(500), nullable=True)
+    status = Column(String(30), default='registrado')
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    designacao = relationship('ContratoDesignacao', backref='atividades')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "designacao_id": self.designacao_id,
+            "user_id": self.user_id,
+            "tipo": self.tipo,
+            "descricao": self.descricao,
+            "data_atividade": self.data_atividade.isoformat() if self.data_atividade else None,
+            "arquivo_path": self.arquivo_path,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ARPSaldo(Base):
+    """Saldo de Ata de Registro de Preços — Lei 14.133/2021 Arts. 82-86"""
+    __tablename__ = 'arp_saldos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ata_id = Column(String(36), ForeignKey('atas_consultadas.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    item_descricao = Column(String(500), nullable=False)
+    catmat_catser = Column(String(50), nullable=True)
+    unidade = Column(String(50), nullable=True)
+    quantidade_registrada = Column(Float, nullable=False)
+    consumido_participante = Column(Float, default=0)
+    consumido_carona = Column(Float, default=0)
+    saldo_disponivel = Column(Float, nullable=True)
+    valor_unitario = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    ata = relationship('AtaConsultada', backref='saldos')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "ata_id": self.ata_id,
+            "user_id": self.user_id,
+            "item_descricao": self.item_descricao,
+            "catmat_catser": self.catmat_catser,
+            "unidade": self.unidade,
+            "quantidade_registrada": float(self.quantidade_registrada) if self.quantidade_registrada else None,
+            "consumido_participante": float(self.consumido_participante) if self.consumido_participante else 0,
+            "consumido_carona": float(self.consumido_carona) if self.consumido_carona else 0,
+            "saldo_disponivel": float(self.saldo_disponivel) if self.saldo_disponivel else None,
+            "valor_unitario": float(self.valor_unitario) if self.valor_unitario else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SolicitacaoCarona(Base):
+    """Solicitações de carona/adesão a ARP"""
+    __tablename__ = 'solicitacoes_carona'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    arp_saldo_id = Column(String(36), ForeignKey('arp_saldos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    orgao_solicitante = Column(String(300), nullable=False)
+    cnpj_solicitante = Column(String(18), nullable=True)
+    quantidade_solicitada = Column(Float, nullable=False)
+    valor_unitario = Column(Float, nullable=True)
+    justificativa = Column(Text, nullable=True)
+    status = Column(String(30), default='pendente')  # pendente, aprovada, recusada, executada
+    data_solicitacao = Column(DateTime, default=datetime.now)
+    data_resposta = Column(DateTime, nullable=True)
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    arp_saldo = relationship('ARPSaldo', backref='solicitacoes_carona')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "arp_saldo_id": self.arp_saldo_id,
+            "user_id": self.user_id,
+            "orgao_solicitante": self.orgao_solicitante,
+            "cnpj_solicitante": self.cnpj_solicitante,
+            "quantidade_solicitada": float(self.quantidade_solicitada) if self.quantidade_solicitada else None,
+            "valor_unitario": float(self.valor_unitario) if self.valor_unitario else None,
+            "justificativa": self.justificativa,
+            "status": self.status,
+            "data_solicitacao": self.data_solicitacao.isoformat() if self.data_solicitacao else None,
+            "data_resposta": self.data_resposta.isoformat() if self.data_resposta else None,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class AlertaVencimentoRegra(Base):
+    """Regras de alerta de vencimento multi-tier"""
+    __tablename__ = 'alerta_vencimento_regras'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo_entidade = Column(String(50), nullable=False)  # contrato, arp, garantia, certidao, entrega
+    dias_30 = Column(Boolean, default=True)
+    dias_15 = Column(Boolean, default=True)
+    dias_7 = Column(Boolean, default=True)
+    dias_1 = Column(Boolean, default=True)
+    canal_email = Column(Boolean, default=True)
+    canal_push = Column(Boolean, default=True)
+    canal_whatsapp = Column(Boolean, default=False)
+    escalation_enabled = Column(Boolean, default=False)
+    escalation_email = Column(String(200), nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "tipo_entidade": self.tipo_entidade,
+            "dias_30": self.dias_30,
+            "dias_15": self.dias_15,
+            "dias_7": self.dias_7,
+            "dias_1": self.dias_1,
+            "canal_email": self.canal_email,
+            "canal_push": self.canal_push,
+            "canal_whatsapp": self.canal_whatsapp,
+            "escalation_enabled": self.escalation_enabled,
+            "escalation_email": self.escalation_email,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
@@ -2673,6 +2909,8 @@ def init_db():
             "ALTER TABLE propostas ADD COLUMN lote_id VARCHAR(36) NULL",
             "ALTER TABLE propostas ADD COLUMN descricao_modo VARCHAR(20) DEFAULT 'edital'",
             "ALTER TABLE propostas ADD COLUMN descricao_personalizada LONGTEXT NULL",
+            # Sprint 5: expandir enum Alerta.tipo
+            "ALTER TABLE alertas MODIFY COLUMN tipo ENUM('abertura','impugnacao','recursos','proposta','personalizado','contrato_vencimento','arp_vencimento','garantia_vencimento','entrega_prazo') NOT NULL DEFAULT 'abertura'",
         ]
         for stmt in alter_stmts:
             try:

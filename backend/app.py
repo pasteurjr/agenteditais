@@ -14,6 +14,10 @@ from models import (
     Empresa, PropostaLog, PropostaTemplate, AnvisaValidacao, ProdutoDocumento,
     # Sprint 4: Recursos e Impugnações
     Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
+    # Sprint 5: Pós-Licitação
+    ContratoAditivo, ContratoDesignacao, AtividadeFiscal,
+    ARPSaldo, SolicitacaoCarona, AlertaVencimentoRegra,
+    ContratoEntrega, AtaConsultada,
 )
 from llm import call_deepseek
 from tools import (
@@ -30,6 +34,10 @@ from tools import (
     # Sprint 4: Recursos e Impugnações
     tool_validacao_legal_edital, tool_gerar_peticao_impugnacao,
     tool_analisar_proposta_vencedora, tool_gerar_laudo_recurso,
+    # Sprint 5: Pós-Licitação
+    tool_calcular_score_logistico, tool_registrar_resultado_api,
+    tool_dashboard_contratado_realizado, tool_alertas_vencimento_multi_tier,
+    tool_buscar_atas_pncp, tool_baixar_ata_pncp, tool_extrair_ata_pdf,
 )
 from config import UPLOAD_FOLDER, MAX_HISTORY_MESSAGES
 
@@ -13459,6 +13467,613 @@ def atualizar_status_recurso(recurso_id):
         return jsonify({"success": True, "recurso": recurso.to_dict()})
     except Exception as e:
         db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# SPRINT 5 — PÓS-LICITAÇÃO
+# =============================================================================
+
+
+# ---- Follow-up (UC-FU01, FU02) ----
+
+@app.route('/api/followup/registrar-resultado', methods=['POST'])
+@require_auth
+def api_followup_registrar_resultado():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        data = request.get_json()
+        result = tool_registrar_resultado_api(data, user_id, db)
+        if result.get('success'):
+            return jsonify(result)
+        return jsonify(result), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/followup/pendentes', methods=['GET'])
+@require_auth
+def api_followup_pendentes():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        editais = db.session.query(Edital).filter_by(user_id=user_id, status='submetido').all()
+        return jsonify([e.to_dict() for e in editais])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/followup/resultados', methods=['GET'])
+@require_auth
+def api_followup_resultados():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        editais = db.session.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.status.in_(['ganho', 'perdido', 'cancelado'])
+        ).order_by(Edital.updated_at.desc()).all()
+        return jsonify([e.to_dict() for e in editais])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Score Logístico (UC-FU03) ----
+
+@app.route('/api/validacao/score-logistico/<edital_id>', methods=['GET'])
+@require_auth
+def api_score_logistico(edital_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        result = tool_calcular_score_logistico(edital_id, user_id, db)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Atas (UC-AT01, AT02, AT03) ----
+
+@app.route('/api/atas/buscar', methods=['GET'])
+@require_auth
+def api_atas_buscar():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        termo = request.args.get('termo', '')
+        if len(termo) < 3:
+            return jsonify({"error": "Termo deve ter pelo menos 3 caracteres"}), 400
+        result = tool_buscar_atas_pncp(termo, user_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/atas/extrair-pdf', methods=['POST'])
+@require_auth
+def api_atas_extrair_pdf():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        data = request.get_json()
+        url = data.get('url', '')
+        texto = data.get('texto', '')
+
+        if url and not texto:
+            download_result = tool_baixar_ata_pncp(url, user_id)
+            if 'erro' in download_result:
+                return jsonify(download_result), 400
+            texto = download_result.get('texto', '')
+
+        if not texto:
+            return jsonify({"error": "Texto ou URL obrigatório"}), 400
+
+        result = tool_extrair_ata_pdf(texto, user_id, db)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/atas/minhas', methods=['GET'])
+@require_auth
+def api_atas_minhas():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        atas = db.session.query(AtaConsultada).filter_by(user_id=user_id).order_by(AtaConsultada.created_at.desc()).all()
+        now = datetime.now()
+        total = len(atas)
+        vigentes = sum(1 for a in atas if a.data_vigencia_fim and a.data_vigencia_fim > now)
+        vencidas = total - vigentes
+        return jsonify({
+            "stats": {"total": total, "vigentes": vigentes, "vencidas": vencidas},
+            "atas": [a.to_dict() for a in atas]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/atas/salvar', methods=['POST'])
+@require_auth
+def api_atas_salvar():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        data = request.get_json()
+        ata = AtaConsultada(
+            user_id=user_id,
+            numero_controle_pncp=data.get('numero_controle_pncp', ''),
+            titulo=data.get('titulo', ''),
+            orgao=data.get('orgao', ''),
+            cnpj_orgao=data.get('cnpj_orgao', ''),
+            uf=data.get('uf', ''),
+            url_pncp=data.get('url_pncp', ''),
+            data_publicacao=datetime.fromisoformat(data['data_publicacao']) if data.get('data_publicacao') else None,
+            data_vigencia_inicio=datetime.fromisoformat(data['data_vigencia_inicio']) if data.get('data_vigencia_inicio') else None,
+            data_vigencia_fim=datetime.fromisoformat(data['data_vigencia_fim']) if data.get('data_vigencia_fim') else None,
+        )
+        db.session.add(ata)
+        db.session.commit()
+        return jsonify({"success": True, "id": ata.id, "ata": ata.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Dashboard Contratado x Realizado (UC-CR01) ----
+
+@app.route('/api/dashboard/contratado-realizado', methods=['GET'])
+@require_auth
+def api_dashboard_contratado_realizado():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        periodo = request.args.get('periodo', '6m')
+        produto_id = request.args.get('produto_id')
+        orgao = request.args.get('orgao')
+        result = tool_dashboard_contratado_realizado(user_id, db, periodo, produto_id, orgao)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Cronograma de Entregas (UC-CT03) ----
+
+@app.route('/api/contratos/<contrato_id>/cronograma', methods=['GET'])
+@require_auth
+def api_contrato_cronograma(contrato_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        if not contrato:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        entregas = db.session.query(ContratoEntrega).filter_by(contrato_id=contrato_id).order_by(ContratoEntrega.data_prevista).all()
+        now = datetime.now()
+
+        semanas = {}
+        atrasados = []
+        proximos_7d = []
+
+        for e in entregas:
+            ed = e.to_dict()
+            if e.data_prevista:
+                # Agrupar por semana
+                week_start = e.data_prevista - timedelta(days=e.data_prevista.weekday())
+                week_key = week_start.strftime('%Y-%m-%d')
+                if week_key not in semanas:
+                    semanas[week_key] = []
+                semanas[week_key].append(ed)
+
+                # Atrasados
+                if e.status != 'entregue' and e.data_prevista < now:
+                    ed['dias_atraso'] = (now - e.data_prevista).days
+                    atrasados.append(ed)
+
+                # Próximos 7 dias
+                dias_ate = (e.data_prevista - now).days
+                if 0 <= dias_ate <= 7 and e.status != 'entregue':
+                    ed['dias_restantes'] = dias_ate
+                    proximos_7d.append(ed)
+
+        stats = {
+            "pendentes": sum(1 for e in entregas if e.status == 'pendente'),
+            "entregues": sum(1 for e in entregas if e.status == 'entregue'),
+            "atrasados": len(atrasados),
+            "total": len(entregas),
+        }
+
+        return jsonify({
+            "contrato": contrato.to_dict(),
+            "stats": stats,
+            "semanas": semanas,
+            "atrasados": atrasados,
+            "proximos_7d": proximos_7d,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Aditivos (UC-CT04) ----
+
+@app.route('/api/contratos/<contrato_id>/aditivos', methods=['GET', 'POST'])
+@require_auth
+def api_contrato_aditivos(contrato_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        if not contrato:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        if request.method == 'GET':
+            aditivos = db.session.query(ContratoAditivo).filter_by(contrato_id=contrato_id).order_by(ContratoAditivo.created_at.desc()).all()
+            total_aditivos = sum(float(a.valor_aditivo or 0) for a in aditivos if a.tipo in ('acrescimo',))
+            total_supressoes = sum(abs(float(a.valor_aditivo or 0)) for a in aditivos if a.tipo == 'supressao')
+            valor_original = float(contrato.valor_total or 0)
+            limite_25 = valor_original * 0.25
+            pct_consumido = (total_aditivos / valor_original * 100) if valor_original > 0 else 0
+            return jsonify({
+                "aditivos": [a.to_dict() for a in aditivos],
+                "resumo": {
+                    "valor_original": valor_original,
+                    "total_acrescimos": total_aditivos,
+                    "total_supressoes": total_supressoes,
+                    "limite_25_pct": limite_25,
+                    "pct_consumido": round(pct_consumido, 2),
+                }
+            })
+
+        # POST
+        data = request.get_json()
+        aditivo = ContratoAditivo(
+            contrato_id=contrato_id,
+            user_id=user_id,
+            tipo=data.get('tipo', 'acrescimo'),
+            justificativa=data.get('justificativa', ''),
+            valor_original=float(contrato.valor_total or 0),
+            valor_aditivo=float(data.get('valor_aditivo', 0)),
+            percentual=float(data.get('percentual', 0)),
+            data_aditivo=datetime.fromisoformat(data['data_aditivo']) if data.get('data_aditivo') else datetime.now(),
+            nova_data_fim=datetime.fromisoformat(data['nova_data_fim']) if data.get('nova_data_fim') else None,
+            fundamentacao_legal=data.get('fundamentacao_legal', ''),
+            status=data.get('status', 'rascunho'),
+            observacoes=data.get('observacoes', ''),
+        )
+        db.session.add(aditivo)
+        db.session.commit()
+        return jsonify({"success": True, "aditivo": aditivo.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/contratos/<contrato_id>/aditivos/<aditivo_id>', methods=['PUT', 'DELETE'])
+@require_auth
+def api_contrato_aditivo_detail(contrato_id, aditivo_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        aditivo = db.session.query(ContratoAditivo).filter_by(id=aditivo_id, contrato_id=contrato_id, user_id=user_id).first()
+        if not aditivo:
+            return jsonify({"error": "Aditivo não encontrado"}), 404
+
+        if request.method == 'DELETE':
+            db.session.delete(aditivo)
+            db.session.commit()
+            return jsonify({"success": True})
+
+        # PUT
+        data = request.get_json()
+        for field in ['tipo', 'justificativa', 'fundamentacao_legal', 'status', 'observacoes']:
+            if field in data:
+                setattr(aditivo, field, data[field])
+        if 'valor_aditivo' in data:
+            aditivo.valor_aditivo = float(data['valor_aditivo'])
+        if 'data_aditivo' in data:
+            aditivo.data_aditivo = datetime.fromisoformat(data['data_aditivo'])
+        if 'nova_data_fim' in data:
+            aditivo.nova_data_fim = datetime.fromisoformat(data['nova_data_fim'])
+        db.session.commit()
+        return jsonify({"success": True, "aditivo": aditivo.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Designações (UC-CT05) ----
+
+@app.route('/api/contratos/<contrato_id>/designacoes', methods=['GET', 'POST'])
+@require_auth
+def api_contrato_designacoes(contrato_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        if not contrato:
+            return jsonify({"error": "Contrato não encontrado"}), 404
+
+        if request.method == 'GET':
+            designacoes = db.session.query(ContratoDesignacao).filter_by(contrato_id=contrato_id).all()
+            return jsonify([d.to_dict() for d in designacoes])
+
+        # POST
+        data = request.get_json()
+        designacao = ContratoDesignacao(
+            contrato_id=contrato_id,
+            user_id=user_id,
+            tipo=data.get('tipo', 'gestor'),
+            nome=data.get('nome', ''),
+            cargo=data.get('cargo', ''),
+            cpf=data.get('cpf', ''),
+            portaria_numero=data.get('portaria_numero', ''),
+            data_inicio=datetime.fromisoformat(data['data_inicio']) if data.get('data_inicio') else datetime.now(),
+            data_fim=datetime.fromisoformat(data['data_fim']) if data.get('data_fim') else None,
+        )
+        db.session.add(designacao)
+        db.session.commit()
+        return jsonify({"success": True, "designacao": designacao.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/contratos/<contrato_id>/designacoes/<designacao_id>', methods=['PUT', 'DELETE'])
+@require_auth
+def api_contrato_designacao_detail(contrato_id, designacao_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        desig = db.session.query(ContratoDesignacao).filter_by(id=designacao_id, contrato_id=contrato_id, user_id=user_id).first()
+        if not desig:
+            return jsonify({"error": "Designação não encontrada"}), 404
+
+        if request.method == 'DELETE':
+            db.session.delete(desig)
+            db.session.commit()
+            return jsonify({"success": True})
+
+        data = request.get_json()
+        for field in ['tipo', 'nome', 'cargo', 'cpf', 'portaria_numero', 'observacoes']:
+            if field in data:
+                setattr(desig, field, data[field])
+        if 'ativo' in data:
+            desig.ativo = data['ativo']
+        if 'data_fim' in data:
+            desig.data_fim = datetime.fromisoformat(data['data_fim'])
+        db.session.commit()
+        return jsonify({"success": True, "designacao": desig.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/contratos/<contrato_id>/designacoes/<designacao_id>/atividades', methods=['GET', 'POST'])
+@require_auth
+def api_contrato_atividades(contrato_id, designacao_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        if request.method == 'GET':
+            atividades = db.session.query(AtividadeFiscal).filter_by(designacao_id=designacao_id, user_id=user_id).order_by(AtividadeFiscal.data_atividade.desc()).all()
+            return jsonify([a.to_dict() for a in atividades])
+
+        data = request.get_json()
+        atividade = AtividadeFiscal(
+            designacao_id=designacao_id,
+            user_id=user_id,
+            tipo=data.get('tipo', 'atesto'),
+            descricao=data.get('descricao', ''),
+            data_atividade=datetime.fromisoformat(data['data_atividade']) if data.get('data_atividade') else datetime.now(),
+            arquivo_path=data.get('arquivo_path', ''),
+        )
+        db.session.add(atividade)
+        db.session.commit()
+        return jsonify({"success": True, "atividade": atividade.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- ARP Saldos e Caronas (UC-CT06) ----
+
+@app.route('/api/atas/<ata_id>/saldos', methods=['GET', 'POST'])
+@require_auth
+def api_ata_saldos(ata_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        if request.method == 'GET':
+            saldos = db.session.query(ARPSaldo).filter_by(ata_id=ata_id, user_id=user_id).all()
+            return jsonify([s.to_dict() for s in saldos])
+
+        data = request.get_json()
+        qtd_reg = float(data.get('quantidade_registrada', 0))
+        saldo = ARPSaldo(
+            ata_id=ata_id,
+            user_id=user_id,
+            item_descricao=data.get('item_descricao', ''),
+            catmat_catser=data.get('catmat_catser', ''),
+            unidade=data.get('unidade', ''),
+            quantidade_registrada=qtd_reg,
+            saldo_disponivel=qtd_reg,
+            valor_unitario=float(data.get('valor_unitario', 0)) if data.get('valor_unitario') else None,
+        )
+        db.session.add(saldo)
+        db.session.commit()
+        return jsonify({"success": True, "saldo": saldo.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/atas/<ata_id>/saldos/<saldo_id>/caronas', methods=['GET', 'POST'])
+@require_auth
+def api_ata_caronas(ata_id, saldo_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        saldo = db.session.query(ARPSaldo).filter_by(id=saldo_id, ata_id=ata_id, user_id=user_id).first()
+        if not saldo:
+            return jsonify({"error": "Saldo ARP não encontrado"}), 404
+
+        if request.method == 'GET':
+            caronas = db.session.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id).order_by(SolicitacaoCarona.created_at.desc()).all()
+            return jsonify([c.to_dict() for c in caronas])
+
+        # POST — validar limites Lei 14.133 (50% individual, 2x global)
+        data = request.get_json()
+        qtd_solicitada = float(data.get('quantidade_solicitada', 0))
+        qtd_registrada = float(saldo.quantidade_registrada or 0)
+
+        # Limite individual: 50% do registrado por órgão
+        orgao = data.get('orgao_solicitante', '')
+        consumo_orgao = db.session.query(SolicitacaoCarona).filter_by(
+            arp_saldo_id=saldo_id, orgao_solicitante=orgao, status='aprovada'
+        ).all()
+        total_orgao = sum(float(c.quantidade_solicitada or 0) for c in consumo_orgao) + qtd_solicitada
+        limite_individual = qtd_registrada * 0.5
+        if total_orgao > limite_individual:
+            return jsonify({"error": f"Limite individual (50%) excedido. Máximo: {limite_individual}, Solicitado total: {total_orgao}"}), 400
+
+        # Limite global: 2x do registrado
+        todas_caronas = db.session.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id, status='aprovada').all()
+        total_global = sum(float(c.quantidade_solicitada or 0) for c in todas_caronas) + qtd_solicitada
+        limite_global = qtd_registrada * 2
+        if total_global > limite_global:
+            return jsonify({"error": f"Limite global (2x) excedido. Máximo: {limite_global}, Total: {total_global}"}), 400
+
+        carona = SolicitacaoCarona(
+            arp_saldo_id=saldo_id,
+            user_id=user_id,
+            orgao_solicitante=orgao,
+            cnpj_solicitante=data.get('cnpj_solicitante', ''),
+            quantidade_solicitada=qtd_solicitada,
+            valor_unitario=float(saldo.valor_unitario or 0),
+            justificativa=data.get('justificativa', ''),
+        )
+        db.session.add(carona)
+        db.session.commit()
+        return jsonify({"success": True, "carona": carona.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/atas/<ata_id>/saldos/<saldo_id>/caronas/<carona_id>', methods=['PUT'])
+@require_auth
+def api_ata_carona_detail(ata_id, saldo_id, carona_id):
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        carona = db.session.query(SolicitacaoCarona).filter_by(id=carona_id, arp_saldo_id=saldo_id, user_id=user_id).first()
+        if not carona:
+            return jsonify({"error": "Solicitação não encontrada"}), 404
+
+        data = request.get_json()
+        if 'status' in data:
+            carona.status = data['status']
+            if data['status'] in ('aprovada', 'recusada'):
+                carona.data_resposta = datetime.now()
+                # Atualizar saldo se aprovada
+                if data['status'] == 'aprovada':
+                    saldo = db.session.query(ARPSaldo).filter_by(id=saldo_id).first()
+                    if saldo:
+                        saldo.consumido_carona = (saldo.consumido_carona or 0) + float(carona.quantidade_solicitada or 0)
+                        saldo.saldo_disponivel = float(saldo.quantidade_registrada or 0) - float(saldo.consumido_participante or 0) - float(saldo.consumido_carona or 0)
+        if 'observacoes' in data:
+            carona.observacoes = data['observacoes']
+        db.session.commit()
+        return jsonify({"success": True, "carona": carona.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---- Alertas de Vencimento Multi-tier (UC-CR03) ----
+
+@app.route('/api/alertas-vencimento/regras', methods=['GET', 'PUT'])
+@require_auth
+def api_alertas_vencimento_regras():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        if request.method == 'GET':
+            regras = db.session.query(AlertaVencimentoRegra).filter_by(user_id=user_id).all()
+            return jsonify([r.to_dict() for r in regras])
+
+        # PUT — upsert rules
+        data = request.get_json()
+        regras_data = data if isinstance(data, list) else [data]
+        results = []
+        for rd in regras_data:
+            tipo = rd.get('tipo_entidade')
+            regra = db.session.query(AlertaVencimentoRegra).filter_by(user_id=user_id, tipo_entidade=tipo).first()
+            if not regra:
+                regra = AlertaVencimentoRegra(user_id=user_id, tipo_entidade=tipo)
+                db.session.add(regra)
+            for field in ['dias_30', 'dias_15', 'dias_7', 'dias_1', 'canal_email', 'canal_push', 'canal_whatsapp', 'escalation_enabled', 'escalation_email', 'ativo']:
+                if field in rd:
+                    setattr(regra, field, rd[field])
+            results.append(regra)
+        db.session.commit()
+        return jsonify([r.to_dict() for r in results])
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/alertas-vencimento/consolidado', methods=['GET'])
+@require_auth
+def api_alertas_vencimento_consolidado():
+    db = get_db()
+    try:
+        user_id = get_current_user_id()
+        result = tool_alertas_vencimento_multi_tier(user_id, db)
+        return jsonify(result)
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()

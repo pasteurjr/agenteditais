@@ -1,203 +1,806 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { BarChart2, TrendingUp, TrendingDown, Clock, AlertTriangle } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, SelectInput } from "../components/common";
+import {
+  BarChart2, TrendingUp, TrendingDown, Clock, AlertTriangle,
+  Loader2, RefreshCw, Shield, Calendar,
+} from "lucide-react";
+import { Card, DataTable, FormField, SelectInput, TextInput } from "../components/common";
 import type { Column } from "../components/common";
 
-interface ContratoComparativo {
-  id: string;
-  edital: string;
-  orgao: string;
-  produto: string;
-  valorContratado: number;
-  valorRealizado: number;
-  variacao: number;
-  status: "concluido" | "em_andamento";
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DashboardTotais {
+  contratado: number;
+  realizado: number;
+  variacao_pct: number;
+  contratos_ativos: number;
 }
 
-interface PedidoAtraso {
-  id: string;
-  contrato: string;
+interface ContratoRow {
+  contrato_id: string;
+  numero: string;
   orgao: string;
-  prazo: string;
-  diasAtraso: number;
+  objeto: string;
+  valor_contratado: number;
+  valor_realizado: number;
+  variacao_pct: number;
+  status: string;
+  data_fim: string | null;
 }
 
-// Dados mock
-const mockContratos: ContratoComparativo[] = [
-  { id: "1", edital: "PE-032/2026", orgao: "USP", produto: "Microscopio", valorContratado: 28000, valorRealizado: 28000, variacao: 0, status: "concluido" },
-  { id: "2", edital: "PE-018/2026", orgao: "UFMG", produto: "Centrifuga", valorContratado: 45000, valorRealizado: 42000, variacao: -6.7, status: "concluido" },
-  { id: "3", edital: "PE-020/2026", orgao: "UNESP", produto: "Autoclave", valorContratado: 35000, valorRealizado: 35000, variacao: 0, status: "em_andamento" },
-  { id: "4", edital: "PE-015/2026", orgao: "UNICAMP", produto: "Reagentes", valorContratado: 15000, valorRealizado: 14200, variacao: -5.3, status: "concluido" },
-];
+interface AtrasoRow {
+  contrato_id: string;
+  contrato_numero: string;
+  orgao: string;
+  entrega: string;
+  data_prevista: string;
+  dias_atraso: number;
+  severidade: "HIGH" | "MEDIUM" | "LOW";
+  valor: number;
+}
 
-const mockAtrasos: PedidoAtraso[] = [
-  { id: "1", contrato: "PE-010/2026", orgao: "UFMG", prazo: "01/02/2026", diasAtraso: 9 },
-  { id: "2", contrato: "PE-015/2026", orgao: "USP", prazo: "05/02/2026", diasAtraso: 5 },
-];
+interface DashboardResponse {
+  totais: DashboardTotais;
+  contratos: ContratoRow[];
+  atrasos: AtrasoRow[];
+  proximos_vencimentos: unknown[];
+  saude_portfolio: "saudavel" | "atencao" | "critico";
+  erro?: string;
+}
 
-const mockProximosVencimentos: PedidoAtraso[] = [
-  { id: "1", contrato: "PE-020/2026", orgao: "CEMIG", prazo: "17/02/2026", diasAtraso: -7 },
-  { id: "2", contrato: "PE-022/2026", orgao: "UNESP", prazo: "20/02/2026", diasAtraso: -10 },
-  { id: "3", contrato: "PE-025/2026", orgao: "UFOP", prazo: "22/02/2026", diasAtraso: -12 },
-];
+interface VencimentoRow {
+  tipo_entidade: "contrato" | "arp" | "entrega";
+  nome: string;
+  data_vencimento: string;
+  dias_restantes: number;
+  valor: number | null;
+  entity_id: string;
+  urgencia: "vermelho" | "laranja" | "amarelo" | "verde";
+}
 
-export function ContratadoRealizadoPage(_props?: PageProps) {
-  const [contratos] = useState<ContratoComparativo[]>(mockContratos);
-  const [atrasos] = useState<PedidoAtraso[]>(mockAtrasos);
-  const [proximosVencimentos] = useState<PedidoAtraso[]>(mockProximosVencimentos);
+interface AlertasResumo {
+  total: number;
+  vermelho: number;
+  laranja: number;
+  amarelo: number;
+  verde: number;
+}
+
+interface AlertasResponse {
+  vencimentos: VencimentoRow[];
+  resumo: AlertasResumo;
+  erro?: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+const formatDate = (iso: string): string => {
+  try {
+    return new Date(iso).toLocaleDateString("pt-BR");
+  } catch {
+    return iso;
+  }
+};
+
+function authHeaders(): HeadersInit {
+  const h: HeadersInit = { "Content-Type": "application/json" };
+  const token = localStorage.getItem("token");
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  return h;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function ContratadoRealizadoPage(props?: PageProps) {
+  const { onSendToChat } = props ?? {};
+
+  // ── Filters ──
   const [periodo, setPeriodo] = useState("6m");
+  const [orgao, setOrgao] = useState("");
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-  };
+  // ── Dashboard data ──
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [dashLoading, setDashLoading] = useState(false);
+  const [dashError, setDashError] = useState("");
 
-  // Calculos
-  const totalContratado = contratos.reduce((acc, c) => acc + c.valorContratado, 0);
-  const totalRealizado = contratos.reduce((acc, c) => acc + c.valorRealizado, 0);
-  const variacaoTotal = ((totalRealizado - totalContratado) / totalContratado) * 100;
+  // ── Alertas vencimento ──
+  const [alertas, setAlertas] = useState<AlertasResponse | null>(null);
+  const [alertasLoading, setAlertasLoading] = useState(false);
+  const [alertasError, setAlertasError] = useState("");
 
-  const contratosColumns: Column<ContratoComparativo>[] = [
-    { key: "edital", header: "Contrato", sortable: true },
-    { key: "orgao", header: "Orgao" },
-    { key: "produto", header: "Produto" },
-    { key: "valorContratado", header: "Contratado", render: (c) => formatCurrency(c.valorContratado) },
-    { key: "valorRealizado", header: "Realizado", render: (c) => formatCurrency(c.valorRealizado) },
+  // ── Fetch dashboard ──
+  const loadDashboard = useCallback(async () => {
+    setDashLoading(true);
+    setDashError("");
+    try {
+      const params = new URLSearchParams({ periodo });
+      if (orgao.trim()) params.append("orgao", orgao.trim());
+      const res = await fetch(`/api/dashboard/contratado-realizado?${params}`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Erro ${res.status}`);
+      }
+      const data: DashboardResponse = await res.json();
+      if (data.erro) throw new Error(data.erro);
+      setDashboard(data);
+    } catch (e) {
+      setDashError(e instanceof Error ? e.message : "Erro ao carregar dashboard");
+    } finally {
+      setDashLoading(false);
+    }
+  }, [periodo, orgao]);
+
+  // ── Fetch alertas vencimento ──
+  const loadAlertas = useCallback(async () => {
+    setAlertasLoading(true);
+    setAlertasError("");
+    try {
+      const res = await fetch("/api/alertas-vencimento/consolidado", {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Erro ${res.status}`);
+      }
+      const data: AlertasResponse = await res.json();
+      if (data.erro) throw new Error(data.erro);
+      setAlertas(data);
+    } catch (e) {
+      setAlertasError(e instanceof Error ? e.message : "Erro ao carregar alertas");
+    } finally {
+      setAlertasLoading(false);
+    }
+  }, []);
+
+  // ── Load on mount + filter change ──
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    loadAlertas();
+  }, [loadAlertas]);
+
+  // ── Derived data ──
+  const totais = dashboard?.totais;
+  const contratos = dashboard?.contratos ?? [];
+  const atrasos = dashboard?.atrasos ?? [];
+  const saude = dashboard?.saude_portfolio ?? "saudavel";
+
+  const atrasosHigh = atrasos.filter((a) => a.severidade === "HIGH");
+  const atrasosMedium = atrasos.filter((a) => a.severidade === "MEDIUM");
+  const atrasosLow = atrasos.filter((a) => a.severidade === "LOW");
+
+  const totalAtrasados = atrasos.length;
+  const altaSeveridade = atrasosHigh.length;
+  const valorEmRisco = atrasos.reduce((s, a) => s + (a.valor || 0), 0);
+
+  const vencimentos = alertas?.vencimentos ?? [];
+  const resumoAlertas = alertas?.resumo;
+
+  // ── Contrato table columns ──
+  const contratosColumns: Column<ContratoRow>[] = [
+    { key: "numero", header: "Contrato", sortable: true },
+    { key: "orgao", header: "Orgao", sortable: true },
     {
-      key: "variacao",
-      header: "Variacao",
-      render: (c) => (
-        <span className={c.variacao < 0 ? "text-success" : c.variacao > 0 ? "text-danger" : ""}>
-          {c.variacao < 0 ? <TrendingDown size={14} /> : c.variacao > 0 ? <TrendingUp size={14} /> : null}
-          {c.variacao.toFixed(1)}%
-        </span>
-      ),
+      key: "valor_contratado",
+      header: "Contratado (R$)",
+      render: (c) => formatCurrency(c.valor_contratado),
+    },
+    {
+      key: "valor_realizado",
+      header: "Realizado (R$)",
+      render: (c) => formatCurrency(c.valor_realizado),
+    },
+    {
+      key: "variacao_pct",
+      header: "Variacao %",
+      sortable: true,
+      render: (c) => {
+        const abs = Math.abs(c.variacao_pct);
+        let badgeClass = "status-badge-success"; // green <=5%
+        if (abs > 15) badgeClass = "status-badge-danger";
+        else if (abs > 5) badgeClass = "status-badge-warning";
+        return (
+          <span className={`status-badge ${badgeClass}`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {c.variacao_pct < 0 ? <TrendingDown size={13} /> : c.variacao_pct > 0 ? <TrendingUp size={13} /> : null}
+            {c.variacao_pct.toFixed(1)}%
+          </span>
+        );
+      },
     },
     {
       key: "status",
       header: "Status",
       render: (c) => (
-        <span className={`status-badge ${c.status === "concluido" ? "status-badge-success" : "status-badge-info"}`}>
-          {c.status === "concluido" ? "Concluido" : "Em andamento"}
+        <span className={`status-badge ${c.status === "vigente" ? "status-badge-success" : c.status === "encerrado" ? "status-badge-neutral" : "status-badge-info"}`}>
+          {c.status}
         </span>
       ),
     },
   ];
 
-  const atrasosColumns: Column<PedidoAtraso>[] = [
-    { key: "contrato", header: "Contrato" },
+  // ── Atrasos table columns (reused per severity group) ──
+  const atrasosColumns: Column<AtrasoRow>[] = [
+    { key: "contrato_numero", header: "Contrato" },
     { key: "orgao", header: "Orgao" },
-    { key: "prazo", header: "Prazo" },
+    { key: "entrega", header: "Entrega" },
     {
-      key: "diasAtraso",
-      header: "Atraso",
-      render: (a) => <span className="text-danger">{a.diasAtraso} dias</span>,
+      key: "data_prevista",
+      header: "Data Prevista",
+      render: (a) => formatDate(a.data_prevista),
     },
     {
-      key: "acoes",
-      header: "",
-      width: "100px",
-      render: () => (
-        <ActionButton label="Contato" onClick={() => {}} />
+      key: "dias_atraso",
+      header: "Dias Atraso",
+      render: (a) => (
+        <span style={{ color: "#dc2626", fontWeight: 600 }}>{a.dias_atraso}d</span>
       ),
+    },
+    {
+      key: "valor",
+      header: "Valor",
+      render: (a) => (a.valor ? formatCurrency(a.valor) : "—"),
     },
   ];
 
-  const vencimentosColumns: Column<PedidoAtraso>[] = [
-    { key: "contrato", header: "Contrato" },
-    { key: "orgao", header: "Orgao" },
-    { key: "prazo", header: "Prazo" },
+  // ── Vencimentos table columns ──
+  const vencimentosColumns: Column<VencimentoRow>[] = [
     {
-      key: "diasAtraso",
-      header: "Dias Rest.",
-      render: (a) => <span className="text-warning">{Math.abs(a.diasAtraso)} dias</span>,
+      key: "tipo_entidade",
+      header: "Tipo",
+      render: (v) => {
+        const colors: Record<string, string> = {
+          contrato: "#3b82f6",
+          arp: "#8b5cf6",
+          entrega: "#f59e0b",
+        };
+        return (
+          <span
+            style={{
+              backgroundColor: colors[v.tipo_entidade] || "#6b7280",
+              color: "#fff",
+              padding: "2px 8px",
+              borderRadius: 4,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {v.tipo_entidade}
+          </span>
+        );
+      },
+    },
+    { key: "nome", header: "Nome" },
+    {
+      key: "data_vencimento",
+      header: "Data Vencimento",
+      render: (v) => formatDate(v.data_vencimento),
+    },
+    {
+      key: "dias_restantes",
+      header: "Dias Restantes",
+      render: (v) => (
+        <span style={{ fontWeight: 600 }}>{v.dias_restantes}d</span>
+      ),
+    },
+    {
+      key: "urgencia",
+      header: "Urgencia",
+      render: (v) => {
+        const colorMap: Record<string, { bg: string; text: string; label: string }> = {
+          vermelho: { bg: "#fecaca", text: "#dc2626", label: "Vermelho" },
+          laranja: { bg: "#fed7aa", text: "#ea580c", label: "Laranja" },
+          amarelo: { bg: "#fef08a", text: "#ca8a04", label: "Amarelo" },
+          verde: { bg: "#bbf7d0", text: "#16a34a", label: "Verde" },
+        };
+        const c = colorMap[v.urgencia] || colorMap.verde;
+        return (
+          <span
+            style={{
+              backgroundColor: c.bg,
+              color: c.text,
+              padding: "2px 10px",
+              borderRadius: 4,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {c.label}
+          </span>
+        );
+      },
     },
   ];
+
+  // ── Saude badge ──
+  const saudeBadge = () => {
+    const map: Record<string, { bg: string; text: string; label: string }> = {
+      saudavel: { bg: "#bbf7d0", text: "#16a34a", label: "Saudavel" },
+      atencao: { bg: "#fef08a", text: "#ca8a04", label: "Atencao" },
+      critico: { bg: "#fecaca", text: "#dc2626", label: "Critico" },
+    };
+    const s = map[saude] || map.saudavel;
+    return (
+      <span
+        style={{
+          backgroundColor: s.bg,
+          color: s.text,
+          padding: "4px 14px",
+          borderRadius: 6,
+          fontWeight: 700,
+          fontSize: 14,
+        }}
+      >
+        {s.label}
+      </span>
+    );
+  };
+
+  // ── Totals row for contratos table ──
+  const totalContratado = contratos.reduce((s, c) => s + c.valor_contratado, 0);
+  const totalRealizado = contratos.reduce((s, c) => s + c.valor_realizado, 0);
+
+  // ── Handle chat send ──
+  const sendToChat = (msg: string) => {
+    if (onSendToChat) onSendToChat(msg);
+  };
+
+  // ── Severity section renderer ──
+  const renderSeverityGroup = (
+    title: string,
+    items: AtrasoRow[],
+    headerColor: string,
+    headerBg: string,
+  ) => {
+    if (items.length === 0) return null;
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            backgroundColor: headerBg,
+            color: headerColor,
+            padding: "6px 14px",
+            borderRadius: 6,
+            fontWeight: 700,
+            fontSize: 14,
+            marginBottom: 8,
+          }}
+        >
+          {title} ({items.length})
+        </div>
+        <DataTable
+          data={items as unknown as Record<string, unknown>[]}
+          columns={atrasosColumns as Column<Record<string, unknown>>[]}
+          idKey="contrato_id"
+          emptyMessage="Nenhum"
+        />
+      </div>
+    );
+  };
 
   return (
     <div className="page-container">
+      {/* ── Page Header ── */}
       <div className="page-header">
         <div className="page-header-left">
           <BarChart2 size={24} />
           <div>
             <h1>Contratado X Realizado</h1>
-            <p>Comparativo de valores e pedidos em atraso</p>
+            <p>Dashboard, pedidos em atraso e vencimentos</p>
           </div>
+        </div>
+        <div className="page-header-right" style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => sendToChat("Resuma o dashboard contratado x realizado")}
+            title="Enviar para Chat"
+          >
+            Enviar ao Chat
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => { loadDashboard(); loadAlertas(); }}
+            title="Atualizar"
+          >
+            <RefreshCw size={16} />
+          </button>
         </div>
       </div>
 
       <div className="page-content">
-        <Card title="Resumo" icon={<BarChart2 size={18} />}>
-          <div className="form-inline">
+        {/* ════════════════════════════════════════════════════════════════════
+         * SECTION 1: Dashboard Contratado x Realizado (UC-CR01)
+         * ════════════════════════════════════════════════════════════════════ */}
+        <Card title="Dashboard Contratado x Realizado" icon={<BarChart2 size={18} />}>
+          {/* ── Sticky filter bar ── */}
+          <div
+            className="form-inline"
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 10,
+              backgroundColor: "var(--bg-card, #fff)",
+              paddingBottom: 12,
+              display: "flex",
+              gap: 16,
+              alignItems: "flex-end",
+              flexWrap: "wrap",
+            }}
+          >
             <FormField label="Periodo">
               <SelectInput
                 value={periodo}
                 onChange={setPeriodo}
                 options={[
+                  { value: "1m", label: "Ultimo mes" },
                   { value: "3m", label: "Ultimos 3 meses" },
                   { value: "6m", label: "Ultimos 6 meses" },
                   { value: "12m", label: "Ultimos 12 meses" },
+                  { value: "tudo", label: "Tudo" },
                 ]}
+              />
+            </FormField>
+            <FormField label="Orgao">
+              <TextInput
+                value={orgao}
+                onChange={setOrgao}
+                placeholder="Filtrar por orgao..."
               />
             </FormField>
           </div>
 
-          <div className="resumo-comparativo">
-            <div className="resumo-item">
-              <label>Total Contratado</label>
-              <span className="valor">{formatCurrency(totalContratado)}</span>
+          {/* ── Loading / Error ── */}
+          {dashLoading && (
+            <div style={{ textAlign: "center", padding: 32 }}>
+              <Loader2 size={28} className="spin" />
+              <p>Carregando dashboard...</p>
             </div>
-            <div className="resumo-item">
-              <label>Total Realizado</label>
-              <span className="valor">{formatCurrency(totalRealizado)}</span>
+          )}
+          {dashError && (
+            <div className="alerta-header danger" style={{ marginBottom: 16 }}>
+              <AlertTriangle size={18} />
+              <span>{dashError}</span>
             </div>
-            <div className="resumo-item">
-              <label>Variacao</label>
-              <span className={`valor ${variacaoTotal < 0 ? "text-success" : "text-danger"}`}>
-                {variacaoTotal < 0 ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
-                {variacaoTotal.toFixed(1)}%
-                {variacaoTotal < 0 && <span className="subtext">(economia)</span>}
-              </span>
-            </div>
-          </div>
+          )}
+
+          {/* ── Stats cards ── */}
+          {!dashLoading && totais && (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                  gap: 16,
+                  marginBottom: 24,
+                }}
+              >
+                {/* Total Contratado */}
+                <div
+                  style={{
+                    background: "var(--bg-card, #f8fafc)",
+                    border: "1px solid var(--border-color, #e2e8f0)",
+                    borderRadius: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    Total Contratado
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>
+                    {formatCurrency(totais.contratado)}
+                  </div>
+                </div>
+
+                {/* Total Realizado */}
+                <div
+                  style={{
+                    background: "var(--bg-card, #f8fafc)",
+                    border: "1px solid var(--border-color, #e2e8f0)",
+                    borderRadius: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    Total Realizado
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>
+                    {formatCurrency(totais.realizado)}
+                  </div>
+                </div>
+
+                {/* Variacao % */}
+                <div
+                  style={{
+                    background: "var(--bg-card, #f8fafc)",
+                    border: "1px solid var(--border-color, #e2e8f0)",
+                    borderRadius: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    Variacao %
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: totais.variacao_pct <= 0 ? "#16a34a" : "#dc2626",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {totais.variacao_pct <= 0 ? (
+                      <TrendingDown size={20} />
+                    ) : (
+                      <TrendingUp size={20} />
+                    )}
+                    {totais.variacao_pct.toFixed(1)}%
+                    {totais.variacao_pct < 0 && (
+                      <span style={{ fontSize: 12, fontWeight: 400, color: "#16a34a" }}>
+                        (economia)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Saude Portfolio */}
+                <div
+                  style={{
+                    background: "var(--bg-card, #f8fafc)",
+                    border: "1px solid var(--border-color, #e2e8f0)",
+                    borderRadius: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    <Shield size={13} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                    Saude Portfolio
+                  </div>
+                  <div style={{ marginTop: 4 }}>{saudeBadge()}</div>
+                </div>
+              </div>
+
+              {/* ── Comparison table ── */}
+              <DataTable
+                data={contratos as unknown as Record<string, unknown>[]}
+                columns={contratosColumns as Column<Record<string, unknown>>[]}
+                idKey="contrato_id"
+                emptyMessage="Nenhum contrato encontrado no periodo"
+              />
+
+              {/* ── Totals row ── */}
+              {contratos.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 32,
+                    marginTop: 8,
+                    padding: "8px 16px",
+                    background: "var(--bg-card, #f1f5f9)",
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
+                  <span>Total Contratado: {formatCurrency(totalContratado)}</span>
+                  <span>Total Realizado: {formatCurrency(totalRealizado)}</span>
+                  <span
+                    style={{
+                      color:
+                        totalRealizado - totalContratado <= 0 ? "#16a34a" : "#dc2626",
+                    }}
+                  >
+                    Var:{" "}
+                    {totalContratado > 0
+                      ? (
+                          ((totalRealizado - totalContratado) / totalContratado) *
+                          100
+                        ).toFixed(1)
+                      : "0.0"}
+                    %
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </Card>
 
-        <Card title="Detalhamento" icon={<BarChart2 size={18} />}>
-          <DataTable
-            data={contratos}
-            columns={contratosColumns}
-            idKey="id"
-            emptyMessage="Nenhum contrato encontrado"
-          />
+        {/* ════════════════════════════════════════════════════════════════════
+         * SECTION 2: Pedidos em Atraso (UC-CR02)
+         * ════════════════════════════════════════════════════════════════════ */}
+        <Card title="Pedidos em Atraso" icon={<AlertTriangle size={18} />}>
+          {dashLoading && (
+            <div style={{ textAlign: "center", padding: 24 }}>
+              <Loader2 size={24} className="spin" />
+            </div>
+          )}
+
+          {!dashLoading && (
+            <>
+              {/* ── Stats ── */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 12,
+                  marginBottom: 20,
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 8,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#991b1b" }}>Total Atrasados</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: "#dc2626" }}>
+                    {totalAtrasados}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 8,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#991b1b" }}>
+                    Alta Severidade (&gt;30d)
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: "#dc2626" }}>
+                    {altaSeveridade}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 8,
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#991b1b" }}>Valor em Risco</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#dc2626" }}>
+                    {formatCurrency(valorEmRisco)}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Severity groups ── */}
+              {totalAtrasados === 0 && (
+                <div style={{ textAlign: "center", padding: 24, color: "#64748b" }}>
+                  Nenhum pedido em atraso
+                </div>
+              )}
+
+              {renderSeverityGroup(
+                "CRITICO",
+                atrasosHigh,
+                "#991b1b",
+                "#fecaca",
+              )}
+              {renderSeverityGroup(
+                "ATENCAO",
+                atrasosMedium,
+                "#92400e",
+                "#fef08a",
+              )}
+              {renderSeverityGroup(
+                "OBSERVACAO",
+                atrasosLow,
+                "#9a3412",
+                "#fed7aa",
+              )}
+            </>
+          )}
         </Card>
 
-        <div className="cards-row">
-          <Card title="Pedidos em Atraso" icon={<AlertTriangle size={18} />}>
-            <div className="alerta-header danger">
-              <AlertTriangle size={20} />
-              <span>{atrasos.length} contratos com entrega atrasada</span>
+        {/* ════════════════════════════════════════════════════════════════════
+         * SECTION 3: Proximos Vencimentos (UC-CR03)
+         * ════════════════════════════════════════════════════════════════════ */}
+        <Card title="Proximos Vencimentos" icon={<Calendar size={18} />}>
+          {alertasLoading && (
+            <div style={{ textAlign: "center", padding: 24 }}>
+              <Loader2 size={24} className="spin" />
             </div>
-            <DataTable
-              data={atrasos}
-              columns={atrasosColumns}
-              idKey="id"
-              emptyMessage="Nenhum pedido em atraso"
-            />
-          </Card>
+          )}
+          {alertasError && (
+            <div className="alerta-header danger" style={{ marginBottom: 16 }}>
+              <AlertTriangle size={18} />
+              <span>{alertasError}</span>
+            </div>
+          )}
 
-          <Card title="Proximos Vencimentos" icon={<Clock size={18} />}>
-            <div className="alerta-header warning">
-              <Clock size={20} />
-              <span>{proximosVencimentos.length} contratos vencem em 7 dias</span>
-            </div>
-            <DataTable
-              data={proximosVencimentos}
-              columns={vencimentosColumns}
-              idKey="id"
-              emptyMessage="Nenhum vencimento proximo"
-            />
-          </Card>
-        </div>
+          {!alertasLoading && resumoAlertas && (
+            <>
+              {/* ── Summary cards ── */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: 12,
+                  marginBottom: 20,
+                }}
+              >
+                <div
+                  style={{
+                    background: "#fecaca",
+                    borderRadius: 8,
+                    padding: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: "#991b1b" }}>
+                    Vermelho (&lt;7d)
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: "#dc2626" }}>
+                    {resumoAlertas.vermelho}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "#fed7aa",
+                    borderRadius: 8,
+                    padding: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: "#9a3412" }}>Laranja (7-15d)</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: "#ea580c" }}>
+                    {resumoAlertas.laranja}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "#fef08a",
+                    borderRadius: 8,
+                    padding: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: "#854d0e" }}>
+                    Amarelo (15-30d)
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: "#ca8a04" }}>
+                    {resumoAlertas.amarelo}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    background: "#bbf7d0",
+                    borderRadius: 8,
+                    padding: 14,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: "#166534" }}>Verde (&gt;30d)</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: "#16a34a" }}>
+                    {resumoAlertas.verde}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Vencimentos table ── */}
+              <DataTable
+                data={vencimentos as unknown as Record<string, unknown>[]}
+                columns={vencimentosColumns as Column<Record<string, unknown>>[]}
+                idKey="entity_id"
+                emptyMessage="Nenhum vencimento proximo"
+              />
+            </>
+          )}
+        </Card>
       </div>
     </div>
   );
