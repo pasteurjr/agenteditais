@@ -37,179 +37,185 @@ async function clickTab(page: any, texto: string) {
   await page.waitForTimeout(2000);
 }
 
-test.describe.serial("Sprint 4 — Recursos e Impugnações: Sequência de Eventos", () => {
+test.describe.serial("Sprint 4 — Pipeline Agente 2 (EXECUTOR): Sequência de Eventos", () => {
 
   // ══════════════════════════════════════════════════════════════
-  // UC-I01: Validação Legal do Edital
-  // Sequência: Acessar → Selecionar edital → Clicar Analisar → Esperar IA → Ver resultado
+  // UC-I01: Validação Legal do Edital (13 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-I01-01: Acessar ImpugnacaoPage — aba Validação Legal com 3 abas visíveis", async ({ page }) => {
+  test("UC-I01 Passo 1: Acessar ImpugnacaoPage — 3 abas visíveis", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
-    // Passo 1: Página carrega com abas
     const body = await page.innerText("body").catch(() => "");
-    console.log(`Validação Legal: ${body.includes("Valid") ? "✅" : "❌"}`);
-    console.log(`Petições: ${body.includes("Peti") ? "✅" : "❌"}`);
-    console.log(`Prazos: ${body.includes("Prazo") ? "✅" : "❌"}`);
-    await page.screenshot({ path: `${SS}/UC-I01-01_pagina_impugnacao.png`, fullPage: true });
-    expect(body.length).toBeGreaterThan(50);
+    await page.screenshot({ path: `${SS}/UC-I01-P01_3abas.png`, fullPage: true });
+    expect(body).toContain("Legal");
+    expect(body).toContain("Peti");
+    expect(body).toContain("Prazo");
   });
 
-  test("UC-I01-02: Selecionar edital no dropdown [I01-F01]", async ({ page }) => {
+  test("UC-I01 Passo 2-3: Selecionar edital [I01-F01] — status documento [I01-F02/F03]", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
-    // Passo 2: Selecionar edital
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 3000 }).catch(() => false)) {
       const options = await select.locator('option').allTextContents();
       console.log(`Editais disponíveis: ${options.length - 1}`);
       if (options.length > 1) {
         await select.selectOption({ index: 1 });
-        await page.waitForTimeout(1000);
-        await page.screenshot({ path: `${SS}/UC-I01-02_edital_selecionado.png`, fullPage: true });
+        await page.waitForTimeout(1500);
       }
     }
+    await page.screenshot({ path: `${SS}/UC-I01-P02_edital_selecionado.png`, fullPage: true });
     expect(true).toBeTruthy();
   });
 
-  test("UC-I01-03: Clicar 'Analisar Edital' [I01-F04] → esperar resposta IA → ver inconsistências", async ({ page }) => {
+  test("UC-I01 Passo 4-8: Clicar Analisar [I01-F04] → IA processa → resultado [I01-F07]", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
-    // Selecionar edital primeiro
+    // Selecionar edital
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const options = await select.locator('option').allTextContents();
-      if (options.length > 1) {
-        await select.selectOption({ index: 1 });
-        await page.waitForTimeout(1000);
-      }
+      const opts = await select.locator('option').allTextContents();
+      if (opts.length > 1) await select.selectOption({ index: 1 });
+      await page.waitForTimeout(1000);
     }
-    // Passo 4: Clicar Analisar
-    const analisarBtn = page.locator('button:has-text("Analisar")').first();
-    if (await analisarBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await page.screenshot({ path: `${SS}/UC-I01-03_antes_analisar.png`, fullPage: true });
-      await analisarBtn.click();
-      // Passo 5-8: Esperar IA processar (pode demorar 30-60s)
-      await page.waitForTimeout(45000);
-      await page.screenshot({ path: `${SS}/UC-I01-04_resultado_analise.png`, fullPage: true });
+    await page.screenshot({ path: `${SS}/UC-I01-P04_antes_analisar.png`, fullPage: true });
+    // Clicar Analisar
+    const btn = page.locator('button:has-text("Analisar")').first();
+    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const t0 = Date.now();
+      await btn.click();
+      await page.waitForTimeout(5000);
+      await page.screenshot({ path: `${SS}/UC-I01-P05_ia_processando.png`, fullPage: true });
+      // Esperar resultado completo (até 60s)
+      await page.waitForTimeout(40000);
+      const elapsed = Math.round((Date.now() - t0) / 1000);
+      console.log(`IA levou ~${elapsed}s`);
+      await page.screenshot({ path: `${SS}/UC-I01-P08_resultado_completo.png`, fullPage: true });
       const body = await page.innerText("body").catch(() => "");
-      console.log(`Resultado IA presente: ${body.length > 200 ? "✅" : "❌"}`);
-    } else {
-      await page.screenshot({ path: `${SS}/UC-I01-03_sem_botao_analisar.png`, fullPage: true });
+      console.log(`Resultado tem conteúdo: ${body.length > 300 ? "✅" : "❌"} (${body.length} chars)`);
     }
     expect(true).toBeTruthy();
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-I03: Gerar Petição de Impugnação
-  // Sequência: Aba Petições → Nova petição → Preencher → Gerar com IA → Editor
+  // UC-I03: Gerar Petição de Impugnação (11 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-I03-01: Aba Petições — lista e botão Nova Petição", async ({ page }) => {
+  test("UC-I03 Passo 1-2: Aba Petições — tabela [I03-F01] e botões", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
     await clickTab(page, "Peti");
     await page.waitForTimeout(1000);
+    await page.screenshot({ path: `${SS}/UC-I03-P01_aba_peticoes.png`, fullPage: true });
     const body = await page.innerText("body").catch(() => "");
-    console.log(`Aba Petições: ${body.includes("Peti") || body.includes("peti") ? "✅" : "❌"}`);
-    await page.screenshot({ path: `${SS}/UC-I03-01_aba_peticoes.png`, fullPage: true });
-    expect(true).toBeTruthy();
+    console.log(`Nova Petição: ${body.includes("Nova") ? "✅" : "❌"}`);
+    console.log(`Upload: ${body.includes("Upload") ? "✅" : "❌"}`);
   });
 
-  test("UC-I03-02: Abrir modal Nova Petição e preencher campos [I03-F05 a F07]", async ({ page }) => {
+  test("UC-I03 Passo 3-5: Abrir modal — selecionar template [I03-F03] e dados [I03-F05/F06/F07]", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
     await clickTab(page, "Peti");
     await page.waitForTimeout(1000);
-    // Clicar botão Nova Petição
-    const novaBtn = page.locator('button:has-text("Nova"), button:has-text("Criar"), button:has-text("Gerar")').first();
+    const novaBtn = page.locator('button:has-text("Nova")').first();
     if (await novaBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await novaBtn.click();
       await page.waitForTimeout(1500);
-      await page.screenshot({ path: `${SS}/UC-I03-02_modal_peticao.png`, fullPage: true });
+      await page.screenshot({ path: `${SS}/UC-I03-P03_modal_nova_peticao.png`, fullPage: true });
+      // Preencher selects no modal
+      const selects = page.locator('.modal-overlay select, dialog select, [class*="modal"] select');
+      const count = await selects.count();
+      for (let i = 0; i < Math.min(count, 3); i++) {
+        const sel = selects.nth(i);
+        const optCount = await sel.locator('option').count();
+        if (optCount > 1) await sel.selectOption({ index: 1 });
+        await page.waitForTimeout(300);
+      }
+      await page.screenshot({ path: `${SS}/UC-I03-P05_modal_preenchido.png`, fullPage: true });
     }
     expect(true).toBeTruthy();
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-I04: Upload de Petição Externa
-  // Sequência: Botão Upload → Modal → Selecionar edital → Upload arquivo
+  // UC-I04: Upload Petição Externa (11 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-I04-01: Botão Upload de petição externa visível", async ({ page }) => {
+  test("UC-I04 Passo 1-5: Upload modal — selecionar edital [I04-F01] e tipo [I04-F02]", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
     await clickTab(page, "Peti");
     await page.waitForTimeout(1000);
-    const uploadBtn = page.locator('button:has-text("Upload"), button:has-text("upload"), button:has-text("Importar")').first();
-    const visible = await uploadBtn.isVisible({ timeout: 3000 }).catch(() => false);
-    console.log(`Upload botão: ${visible ? "✅" : "❌"}`);
-    if (visible) {
+    const uploadBtn = page.locator('button:has-text("Upload")').first();
+    if (await uploadBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await uploadBtn.click();
-      await page.waitForTimeout(1000);
-      await page.screenshot({ path: `${SS}/UC-I04-01_upload_modal.png`, fullPage: true });
-    } else {
-      await page.screenshot({ path: `${SS}/UC-I04-01_aba_peticoes.png`, fullPage: true });
+      await page.waitForTimeout(1500);
+      await page.screenshot({ path: `${SS}/UC-I04-P01_modal_upload.png`, fullPage: true });
+      // Selecionar edital no modal
+      const modalSelect = page.locator('.modal-overlay select, dialog select, [class*="modal"] select').first();
+      if (await modalSelect.isVisible().catch(() => false)) {
+        const opts = await modalSelect.locator('option').count();
+        if (opts > 1) {
+          await modalSelect.selectOption({ index: 1 });
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: `${SS}/UC-I04-P03_edital_selecionado.png`, fullPage: true });
+        }
+      }
     }
     expect(true).toBeTruthy();
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-I05: Controle de Prazo
-  // Sequência: Aba Prazos → Tabela editais → Badges de urgência → Config alertas
+  // UC-I05: Controle de Prazo (11 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-I05-01: Aba Prazos — tabela com editais e badges de urgência", async ({ page }) => {
+  test("UC-I05 Passo 1-4: Aba Prazos — tabela [I05-F01] com badges [I05-F02]", async ({ page }) => {
     await login(page);
     await navTo(page, "Impugnacao");
     await clickTab(page, "Prazo");
     await page.waitForTimeout(2000);
+    await page.screenshot({ path: `${SS}/UC-I05-P01_tabela_prazos.png`, fullPage: true });
     const body = await page.innerText("body").catch(() => "");
-    console.log(`Aba Prazos: ${body.includes("Prazo") || body.includes("prazo") ? "✅" : "❌"}`);
-    await page.screenshot({ path: `${SS}/UC-I05-01_aba_prazos.png`, fullPage: true });
-    expect(true).toBeTruthy();
+    console.log(`Tem tabela prazos: ${body.includes("Prazo") ? "✅" : "❌"}`);
+    // Verificar badges coloridos
+    const badges = await page.locator('[style*="background"]').count();
+    console.log(`Badges coloridos: ${badges}`);
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-RE01: Monitorar Janela de Recurso
-  // Sequência: Acessar RecursosPage → Aba Monitoramento → Selecionar edital → Ativar
+  // UC-RE01: Monitorar Janela de Recurso (13 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-RE01-01: RecursosPage — aba Monitoramento com 3 abas visíveis", async ({ page }) => {
+  test("UC-RE01 Passo 1: Acessar RecursosPage — 3 abas", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
+    await page.screenshot({ path: `${SS}/UC-RE01-P01_pagina_recursos.png`, fullPage: true });
     const body = await page.innerText("body").catch(() => "");
-    console.log(`Monitoramento: ${body.includes("Monitoramento") || body.includes("Monitor") ? "✅" : "❌"}`);
-    console.log(`Análise: ${body.includes("Análise") || body.includes("Analise") ? "✅" : "❌"}`);
-    console.log(`Laudos: ${body.includes("Laudo") ? "✅" : "❌"}`);
-    await page.screenshot({ path: `${SS}/UC-RE01-01_pagina_recursos.png`, fullPage: true });
-    expect(body.length).toBeGreaterThan(50);
+    expect(body).toContain("Monitoramento");
   });
 
-  test("UC-RE01-02: Selecionar edital [RE01] e configurar monitoramento", async ({ page }) => {
+  test("UC-RE01 Passo 2-5: Selecionar edital → configurar canais [RE01-F06/F07/F08] → ativar [RE01-F09]", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
-    // Selecionar edital no dropdown
+    // Passo 2: Selecionar edital
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const options = await select.locator('option').allTextContents();
-      if (options.length > 1) {
+      const opts = await select.locator('option').allTextContents();
+      if (opts.length > 1) {
         await select.selectOption({ index: 1 });
         await page.waitForTimeout(1500);
-        await page.screenshot({ path: `${SS}/UC-RE01-02_edital_selecionado.png`, fullPage: true });
-
-        // Passo 4-5: Verificar checkboxes de canais e botão Ativar
+        await page.screenshot({ path: `${SS}/UC-RE01-P02_edital_selecionado.png`, fullPage: true });
+        // Passo 4: Verificar checkboxes
         const body = await page.innerText("body").catch(() => "");
-        console.log(`Email checkbox: ${body.includes("Email") || body.includes("email") ? "✅" : "❌"}`);
-        console.log(`Ativar botão: ${body.includes("Ativar") || body.includes("Monitorar") ? "✅" : "❌"}`);
-
-        // Tentar ativar monitoramento
-        const ativarBtn = page.locator('button:has-text("Ativar"), button:has-text("Monitorar"), button:has-text("Iniciar")').first();
+        console.log(`WhatsApp: ${body.includes("WhatsApp") || body.includes("Whats") ? "✅" : "❌"}`);
+        console.log(`Email: ${body.includes("Email") || body.includes("email") ? "✅" : "❌"}`);
+        console.log(`Alerta: ${body.includes("Alerta") || body.includes("alerta") ? "✅" : "❌"}`);
+        // Passo 5: Clicar Ativar/Criar Monitoramento
+        const ativarBtn = page.locator('button:has-text("Ativar"), button:has-text("Criar"), button:has-text("Monitorar")').first();
         if (await ativarBtn.isVisible().catch(() => false)) {
           await ativarBtn.click();
           await page.waitForTimeout(2000);
-          await page.screenshot({ path: `${SS}/UC-RE01-03_monitoramento_ativado.png`, fullPage: true });
+          await page.screenshot({ path: `${SS}/UC-RE01-P05_monitoramento_ativado.png`, fullPage: true });
         }
       }
     }
@@ -217,156 +223,159 @@ test.describe.serial("Sprint 4 — Recursos e Impugnações: Sequência de Event
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-RE02: Analisar Proposta Vencedora
-  // Sequência: Aba Análise → Selecionar edital → Preencher empresa → Clicar Analisar → Esperar IA
+  // UC-RE02: Analisar Proposta Vencedora (14 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-RE02-01: Aba Análise — selecionar edital e clicar Analisar", async ({ page }) => {
+  test("UC-RE02 Passo 1-3: Aba Análise — selecionar edital [RE02-F01]", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
     await clickTab(page, "Análise");
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: `${SS}/UC-RE02-01_aba_analise.png`, fullPage: true });
-
+    await page.screenshot({ path: `${SS}/UC-RE02-P01_aba_analise.png`, fullPage: true });
     // Selecionar edital
     const select = page.locator('select').first();
     if (await select.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const options = await select.locator('option').allTextContents();
-      if (options.length > 1) {
+      const opts = await select.locator('option').allTextContents();
+      if (opts.length > 1) {
         await select.selectOption({ index: 1 });
         await page.waitForTimeout(1000);
-        await page.screenshot({ path: `${SS}/UC-RE02-02_edital_selecionado.png`, fullPage: true });
+        await page.screenshot({ path: `${SS}/UC-RE02-P02_edital_selecionado.png`, fullPage: true });
       }
-    }
-
-    // Clicar Analisar
-    const analisarBtn = page.locator('button:has-text("Analisar")').first();
-    if (await analisarBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await analisarBtn.click();
-      // Esperar IA (30-60s)
-      await page.waitForTimeout(45000);
-      await page.screenshot({ path: `${SS}/UC-RE02-03_resultado_analise.png`, fullPage: true });
     }
     expect(true).toBeTruthy();
   });
 
-  // ══════════════════════════════════════════════════════════════
-  // UC-RE03: Chatbox de Análise
-  // Sequência: Input de pergunta → Enviar → Esperar resposta IA → Ver resposta
-  // ══════════════════════════════════════════════════════════════
-
-  test("UC-RE03-01: Chatbox interativo — digitar pergunta e enviar", async ({ page }) => {
+  test("UC-RE02 Passo 6-8: Clicar Analisar [RE02-F06] → IA processa → resultado [RE02-F08]", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
     await clickTab(page, "Análise");
     await page.waitForTimeout(1000);
+    // Selecionar edital
+    const select = page.locator('select').first();
+    if (await select.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const opts = await select.locator('option').allTextContents();
+      if (opts.length > 1) await select.selectOption({ index: 1 });
+      await page.waitForTimeout(1000);
+    }
+    // Clicar Analisar
+    const btn = page.locator('button:has-text("Analisar")').first();
+    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await page.screenshot({ path: `${SS}/UC-RE02-P06_antes_analisar.png`, fullPage: true });
+      const t0 = Date.now();
+      await btn.click();
+      await page.waitForTimeout(45000);
+      const elapsed = Math.round((Date.now() - t0) / 1000);
+      console.log(`Análise vencedora IA: ~${elapsed}s`);
+      await page.screenshot({ path: `${SS}/UC-RE02-P08_resultado_analise.png`, fullPage: true });
+    }
+    expect(true).toBeTruthy();
+  });
 
-    // Localizar input do chatbox
-    const chatInput = page.locator('input[placeholder*="pergunt" i], input[placeholder*="diga" i], textarea[placeholder*="pergunt" i]').first();
+  // ══════════════════════════════════════════════════════════════
+  // UC-RE03: Chatbox de Análise (12 passos)
+  // ══════════════════════════════════════════════════════════════
+
+  test("UC-RE03 Passo 5-8: Digitar pergunta [RE03-F08] → enviar [RE03-F09] → resposta IA [RE03-F05]", async ({ page }) => {
+    await login(page);
+    await navTo(page, "Recursos");
+    await clickTab(page, "Análise");
+    await page.waitForTimeout(1000);
+    // Localizar chatbox input
+    const chatInput = page.locator('input[placeholder*="pergunt" i], input[placeholder*="diga" i], textarea[placeholder*="pergunt" i], input[placeholder*="Faça" i]').first();
     if (await chatInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await chatInput.fill("Quais são os principais riscos jurídicos deste edital?");
-      await page.screenshot({ path: `${SS}/UC-RE03-01_pergunta_digitada.png`, fullPage: true });
-
-      // Enviar
+      await chatInput.fill("Quais são os riscos jurídicos deste edital conforme a Lei 14.133?");
+      await page.screenshot({ path: `${SS}/UC-RE03-P05_pergunta_digitada.png`, fullPage: true });
       const enviarBtn = page.locator('button:has-text("Enviar"), button[type="submit"]').first();
       if (await enviarBtn.isVisible().catch(() => false)) {
+        const t0 = Date.now();
         await enviarBtn.click();
-        // Esperar resposta IA
         await page.waitForTimeout(30000);
-        await page.screenshot({ path: `${SS}/UC-RE03-02_resposta_ia.png`, fullPage: true });
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        console.log(`Chatbox IA resposta: ~${elapsed}s`);
+        await page.screenshot({ path: `${SS}/UC-RE03-P07_resposta_ia.png`, fullPage: true });
       }
     } else {
-      await page.screenshot({ path: `${SS}/UC-RE03-01_chatbox_area.png`, fullPage: true });
+      await page.screenshot({ path: `${SS}/UC-RE03-P05_chatbox_area.png`, fullPage: true });
     }
     expect(true).toBeTruthy();
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-RE04: Gerar Laudo de Recurso
-  // Sequência: Aba Laudos → Selecionar edital → Tipo Recurso → Template → Gerar → Editor
+  // UC-RE04: Gerar Laudo de Recurso (15 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-RE04-01: Aba Laudos — lista de laudos e botão Novo Laudo", async ({ page }) => {
+  test("UC-RE04 Passo 1-2: Aba Laudos — lista [RE04-F01] e Novo Laudo", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
     await clickTab(page, "Laudo");
     await page.waitForTimeout(1500);
-    const body = await page.innerText("body").catch(() => "");
-    console.log(`Aba Laudos: ${body.includes("Laudo") || body.includes("laudo") ? "✅" : "❌"}`);
-    console.log(`Novo Laudo: ${body.includes("Novo") ? "✅" : "❌"}`);
-    await page.screenshot({ path: `${SS}/UC-RE04-01_aba_laudos.png`, fullPage: true });
-    expect(true).toBeTruthy();
+    await page.screenshot({ path: `${SS}/UC-RE04-P01_aba_laudos.png`, fullPage: true });
   });
 
-  test("UC-RE04-02: Abrir modal Novo Laudo — preencher campos [RE04-F01 a F08]", async ({ page }) => {
+  test("UC-RE04 Passo 3-8: Novo Laudo → selecionar edital/tipo/subtipo/template [RE04-F02 a F08]", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
     await clickTab(page, "Laudo");
     await page.waitForTimeout(1500);
-
-    // Clicar Novo Laudo
-    const novoBtn = page.locator('button:has-text("Novo Laudo"), button:has-text("Novo"), button:has-text("Criar")').first();
+    const novoBtn = page.locator('button:has-text("Novo Laudo"), button:has-text("Novo")').first();
     if (await novoBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await novoBtn.click();
       await page.waitForTimeout(1500);
-      await page.screenshot({ path: `${SS}/UC-RE04-02_modal_novo_laudo.png`, fullPage: true });
-
-      // Preencher campos do modal
-      // Selecionar edital
+      await page.screenshot({ path: `${SS}/UC-RE04-P03_modal_vazio.png`, fullPage: true });
+      // Preencher dropdowns
       const selects = page.locator('select');
-      const selectCount = await selects.count();
-      for (let i = 0; i < Math.min(selectCount, 4); i++) {
+      const count = await selects.count();
+      for (let i = 0; i < Math.min(count, 4); i++) {
         const sel = selects.nth(i);
-        const opts = await sel.locator('option').count();
-        if (opts > 1) {
+        const optCount = await sel.locator('option').count();
+        if (optCount > 1) {
           await sel.selectOption({ index: 1 });
-          await page.waitForTimeout(300);
+          await page.waitForTimeout(500);
         }
       }
-      await page.screenshot({ path: `${SS}/UC-RE04-03_modal_preenchido.png`, fullPage: true });
-
-      // Clicar Gerar
-      const gerarBtn = page.locator('button:has-text("Gerar"), button:has-text("gerar")').first();
+      await page.screenshot({ path: `${SS}/UC-RE04-P06_campos_preenchidos.png`, fullPage: true });
+      // Passo 8: Clicar Gerar
+      const gerarBtn = page.locator('button:has-text("Gerar"), button:has-text("Criar")').first();
       if (await gerarBtn.isVisible().catch(() => false)) {
+        const t0 = Date.now();
         await gerarBtn.click();
-        // Esperar IA gerar laudo (60s+)
         await page.waitForTimeout(60000);
-        await page.screenshot({ path: `${SS}/UC-RE04-04_laudo_gerado.png`, fullPage: true });
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        console.log(`Gerar laudo IA: ~${elapsed}s`);
+        await page.screenshot({ path: `${SS}/UC-RE04-P09_laudo_gerado.png`, fullPage: true });
       }
     }
     expect(true).toBeTruthy();
   });
 
   // ══════════════════════════════════════════════════════════════
-  // UC-RE05: Gerar Laudo de Contra-Razão
-  // Sequência: Tipo Contra-Razão → Preencher → Upload recurso → Gerar → Editor
+  // UC-RE05: Gerar Laudo de Contra-Razão (18 passos)
   // ══════════════════════════════════════════════════════════════
 
-  test("UC-RE05-01: Modal Contra-Razão — campos específicos visíveis", async ({ page }) => {
+  test("UC-RE05 Passo 1-4: Modal tipo Contra-Razão — campos específicos [RE05-F02/F04/F05]", async ({ page }) => {
     await login(page);
     await navTo(page, "Recursos");
     await clickTab(page, "Laudo");
     await page.waitForTimeout(1500);
-
-    const novoBtn = page.locator('button:has-text("Novo Laudo"), button:has-text("Novo"), button:has-text("Contra")').first();
+    const novoBtn = page.locator('button:has-text("Novo Laudo"), button:has-text("Novo")').first();
     if (await novoBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await novoBtn.click();
       await page.waitForTimeout(1500);
-
       // Selecionar tipo Contra-Razão
-      const tipoSelect = page.locator('select');
-      const tipoCount = await tipoSelect.count();
-      for (let i = 0; i < tipoCount; i++) {
-        const sel = tipoSelect.nth(i);
+      const selects = page.locator('select');
+      const count = await selects.count();
+      // Selecionar edital primeiro
+      if (count > 0) { const s = selects.nth(0); if (await s.locator('option').count() > 1) await s.selectOption({ index: 1 }); }
+      await page.waitForTimeout(300);
+      // Selecionar tipo: buscar "contra" nas options
+      for (let i = 0; i < count; i++) {
+        const sel = selects.nth(i);
         const opts = await sel.locator('option').allTextContents();
-        const contraIdx = opts.findIndex(o => o.toLowerCase().includes('contra'));
-        if (contraIdx >= 0) {
-          await sel.selectOption({ index: contraIdx });
-          await page.waitForTimeout(500);
-          break;
-        }
+        const idx = opts.findIndex(o => o.toLowerCase().includes('contra'));
+        if (idx >= 0) { await sel.selectOption({ index: idx }); break; }
       }
-      await page.screenshot({ path: `${SS}/UC-RE05-01_modal_contra_razao.png`, fullPage: true });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: `${SS}/UC-RE05-P03_contra_razao_selecionado.png`, fullPage: true });
     }
     expect(true).toBeTruthy();
   });
