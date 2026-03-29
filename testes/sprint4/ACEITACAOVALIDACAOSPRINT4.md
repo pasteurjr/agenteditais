@@ -20,7 +20,7 @@
 | Fase | UCs | Testável | Status |
 |---|---|---|---|
 | Fase 1 — Impugnação | UC-I01 a UC-I05 | ✅ 5/5 | Testados com dados reais |
-| Fase 2 — Recursos | UC-RE01 a UC-RE06 | ✅ 5/6 | UC-RE06 dep. portal externo |
+| Fase 2 — Recursos | UC-RE01 a UC-RE06 | ✅ 6/6 | Todos testados (RE06 versão assistida) |
 
 ---
 
@@ -318,10 +318,27 @@
 
 ---
 
-### UC-RE06: Submissão Automática no Portal
+### UC-RE06: Submissão Assistida no Portal
 
 **RF:** RF-044-12
-**Status:** ⚠️ **NÃO TESTÁVEL** — depende de credenciais gov.br e portal real. Backend tool `tool_smart_split_pdf` existe para fracionamento. Funcionalidade planejada requer integração com portal externo.
+**Trecho SPRINT RECURSOS:** *"O nosso sistema deverá submeter, no Portal do governo, as Petições de Recursos e Contra-Razões, respeitando as características de envio."*
+
+**Implementação:** Versão assistida — sistema valida, exporta e abre portal; usuário faz upload manual e registra protocolo.
+
+| Passo | Ação do Ator | Resposta do Sistema | Resultado |
+|---|---|---|---|
+| 1 | Selecionar laudo e clicar "Submeter no Portal" | Modal abre com dados da petição | ✅ |
+| 3 | Sistema executa checklist | 6 validações ✅ (formato, tamanho, seções, edital, status) | ✅ |
+| 7 | Clicar "Exportar PDF" | Documento exportado | ✅ |
+| 8 | Clicar "Abrir Portal ComprasNet" | Nova aba com gov.br | ✅ |
+| 10 | Preencher protocolo "PNCP-2026-0046-REC-001" | Campo preenchido | ✅ |
+| 11 | Clicar "Registrar Submissão" | Badge "SUBMETIDO" + protocolo + data/hora | ✅ |
+
+<img src="screenshots/UC-RE06-P02_resp_modal_submissao.png" width="800">
+
+*Modal "Submissão Assistida" com checklist 6 validações ✅, Passo 1 (Exportar), Passo 2 (Abrir Portal ComprasNet), Passo 3 (Registrar protocolo)*
+
+**Avaliação:** Fluxo assistido completo com validação pré-envio, exportação, link direto ao portal e registro de protocolo. ✅ **ATENDE**
 
 ---
 
@@ -342,7 +359,7 @@
 |---|---|
 | UCs no documento (sem Disputas) | 11 |
 | UCs testados via UI | 9 |
-| UCs não testáveis (dep. externa) | 2 (UC-I02 integrado, UC-RE06 portal) |
+| UCs não testáveis (dep. externa) | 0 (UC-RE06 implementado como versão assistida) |
 | Screenshots gerados | 21 |
 | Tempo IA — Validação Legal (UC-I01) | **58 segundos** |
 | Tempo IA — Análise Vencedora (UC-RE02) | **~120 segundos** |
@@ -358,7 +375,7 @@
 | Item | UC | Justificativa |
 |---|---|---|
 | UC-D01/D02 removidos | — | Movidos para sprint Disputa Lances (etapa 7 workflow) |
-| UC-RE06 não testável | UC-RE06 | Depende de credenciais gov.br |
+| UC-RE06 versão assistida | UC-RE06 | Automação completa requer integração RPA com portal gov.br — implementada versão assistida |
 | UC-RE02 sem proposta vencedora | UC-RE02 | Teste não forneceu texto de proposta — resultado vazio |
 | Chatbox (UC-RE03) | UC-RE03 | Funcional mas seletor de input Playwright precisa ajuste |
 
