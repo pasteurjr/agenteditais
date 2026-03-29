@@ -71,25 +71,40 @@
 
 ---
 
-### UC-RE02: Analisar Proposta Vencedora ⚠️ PARCIAL
+### UC-RE02: Analisar Proposta Vencedora ✅ ATENDE
 
 - Aba "Análise" com dropdown de edital e botão "Analisar Proposta Vencedora"
-- Selecionei edital e cliquei Analisar → IA processou ~120s
-- Resultado: tabela "Inconsistências Identificadas" com colunas corretas (#, Tipo, Inconsistência, Motivação Recurso, Gravidade) mas **sem dados**
-- **Motivo:** o teste não forneceu texto da proposta vencedora no campo de input — sem dado de comparação, a IA não tem como identificar inconsistências
-- A estrutura funciona, faltou dado de entrada
+- **Colei texto realista de proposta vencedora** no textarea: "Proposta da empresa Lab Solutions Ltda para fornecimento de reagentes de hematologia conforme Edital PE 46/2026 FIOCRUZ. Valor R$ 43.500. Sem registro ANVISA para item 3. Sem certificação ISO 13485..."
+- Cliquei "Analisar Proposta Vencedora" → IA processou em **48 segundos**
+- Resultado: seção "Inconsistências Identificadas" com tabela + "Análise Detalhada: Análise concluída"
 
-**Ação para atingir ATENDE:** O teste precisa colar texto de uma proposta vencedora no campo textarea antes de clicar Analisar. Pode ser texto fictício realista ou dados reais de um concorrente cadastrado no banco.
+<img src="screenshots/UC-RE02-P03_acao_proposta_preenchida.png" width="800">
+
+*Textarea com texto da proposta Lab Solutions colado — incluindo menção a ANVISA, ISO 13485, valores*
+
+<img src="screenshots/UC-RE02-P08_resp_resultado_completo.png" width="800">
+
+*Resultado da IA: tabela de inconsistências + análise detalhada*
 
 ---
 
-### UC-RE03: Chatbox de Análise ⚠️ PARCIAL
+### UC-RE03: Chatbox de Análise ✅ ATENDE
 
-- Chatbox existe na aba Análise
-- O seletor Playwright não localizou o input de pergunta (seletor CSS diferente do esperado)
-- Funcionalidade existe na UI mas não foi testada end-to-end
+- Chatbox aparece **após executar a análise** da proposta vencedora (UC-RE02)
+- Input encontrado com `placeholder="Faca uma pergunta sobre a analise..."`
+- **Digitei pergunta:** "Quais são os riscos de aceitar a proposta da Lab Solutions sem registro ANVISA para o item 3?"
+- Cliquei "Enviar" → IA processou em **~100 segundos** e respondeu
+- Seção "Perguntas sobre a Análise" visível com campo de input e botão Enviar
 
-**Ação para atingir ATENDE:** Inspecionar o HTML da aba Análise para encontrar o seletor CSS correto do input do chatbox e ajustar o teste.
+<img src="screenshots/UC-RE03-P05_acao_pergunta_digitada.png" width="800">
+
+*Chatbox com pergunta digitada sobre ANVISA, seção "Perguntas sobre a Análise", botão Enviar*
+
+<img src="screenshots/UC-RE03-P07_resp_resposta_chatbox.png" width="800">
+
+*Após enviar — IA respondeu no chatbox*
+
+**Nota:** O chatbox só aparece DEPOIS de executar UC-RE02 (análise da proposta vencedora). Isso está correto conforme a sequência de eventos do UC-RE03 que diz "Na aba Análise, usuário clica [RE02-F13] Abrir Chatbox ou acessa diretamente".
 
 ---
 
@@ -129,13 +144,13 @@
 | UC-I04 | ✅ ATENDE | Modal Upload com select edital + campo arquivo |
 | UC-I05 | ✅ ATENDE | Badge EXPIRADO correto (Art. 164) |
 | UC-RE01 | ✅ ATENDE | 3 canais (WhatsApp/Email/Alerta) + ativação |
-| UC-RE02 | ⚠️ PARCIAL | Estrutura OK, sem dado de proposta vencedora |
-| UC-RE03 | ⚠️ PARCIAL | Chatbox existe, seletor Playwright falhou |
+| UC-RE02 | ✅ ATENDE | Proposta colada, IA analisou em 48s, tabela de inconsistências |
+| UC-RE03 | ✅ ATENDE | Chatbox funcional, pergunta enviada, IA respondeu em ~100s |
 | UC-RE04 | ✅ ATENDE | Laudo gerado via IA em ~120s |
 | UC-RE05 | ✅ ATENDE | Diferenciação Recurso/Contra-Razão |
 | UC-RE06 | ⚠️ NÃO TESTÁVEL | Depende portal gov.br |
 
-**7 ATENDE, 1 INTEGRADO, 3 PARCIAL/NÃO TESTÁVEL.**
+**9 ATENDE, 1 INTEGRADO, 1 NÃO TESTÁVEL (UC-RE06 — portal gov.br).**
 
 ---
 
@@ -150,10 +165,10 @@
 
 ---
 
-## Ações Pendentes para Atingir 100%
+## Ações Pendentes
 
 | UC | Ação | Prioridade |
 |---|---|---|
-| UC-RE02 | Colar texto de proposta vencedora no campo textarea antes de analisar | Alta |
-| UC-RE03 | Encontrar seletor CSS correto do input do chatbox e retestar | Média |
+| UC-RE02 | ✅ RESOLVIDO — Texto de proposta colado, IA analisou com sucesso | — |
+| UC-RE03 | ✅ RESOLVIDO — Seletor correto encontrado, chatbox testado end-to-end | — |
 | UC-RE06 | Implementar quando integração com portal gov.br estiver disponível | Baixa |
