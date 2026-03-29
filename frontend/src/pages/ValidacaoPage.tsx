@@ -727,7 +727,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
 
         // Sprint 5: enriquecer com score logístico detalhado (4 dimensões)
         try {
-          const token = localStorage.getItem("token");
+          const token = localStorage.getItem("editais_ia_access_token");
           const logRes = await fetch(`/api/validacao/score-logistico/${alvo.id}`, {
             headers: { Authorization: `Bearer ${token}` },
           });

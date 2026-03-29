@@ -221,7 +221,7 @@ export function RecursosPage(props?: PageProps) {
     setChatSessionId("");
     try {
       // Chamar endpoint direto que usa tool_analisar_proposta_vencedora (lê PDF real)
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("editais_ia_access_token");
       const resp = await fetch(`/api/editais/${analiseEditalId}/analisar-vencedora`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -309,7 +309,7 @@ export function RecursosPage(props?: PageProps) {
     setLaudosSaving(true);
     try {
       // Chamar endpoint que usa tool_gerar_laudo_recurso (IA gera laudo real)
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("editais_ia_access_token");
       const resp = await fetch("/api/recursos", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

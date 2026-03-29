@@ -87,7 +87,7 @@ const formatDate = (iso: string): string => {
 
 function authHeaders(): HeadersInit {
   const h: HeadersInit = { "Content-Type": "application/json" };
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("editais_ia_access_token");
   if (token) h["Authorization"] = `Bearer ${token}`;
   return h;
 }

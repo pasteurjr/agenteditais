@@ -210,7 +210,7 @@ export function ImpugnacaoPage(props?: PageProps) {
     setPeticaoSugerida("");
     try {
       // Chamar endpoint direto que usa tool_validacao_legal_edital (lê PDF real)
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("editais_ia_access_token");
       const resp = await fetch(`/api/editais/${editalId}/validacao-legal`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

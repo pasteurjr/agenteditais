@@ -75,7 +75,7 @@ interface CronogramaData {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ProducaoPage(_props?: PageProps) {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("editais_ia_access_token");
   const headers: Record<string, string> = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const fmt = (v: number | null | undefined) => v != null ? `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
 

@@ -55,7 +55,7 @@ interface Carona {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AtasPage(_props?: PageProps) {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("editais_ia_access_token");
   const headers: Record<string, string> = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   // Tab 1: Buscar
