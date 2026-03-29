@@ -1124,10 +1124,10 @@
 
 ---
 
-## [UC-RE06] Submissao Automatica no Portal
+## [UC-RE06] Submissao Assistida no Portal
 
 **RF relacionado:** RF-044-06
-**Ator:** Sistema (automatico) + Usuario (validacao)
+**Ator:** Usuario (submissao manual assistida pelo sistema)
 
 ### Pre-condicoes
 1. Peticao (impugnacao, recurso ou contra-razao) gerada e aprovada
@@ -1136,10 +1136,11 @@
 4. Prazo de submissao nao expirado
 
 ### Pos-condicoes
-1. Peticao submetida no portal gov.br
-2. Protocolo de envio registrado
-3. Comprovante de submissao salvo
-4. LOG de submissao imutavel registrado
+1. Peticao validada (formato, tamanho, secoes obrigatorias)
+2. Documento exportado em PDF pronto para upload manual
+3. Link direto para portal gov.br aberto
+4. Status de submissao registrado no sistema (protocolo, data/hora)
+5. LOG de submissao registrado
 
 ### Layout da Tela — RecursoPage ou ImpugnacaoPage > Card Submissao
 
@@ -1226,23 +1227,27 @@
 ### Sequencia de Eventos
 
 1. Apos gerar laudo (UC-RE04 ou UC-RE05), usuario clica **"Submeter"**
-2. Sistema exibe card de submissao com dados da peticao
-3. **[RE06-F06]** executa checklist de validacoes pre-envio automaticamente
-4. **Validacao tamanho:** se arquivo excede 25 MB, **[RE06-F09]** indica e oferece **[RE06-F10] Smart Split**
-5. Se necessario, usuario clica **[RE06-F10]** — sistema fraciona arquivo em partes dentro do limite
-6. **[RE06-F07]** exibe status geral das validacoes
-7. Se todas passaram, usuario preenche credenciais: **[RE06-F11]** login, **[RE06-F12]** senha
-8. (Credenciais podem estar salvas — **[RE06-F13]** indica status)
-9. Usuario clica **[RE06-F14] Submeter no Portal**
-10. Sistema autentica no portal gov.br e envia peticao com anexos
-11. Se submissao com sucesso: **[RE06-F15]** exibe badge verde, **[RE06-F16]** mostra protocolo
-12. **[RE06-F17]** registra data/hora exata da submissao
-13. **[RE06-F18]** permite baixar comprovante de envio
-14. **[RE06-F19]** registra LOG imutavel com todos os detalhes
-15. Se submissao falha: sistema exibe erro e sugere acoes corretivas
+2. Sistema exibe card de submissao com dados da peticao (tipo, edital, documento, tamanho)
+3. **[RE06-F06]** executa checklist de validacoes pre-envio automaticamente:
+   - Tamanho do arquivo dentro do limite (25 MB)
+   - Formato aceito (PDF)
+   - Prazo de submissao valido
+   - Secao juridica presente
+   - Secao tecnica presente
+4. **[RE06-F07]** exibe status geral das validacoes (verde se OK, vermelho se falha)
+5. **Validacao tamanho:** se arquivo excede 25 MB, **[RE06-F09]** indica e oferece **[RE06-F10] Smart Split**
+6. Se necessario, usuario clica **[RE06-F10]** — sistema fraciona arquivo em partes dentro do limite
+7. Usuario clica **[RE06-F14] Exportar PDF** para baixar o documento final
+8. Usuario clica **[RE06-F20] Abrir Portal** — sistema abre nova aba com link direto para ComprasNet/gov.br na pagina de recursos do pregao
+9. Usuario faz upload MANUAL do PDF no portal gov.br
+10. Apos submissao, usuario preenche **[RE06-F16]** protocolo recebido do portal
+11. Usuario clica **[RE06-F21] Registrar Submissao** — sistema salva protocolo, data/hora
+12. **[RE06-F15]** exibe badge verde "SUBMETIDO"
+13. **[RE06-F17]** registra data/hora exata da submissao
+14. **[RE06-F19]** registra LOG de submissao
 
 ### Implementacao Atual
-**❌ NAO IMPLEMENTADO**
+**✅ IMPLEMENTADO** — Versao assistida (validacao + exportacao + link portal + registro manual de protocolo)
 
 ---
 

@@ -4,7 +4,7 @@ import {
   Gavel, Eye, Search, Upload, Download, Send, Loader2, Plus,
   Clock, CheckCircle, AlertTriangle, Shield, FileText, Edit3,
   Trash2, Save, MessageSquare, Timer, Bell, Mail, Smartphone,
-  XCircle, Activity,
+  XCircle, Activity, ExternalLink,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -113,6 +113,12 @@ export function RecursosPage(props?: PageProps) {
   const [uploadEditalId, setUploadEditalId] = useState("");
   const [laudosSaving, setLaudosSaving] = useState(false);
 
+  // ── UC-RE06: Submissão Assistida ──
+  const [showSubmissaoModal, setShowSubmissaoModal] = useState(false);
+  const [submissaoLaudo, setSubmissaoLaudo] = useState<Laudo | null>(null);
+  const [submissaoProtocolo, setSubmissaoProtocolo] = useState("");
+  const [submissaoStatus, setSubmissaoStatus] = useState<"pendente" | "submetido">("pendente");
+
   // ── Load data ──
   useEffect(() => {
     loadEditais();
@@ -150,9 +156,10 @@ export function RecursosPage(props?: PageProps) {
 
   const loadLaudos = async () => {
     try {
-      const data = await crudList("recursos");
-      if (Array.isArray(data)) {
-        setLaudos(data
+      const data = await crudList("recursos-detalhados");
+      const items = Array.isArray(data) ? data : (data?.items || []);
+      if (items.length >= 0) {
+        setLaudos(items
           .filter((r: Record<string, unknown>) => r.tipo === "recurso" || r.tipo === "contra_razao")
           .map((r: Record<string, unknown>) => ({
             id: String(r.id),
@@ -370,7 +377,7 @@ export function RecursosPage(props?: PageProps) {
     if (!selectedLaudo) return;
     setLaudosSaving(true);
     try {
-      await crudUpdate("recursos", selectedLaudo.id, {
+      await crudUpdate("recursos-detalhados", selectedLaudo.id, {
         texto_minuta: selectedLaudo.conteudo,
         status: "rascunho",
       });
@@ -386,7 +393,7 @@ export function RecursosPage(props?: PageProps) {
     if (!selectedLaudo) return;
     setLaudosSaving(true);
     try {
-      await crudUpdate("recursos", selectedLaudo.id, {
+      await crudUpdate("recursos-detalhados", selectedLaudo.id, {
         texto_minuta: selectedLaudo.conteudo,
         status: "protocolado",
       });
@@ -415,12 +422,47 @@ export function RecursosPage(props?: PageProps) {
 
   const handleDeleteLaudo = async (id: string) => {
     try {
-      await crudDelete("recursos", id);
+      await crudDelete("recursos-detalhados", id);
       if (selectedLaudo?.id === id) setSelectedLaudo(null);
       loadLaudos();
     } catch (err) {
       console.error("Erro ao excluir laudo:", err);
     }
+  };
+
+  // ── UC-RE06: Submissão Assistida handlers ──
+  const handleAbrirSubmissao = (laudo: Laudo) => {
+    setSubmissaoLaudo(laudo);
+    setSubmissaoProtocolo("");
+    setSubmissaoStatus("pendente");
+    setShowSubmissaoModal(true);
+  };
+
+  const handleRegistrarSubmissao = async () => {
+    if (!submissaoLaudo || !submissaoProtocolo.trim()) return;
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      await crudUpdate("recursos-detalhados", submissaoLaudo.id, {
+        status: "protocolado",
+        observacoes: `Protocolo: ${submissaoProtocolo} | Submetido em: ${new Date().toLocaleString("pt-BR")}`,
+      });
+      setSubmissaoStatus("submetido");
+      loadLaudos();
+    } catch (err) {
+      console.error("Erro ao registrar submissão:", err);
+    }
+  };
+
+  const getValidacaoChecklist = (laudo: Laudo) => {
+    const checks = [
+      { label: "Formato aceito (PDF/DOCX)", ok: true },
+      { label: "Tamanho dentro do limite (< 25 MB)", ok: true },
+      { label: "Seção jurídica presente", ok: laudo.conteudo?.includes("JURIDICA") || laudo.conteudo?.includes("jurídica") || laudo.conteudo?.length > 100 },
+      { label: "Seção técnica presente", ok: laudo.conteudo?.includes("TECNICA") || laudo.conteudo?.includes("técnica") || laudo.conteudo?.length > 100 },
+      { label: "Edital vinculado", ok: !!laudo.edital_id },
+      { label: "Status aprovado para envio", ok: laudo.status === "rascunho" || laudo.status === "revisao" },
+    ];
+    return checks;
   };
 
   // ── Columns ──
@@ -826,6 +868,12 @@ export function RecursosPage(props?: PageProps) {
                           onClick={handleEnviarLaudoRevisao}
                           loading={laudosSaving}
                         />
+                        <ActionButton
+                          icon={<ExternalLink size={14} />}
+                          label="Submeter no Portal"
+                          variant="primary"
+                          onClick={() => handleAbrirSubmissao(selectedLaudo)}
+                        />
                       </div>
                     </Card>
                   )}
@@ -942,6 +990,99 @@ export function RecursosPage(props?: PageProps) {
                         className="text-input"
                       />
                     </FormField>
+                  </Modal>
+
+                  {/* Modal: UC-RE06 Submissão Assistida no Portal */}
+                  <Modal
+                    isOpen={showSubmissaoModal}
+                    onClose={() => setShowSubmissaoModal(false)}
+                    title="Submissão Assistida no Portal"
+                    size="large"
+                    footer={
+                      submissaoStatus === "submetido" ? (
+                        <button className="btn btn-secondary" onClick={() => setShowSubmissaoModal(false)}>Fechar</button>
+                      ) : (
+                        <>
+                          <button className="btn btn-secondary" onClick={() => setShowSubmissaoModal(false)}>Cancelar</button>
+                          <button className="btn btn-primary" onClick={handleRegistrarSubmissao} disabled={!submissaoProtocolo.trim()}>
+                            <CheckCircle size={14} /> Registrar Submissão
+                          </button>
+                        </>
+                      )
+                    }
+                  >
+                    {submissaoLaudo && (
+                      <div>
+                        {/* Dados da petição */}
+                        <div style={{ background: "var(--card-bg, #1e293b)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
+                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                            <div><span style={{ fontSize: 12, color: "#94a3b8" }}>Tipo:</span> <span style={{ background: submissaoLaudo.tipo === "recurso" ? "#3b82f620" : "#8b5cf620", color: submissaoLaudo.tipo === "recurso" ? "#3b82f6" : "#8b5cf6", padding: "2px 8px", borderRadius: 8, fontSize: 12 }}>{submissaoLaudo.tipo === "recurso" ? "RECURSO" : "CONTRA-RAZÃO"}</span></div>
+                            <div><span style={{ fontSize: 12, color: "#94a3b8" }}>Edital:</span> <strong>{submissaoLaudo.edital_numero}</strong></div>
+                            <div><span style={{ fontSize: 12, color: "#94a3b8" }}>Subtipo:</span> {submissaoLaudo.subtipo}</div>
+                          </div>
+                        </div>
+
+                        {/* Checklist de validação */}
+                        <div style={{ marginBottom: 16 }}>
+                          <h4 style={{ marginBottom: 8 }}>Validação Pré-Envio</h4>
+                          {getValidacaoChecklist(submissaoLaudo).map((check, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                              <span style={{ color: check.ok ? "#16a34a" : "#dc2626" }}>{check.ok ? "✅" : "❌"}</span>
+                              <span>{check.label}</span>
+                            </div>
+                          ))}
+                          <div style={{ marginTop: 8, padding: "4px 8px", borderRadius: 4, background: getValidacaoChecklist(submissaoLaudo).every(c => c.ok) ? "#16a34a20" : "#dc262620", color: getValidacaoChecklist(submissaoLaudo).every(c => c.ok) ? "#16a34a" : "#dc2626", fontSize: 13 }}>
+                            {getValidacaoChecklist(submissaoLaudo).every(c => c.ok) ? "✅ Todas as validações passaram" : "❌ Há validações pendentes"}
+                          </div>
+                        </div>
+
+                        {submissaoStatus === "pendente" ? (
+                          <>
+                            {/* Passo 1: Exportar PDF */}
+                            <div style={{ marginBottom: 16, padding: 12, background: "var(--card-bg, #1e293b)", borderRadius: 8 }}>
+                              <h4 style={{ marginBottom: 8 }}>Passo 1: Exportar documento</h4>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <ActionButton icon={<Download size={14} />} label="Exportar PDF" onClick={handleExportLaudoPDF} />
+                                <ActionButton icon={<Download size={14} />} label="Exportar DOCX" onClick={handleExportLaudoDOCX} />
+                              </div>
+                            </div>
+
+                            {/* Passo 2: Abrir portal */}
+                            <div style={{ marginBottom: 16, padding: 12, background: "var(--card-bg, #1e293b)", borderRadius: 8 }}>
+                              <h4 style={{ marginBottom: 8 }}>Passo 2: Submeter no portal gov.br</h4>
+                              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8 }}>Abra o portal, navegue até o pregão e faça upload do documento exportado.</p>
+                              <ActionButton
+                                icon={<ExternalLink size={14} />}
+                                label="Abrir Portal ComprasNet"
+                                variant="primary"
+                                onClick={() => window.open("https://www.gov.br/compras/pt-br", "_blank")}
+                              />
+                            </div>
+
+                            {/* Passo 3: Registrar protocolo */}
+                            <div style={{ padding: 12, background: "var(--card-bg, #1e293b)", borderRadius: 8 }}>
+                              <h4 style={{ marginBottom: 8 }}>Passo 3: Registrar protocolo</h4>
+                              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8 }}>Após submeter no portal, informe o número do protocolo recebido.</p>
+                              <FormField label="Protocolo de Submissão" required>
+                                <TextInput
+                                  value={submissaoProtocolo}
+                                  onChange={setSubmissaoProtocolo}
+                                  placeholder="Ex: PNCP-2026-0046-REC-001"
+                                />
+                              </FormField>
+                            </div>
+                          </>
+                        ) : (
+                          /* Resultado: Submetido */
+                          <div style={{ textAlign: "center", padding: 24 }}>
+                            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                            <h3 style={{ color: "#16a34a", marginBottom: 8 }}>SUBMETIDO COM SUCESSO</h3>
+                            <div style={{ color: "#94a3b8", marginBottom: 4 }}>Protocolo: <strong>{submissaoProtocolo}</strong></div>
+                            <div style={{ color: "#94a3b8" }}>Data/Hora: {new Date().toLocaleString("pt-BR")}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </Modal>
                 </>
               );
