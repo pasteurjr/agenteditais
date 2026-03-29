@@ -220,26 +220,36 @@ export function RecursosPage(props?: PageProps) {
     setChatMessages([]);
     setChatSessionId("");
     try {
+      // Chamar endpoint direto que usa tool_analisar_proposta_vencedora (lê PDF real)
+      const token = localStorage.getItem("token");
+      const resp = await fetch(`/api/editais/${analiseEditalId}/analisar-vencedora`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposta_vencedora_texto: propostaVencedoraTexto.trim() || undefined,
+        }),
+      });
+      const data = await resp.json();
+
+      if (data.success) {
+        setAnaliseResultadoMd(data.analise_ia || data.resumo || "Análise concluída.");
+        if (data.inconsistencias && data.inconsistencias.length > 0) {
+          const mapped = data.inconsistencias.map((inc: any, idx: number) => ({
+            id: String(idx + 1),
+            item: inc.item || inc.trecho || "",
+            inconsistencia: inc.inconsistencia || inc.fundamentacao || "",
+            motivacao_recurso: inc.motivacao_recurso || inc.sugestao_correcao || "",
+            gravidade: (inc.gravidade || "media").toLowerCase(),
+          }));
+          setInconsistenciasVencedora(mapped);
+        }
+      } else {
+        setAnaliseResultadoMd(data.error || "Erro ao analisar proposta vencedora.");
+      }
+
+      // Iniciar sessão de chat para perguntas complementares
       const session = await createSession("analise-vencedora") as Record<string, unknown>;
-      const sid = String(session.session_id || session.id);
-      setChatSessionId(sid);
-      const edital = editais.find(e => e.id === analiseEditalId);
-      let prompt = `Analise a proposta vencedora do edital ${edital?.numero || analiseEditalId}.`;
-      if (propostaVencedoraTexto.trim()) {
-        prompt += ` Texto da proposta vencedora:\n\n${propostaVencedoraTexto}\n\n`;
-      }
-      prompt += `Identifique inconsistencias, irregularidades e motivacoes para recurso. Para cada item encontrado, indique: item analisado, inconsistencia, motivacao para recurso e gravidade (ALTA/MEDIA/BAIXA). Apresente em tabela markdown e ao final faca uma analise geral.`;
-      const resp = await sendMessage(sid, prompt);
-      setAnaliseResultadoMd(resp.response || "");
-      // Try parsing table
-      const parsed = parseInconsistenciasVencedora(resp.response || "");
-      if (parsed.length > 0) {
-        setInconsistenciasVencedora(parsed);
-      }
-      setChatMessages([
-        { role: "user", content: prompt },
-        { role: "assistant", content: resp.response || "" },
-      ]);
+      setChatSessionId(String(session.session_id || session.id));
     } catch (err) {
       console.error("Erro ao analisar proposta:", err);
       setAnaliseResultadoMd("Erro ao analisar proposta vencedora.");
@@ -298,29 +308,24 @@ export function RecursosPage(props?: PageProps) {
     if (!laudoEditalId) return;
     setLaudosSaving(true);
     try {
-      let conteudo = laudoConteudo;
-      if (laudoTemplateId && !conteudo) {
-        const tmpl = templates.find(t => t.id === laudoTemplateId);
-        conteudo = tmpl?.conteudo_md || "";
-      }
-      // Add mandatory sections if empty
-      if (!conteudo && laudoTipo === "recurso") {
-        conteudo = `## SECAO JURIDICA\n\n[Fundamentacao legal]\n\n## SECAO TECNICA\n\n[Analise tecnica]\n\n`;
-      }
-      if (!conteudo && laudoTipo === "contra_razao") {
-        conteudo = `## SECAO JURIDICA\n\n[Fundamentacao legal]\n\n## SECAO TECNICA\n\n[Analise tecnica]\n\n## DEFESA\n\n[Argumentos de defesa]\n\n## ATAQUE\n\n[Contra-argumentos]\n\n`;
-      }
-      await crudCreate("recursos", {
-        edital_id: laudoEditalId,
-        tipo: laudoTipo,
-        subtipo: laudoSubtipo,
-        empresa_alvo: laudoEmpresaAlvo,
-        template_id: laudoTemplateId || null,
-        motivo: laudoTipo === "recurso" ? "Recurso administrativo" : "Contra-razao",
-        texto_minuta: conteudo,
-        status: "rascunho",
-        prazo_limite: new Date().toISOString(),
+      // Chamar endpoint que usa tool_gerar_laudo_recurso (IA gera laudo real)
+      const token = localStorage.getItem("token");
+      const resp = await fetch("/api/recursos", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          edital_id: laudoEditalId,
+          tipo: laudoTipo,
+          subtipo: laudoSubtipo,
+          empresa_alvo: laudoEmpresaAlvo,
+          template_id: laudoTemplateId || null,
+          instrucao: laudoConteudo || undefined,
+        }),
       });
+      const data = await resp.json();
+      if (!data.success && data.error) {
+        console.error("Erro ao gerar laudo:", data.error);
+      }
       setShowNovoLaudoModal(false);
       setLaudoEditalId("");
       setLaudoTipo("recurso");

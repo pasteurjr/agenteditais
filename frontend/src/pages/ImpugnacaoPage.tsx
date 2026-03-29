@@ -209,19 +209,33 @@ export function ImpugnacaoPage(props?: PageProps) {
     setInconsistencias([]);
     setPeticaoSugerida("");
     try {
-      const session = await createSession("validacao-legal") as Record<string, unknown>;
-      const sid = String(session.session_id || session.id);
-      const edital = editais.find(e => e.id === editalId);
-      const prompt = `Analise a conformidade legal do edital ${edital?.numero || editalId}. Identifique inconsistencias, trechos que violam a Lei 14.133/2021 ou outras normas. Para cada inconsistencia retorne: o trecho exato, a lei violada, a gravidade (ALTA/MEDIA/BAIXA) e se recomenda Esclarecimento ou Impugnacao. Responda em formato de tabela markdown com colunas: #, Trecho, Lei Violada, Gravidade, Sugestao.`;
-      const resp = await sendMessage(sid, prompt);
+      // Chamar endpoint direto que usa tool_validacao_legal_edital (lê PDF real)
+      const token = localStorage.getItem("token");
+      const resp = await fetch(`/api/editais/${editalId}/validacao-legal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await resp.json();
       setValidacaoStatus("");
-      // Parse the response into inconsistencies if possible, or display as-is
-      const parsed = parseInconsistencias(resp.response || "");
-      if (parsed.length > 0) {
-        setInconsistencias(parsed);
+
+      if (data.success && data.inconsistencias && data.inconsistencias.length > 0) {
+        // Mapear inconsistências da tool para o formato do frontend
+        const mapped = data.inconsistencias.map((inc: any, idx: number) => ({
+          id: String(idx + 1),
+          trecho: inc.trecho || "",
+          lei_violada: inc.lei_violada || "",
+          gravidade: (inc.gravidade || "media").toLowerCase(),
+          sugestao_tipo: inc.sugestao_tipo || "esclarecimento",
+          fundamentacao: inc.fundamentacao || "",
+          sugestao_correcao: inc.sugestao_correcao || "",
+        }));
+        setInconsistencias(mapped);
+      } else if (data.sem_pdf) {
+        setPeticaoSugerida("⚠️ Este edital não possui PDF com texto extraído. Baixe o PDF do edital primeiro para realizar a análise legal.");
+      } else if (data.error) {
+        setPeticaoSugerida(`❌ Erro: ${data.error}`);
       } else {
-        // Fallback: show as a single entry
-        setPeticaoSugerida(resp.response || "Nenhuma inconsistencia encontrada.");
+        setPeticaoSugerida("✅ Nenhuma inconsistência legal encontrada neste edital.");
       }
     } catch (err) {
       console.error("Erro na validacao legal:", err);
@@ -229,7 +243,7 @@ export function ImpugnacaoPage(props?: PageProps) {
     } finally {
       setValidacaoLoading(false);
     }
-  }, [editalId, editais]);
+  }, [editalId]);
 
   const handleGerarPeticao = useCallback(async () => {
     if (!editalId) return;
