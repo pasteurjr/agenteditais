@@ -10656,11 +10656,11 @@ def tool_calcular_score_logistico(edital_id, user_id, db=None):
         db = get_db()
         close_db = True
     try:
-        edital = db.session.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        edital = db.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
         if not edital:
             return {"erro": "Edital não encontrado"}
 
-        empresa = db.session.query(Empresa).filter_by(user_id=user_id).first()
+        empresa = db.query(Empresa).filter_by(user_id=user_id).first()
         origem_uf = empresa.uf if empresa and hasattr(empresa, 'uf') and empresa.uf else 'SP'
         destino_uf = edital.uf if hasattr(edital, 'uf') and edital.uf else ''
 
@@ -10687,7 +10687,7 @@ def tool_calcular_score_logistico(edital_id, user_id, db=None):
             distance_score = 35
 
         # Dimensão 2: Histórico de entregas (25%)
-        entregas_count = db.session.query(ContratoEntrega).join(Contrato).filter(
+        entregas_count = db.query(ContratoEntrega).join(Contrato).filter(
             Contrato.user_id == user_id,
             ContratoEntrega.status == 'entregue'
         ).count()
@@ -10770,7 +10770,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
         motivo_derrota = data.get('motivo_derrota', '')
         observacoes = data.get('observacoes', '')
 
-        edital = db.session.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        edital = db.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
 
@@ -10780,7 +10780,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
             edital.status = 'ganho'
             # Auto-gerar número do contrato
             ano = datetime.now().year
-            count = db.session.query(Contrato).filter_by(user_id=user_id).count() + 1
+            count = db.query(Contrato).filter_by(user_id=user_id).count() + 1
             numero_contrato = f"CT-{ano}/{count:03d}"
 
             contrato = Contrato(
@@ -10796,8 +10796,8 @@ def tool_registrar_resultado_api(data, user_id, db=None):
             )
             if hasattr(edital, 'proposta_id'):
                 contrato.proposta_id = edital.proposta_id
-            db.session.add(contrato)
-            db.session.flush()
+            db.add(contrato)
+            db.flush()
             contrato_id = contrato.id
 
             # Salvar no histórico de preços
@@ -10809,7 +10809,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
                     fonte='manual',
                     descricao=f"Resultado licitação - Vitória {edital.numero if hasattr(edital, 'numero') else ''}",
                 )
-                db.session.add(preco)
+                db.add(preco)
 
         elif tipo == 'derrota':
             edital.status = 'perdido'
@@ -10822,7 +10822,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
                     resultado='vencedor',
                     observacoes=f"Motivo derrota: {motivo_derrota}",
                 )
-                db.session.add(concorrente)
+                db.add(concorrente)
             if valor_final:
                 preco = PrecoHistorico(
                     user_id=user_id,
@@ -10831,7 +10831,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
                     fonte='manual',
                     descricao=f"Resultado licitação - Derrota {edital.numero if hasattr(edital, 'numero') else ''} - Vencedor: {vencedor}",
                 )
-                db.session.add(preco)
+                db.add(preco)
 
         elif tipo == 'cancelado':
             edital.status = 'cancelado'
@@ -10839,7 +10839,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
         if observacoes:
             edital.observacoes = (edital.observacoes or '') + f"\n[Resultado] {observacoes}"
 
-        db.session.commit()
+        db.commit()
         return {
             "success": True,
             "tipo": tipo,
@@ -10848,7 +10848,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
             "message": f"Resultado '{tipo}' registrado com sucesso"
         }
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return {"success": False, "error": str(e)}
     finally:
         if close_db and db:
@@ -10865,7 +10865,7 @@ def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_
         db = get_db()
         close_db = True
     try:
-        query = db.session.query(Contrato).filter_by(user_id=user_id)
+        query = db.query(Contrato).filter_by(user_id=user_id)
 
         # Filtro período
         if periodo and periodo != 'tudo':
@@ -10888,7 +10888,7 @@ def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_
             valor_contratado = float(c.valor_total) if c.valor_total else 0
             total_contratado += valor_contratado
 
-            entregas = db.session.query(ContratoEntrega).filter_by(contrato_id=c.id).all()
+            entregas = db.query(ContratoEntrega).filter_by(contrato_id=c.id).all()
             valor_realizado = sum(
                 float(e.valor_total) if e.valor_total else 0
                 for e in entregas if e.status == 'entregue'
@@ -10932,7 +10932,7 @@ def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_
 
         # Próximos vencimentos (contratos com data_fim nos próximos 90 dias)
         data_limite = datetime.now() + timedelta(days=90)
-        vencimentos = db.session.query(Contrato).filter(
+        vencimentos = db.query(Contrato).filter(
             Contrato.user_id == user_id,
             Contrato.data_fim != None,
             Contrato.data_fim <= data_limite,
@@ -10994,7 +10994,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
         limite_30d = agora + timedelta(days=30)
 
         # Contratos com vencimento próximo
-        contratos = db.session.query(Contrato).filter(
+        contratos = db.query(Contrato).filter(
             Contrato.user_id == user_id,
             Contrato.data_fim != None,
             Contrato.data_fim <= limite_90d,
@@ -11013,7 +11013,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
             })
 
         # Atas com vigência próxima do fim
-        atas = db.session.query(AtaConsultada).filter(
+        atas = db.query(AtaConsultada).filter(
             AtaConsultada.user_id == user_id,
             AtaConsultada.data_vigencia_fim != None,
             AtaConsultada.data_vigencia_fim <= limite_90d,
@@ -11031,7 +11031,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
             })
 
         # Entregas pendentes com prazo próximo
-        entregas = db.session.query(ContratoEntrega).join(Contrato).filter(
+        entregas = db.query(ContratoEntrega).join(Contrato).filter(
             Contrato.user_id == user_id,
             ContratoEntrega.status == 'pendente',
             ContratoEntrega.data_prevista != None,

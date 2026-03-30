@@ -2875,7 +2875,14 @@ class ValidacaoLegal(Base):
 
 # ==================== DATABASE ====================
 
-engine = create_engine(MYSQL_URI, pool_pre_ping=True, pool_recycle=3600)
+engine = create_engine(
+    MYSQL_URI,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=20,
+    max_overflow=30,
+    pool_timeout=30,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

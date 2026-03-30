@@ -244,7 +244,7 @@ export function AtasPage(_props?: PageProps) {
               <SelectInput value={ufFiltro} onChange={setUfFiltro} options={ufs.map(u => ({ value: u, label: u || "Todas" }))} />
             </FormField>
           </div>
-          <ActionButton label={searching ? "Buscando..." : "Buscar"} onClick={handleBuscar} disabled={searching || termo.length < 3} icon={<Search size={16} />} />
+          <ActionButton label={searching ? "Buscando..." : "Buscar"} onClick={handleBuscar} disabled={searching || termo.trim().length < 3} icon={<Search size={16} />} />
         </div>
       </Card>
       {searchResults.length > 0 && (

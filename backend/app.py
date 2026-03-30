@@ -13502,7 +13502,7 @@ def api_followup_pendentes():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        editais = db.session.query(Edital).filter(
+        editais = db.query(Edital).filter(
             Edital.user_id == user_id,
             Edital.status.in_(['submetido', 'proposta_enviada', 'em_pregao'])
         ).all()
@@ -13519,7 +13519,7 @@ def api_followup_resultados():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        editais = db.session.query(Edital).filter(
+        editais = db.query(Edital).filter(
             Edital.user_id == user_id,
             Edital.status.in_(['ganho', 'perdido', 'cancelado'])
         ).order_by(Edital.updated_at.desc()).all()
@@ -13598,7 +13598,7 @@ def api_atas_minhas():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        atas = db.session.query(AtaConsultada).filter_by(user_id=user_id).order_by(AtaConsultada.created_at.desc()).all()
+        atas = db.query(AtaConsultada).filter_by(user_id=user_id).order_by(AtaConsultada.created_at.desc()).all()
         now = datetime.now()
         total = len(atas)
         vigentes = sum(1 for a in atas if a.data_vigencia_fim and a.data_vigencia_fim > now)
@@ -13632,11 +13632,11 @@ def api_atas_salvar():
             data_vigencia_inicio=datetime.fromisoformat(data['data_vigencia_inicio']) if data.get('data_vigencia_inicio') else None,
             data_vigencia_fim=datetime.fromisoformat(data['data_vigencia_fim']) if data.get('data_vigencia_fim') else None,
         )
-        db.session.add(ata)
-        db.session.commit()
+        db.add(ata)
+        db.commit()
         return jsonify({"success": True, "id": ata.id, "ata": ata.to_dict()})
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13669,34 +13669,41 @@ def api_contrato_cronograma(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
-        entregas = db.session.query(ContratoEntrega).filter_by(contrato_id=contrato_id).order_by(ContratoEntrega.data_prevista).all()
+        entregas = db.query(ContratoEntrega).filter_by(contrato_id=contrato_id).order_by(ContratoEntrega.data_prevista).all()
         now = datetime.now()
 
         semanas = {}
         atrasados = []
         proximos_7d = []
+        now_date = now.date() if hasattr(now, 'date') else now
 
         for e in entregas:
             ed = e.to_dict()
-            if e.data_prevista:
+            # Normalizar data_prevista para date
+            dp = e.data_prevista
+            if hasattr(dp, 'date'):
+                dp = dp.date()
+            elif not dp:
+                continue
+            if dp:
                 # Agrupar por semana
-                week_start = e.data_prevista - timedelta(days=e.data_prevista.weekday())
+                week_start = dp - timedelta(days=dp.weekday())
                 week_key = week_start.strftime('%Y-%m-%d')
                 if week_key not in semanas:
                     semanas[week_key] = []
                 semanas[week_key].append(ed)
 
                 # Atrasados
-                if e.status != 'entregue' and e.data_prevista < now:
-                    ed['dias_atraso'] = (now - e.data_prevista).days
+                if e.status != 'entregue' and dp < now_date:
+                    ed['dias_atraso'] = (now_date - dp).days
                     atrasados.append(ed)
 
                 # Próximos 7 dias
-                dias_ate = (e.data_prevista - now).days
+                dias_ate = (dp - now_date).days
                 if 0 <= dias_ate <= 7 and e.status != 'entregue':
                     ed['dias_restantes'] = dias_ate
                     proximos_7d.append(ed)
@@ -13729,12 +13736,12 @@ def api_contrato_aditivos(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
         if request.method == 'GET':
-            aditivos = db.session.query(ContratoAditivo).filter_by(contrato_id=contrato_id).order_by(ContratoAditivo.created_at.desc()).all()
+            aditivos = db.query(ContratoAditivo).filter_by(contrato_id=contrato_id).order_by(ContratoAditivo.created_at.desc()).all()
             total_aditivos = sum(float(a.valor_aditivo or 0) for a in aditivos if a.tipo in ('acrescimo',))
             total_supressoes = sum(abs(float(a.valor_aditivo or 0)) for a in aditivos if a.tipo == 'supressao')
             valor_original = float(contrato.valor_total or 0)
@@ -13767,11 +13774,11 @@ def api_contrato_aditivos(contrato_id):
             status=data.get('status', 'rascunho'),
             observacoes=data.get('observacoes', ''),
         )
-        db.session.add(aditivo)
-        db.session.commit()
+        db.add(aditivo)
+        db.commit()
         return jsonify({"success": True, "aditivo": aditivo.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13783,13 +13790,13 @@ def api_contrato_aditivo_detail(contrato_id, aditivo_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        aditivo = db.session.query(ContratoAditivo).filter_by(id=aditivo_id, contrato_id=contrato_id, user_id=user_id).first()
+        aditivo = db.query(ContratoAditivo).filter_by(id=aditivo_id, contrato_id=contrato_id, user_id=user_id).first()
         if not aditivo:
             return jsonify({"error": "Aditivo não encontrado"}), 404
 
         if request.method == 'DELETE':
-            db.session.delete(aditivo)
-            db.session.commit()
+            db.delete(aditivo)
+            db.commit()
             return jsonify({"success": True})
 
         # PUT
@@ -13803,10 +13810,10 @@ def api_contrato_aditivo_detail(contrato_id, aditivo_id):
             aditivo.data_aditivo = datetime.fromisoformat(data['data_aditivo'])
         if 'nova_data_fim' in data:
             aditivo.nova_data_fim = datetime.fromisoformat(data['nova_data_fim'])
-        db.session.commit()
+        db.commit()
         return jsonify({"success": True, "aditivo": aditivo.to_dict()})
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13820,12 +13827,12 @@ def api_contrato_designacoes(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.session.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
         if request.method == 'GET':
-            designacoes = db.session.query(ContratoDesignacao).filter_by(contrato_id=contrato_id).all()
+            designacoes = db.query(ContratoDesignacao).filter_by(contrato_id=contrato_id).all()
             return jsonify([d.to_dict() for d in designacoes])
 
         # POST
@@ -13841,11 +13848,11 @@ def api_contrato_designacoes(contrato_id):
             data_inicio=datetime.fromisoformat(data['data_inicio']) if data.get('data_inicio') else datetime.now(),
             data_fim=datetime.fromisoformat(data['data_fim']) if data.get('data_fim') else None,
         )
-        db.session.add(designacao)
-        db.session.commit()
+        db.add(designacao)
+        db.commit()
         return jsonify({"success": True, "designacao": designacao.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13857,13 +13864,13 @@ def api_contrato_designacao_detail(contrato_id, designacao_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        desig = db.session.query(ContratoDesignacao).filter_by(id=designacao_id, contrato_id=contrato_id, user_id=user_id).first()
+        desig = db.query(ContratoDesignacao).filter_by(id=designacao_id, contrato_id=contrato_id, user_id=user_id).first()
         if not desig:
             return jsonify({"error": "Designação não encontrada"}), 404
 
         if request.method == 'DELETE':
-            db.session.delete(desig)
-            db.session.commit()
+            db.delete(desig)
+            db.commit()
             return jsonify({"success": True})
 
         data = request.get_json()
@@ -13874,10 +13881,10 @@ def api_contrato_designacao_detail(contrato_id, designacao_id):
             desig.ativo = data['ativo']
         if 'data_fim' in data:
             desig.data_fim = datetime.fromisoformat(data['data_fim'])
-        db.session.commit()
+        db.commit()
         return jsonify({"success": True, "designacao": desig.to_dict()})
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13890,7 +13897,7 @@ def api_contrato_atividades(contrato_id, designacao_id):
     try:
         user_id = get_current_user_id()
         if request.method == 'GET':
-            atividades = db.session.query(AtividadeFiscal).filter_by(designacao_id=designacao_id, user_id=user_id).order_by(AtividadeFiscal.data_atividade.desc()).all()
+            atividades = db.query(AtividadeFiscal).filter_by(designacao_id=designacao_id, user_id=user_id).order_by(AtividadeFiscal.data_atividade.desc()).all()
             return jsonify([a.to_dict() for a in atividades])
 
         data = request.get_json()
@@ -13902,11 +13909,11 @@ def api_contrato_atividades(contrato_id, designacao_id):
             data_atividade=datetime.fromisoformat(data['data_atividade']) if data.get('data_atividade') else datetime.now(),
             arquivo_path=data.get('arquivo_path', ''),
         )
-        db.session.add(atividade)
-        db.session.commit()
+        db.add(atividade)
+        db.commit()
         return jsonify({"success": True, "atividade": atividade.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13921,7 +13928,7 @@ def api_ata_saldos(ata_id):
     try:
         user_id = get_current_user_id()
         if request.method == 'GET':
-            saldos = db.session.query(ARPSaldo).filter_by(ata_id=ata_id, user_id=user_id).all()
+            saldos = db.query(ARPSaldo).filter_by(ata_id=ata_id, user_id=user_id).all()
             return jsonify([s.to_dict() for s in saldos])
 
         data = request.get_json()
@@ -13936,11 +13943,11 @@ def api_ata_saldos(ata_id):
             saldo_disponivel=qtd_reg,
             valor_unitario=float(data.get('valor_unitario', 0)) if data.get('valor_unitario') else None,
         )
-        db.session.add(saldo)
-        db.session.commit()
+        db.add(saldo)
+        db.commit()
         return jsonify({"success": True, "saldo": saldo.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -13952,12 +13959,12 @@ def api_ata_caronas(ata_id, saldo_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        saldo = db.session.query(ARPSaldo).filter_by(id=saldo_id, ata_id=ata_id, user_id=user_id).first()
+        saldo = db.query(ARPSaldo).filter_by(id=saldo_id, ata_id=ata_id, user_id=user_id).first()
         if not saldo:
             return jsonify({"error": "Saldo ARP não encontrado"}), 404
 
         if request.method == 'GET':
-            caronas = db.session.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id).order_by(SolicitacaoCarona.created_at.desc()).all()
+            caronas = db.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id).order_by(SolicitacaoCarona.created_at.desc()).all()
             return jsonify([c.to_dict() for c in caronas])
 
         # POST — validar limites Lei 14.133 (50% individual, 2x global)
@@ -13967,7 +13974,7 @@ def api_ata_caronas(ata_id, saldo_id):
 
         # Limite individual: 50% do registrado por órgão
         orgao = data.get('orgao_solicitante', '')
-        consumo_orgao = db.session.query(SolicitacaoCarona).filter_by(
+        consumo_orgao = db.query(SolicitacaoCarona).filter_by(
             arp_saldo_id=saldo_id, orgao_solicitante=orgao, status='aprovada'
         ).all()
         total_orgao = sum(float(c.quantidade_solicitada or 0) for c in consumo_orgao) + qtd_solicitada
@@ -13976,7 +13983,7 @@ def api_ata_caronas(ata_id, saldo_id):
             return jsonify({"error": f"Limite individual (50%) excedido. Máximo: {limite_individual}, Solicitado total: {total_orgao}"}), 400
 
         # Limite global: 2x do registrado
-        todas_caronas = db.session.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id, status='aprovada').all()
+        todas_caronas = db.query(SolicitacaoCarona).filter_by(arp_saldo_id=saldo_id, status='aprovada').all()
         total_global = sum(float(c.quantidade_solicitada or 0) for c in todas_caronas) + qtd_solicitada
         limite_global = qtd_registrada * 2
         if total_global > limite_global:
@@ -13991,11 +13998,11 @@ def api_ata_caronas(ata_id, saldo_id):
             valor_unitario=float(saldo.valor_unitario or 0),
             justificativa=data.get('justificativa', ''),
         )
-        db.session.add(carona)
-        db.session.commit()
+        db.add(carona)
+        db.commit()
         return jsonify({"success": True, "carona": carona.to_dict()}), 201
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -14007,7 +14014,7 @@ def api_ata_carona_detail(ata_id, saldo_id, carona_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        carona = db.session.query(SolicitacaoCarona).filter_by(id=carona_id, arp_saldo_id=saldo_id, user_id=user_id).first()
+        carona = db.query(SolicitacaoCarona).filter_by(id=carona_id, arp_saldo_id=saldo_id, user_id=user_id).first()
         if not carona:
             return jsonify({"error": "Solicitação não encontrada"}), 404
 
@@ -14018,16 +14025,16 @@ def api_ata_carona_detail(ata_id, saldo_id, carona_id):
                 carona.data_resposta = datetime.now()
                 # Atualizar saldo se aprovada
                 if data['status'] == 'aprovada':
-                    saldo = db.session.query(ARPSaldo).filter_by(id=saldo_id).first()
+                    saldo = db.query(ARPSaldo).filter_by(id=saldo_id).first()
                     if saldo:
                         saldo.consumido_carona = (saldo.consumido_carona or 0) + float(carona.quantidade_solicitada or 0)
                         saldo.saldo_disponivel = float(saldo.quantidade_registrada or 0) - float(saldo.consumido_participante or 0) - float(saldo.consumido_carona or 0)
         if 'observacoes' in data:
             carona.observacoes = data['observacoes']
-        db.session.commit()
+        db.commit()
         return jsonify({"success": True, "carona": carona.to_dict()})
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -14042,7 +14049,7 @@ def api_alertas_vencimento_regras():
     try:
         user_id = get_current_user_id()
         if request.method == 'GET':
-            regras = db.session.query(AlertaVencimentoRegra).filter_by(user_id=user_id).all()
+            regras = db.query(AlertaVencimentoRegra).filter_by(user_id=user_id).all()
             return jsonify([r.to_dict() for r in regras])
 
         # PUT — upsert rules
@@ -14051,18 +14058,18 @@ def api_alertas_vencimento_regras():
         results = []
         for rd in regras_data:
             tipo = rd.get('tipo_entidade')
-            regra = db.session.query(AlertaVencimentoRegra).filter_by(user_id=user_id, tipo_entidade=tipo).first()
+            regra = db.query(AlertaVencimentoRegra).filter_by(user_id=user_id, tipo_entidade=tipo).first()
             if not regra:
                 regra = AlertaVencimentoRegra(user_id=user_id, tipo_entidade=tipo)
-                db.session.add(regra)
+                db.add(regra)
             for field in ['dias_30', 'dias_15', 'dias_7', 'dias_1', 'canal_email', 'canal_push', 'canal_whatsapp', 'escalation_enabled', 'escalation_email', 'ativo']:
                 if field in rd:
                     setattr(regra, field, rd[field])
             results.append(regra)
-        db.session.commit()
+        db.commit()
         return jsonify([r.to_dict() for r in results])
     except Exception as e:
-        db.session.rollback()
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
