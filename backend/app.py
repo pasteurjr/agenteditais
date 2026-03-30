@@ -13502,7 +13502,10 @@ def api_followup_pendentes():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        editais = db.session.query(Edital).filter_by(user_id=user_id, status='submetido').all()
+        editais = db.session.query(Edital).filter(
+            Edital.user_id == user_id,
+            Edital.status.in_(['submetido', 'proposta_enviada', 'em_pregao'])
+        ).all()
         return jsonify([e.to_dict() for e in editais])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
