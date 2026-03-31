@@ -1,0 +1,161 @@
+0:00My name is David Andre and this is the clearest explanation of auto research you're going to find on the internet. So what is auto research? It's an open-
+0:088 segundossource project by Andre Karpathy that lets AI improve itself autonomously. You have an AI agent that runs experiments
+0:1515 segundosautomatically and it keeps what works and throws away everything that doesn't.
+0:1818 segundosSo in this video I'm going to explain how auto research actually works, how you can use it in your own life and business because there are a lot of implications and how you can build your
+0:2727 segundosvery first auto research loop. So, if you really want to be on the cutting edge of AI, make sure to watch until the end. First off, who is Andre Kapathy?
+0:3535 segundosHe's one of the most legendary AI researchers of all time. He's one of the OpenAI co-founders, and he's the main person behind Tesla autopilot. Oh, yeah.
+0:4444 segundosAnd he's also the guy who invented the term VIP coding. Plus, he has contributed a lot to the open-source community, especially in AI. And yes,
+0:5252 segundosmost importantly, he was born in Czechoslovakia. However, this video is about one of his contributions and that is auto research. Karpathi had a
+1:001 minutotraining script for the GPD2 model that he's been optimizing for many months.
+1:041 minuto e 4 segundosAnd then he realized why am I doing this? Why not just have an AI agent run different experiments in a loop to figure out what's the best way to
+1:121 minuto e 12 segundosoptimize this model? And this is the core idea. Give AI one file, one metric,
+1:181 minuto e 18 segundosand let it run hundreds if not thousands of experiments by itself while you sleep and watch it improve. And yes, at the end of the video, I'll show you how you
+1:261 minuto e 26 segundoscan build your first order research loop. And yes, you can do this even if you are a complete beginner. Now, let's talk about the prepare. py file because
+1:341 minuto e 34 segundosit's essential to understand this. The agent cannot touch prepare. So that it can't cheat the eal you set for it.
+1:411 minuto e 41 segundosWithout this limitation, it could rewrite the scoring function to fake its results. So basically, the prepare py file defines what better means. Now, of course, if you set the wrong metric,
+1:511 minuto e 51 segundosyou'll get the wrong results. So here's a nice graphic that visualizes the loop.
+1:551 minuto e 55 segundosFirst the agent comes up with a hypothesis, right? A theory of what it's going to improve, what experiment it could run. Then it modifies the code.
+2:032 minutos e 3 segundosYou train it for around 5 minutes. Then it runs the evaluation to see if it's good or if it's not good. If it wants to keep it, it will just commit it to your
+2:102 minutos e 10 segundosgit history. If it's bad and if it worsens the results, it will do git reset and repeat the whole loop over and over and over as many times as you want.
+2:202 minutos e 20 segundosyou know [laughter] depending on how many dollars you want to spend or tokens and yeah this is auto research basically in a single image. So if you start it right before going to bed it can run
+2:282 minutos e 28 segundosroughly 100 experiments overnight. Now by giving it a fixed time budget you make every experiment directly comparable because let's say you're
+2:362 minutos e 36 segundoshiring for your company. If you have one applicant and you give him seven days to complete a task and the other one only has seven minutes then obviously the one
+2:442 minutos e 44 segundoswho does seven days on average will do better. So you want to make sure this is the same in AI agents. That way the agent can't cheat just by training
+2:532 minutos e 53 segundoslonger or by training better ideas. Only the raw idea wins with the same time allocated. But if you think that order research only applies to the training of
+3:013 minutos e 1 segundoAI models, you are badly mistaken. This has massive implications across every domain of your life or business. You can build a recursive self-improving loop
+3:103 minutos e 10 segundosfor nearly anything that can be measured. Thanks to AI agents, soon enough the execution of any work or task will become basically free. However,
+3:193 minutos e 19 segundoswhat will become valuable is knowing what to measure, picking the right metric, and setting the right constraints. This is the skill that is
+3:273 minutos e 27 segundosgoing to make millionaires in the future. And by the way, this is the clearest example of what AI agents actually look like in practice. Not just
+3:343 minutos e 34 segundoschat bots, but real autonomous loops that do meaningful work for companies or individuals. And if you reason about the
+3:413 minutos e 41 segundosstate of AI from first principles, you realize that this has been the end goal all along. Andre Karpathy predicts that
+3:483 minutos e 48 segundosall LLM frontier labs will do this. They will run some sort of auto research.
+3:533 minutos e 53 segundosThis is the final boss battle. And if you think about it, this is literally what [clears throat] recursive self-improvement will look like. And the funny thing is that right now the AI
+4:014 minutos e 1 segundolabs like OpenAI Enthropic Gemini are spending tens of millions of dollars on researchers, all of which are trying to build this. Yet Karpafei made it
+4:104 minutos e 10 segundoscompletely open source. Now to understand order research, you must understand its free file architecture.
+4:164 minutos e 16 segundosFirst you have program.mmd. This is the most important file. This is the human setting the goal, the constraints and the rules for the agent. Then you have
+4:244 minutos e 24 segundosthe train. py file. This is the one file that the agent can actually change. And this could be anything by the way. Code,
+4:304 minutos e 30 segundossome config, a prompt, some math equation, literally anything you want to optimize. And then you have prepared.
+4:364 minutos e 36 segundospy. This is the metric and the evaluation script. The agent cannot touch this. Absolutely never. Because this is what measures the result. And by
+4:454 minutos e 45 segundosthe way, there are several tech billionaires who are going crazy over this such as the CEO of Shopify and the CEO of Stripe because these guys realize
+4:534 minutos e 53 segundosthat this is not just about training AI models. And this is perhaps the biggest misconception about auto research.
+4:584 minutos e 58 segundosPeople think that it's just about optimizing of machine learning, right?
+5:025 minutos e 2 segundosBecause this is what Karpathi used as example. But if you actually pay attention and if you think about it a little bit more, you realize that as long as you have a clear metric and you
+5:115 minutos e 11 segundoscan run these experiments, this could be used in so many different ways in marketing, in business, in testing new products, in trading strategies, in personal life, in weather forecast,
+5:215 minutos e 21 segundosliterally hundreds of possible domains.
+5:235 minutos e 23 segundosYou can build these auto research loops that don't have any human in the loop,
+5:265 minutos e 26 segundosbut instead swarm of AI agents running experiments, discarding what doesn't work, and keeping what works. And as Kafi says here, we might be in the early
+5:355 minutos e 35 segundosstages of the singularity. Now, every AI workflow has the same bottleneck,
+5:395 minutos e 39 segundosgetting fresh real world data. You can build the most sophisticated AI agent,
+5:425 minutos e 42 segundosbut if it can't see what's actually on the web right now, it's flying blind.
+5:475 minutos e 47 segundosThat's where Oxyabs comes in. The Oxyabs web scraper API lets you pull structured data from basically any website. This could be Amazon product listings, Google search results, real estate listings,
+5:585 minutos e 58 segundosall through a single API call. It handles proxy rotation, capture solving,
+6:026 minutos e 2 segundosand JavaScript rendering, so you don't have to do that yourself. But here's what makes it interesting for us AI developers. Oxyabs has an official MCP
+6:106 minutos e 10 segundosthat you can connect directly to cursor or cloth code in a matter of a minute,
+6:146 minutos e 14 segundosso that your AI agent gets live web scraping superpowers. Say you need to pull competitors pricing or scrape search results or grab real estate listings. Just ask it in plain English.
+6:256 minutos e 25 segundosThe agent calls OxyLabs, gets structured data back, and reasons over it. And even if you aren't a developer, OxyLabs plugs
+6:336 minutos e 33 segundosstraight into NA10. You can visually build a workflow that scrapes Amazon prices, sends them to an AI, and spits out insights with zero code written by
+6:426 minutos e 42 segundosyou. And the best part is Oxyabs gives up to 2,000 scrape results for free, so you can test it yourself. So go to
+6:496 minutos e 49 segundosoxyabs.io/david for a free trial. Oh, and there is no credit card required. And if you run out of credits, use my code David for 20%
+6:576 minutos e 57 segundosoff all Oxyab plans. And thank you to OxyLabs for sponsoring this video.
+7:027 minutos e 2 segundosAgain, I need to stress auto research is not just for machine learning. This pattern works anywhere you can measure an outcome, a clear outcome. And Kathy
+7:107 minutos e 10 segundossaid this himself. Any metric you care about that is reasonably efficient to evaluate can be auto researched. So you need one file to edit, one scalar
+7:187 minutos e 18 segundosmetric, and a time box loop. If you can score it, you can auto research it. Now let's look at some practical valuable use cases. First off, trading. You can
+7:277 minutos e 27 segundostake the same order research loop, but instead of improving an AI model, you can point it on a trading strategy. The agent tweaks your buy sell rules, tries
+7:357 minutos e 35 segundosexperiments based on years of market data, and scores each experiment by its sharp ratio, which is basically how good are the returns to the risk. And it can
+7:437 minutos e 43 segundostest hundreds of different trading strategies to see which one has the best returns. Here's another use case,
+7:487 minutos e 48 segundosmarketing. You can now apply auto research to marketing with emails, ad creatives, landing pages, automated AB tests, headlines, thumbnails, YouTube
+7:577 minutos e 57 segundostitles, any type of marketing. Eric Sue put it the best. Most marketing teams run 30 experiments per year. The next generation will run 36,000,
+8:078 minutos e 7 segundosaka roughly 100 per day. The agent will modify the copy and measure the conversions and decide whether to keep this experiment or to discard it. The
+8:158 minutos e 15 segundosexact same loop as before. Now before I show you more use cases how auto research can benefit your life, please consider subscribing. 25% of you are
+8:248 minutos e 24 segundossubscribed which means the vast majority of you watching right now are not subscribed. So if you want to see more highquality AI content in your YouTube
+8:328 minutos e 32 segundosrecommended, please take two seconds, go below the video and click the subscribe button. It helps out more than you think. So to all of you who just
+8:408 minutos e 40 segundossubscribed, thank you. The next use case is for developers. You can point auto research at basically any codebase and say make it faster. And people are also
+8:488 minutos e 48 segundosusing auto research to fine-tune open source AI models so they run faster locally on your laptop or phone. So expect in the next 6 months insane
+8:578 minutos e 57 segundosbreakthroughs in terms of what is possible to run on phone. I would even say that we will have Sonet 4.6 quality models runningable on iPhones in three or four months. This is a prediction.
+9:099 minutos e 9 segundosLet's see if it's correct. Another use case is prompt engineering. Auto research can fine-tune the system instructions behind all of your AI agents. So Harrison Chase, the founder
+9:179 minutos e 17 segundosof Langchain, which is a billiond dollar company, said agents mess up because they don't have the right context and system prompts are part of that context.
+9:259 minutos e 25 segundosSo order research can find new ways to phrase things, better language, maybe even different language, you know, maybe instead of English, it can use Polish or
+9:339 minutos e 33 segundosCzech or German, whatever. It can try different levels like beginner, you know, college level, PhD level to see
+9:419 minutos e 41 segundoswhich prompt works the best for all of your AI agents. So these are the three conditions that decide whether your auto research loop will be successful or will
+9:509 minutos e 50 segundosbe a failure. Number one, a clear metric. One number, a clear direction you want to go in. And number two, an automated evaluation where there isn't a
+9:579 minutos e 57 segundoshuman in the loop. Right? If you, the human, need to be in the loop, it will be so slow and it will not be auto research. Sure, it still can be
+10:0510 minutos e 5 segundosresearch, but it will not be auto research. It will not be running while you sleep. And number three, there's one file that the agent can change. Not two,
+10:1310 minutos e 13 segundosnot zero, one file. And you need all of these three conditions for auto research to work. Now, here's where auto research will fail. Brand design, UX, pricing,
+10:2210 minutos e 22 segundosanything where better is subjective.
+10:2410 minutos e 24 segundosNow, for example, in pricing, you could have it succeed if you have a large volume of traffic to your pricing page and you can quickly AB test different pricing to see highest cash collected.
+10:3410 minutos e 34 segundosBut for most businesses, it will not be effective, right? Because the quality of that makes better is subjective or the loop is too slow. The loop needs
+10:4210 minutos e 42 segundosobjective metric. If the success is a judgment call or a feeling, the agent cannot tell what's working. So, it will optimize in a random direction. Also, I
+10:5010 minutos e 50 segundoswant to stress this again. If you give it a bad metric, it will very confidently optimize the wrong thing. So here's Arj Karpathi's end vision. In the
+10:5810 minutos e 58 segundosearly 2000s, there was a project set at home that let anyone donate their spare computer power to research for alien
+11:0611 minutos e 6 segundoslife. And Arj Karpathi wants to do the same model, the same idea, but for AI research where we have millions of AI
+11:1311 minutos e 13 segundosagents distributed across thousands of computers and you can actually allocate where that research goes towards. All right, so now let me show you how to
+11:2111 minutos e 21 segundosactually build your own order research loop from scratch. Even if you're a complete beginner, just stick with me for the next five minutes and you'll be
+11:2911 minutos e 29 segundosahead of 99.9% of people in AI who just pay GBT subscription and they think they're advanced. They cannot even dream about having their own auto research.
+11:3811 minutos e 38 segundosBut you are like a couple of steps away from having that. So log in. So first of all, this is the GitHub repo. I'm going to link it below the video. This is the auto research repository from Karpathy.
+11:4711 minutos e 47 segundosI'm going to start it as well because it's a great project. Now, if you are not familiar with GitHub, you don't need to panic. You don't need to understand much. This is just a way to store code.
+11:5611 minutos e 56 segundosOkay? Efficient way to store coding projects. That's all you need to understand. You don't need to be a Git expert, nothing like that. All we need
+12:0412 minutos e 4 segundosto do is click here on the code and click copy here. That's it. Next, you need an IDE. So, either VS Code or cursor. I'm going to be using cursor here. Just install an ID of some sort.
+12:1412 minutos e 14 segundosAnd we're going to use a coding agent.
+12:1512 minutos e 15 segundosI'm going to use cloth code. So, I'm going to open an empty project here.
+12:1912 minutos e 19 segundosBoom. Nothing in here. You can see on the right, no files. And I'm going to launch cloth dangerously skip
+12:2612 minutos e 26 segundospermissions. Boom. Enter. So, here it is. CL code. Now, I'm going to say create a new folder/or original in our
+12:3512 minutos e 35 segundosrepo root level and in there clone this GitHub repository. Boom. Paste it in.
+12:4212 minutos e 42 segundosAnd again, Cloudcore will know what to do exactly. So we will figure out okay everything is empty and then it created original folder and clone it in there.
+12:4912 minutos e 49 segundosNow why did I want to do it? Well because I want to create a separate folder where we're going to build something with auto research for us but I also want to keep the original
+12:5712 minutos e 57 segundosrepository here so that we can use it as a reference. Next I'm going to say now create slash website folder root level
+13:0613 minutos e 6 segundosand in there build the following project XML text boom project. So I have described a clear vision for a simple
+13:1413 minutos e 14 segundosweb app and what I'm want to show you is how you can use auto research to optimize any website you have right whether it's a personal website whether
+13:2113 minutos e 21 segundosit's your AI startup any type of website to optimize the loading times or anything else that you can measure but loading loading times are very easy to
+13:2913 minutos e 29 segundosmeasure so they're a great candidate for an auto research loop so I'm just having cloth code with bypass all permissions
+13:3613 minutos e 36 segundosbuild this so that we can uh build our own auto research loop and in fact while this is running let me launch a Codeex in YOLO mode. Boom. Let me put it here.
+13:4413 minutos e 44 segundosSo, I'm going to rename it so it's clear for you guys what it's what. Codeex CLI.
+13:4913 minutos e 49 segundosGBD 5.4 is actually really good at u fixing and debugging, but cloth code with Opus 4.6 is really incredible to
+13:5713 minutos e 57 segundoswork with, especially with fast mode. I know it costs a lot of money if you do slashfast, but I highly recommend it.
+14:0214 minutos e 2 segundosAnd I also highly recommend it inside of u Codex. And keep it on high. Extra high is usually overkill. So, for codex, I'm going to say create a benchmark. MGS
+14:1114 minutos e 11 segundosfile inside of / original folder where it makes sense. Going to give it the eval instructions. Hand hit enter. Okay.
+14:2014 minutos e 20 segundosActually, first I'm going to say read the structure of the actually that's my bad. It should be in the website here website folder not original because uh
+14:2814 minutos e 28 segundosit should read the original which was the original repo by Karpathi to understand where the evil script should
+14:3614 minutos e 36 segundosbe. Boom. So this is going to use Puppeteer to test the speed locally of this website. Um it we should have the
+14:4514 minutos e 45 segundosproject running on local 3000. Let me see. So basically I asked it to create a simple portfolio website with express and static files. So let's see what it built. Uh here's what it looks like.
+14:5514 minutos e 55 segundosAlex Morgan. Uh just a simple portfolio website. Like you could see this literally like 10 15 years ago. Every website looked like this, right?
+15:0315 minutos e 3 segundosEverybody who like is new to HTML and CSS would have stuff like this in high school and think they're the best website designer. I'm guilty of that as
+15:1115 minutos e 11 segundoswell. But anyways, let's uh see whether Codex finished this. Okay, it did. So,
+15:1615 minutos e 16 segundoswe have the setup. So, now let's understand the repo, right? Remember there are the three main files program MD, train py, and prepare. py. So, the
+15:2515 minutos e 25 segundosoriginal programm looks like this from Karpathy and he wrote this himself and this is a very u useful instruction by the way. Feel free to steal this prompt
+15:3315 minutos e 33 segundosinto many of your agentic projects where you want the agent to keep going forever or as close to forever as possible, but we need to kind of write our own. Okay,
+15:4215 minutos e 42 segundosso let's go back into cloud code and I'm going to tell it what to do to see the into the website folder and to install puppeteer and run this uh baseline
+15:5115 minutos e 51 segundosscript. We're [clears throat] going to benchmark our website of our uh expert Alex Morgan portfolio designer to see
+15:5715 minutos e 57 segundoshow fast or slow this is and then we're going to run auto research to optimize the living out of it. Okay. Okay. Let's see. Okay, we have the results. So,
+16:0616 minutos e 6 segundosPuppeteer ran and it closed the Chrome faster than I could see it or ran it in the background. But basically, we have the medium load time 50 ms uh which is
+16:1616 minutos e 16 segundosuh not that bad. So, we'll see whether auto research can can optimize this.
+16:2016 minutos e 20 segundosOkay. So now the most important part of any auto research loop is the program.md. So I'm going to go into our website folder create a new file
+16:2716 minutos e 27 segundosprogram.md and u this is the main file and actually we can use u inspiration from karpathy say like so read the
+16:3716 minutos e 37 segundosprogramm inside of / original and then build our new website/program.md
+16:4416 minutos e 44 segundosfile on top of that but relevant to our website speed benchmarking auto research
+16:5216 minutos e 52 segundosobjective. Okay, so we're going to borrow Andre Kafis from engineering that he optimized quite heavily for his own project and we're going to have clot
+17:0117 minutos e 1 segundocode rewrite that into our own programm which is going to be relevant to our own project. So again feel free to steal this for whatever you want any business
+17:0917 minutos e 9 segundosuse case any marketing use case any make money use case anything where there's a clear metric you can create your own programm and boom just like that I use
+17:1717 minutos e 17 segundoscloth code to write 128 lines of instructions and to adapt it to this project. So now the programm is highly relevant to this specific project. Okay.
+17:2617 minutos e 26 segundosSo I'm going to say do this next. Give it a clear instruction of what I want cloud code to do to um stage this commit
+17:3417 minutos e 34 segundosthis as a baseline. So remember if an experiment is successful it commits the result into history tweak. If it's not
+17:4217 minutos e 42 segundosit does get reset and try something else. Now I'm going to say read program.
+17:4617 minutos e 46 segundosMD run baseline benchmark first. Record results tsv then begin the experiment loop. Do not stop or ask me anything.
+17:5317 minutos e 53 segundosJust keep running experiments autonomously. And there we go. We have our first auto research loop running. Uh maybe I could have created a separate uh
+18:0118 minutos e 1 segundoagent, you know, separate cloth coder codex. And obviously you can try different agents and see which you know which one performs the best. But uh as
+18:0818 minutos e 8 segundosyou can see it's not so look slightly worse. Looks like noise. Let me rerun to confirm. Still worse. Following protocol revert. Okay. Amazing. So it ran an experiment and the speed of the website
+18:1718 minutos e 17 segundoswas worse. So it's going to try something else. And this is the whole point of auto research. I'm not doing anything. My hands are up. And even if I was doing this, first of all, I would need to be a solid front-end developer.
+18:2718 minutos e 27 segundosAnd second of all, I couldn't do it so quickly, right? So, even if you are a great front end developer and you know how to optimize websites, you're still Okay, now it found an improvement.
+18:3518 minutos e 35 segundosYou're still not going to beat an AI agent that can generate hundreds of tokens per second. So, it found an improvement. Look at it. 33 milliseconds instead of 50. So, we're already down 34% in a matter of less than a minute.
+18:4618 minutos e 46 segundosThis is the power of our research. Okay.
+18:4818 minutos e 48 segundosAnd look at this. Another one. 28 milliseconds. Another 15% improvement in a matter of 2 or 3 minutes, guys. Yeah,
+18:5518 minutos e 55 segundosauto research is insane and I have a feeling that this is not the last video I'm going to make on auto research. So again, if you want me to make more content on auto research, make sure to
+19:0319 minutos e 3 segundossubscribe. And if you are someone who's building his own AI startup, you want to build a real AI business, then listen up because in my accelerator, we work
+19:1019 minutos e 10 segundosclosely with a handful of founders for 6 months to help them scale aggressively.
+19:1419 minutos e 14 segundosAnd in fact, for the rest of March, we are offering free idea validation calls.
+19:1919 minutos e 19 segundosSo, if you have an AI app you want to build and you want to turn it into a real profitable business, then make sure to click the second link in the description, which will take you to the
+19:2719 minutos e 27 segundoslanding page to see if you qualify for a free idea validation call. But again,
+19:3119 minutos e 31 segundosthis is only for serious founders who actually want to build a real AI business. That being said, thank you guys for watching. I'm going to let this auto research loop run for a bit. We're
+19:3919 minutos e 39 segundosalready on 25 milliseconds. That's crazy. Already half in a matter of four minutes. Let's see where this gets. And uh yeah, I'm going to update you on
+19:4819 minutos e 48 segundosTwitter, so make sure to follow me on Twitter and have a great productive
+
+Sincronizar com o momento do vídeo
