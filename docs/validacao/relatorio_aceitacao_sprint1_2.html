@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatório de Aceitação — Sprint 1 e Sprint 2 | Agente de Editais</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-light: #dbeafe;
+      --success: #16a34a;
+      --success-light: #dcfce7;
+      --warning: #ca8a04;
+      --warning-light: #fef9c3;
+      --danger: #dc2626;
+      --surface: #ffffff;
+      --bg: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -1px rgba(0,0,0,.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+      color: #fff;
+      padding: 2.5rem 2rem 2rem;
+      text-align: center;
+    }
+    .site-header .logo { font-size: 2rem; margin-bottom: .5rem; }
+    .site-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: .25rem; }
+    .site-header p  { opacity: .85; font-size: .95rem; }
+    .site-header .meta {
+      display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;
+      margin-top: 1.25rem;
+    }
+    .site-header .meta span {
+      background: rgba(255,255,255,.15);
+      border-radius: 20px;
+      padding: .25rem .85rem;
+      font-size: .82rem;
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex; gap: 2rem; flex-wrap: wrap; align-items: center; justify-content: center;
+    }
+    .summary-bar .stat { text-align: center; }
+    .summary-bar .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+    .summary-bar .stat-label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+
+    /* ── Sprint nav ── */
+    .sprint-nav {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: .75rem 2rem;
+      display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+      position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+    }
+    .sprint-nav a {
+      text-decoration: none; color: var(--text-muted);
+      font-size: .8rem; padding: .3rem .7rem; border-radius: 6px;
+      transition: all .15s;
+    }
+    .sprint-nav a:hover { background: var(--primary-light); color: var(--primary); }
+    .sprint-nav .sep { color: var(--border); }
+
+    /* ── Sprint section header ── */
+    .sprint-header {
+      margin: 2rem 1.5rem .5rem;
+      padding: 1rem 1.5rem;
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    /* ── UC Section ── */
+    section.uc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 1rem 1.5rem;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .uc-head {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+      gap: .75rem;
+      padding: 1rem 1.5rem;
+      background: linear-gradient(90deg, var(--primary-light) 0%, #fff 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .uc-head h2 { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+    .uc-head .uc-obj {
+      font-size: .82rem; color: var(--text-muted); margin-top: .15rem; max-width: 700px;
+    }
+
+    .badge-pass {
+      display: inline-flex; align-items: center; gap: .35rem;
+      background: var(--success-light); color: var(--success);
+      border: 1px solid #bbf7d0;
+      border-radius: 20px; padding: .3rem 1rem; font-size: .8rem; font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .uc-body { padding: 1.25rem 1.5rem; }
+
+    /* Requisitos */
+    .req-block { margin-bottom: 1.5rem; }
+    .req-block h3 {
+      font-size: .8rem; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--text-muted); margin-bottom: .6rem; font-weight: 600;
+    }
+    .req-list { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem; }
+    .req-list li {
+      background: var(--primary-light); color: var(--primary);
+      border: 1px solid #bfdbfe;
+      border-radius: 6px; padding: .25rem .7rem; font-size: .78rem; font-weight: 500;
+    }
+    .req-list li span { font-weight: 700; margin-right: .35rem; }
+
+    /* Sequencia */
+    .seq-block h3 {
+      font-size: .8rem; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--text-muted); margin-bottom: .9rem; font-weight: 600;
+    }
+
+    .passos { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    .passo {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .passo-header {
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      padding: .6rem 1rem;
+      font-size: .82rem; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .passo-header .pnum {
+      background: var(--primary); color: #fff;
+      border-radius: 50%; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .7rem; font-weight: 700; flex-shrink: 0;
+    }
+
+    .screenshots {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+
+    .screenshot-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fafafa;
+    }
+    .screenshot-card img {
+      width: 100%; display: block;
+      max-height: 200px; object-fit: contain;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+    }
+    .screenshot-card .sc-caption {
+      padding: .4rem .6rem;
+      font-size: .72rem; color: var(--text-muted); text-align: center;
+    }
+
+    .no-screenshots {
+      padding: 1rem; color: var(--text-muted); font-size: .82rem; font-style: italic;
+    }
+
+    /* Resultado */
+    .resultado {
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: .75rem 1.5rem;
+      border-top: 1px solid var(--border);
+      background: #f8fafc;
+    }
+
+    /* Print */
+    @media print {
+      .sprint-nav, .site-header .meta { display: none; }
+      section.uc { page-break-inside: avoid; box-shadow: none; }
+      .screenshots { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 640px) {
+      .site-header h1 { font-size: 1.25rem; }
+      .sprint-nav a { font-size: .72rem; }
+      section.uc { margin: .75rem .5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     HEADER
+════════════════════════════════════════ -->
+<header class="site-header">
+  <div class="logo">📋</div>
+  <h1>Relatório de Aceitação — Sprint 1 e Sprint 2</h1>
+  <p>Projeto <strong>facilicita.ia — Agente de Editais</strong></p>
+  <div class="meta">
+    <span>📅 Gerado em: 31/03/2026</span>
+    <span>🔢 UCs cobertos: UC-001 a UC-019</span>
+    <span>✅ 19 de 19 aprovados</span>
+    <span>🖼 Screenshots: runtime/screenshots/</span>
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════
+     SUMMARY
+════════════════════════════════════════ -->
+<div class="summary-bar">
+  <div class="stat"><div class="stat-value">19</div><div class="stat-label">Casos de Uso</div></div>
+  <div class="stat"><div class="stat-value">2</div><div class="stat-label">Sprints</div></div>
+  <div class="stat"><div class="stat-value">19</div><div class="stat-label">Aprovados</div></div>
+  <div class="stat"><div class="stat-value">0</div><div class="stat-label">Reprovados</div></div>
+  <div class="stat"><div class="stat-value">100%</div><div class="stat-label">Taxa de Aprovação</div></div>
+</div>
+
+<!-- ════════════════════════════════════════
+     STICKY NAV
+════════════════════════════════════════ -->
+<nav class="sprint-nav">
+  <strong style="font-size:.78rem;color:var(--primary);margin-right:.25rem;">Sprint 1:</strong>
+  <a href="#uc-001">UC-001</a>
+  <a href="#uc-002">UC-002</a>
+  <a href="#uc-003">UC-003</a>
+  <a href="#uc-004">UC-004</a>
+  <a href="#uc-005">UC-005</a>
+  <a href="#uc-006">UC-006</a>
+  <a href="#uc-007">UC-007</a>
+  <a href="#uc-008">UC-008</a>
+  <a href="#uc-009">UC-009</a>
+  <a href="#uc-010">UC-010</a>
+  <a href="#uc-011">UC-011</a>
+  <a href="#uc-012">UC-012</a>
+  <span class="sep">|</span>
+  <strong style="font-size:.78rem;color:var(--primary);margin-right:.25rem;">Sprint 2:</strong>
+  <a href="#uc-013">UC-013</a>
+  <a href="#uc-014">UC-014</a>
+  <a href="#uc-015">UC-015</a>
+  <a href="#uc-016">UC-016</a>
+  <a href="#uc-017">UC-017</a>
+  <a href="#uc-018">UC-018</a>
+  <a href="#uc-019">UC-019</a>
+</nav>
+
+
+<!-- ════════════════════════════════════════
+     SPRINT 1
+════════════════════════════════════════ -->
+<div class="sprint-header">Sprint 1 — Módulos: Autenticação, Empresa, Portfolio, Parametrizações e Dashboard (UC-001 a UC-012)</div>
+
+<!-- ──────────────────────────────────────
+     UC-001
+────────────────────────────────────── -->
+<section class="uc" id="uc-001">
+  <div class="uc-head">
+    <div>
+      <h2>UC-001 — Login e Autenticação</h2>
+      <div class="uc-obj">Permitir que o usuário acesse o sistema informando credenciais (email/senha), obtendo token JWT que autoriza o acesso a todas as funcionalidades protegidas.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-059</span>Autenticação e Multi-tenancy — login com email/senha, JWT, refresh token, redirecionamento para Dashboard</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Usuário acessa a tela de login / Exibe formulário</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P01_tela_login.png" alt="P01 tela login">
+              <div class="sc-caption">P01 — Tela de login carregada</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02–P03 — Preenchimento de email e senha</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P02_email_preenchido.png" alt="P02 email">
+              <div class="sc-caption">P02 — Email preenchido</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P03_senha_preenchida.png" alt="P03 senha">
+              <div class="sc-caption">P03 — Senha preenchida</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P04_loading.png" alt="P04 loading">
+              <div class="sc-caption">P04 — Estado de carregamento (submit)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05 — Sistema autentica e redireciona para Dashboard</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P05_dashboard_apos_login.png" alt="P05 dashboard">
+              <div class="sc-caption">P05 — Dashboard carregado após login</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FE01 — Fluxo de Exceção: credenciais inválidas</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/P06_erro_credenciais.png" alt="FE01 erro">
+              <div class="sc-caption">FE01 — Mensagem de erro exibida</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>FA01 — Fluxo Alternativo: criar conta</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/FA01_antes_criar_conta.png" alt="FA01 antes">
+              <div class="sc-caption">FA01 — Link "Criar conta" visível</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-001/FA01_register_page.png" alt="FA01 register">
+              <div class="sc-caption">FA01 — Tela de registro</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-002
+────────────────────────────────────── -->
+<section class="uc" id="uc-002">
+  <div class="uc-head">
+    <div>
+      <h2>UC-002 — Cadastro de Empresa</h2>
+      <div class="uc-obj">Permitir que o usuário cadastre e mantenha os dados cadastrais da empresa (CNPJ, razão social, nome fantasia, endereço, contatos e redes sociais).</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-001</span>Cadastro de dados da empresa — CNPJ, razão social, endereço, contatos</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Usuário acessa menu "Empresa" / Tela carregada</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/P01_tela_empresa.png" alt="P01 tela empresa">
+              <div class="sc-caption">P01 — Tela Empresa</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/P01_empresa_carregada.png" alt="P01 empresa carregada">
+              <div class="sc-caption">P01 — Empresa carregada com dados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>FA01 — Campos e seções do formulário visíveis</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/FA01_campos_formulario.png" alt="FA01 campos">
+              <div class="sc-caption">FA01 — Campos do formulário</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/FA01_secoes_empresa.png" alt="FA01 secoes">
+              <div class="sc-caption">FA01 — Seções da EmpresaPage</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P06 — Salvar e confirmar persistência</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/P05_salvo_sucesso.png" alt="P05 salvo">
+              <div class="sc-caption">P05 — Confirmação de salvo com sucesso</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-002/P06_listagem_atualizada.png" alt="P06 listagem">
+              <div class="sc-caption">P06 — Listagem atualizada</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-003
+────────────────────────────────────── -->
+<section class="uc" id="uc-003">
+  <div class="uc-head">
+    <div>
+      <h2>UC-003 — Gestão de Documentos da Empresa</h2>
+      <div class="uc-obj">Permitir upload, visualização, organização e gestão de documentos da empresa (contrato social, alvarás, certidões), com controle de validade e status.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-004</span>Upload e gestão de documentos da empresa com categorização e controle de validade</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Acessar aba "Documentos"</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P01_aba_documentos.png" alt="P01 aba documentos">
+              <div class="sc-caption">P01 — Aba Documentos da Empresa</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P02_secao_documentos.png" alt="P02 secao">
+              <div class="sc-caption">P02 — Seção de documentos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02–P03 — Abrir modal de upload e selecionar arquivo</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P02_modal_upload.png" alt="P02 modal">
+              <div class="sc-caption">P02 — Modal de upload aberto</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P03_modal_aberto.png" alt="P03 modal aberto">
+              <div class="sc-caption">P03 — Modal com arquivo selecionado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P03_arquivo_selecionado.png" alt="P03 arquivo">
+              <div class="sc-caption">P03 — Arquivo selecionado</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P04–P05 — Definir tipo e validade do documento</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P04_tipo_selecionado.png" alt="P04 tipo">
+              <div class="sc-caption">P04 — Tipo de documento selecionado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P05_validade.png" alt="P05 validade">
+              <div class="sc-caption">P05 — Data de validade preenchida</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P06–P07 — Documento salvo e listado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P06_listagem_documentos.png" alt="P06 listagem">
+              <div class="sc-caption">P06 — Listagem de documentos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P07_listagem_com_documento.png" alt="P07 documento">
+              <div class="sc-caption">P07 — Documento adicionado à listagem</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>Pré-upload — estado antes de fazer upload</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P03_antes_upload.png" alt="antes upload">
+              <div class="sc-caption">Estado antes do upload</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-003/P02_apos_modal.png" alt="apos modal">
+              <div class="sc-caption">Estado após fechar modal</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-004
+────────────────────────────────────── -->
+<section class="uc" id="uc-004">
+  <div class="uc-head">
+    <div>
+      <h2>UC-004 — Busca Automática de Certidões</h2>
+      <div class="uc-obj">Solicitar busca automática de certidões (INSS, FGTS, tributos federais) em portais governamentais, com resolução de CAPTCHAs, obtendo documentos e status de validade.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-002</span>Busca automática de certidões via browser headless com resolução de CAPTCHA (CAPSolver)</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Acessar aba "Certidões" / Botão de busca visível</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P01_aba_certidoes.png" alt="P01 certidoes">
+              <div class="sc-caption">P01 — Aba Certidões Automáticas</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P01_secao_certidoes.png" alt="P01 secao">
+              <div class="sc-caption">P01 — Seção Certidões</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P01_botao_buscar.png" alt="P01 botao">
+              <div class="sc-caption">P01 — Botão "Buscar Certidões"</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Busca iniciada / Streaming de progresso</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P02_antes_busca.png" alt="P02 antes">
+              <div class="sc-caption">P02 — Estado antes da busca</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P02_buscando.png" alt="P02 buscando">
+              <div class="sc-caption">P02 — Buscando (status streaming)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P04–P05 — Resultado e status de validade</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P04_resultado_busca.png" alt="P04 resultado">
+              <div class="sc-caption">P04 — Resultado da busca</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/P05_status_validade.png" alt="P05 validade">
+              <div class="sc-caption">P05 — Status e validade das certidões</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FA01 — Modal de certidão / detalhes</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-004/FA01_apos_modal.png" alt="FA01 modal">
+              <div class="sc-caption">FA01 — Após interação com modal</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-005
+────────────────────────────────────── -->
+<section class="uc" id="uc-005">
+  <div class="uc-head">
+    <div>
+      <h2>UC-005 — Cadastro de Responsáveis</h2>
+      <div class="uc-obj">Permitir o cadastro e gestão dos responsáveis da empresa (representantes legais, prepostos e responsáveis técnicos) com dados de identificação e contato.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-003</span>CRUD de responsáveis da empresa com tipos predefinidos (Representante Legal, Preposto, Responsável Técnico)</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Acessar aba "Responsáveis"</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P01_aba_responsaveis.png" alt="P01">
+              <div class="sc-caption">P01 — Aba Responsáveis</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P01_secao_responsaveis.png" alt="P01 secao">
+              <div class="sc-caption">P01 — Seção de Responsáveis</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02–P03 — Abrir formulário e preencher nome</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P02_formulario_novo.png" alt="P02 form">
+              <div class="sc-caption">P02 — Formulário novo responsável</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P03_nome.png" alt="P03 nome">
+              <div class="sc-caption">P03 — Nome preenchido</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P06 — Formulário completo e salvo</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P05_formulario_completo.png" alt="P05">
+              <div class="sc-caption">P05 — Formulário preenchido completo</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P06_salvo.png" alt="P06">
+              <div class="sc-caption">P06 — Responsável salvo</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/P07_listagem.png" alt="P07">
+              <div class="sc-caption">P07 — Listagem de responsáveis</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FE01 — Dropdown de tipo de responsável</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/FE01_modal_dropdown.png" alt="FE01 dropdown">
+              <div class="sc-caption">FE01 — Dropdown tipo responsável</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-005/FE01_opcoes_tipo.png" alt="FE01 opcoes">
+              <div class="sc-caption">FE01 — Opções de tipo disponíveis</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-006
+────────────────────────────────────── -->
+<section class="uc" id="uc-006">
+  <div class="uc-head">
+    <div>
+      <h2>UC-006 — Listar, Filtrar e Inspecionar Produtos</h2>
+      <div class="uc-obj">Permitir listagem, filtragem e inspeção dos produtos do portfólio com visualização de detalhe completo (classificação, NCM, preço de referência, especificações e metadados).</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-008</span>Listagem e filtro de produtos do portfólio com hierarquia Área → Classe → Subclasse</li>
+        <li><span>RF-010</span>Visualização de detalhe completo com score de completude e metadados de captação</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Acessar portfólio / Aba "Meus Produtos"</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P01_meus_produtos.png" alt="P01 meus produtos">
+              <div class="sc-caption">P01 — Aba Meus Produtos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P01_portfolio.png" alt="P01 portfolio">
+              <div class="sc-caption">P01 — Portfólio geral</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Filtro aplicado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P02_filtro_aplicado.png" alt="P02 filtro">
+              <div class="sc-caption">P02 — Filtro aplicado na listagem</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P03–P05 — Abrir detalhe do produto</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P03_antes_detalhe.png" alt="P03 antes">
+              <div class="sc-caption">P03 — Antes de abrir detalhe</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P03_dados_basicos.png" alt="P03 dados">
+              <div class="sc-caption">P03 — Dados básicos do produto</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P04_classificacao.png" alt="P04 classificacao">
+              <div class="sc-caption">P04 — Classificação Área/Classe/Subclasse</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P05_metadados.png" alt="P05 metadados">
+              <div class="sc-caption">P05 — Metadados de captação</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P06 — Listagem final de produtos</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-006/P06_listagem.png" alt="P06 listagem">
+              <div class="sc-caption">P06 — Listagem completa de produtos</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-007
+────────────────────────────────────── -->
+<section class="uc" id="uc-007">
+  <div class="uc-head">
+    <div>
+      <h2>UC-007 — Upload de Manual com Extração por IA</h2>
+      <div class="uc-obj">Fazer upload de documento técnico (manual, IFU, folder, NF) ou informar URL de fabricante para que a IA DeepSeek extraia especificações e cadastre o produto no portfólio.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-010</span>Cadastro assistido por IA — upload de documento técnico e extração automática de especificações via DeepSeek</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Acessar aba "Cadastro por IA"</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P01_aba_cadastro_ia.png" alt="P01 aba IA">
+              <div class="sc-caption">P01 — Aba Cadastro por IA</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Selecionar tipo de documento</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P02_antes_select.png" alt="P02 antes">
+              <div class="sc-caption">P02 — Antes de selecionar tipo</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P02_tipo_documento_selecionado.png" alt="P02 tipo">
+              <div class="sc-caption">P02 — Tipo de documento selecionado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P02_tipo_selecionado.png" alt="P02 selecionado">
+              <div class="sc-caption">P02 — Tipo confirmado</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P04 — Antes de processar com IA</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P04_antes_processar.png" alt="P04 antes">
+              <div class="sc-caption">P04 — Formulário pronto para processar</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FA01 — Campo URL para website de fabricante</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/FA01_campo_url.png" alt="FA01 url">
+              <div class="sc-caption">FA01 — Campo URL visível para tipo Website</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>P08 — Produto cadastrado aparece na listagem</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-007/P08_produto_na_listagem.png" alt="P08">
+              <div class="sc-caption">P08 — Produto extraído na listagem</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-008
+────────────────────────────────────── -->
+<section class="uc" id="uc-008">
+  <div class="uc-head">
+    <div>
+      <h2>UC-008 — Gestão de Especificações Técnicas, Reprocessamento e Completude</h2>
+      <div class="uc-obj">Editar especificações técnicas do produto (campos da máscara da subclasse), solicitar reprocessamento por IA e verificar o score de completude técnica.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-008</span>Edição de especificações técnicas estruturadas por máscara de subclasse</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Lista de produtos com ScoreBar</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-008/P01_lista_produtos_scorebar.png" alt="P01 scorebar">
+              <div class="sc-caption">P01 — Listagem com ScoreBar de completude</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Antes de selecionar produto</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-008/P02_antes_selecionar.png" alt="P02 antes">
+              <div class="sc-caption">P02 — Antes de selecionar produto</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P06 — Salvo em modo visualização / ScoreBar atualizado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-008/P05_salvo_modo_visualizacao.png" alt="P05">
+              <div class="sc-caption">P05 — Especificações salvas em modo visualização</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-008/P06_scorebar_atualizado.png" alt="P06">
+              <div class="sc-caption">P06 — ScoreBar atualizado após edição</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-009
+────────────────────────────────────── -->
+<section class="uc" id="uc-009">
+  <div class="uc-head">
+    <div>
+      <h2>UC-009 — Metadados de Captação e Classificação no Funil</h2>
+      <div class="uc-obj">Reprocessar metadados de captação (CATMAT, CATSER, termos de busca) e consultar a árvore de classificação com o funil de monitoramento de mercado.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-013</span>Criação e gestão de classes e subclasses com máscara de campos técnicos</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Aba Classificação / Árvore de classificação</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-009/P01_aba_classificacao_arvore.png" alt="P01 arvore">
+              <div class="sc-caption">P01 — Aba Classificação com árvore</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Após reprocessar metadados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-009/P02_apos_reprocessar.png" alt="P02 reprocessar">
+              <div class="sc-caption">P02 — Após reprocessar metadados de captação</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P04 — Antes de expandir nó da árvore</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-009/P04_antes_expandir.png" alt="P04">
+              <div class="sc-caption">P04 — Antes de expandir nó da hierarquia</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P07 — Hierarquia completa expandida</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-009/P07_hierarquia_completa.png" alt="P07 hierarquia">
+              <div class="sc-caption">P07 — Hierarquia Área → Classe → Subclasse completa</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-010
+────────────────────────────────────── -->
+<section class="uc" id="uc-010">
+  <div class="uc-head">
+    <div>
+      <h2>UC-010 — Configuração de Fontes de Editais</h2>
+      <div class="uc-obj">Permitir ao administrador configurar as fontes de editais (PNCP API, Brave Search scraper), ativar/desativar fontes e definir palavras-chave e NCMs de busca.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-015</span>Configuração de fontes de busca de editais com flag ativa/inativa e tipo api/scraper</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Parametrizações / Fontes de Busca</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P01_parametrizacoes_fontes.png" alt="P01 fontes">
+              <div class="sc-caption">P01 — Aba Fontes de Busca</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P01_parametrizacoes.png" alt="P01 parametrizacoes">
+              <div class="sc-caption">P01 — Página Parametrizações</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Badges de tipo de fonte e lista de status</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P02_badges_tipo_fonte.png" alt="P02 badges">
+              <div class="sc-caption">P02 — Badges tipo API / Scraper</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P02_lista_fontes_status.png" alt="P02 status">
+              <div class="sc-caption">P02 — Lista de fontes com status</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P03 — Toggle de ativação / configuração final</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P03_antes_toggle.png" alt="P03 antes">
+              <div class="sc-caption">P03 — Antes de acionar toggle</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P03_configuracao_final.png" alt="P03 final">
+              <div class="sc-caption">P03 — Configuração final de fontes</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P04 / P06 — Palavras-chave e NCMs configurados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P04_palavras_chave.png" alt="P04 palavras">
+              <div class="sc-caption">P04 — Palavras-chave configuradas</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-010/P06_ncms.png" alt="P06 ncms">
+              <div class="sc-caption">P06 — NCMs de busca configurados</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-011
+────────────────────────────────────── -->
+<section class="uc" id="uc-011">
+  <div class="uc-head">
+    <div>
+      <h2>UC-011 — Configuração de Parâmetros de Score, Comercial e Notificações</h2>
+      <div class="uc-obj">Configurar pesos das dimensões de score, limiares GO/NO-GO, parâmetros comerciais/logísticos, regiões de atuação e preferências de notificação que influenciam a validação de editais.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-018</span>Configuração de pesos das 6 dimensões de score (técnico, comercial, documental, complexidade, jurídico, logístico)</li>
+        <li><span>RF-016</span>Limiares de decisão GO/NO-GO parametrizáveis com notificações e preferências globais</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Seção Score / Pesos atuais</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P01_secao_score_pesos.png" alt="P01 score">
+              <div class="sc-caption">P01 — Seção Score com pesos atuais</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P02_pesos_atuais.png" alt="P02 pesos">
+              <div class="sc-caption">P02 — Pesos configurados das dimensões</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02 — Limiares GO/NO-GO e peso alterado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P02_limiares_go_nogo.png" alt="P02 limiares">
+              <div class="sc-caption">P02 — Limiares GO / NO-GO</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P02_peso_alterado.png" alt="P02 alterado">
+              <div class="sc-caption">P02 — Peso alterado em edição</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P03–P04 — Parâmetros comerciais e pesos salvos</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P03_parametros_comerciais.png" alt="P03 comercial">
+              <div class="sc-caption">P03 — Parâmetros comerciais</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P04_pesos_salvos.png" alt="P04 salvos">
+              <div class="sc-caption">P04 — Pesos salvos com sucesso</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P04_estados_atuacao.png" alt="P04 estados">
+              <div class="sc-caption">P04 — Estados de atuação configurados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P05–P06 — Parâmetros comerciais e custos salvos</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P05_comercial_preenchido.png" alt="P05 comercial">
+              <div class="sc-caption">P05 — Comercial preenchido</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P05_custos_salvos.png" alt="P05 custos">
+              <div class="sc-caption">P05 — Custos salvos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/P06_salvo_com_sucesso.png" alt="P06 sucesso">
+              <div class="sc-caption">P06 — Configuração salva com sucesso</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>FA02 — Notificações configuradas</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-011/FA02_notificacoes.png" alt="FA02">
+              <div class="sc-caption">FA02 — Notificações e preferências</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-012
+────────────────────────────────────── -->
+<section class="uc" id="uc-012">
+  <div class="uc-head">
+    <div>
+      <h2>UC-012 — Dashboard Geral</h2>
+      <div class="uc-obj">Fornecer visão consolidada em tempo real do estado de todos os editais e processos licitatórios, incluindo KPIs, funil de vendas, editais urgentes, status do scheduler e notificações.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-047</span>Dashboard com KPIs consolidados, funil de vendas e editais urgentes</li>
+        <li><span>RF-048</span>Status do scheduler de monitoramento automático com indicador de notificações não lidas</li>
+        <li><span>RF-049</span>Busca rápida no Dashboard com navegação para módulos</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01 — Dashboard carregado após login / via menu</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P01_dashboard_completo.png" alt="P01 dashboard">
+              <div class="sc-caption">P01 — Dashboard completo</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P01_dashboard_via_menu.png" alt="P01 menu">
+              <div class="sc-caption">P01 — Dashboard acessado via menu</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P02–P03 — KPIs e funil de vendas</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P02_kpis_cards.png" alt="P02 kpis">
+              <div class="sc-caption">P02 — KPI cards (em análise, propostas, ganhos)</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P03_funil_vendas.png" alt="P03 funil">
+              <div class="sc-caption">P03 — Funil de vendas (6 etapas)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P04–P05 — Editais urgentes e status bar</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P04_editais_urgentes.png" alt="P04 urgentes">
+              <div class="sc-caption">P04 — Editais urgentes com prazos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P05_status_bar.png" alt="P05 status">
+              <div class="sc-caption">P05 — Status bar com contadores rápidos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P06–P08 — Scheduler, notificações e busca rápida</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P06_scheduler_status.png" alt="P06 scheduler">
+              <div class="sc-caption">P06 — Status do scheduler de monitoramento</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P07_notificacoes_icone.png" alt="P07 icone">
+              <div class="sc-caption">P07 — Ícone Bell com badge de notificações</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P07_notificacoes_abertas.png" alt="P07 abertas">
+              <div class="sc-caption">P07 — Painel de notificações aberto</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/P08_busca_rapida.png" alt="P08 busca">
+              <div class="sc-caption">P08 — Busca rápida no Dashboard</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>FA01 / FE01 — Dashboard vazio e redirecionamento sem auth</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/FA01_dashboard_vazio.png" alt="FA01">
+              <div class="sc-caption">FA01 — Dashboard sem dados cadastrados</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-012/FE01_redirect_login.png" alt="FE01">
+              <div class="sc-caption">FE01 — Redirecionamento para login (sem auth)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ════════════════════════════════════════
+     SPRINT 2
+════════════════════════════════════════ -->
+<div class="sprint-header">Sprint 2 — Módulos: Captação e Validação (UC-013 a UC-019)</div>
+
+
+<!-- ──────────────────────────────────────
+     UC-013
+────────────────────────────────────── -->
+<section class="uc" id="uc-013">
+  <div class="uc-head">
+    <div>
+      <h2>UC-013 — Buscar Editais por Termo</h2>
+      <div class="uc-obj">Buscar editais de licitação em múltiplas fontes (PNCP Search API + Brave/Serper scraper) a partir de palavras-chave, exibindo resultados consolidados com score de aderência ao portfólio.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-019</span>Busca multifonte de editais via PNCP Search API + Brave Search scraper</li>
+        <li><span>RF-021</span>Score de aderência ao portfólio calculado automaticamente por resultado de busca</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Dashboard pós-login / Módulo Captação inicial</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P01_dashboard_pos_login.png" alt="P01">
+              <div class="sc-caption">P01 — Dashboard após login</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P02_captacao_inicial.png" alt="P02">
+              <div class="sc-caption">P02 — Tela Captação inicial</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P03–P04 — Preencher termo e configurar busca</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P03_termo_preenchido_fallback.png" alt="P03 termo">
+              <div class="sc-caption">P03 — Termo de busca preenchido</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P04_antes_busca.png" alt="P04 antes">
+              <div class="sc-caption">P04 — Antes de clicar em "Buscar Editais"</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P06 — Busca iniciada / Resultados carregados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P05_busca_iniciada.png" alt="P05 busca">
+              <div class="sc-caption">P05 — Busca em andamento</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P06_resultados_carregados.png" alt="P06 resultados">
+              <div class="sc-caption">P06 — Resultados carregados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P08–P10 — StatCards e tabela final</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P08_statcards.png" alt="P08 statcards">
+              <div class="sc-caption">P08 — StatCards com métricas da busca</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/P10_tabela_final.png" alt="P10 tabela">
+              <div class="sc-caption">P10 — Tabela final de resultados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>FA04 — Busca sem resultados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/FA04_antes_busca_vazia.png" alt="FA04 vazia">
+              <div class="sc-caption">FA04 — Antes de busca sem resultados</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-013/FA04_sem_resultados.png" alt="FA04 sem">
+              <div class="sc-caption">FA04 — Mensagem de sem resultados</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-014
+────────────────────────────────────── -->
+<section class="uc" id="uc-014">
+  <div class="uc-head">
+    <div>
+      <h2>UC-014 — Explorar Resultados e Painel Lateral do Edital</h2>
+      <div class="uc-obj">Explorar resultados de busca com filtros combinados (UF, modalidade, período, faixa de valor) e visualizar detalhes completos do edital no painel lateral (score, itens, recomendação, ações).</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-021</span>Filtros cumulativos na DataTable (UF, categoria, modalidade, período, faixa de valor)</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Busca iniciada / Resultados disponíveis</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P01_busca_iniciada.png" alt="P01">
+              <div class="sc-caption">P01 — Busca iniciada</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P02_resultados_disponiveis.png" alt="P02">
+              <div class="sc-caption">P02 — Resultados disponíveis na tabela</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P04–P05 — Painel lateral aberto / Dados do edital</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P04_painel_lateral_aberto.png" alt="P04 painel">
+              <div class="sc-caption">P04 — Painel lateral aberto</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P05_dados_edital_painel.png" alt="P05 dados">
+              <div class="sc-caption">P05 — Dados do edital no painel lateral</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P06–P07 — Filtro UF aplicado / Estado final</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P06_filtro_uf_fallback.png" alt="P06 filtro">
+              <div class="sc-caption">P06 — Filtro UF aplicado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-014/P07_estado_final.png" alt="P07 final">
+              <div class="sc-caption">P07 — Estado final após filtros</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-015
+────────────────────────────────────── -->
+<section class="uc" id="uc-015">
+  <div class="uc-head">
+    <div>
+      <h2>UC-015 — Salvar Editais, Definir Estratégia e Exportar Resultados</h2>
+      <div class="uc-obj">Persistir editais no banco (individual ou em lote), definir estratégia comercial (intenção, margem, variação) e exportar resultados em CSV ou relatório completo.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-023</span>Salvamento de editais com verificação de duplicidade e persistência de estratégia comercial</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Resultados disponíveis / Painel lateral</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P01_resultados_disponiveis.png" alt="P01">
+              <div class="sc-caption">P01 — Resultados prontos para salvar</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P02_painel_lateral.png" alt="P02">
+              <div class="sc-caption">P02 — Painel lateral com ações</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P03–P04 — Antes de salvar / Após salvar</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P03_antes_salvar.png" alt="P03 antes">
+              <div class="sc-caption">P03 — Antes de clicar "Salvar Edital"</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P04_apos_salvar.png" alt="P04 apos">
+              <div class="sc-caption">P04 — Após salvar — edital persistido</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P06 — Badge "Salvo" e estratégia salva</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P05_badge_salvo.png" alt="P05 badge">
+              <div class="sc-caption">P05 — Badge "Salvo" no edital</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/P06_estrategia_salva.png" alt="P06 estrategia">
+              <div class="sc-caption">P06 — Estratégia comercial salva</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FA02–FA03 — Intenção estratégica e exportação</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/FA02_intencao_estrategica.png" alt="FA02">
+              <div class="sc-caption">FA02 — Radio de intenção estratégica</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/FA03_resultados_para_export.png" alt="FA03 export">
+              <div class="sc-caption">FA03 — Resultados prontos para exportar</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-015/FA03_apos_exportar.png" alt="FA03 apos">
+              <div class="sc-caption">FA03 — Após exportar CSV</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-016
+────────────────────────────────────── -->
+<section class="uc" id="uc-016">
+  <div class="uc-head">
+    <div>
+      <h2>UC-016 — Calcular Scores Multidimensionais e Decidir GO/NO-GO</h2>
+      <div class="uc-obj">Na aba "Aderência" da ValidacaoPage, calcular scores em 6 dimensões via IA DeepSeek, exibir score geral, recomendação, pontos positivos/atenção e registrar decisão GO/NO-GO com justificativa.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-028</span>Cálculo de score multidimensional (6 dimensões) com ScoreCircle e ScoreBar</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Validação inicial / Lista de editais</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P01_validacao_inicial.png" alt="P01">
+              <div class="sc-caption">P01 — Tela Validação inicial</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P02_lista_editais.png" alt="P02">
+              <div class="sc-caption">P02 — Lista de editais salvos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P03–P04 — Edital selecionado / Aba Aderência</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P03_edital_selecionado.png" alt="P03">
+              <div class="sc-caption">P03 — Edital selecionado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P04_aba_aderencia.png" alt="P04">
+              <div class="sc-caption">P04 — Aba Aderência</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P05–P07 — Calcular scores / Scores em cálculo / Calculados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P05_antes_calcular_scores.png" alt="P05">
+              <div class="sc-caption">P05 — Antes de calcular scores</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P06_scores_em_calculo.png" alt="P06 calc">
+              <div class="sc-caption">P06 — Scores sendo calculados</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P07_scores_calculados.png" alt="P07 scores">
+              <div class="sc-caption">P07 — Scores calculados e exibidos</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P06 / P08 — Aderência com decisão / ScoreCircle e pontos</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P06_aba_aderencia_decisao.png" alt="P06 decisao">
+              <div class="sc-caption">P06 — Aba Aderência com bloco de decisão</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P08_score_circle_bars.png" alt="P08 circle">
+              <div class="sc-caption">P08 — ScoreCircle + ScoreBars das 6 dimensões</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P09_pontos_positivos_atencao.png" alt="P09 pontos">
+              <div class="sc-caption">P09 — Pontos positivos e de atenção</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>P07–P09 — Decisão GO registrada com justificativa</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P07_botao_go_clicado.png" alt="P07 go">
+              <div class="sc-caption">P07 — Botão GO clicado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P08_justificativa_preenchida.png" alt="P08 justif">
+              <div class="sc-caption">P08 — Justificativa preenchida</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-016/P09_decisao_registrada.png" alt="P09 decisao">
+              <div class="sc-caption">P09 — Decisão GO/NO-GO registrada</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-017
+────────────────────────────────────── -->
+<section class="uc" id="uc-017">
+  <div class="uc-head">
+    <div>
+      <h2>UC-017 — Importar Lotes, Confrontar Documentação e Analisar Riscos</h2>
+      <div class="uc-obj">Cobrir três abas da ValidacaoPage: (1) aba "Lotes" — importar itens do PNCP e extrair lotes via IA; (2) aba "Documentos" — confrontar documentação necessária; (3) aba "Riscos" — analisar riscos, atas, vencedores e concorrentes.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-029</span>Importação de itens do PNCP e extração de lotes via IA DeepSeek</li>
+        <li><span>RF-031</span>Confronto documental com checklist de certidões e atestados obrigatórios</li>
+        <li><span>RF-032</span>Análise de riscos do edital (cláusulas restritivas, impugnações, histórico)</li>
+        <li><span>RF-033</span>Busca de atas, vencedores e preços históricos via PNCP API</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Edital selecionado / Aba Lotes</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P01_edital_selecionado.png" alt="P01">
+              <div class="sc-caption">P01 — Edital selecionado para validação</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P02_aba_lotes.png" alt="P02">
+              <div class="sc-caption">P02 — Aba Lotes aberta</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P03–P06 — Buscar itens / Importar / Extrair lotes via IA</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P03_antes_buscar_itens.png" alt="P03">
+              <div class="sc-caption">P03 — Antes de buscar itens</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P04_itens_importados.png" alt="P04">
+              <div class="sc-caption">P04 — Itens importados do PNCP</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P05_extracao_lotes_iniciada.png" alt="P05">
+              <div class="sc-caption">P05 — Extração de lotes iniciada</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P06_lotes_extraidos.png" alt="P06">
+              <div class="sc-caption">P06 — Lotes extraídos pela IA</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P07–P10 — Reprocessar / Aba Documentos / Identificar / Identificados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P07_reprocessar.png" alt="P07">
+              <div class="sc-caption">P07 — Botão Reprocessar lotes</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P08_aba_documentos.png" alt="P08">
+              <div class="sc-caption">P08 — Aba Documentos aberta</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P09_antes_identificar_docs.png" alt="P09">
+              <div class="sc-caption">P09 — Antes de identificar documentos exigidos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P10_documentos_identificados.png" alt="P10">
+              <div class="sc-caption">P10 — Documentos exigidos identificados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>P12–P15 — Certidões verificadas / Riscos analisados</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P12_certidoes_verificadas.png" alt="P12">
+              <div class="sc-caption">P12 — Certidões verificadas</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P13_aba_riscos.png" alt="P13">
+              <div class="sc-caption">P13 — Aba Riscos aberta</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P14_antes_analisar_riscos.png" alt="P14">
+              <div class="sc-caption">P14 — Antes de analisar riscos</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P15_riscos_analisados.png" alt="P15">
+              <div class="sc-caption">P15 — Riscos analisados e listados</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>P16–P17 — Atas rebuscadas / Vencedores e preços</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P16_atas_rebuscadas.png" alt="P16">
+              <div class="sc-caption">P16 — Atas do órgão rebuscadas</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-017/P17_vencedores_precos.png" alt="P17">
+              <div class="sc-caption">P17 — Vencedores e preços históricos</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-018
+────────────────────────────────────── -->
+<section class="uc" id="uc-018">
+  <div class="uc-head">
+    <div>
+      <h2>UC-018 — Análise de Mercado via IA</h2>
+      <div class="uc-obj">Executar análise de mercado e concorrência para um edital, identificando sinais de mercado, histórico de vencedores do órgão, estimativa de concorrentes, tendências de preços e riscos competitivos.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-033</span>Análise de mercado via IA com histórico de vencedores, reputação do órgão e estimativa de concorrentes</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P03 — Validação inicial / Lista / Edital selecionado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P01_validacao_inicial.png" alt="P01">
+              <div class="sc-caption">P01 — Tela validação inicial</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P02_lista_editais.png" alt="P02">
+              <div class="sc-caption">P02 — Lista de editais</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P03_edital_selecionado.png" alt="P03">
+              <div class="sc-caption">P03 — Edital selecionado</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P04–P06 — Aba Mercado / Antes de analisar / Análise iniciada</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P04_aba_mercado.png" alt="P04">
+              <div class="sc-caption">P04 — Aba Mercado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P05_antes_analisar_mercado.png" alt="P05">
+              <div class="sc-caption">P05 — Antes de clicar "Analisar Mercado"</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P06_analise_iniciada.png" alt="P06">
+              <div class="sc-caption">P06 — Análise de mercado iniciada</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P07 — Análise de mercado completa</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P07_analise_mercado_completa.png" alt="P07">
+              <div class="sc-caption">P07 — Análise de mercado completa</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P07b_todos_cards_mercado.png" alt="P07b">
+              <div class="sc-caption">P07b — Todos os cards de mercado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-018/P07c_reanalisar_mercado.png" alt="P07c">
+              <div class="sc-caption">P07c — Botão "Reanalisar Mercado"</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ──────────────────────────────────────
+     UC-019
+────────────────────────────────────── -->
+<section class="uc" id="uc-019">
+  <div class="uc-head">
+    <div>
+      <h2>UC-019 — Listar Editais Salvos, Selecionar e Usar IA na Validação</h2>
+      <div class="uc-obj">Listar e selecionar editais salvos na ValidacaoPage e usar a IA na aba "IA" para geração de resumo, perguntas livres, requisitos técnicos e classificação de edital.</div>
+    </div>
+    <span class="badge-pass">✅ APROVADO</span>
+  </div>
+  <div class="uc-body">
+    <div class="req-block">
+      <h3>Requisitos Implementados</h3>
+      <ul class="req-list">
+        <li><span>RF-027</span>Listagem e seleção de editais salvos com filtro por status (novo, avaliando, go, nogo)</li>
+        <li><span>RF-037</span>Aba "IA" na validação — geração de resumo, perguntas livres e ações rápidas via DeepSeek</li>
+      </ul>
+    </div>
+    <div class="seq-block">
+      <h3>Sequência de Eventos Validada</h3>
+      <div class="passos">
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">1</span>P01–P02 — Tela de validação / Tabela de editais</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P01_validacao_page.png" alt="P01">
+              <div class="sc-caption">P01 — Página Validação</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P02_tabela_editais.png" alt="P02">
+              <div class="sc-caption">P02 — Tabela "Meus Editais"</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">2</span>P03–P05 — Filtro por status / Antes de selecionar / Edital selecionado</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P03_filtro_status.png" alt="P03 filtro">
+              <div class="sc-caption">P03 — Filtro de status aplicado</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P03_filtro_status_fallback.png" alt="P03 fallback">
+              <div class="sc-caption">P03 — Filtro status (fallback)</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P04_antes_selecionar.png" alt="P04">
+              <div class="sc-caption">P04 — Antes de selecionar edital</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P05_edital_selecionado.png" alt="P05">
+              <div class="sc-caption">P05 — Edital selecionado</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">3</span>P06–P07 — Painel de análise / PDF viewer</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P06_painel_analise.png" alt="P06">
+              <div class="sc-caption">P06 — Painel de análise do edital</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/P07_pdf_viewer.png" alt="P07">
+              <div class="sc-caption">P07 — PDF Viewer do edital</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">4</span>FA02 — Aba IA / Gerar resumo</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/FA02_aba_ia.png" alt="FA02 aba ia">
+              <div class="sc-caption">FA02 — Aba IA aberta</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/FA02_antes_gerar_resumo.png" alt="FA02 antes">
+              <div class="sc-caption">FA02 — Antes de gerar resumo</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/FA02_resumo_gerando.png" alt="FA02 gerando">
+              <div class="sc-caption">FA02 — Resumo sendo gerado pela IA</div>
+            </div>
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/FA02_resumo_gerado.png" alt="FA02 gerado">
+              <div class="sc-caption">FA02 — Resumo gerado e exibido</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="passo">
+          <div class="passo-header"><span class="pnum">5</span>FA02 — Ação rápida: Requisitos Técnicos</div>
+          <div class="screenshots">
+            <div class="screenshot-card">
+              <img src="../../runtime/screenshots/UC-019/FA02_requisitos_tecnicos.png" alt="FA02 req">
+              <div class="sc-caption">FA02 — Resposta IA: Requisitos Técnicos</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="resultado"><span class="badge-pass">✅ APROVADO</span></div>
+</section>
+
+
+<!-- ════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════ -->
+<footer style="text-align:center;padding:2rem;color:var(--text-muted);font-size:.8rem;border-top:1px solid var(--border);margin-top:2rem;background:#fff;">
+  <strong>facilicita.ia — Agente de Editais</strong> &nbsp;|&nbsp;
+  Relatório de Aceitação Sprint 1 e Sprint 2 &nbsp;|&nbsp;
+  Gerado em: 31/03/2026 &nbsp;|&nbsp;
+  19 casos de uso validados &nbsp;|&nbsp;
+  Taxa de aprovação: 100%
+</footer>
+
+</body>
+</html>

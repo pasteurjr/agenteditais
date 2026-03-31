@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatorio de Aceitacao — Sprint 4 | facilicita.ia</title>
+  <style>
+    /* ===== RESET & BASE ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      color: #1a1d23;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    /* ===== HEADER ===== */
+    .report-header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d5a9e 50%, #1a7f5a 100%);
+      color: #fff;
+      padding: 48px 40px 36px;
+      position: relative;
+      overflow: hidden;
+    }
+    .report-header::after {
+      content: '';
+      position: absolute;
+      bottom: -30px; left: 0; right: 0;
+      height: 60px;
+      background: #f0f2f5;
+      clip-path: ellipse(55% 100% at 50% 100%);
+    }
+    .report-header .logo { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; opacity: .7; margin-bottom: 10px; }
+    .report-header h1 { font-size: 32px; font-weight: 700; line-height: 1.2; margin-bottom: 8px; }
+    .report-header .subtitle { font-size: 16px; opacity: .85; margin-bottom: 20px; }
+    .meta-bar {
+      display: flex; flex-wrap: wrap; gap: 20px; margin-top: 16px;
+    }
+    .meta-item { font-size: 13px; opacity: .8; }
+    .meta-item strong { opacity: 1; font-size: 14px; }
+
+    /* ===== NAVIGATION ===== */
+    .nav-toc {
+      background: #fff;
+      border-bottom: 2px solid #e2e8f0;
+      padding: 16px 40px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .nav-toc h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; margin-bottom: 10px; }
+    .nav-toc ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+    .nav-toc a {
+      display: inline-block;
+      padding: 5px 12px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      text-decoration: none;
+      transition: all .2s;
+    }
+    .nav-toc a:hover { background: #2d5a9e; color: #fff; border-color: #2d5a9e; }
+
+    /* ===== SUMMARY DASHBOARD ===== */
+    .dashboard {
+      padding: 40px 40px 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+    }
+    .kpi-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      border-top: 4px solid #2d5a9e;
+    }
+    .kpi-card.green { border-top-color: #16a34a; }
+    .kpi-card.amber { border-top-color: #d97706; }
+    .kpi-card .kpi-num { font-size: 36px; font-weight: 800; color: #1e3a5f; }
+    .kpi-card.green .kpi-num { color: #16a34a; }
+    .kpi-card .kpi-label { font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: .8px; }
+
+    /* ===== SECTION WRAPPER ===== */
+    .section-wrapper {
+      padding: 20px 40px 40px;
+    }
+
+    /* ===== UC SECTION ===== */
+    section.uc {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.07);
+      margin-bottom: 32px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+
+    .uc-header {
+      background: linear-gradient(90deg, #1e3a5f, #2d5a9e);
+      color: #fff;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .uc-header h2 { font-size: 20px; font-weight: 700; }
+    .uc-header .uc-meta { font-size: 12px; opacity: .75; margin-top: 2px; }
+    .badge-pass {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #16a34a;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 7px 16px;
+      border-radius: 30px;
+      letter-spacing: .5px;
+      box-shadow: 0 2px 6px rgba(22,163,74,.4);
+    }
+
+    .uc-body { padding: 28px; }
+
+    /* ===== REQUIREMENTS ===== */
+    .req-block {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 24px;
+    }
+    .req-block h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #475569;
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .req-block h3::before { content: ''; width: 4px; height: 14px; background: #2d5a9e; border-radius: 2px; display: block; }
+    .req-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .req-item {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 10px 14px;
+      background: #fff;
+      border-radius: 8px;
+      border-left: 3px solid #2d5a9e;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .req-tag {
+      flex-shrink: 0;
+      background: #2d5a9e;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: .3px;
+      margin-top: 1px;
+    }
+    .req-text { font-size: 14px; color: #334155; }
+    .req-desc { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+    /* ===== SEQUENCE STEPS ===== */
+    .seq-block { margin-bottom: 24px; }
+    .seq-block h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #475569;
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .seq-block h3::before { content: ''; width: 4px; height: 14px; background: #1a7f5a; border-radius: 2px; display: block; }
+
+    .step {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .step-label {
+      background: #f1f5f9;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .step-label .step-num {
+      background: #2d5a9e;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .step-label .step-type {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .step-label .step-type.acao { background: #dbeafe; color: #1e40af; }
+    .step-label .step-type.resp  { background: #dcfce7; color: #166534; }
+    .step-label .step-type.loading { background: #fef3c7; color: #92400e; }
+
+    .step-imgs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 0;
+    }
+    .step-img-wrap {
+      padding: 12px;
+      background: #fff;
+    }
+    .step-img-wrap + .step-img-wrap { border-left: 1px solid #e2e8f0; }
+    .step-img-wrap img {
+      width: 100%;
+      max-height: 400px;
+      object-fit: contain;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      display: block;
+    }
+    .step-img-caption {
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    /* ===== RESULT ===== */
+    .result-bar {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .result-bar .result-info { font-size: 13px; color: #166534; }
+    .result-bar .result-info strong { font-size: 14px; }
+
+    /* ===== IMPL EVIDENCE ===== */
+    .impl-block {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 16px;
+      font-size: 13px;
+      color: #78350f;
+    }
+    .impl-block h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; color: #92400e; }
+    .impl-block ul { padding-left: 16px; }
+    .impl-block li { margin-bottom: 3px; }
+
+    /* ===== FOOTER ===== */
+    .report-footer {
+      background: #1e3a5f;
+      color: rgba(255,255,255,.7);
+      text-align: center;
+      padding: 24px 40px;
+      font-size: 12px;
+      margin-top: 20px;
+    }
+    .report-footer strong { color: #fff; }
+
+    /* ===== PRINT ===== */
+    @media print {
+      .nav-toc { display: none; }
+      section.uc { page-break-inside: avoid; }
+      .step-imgs { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .report-header, .section-wrapper, .dashboard, .nav-toc { padding-left: 16px; padding-right: 16px; }
+      .uc-header h2 { font-size: 16px; }
+      .step-imgs { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== REPORT HEADER ===== -->
+<header class="report-header">
+  <div class="logo">facilicita.ia — Agente de Editais</div>
+  <h1>Relatorio de Aceitacao<br>Sprint 4</h1>
+  <div class="subtitle">Modulos: Impugnacao (UC-032 a UC-035) + Recursos e Contra-Razoes (UC-036 a UC-041)</div>
+  <div class="meta-bar">
+    <div class="meta-item">Data de geracao: <strong>31/03/2026</strong></div>
+    <div class="meta-item">Responsavel: <strong>Equipe facilicita.ia</strong></div>
+    <div class="meta-item">Versao requisitos: <strong>v6.0</strong></div>
+    <div class="meta-item">Periodo da sprint: <strong>Março 2026</strong></div>
+    <div class="meta-item">Cobertura: <strong>UC-032 a UC-041 (10 casos de uso)</strong></div>
+  </div>
+</header>
+
+<!-- ===== NAVIGATION ===== -->
+<nav class="nav-toc">
+  <h2>Indice de Casos de Uso</h2>
+  <ul>
+    <li><a href="#uc-032">UC-032 Validação Legal IA</a></li>
+    <li><a href="#uc-033">UC-033 Gerar Petição</a></li>
+    <li><a href="#uc-034">UC-034 Upload Petição</a></li>
+    <li><a href="#uc-035">UC-035 Controle de Prazo</a></li>
+    <li><a href="#uc-036">UC-036 Monitorar Recurso</a></li>
+    <li><a href="#uc-037">UC-037 Analisar Vencedora IA</a></li>
+    <li><a href="#uc-038">UC-038 Chatbox Análise</a></li>
+    <li><a href="#uc-039">UC-039 Laudo de Recurso IA</a></li>
+    <li><a href="#uc-040">UC-040 Contra-Razão IA</a></li>
+    <li><a href="#uc-041">UC-041 Submissão Portal</a></li>
+  </ul>
+</nav>
+
+<!-- ===== DASHBOARD ===== -->
+<div class="dashboard">
+  <div class="kpi-card green">
+    <div class="kpi-num">10</div>
+    <div class="kpi-label">UCs Validados</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-num">10</div>
+    <div class="kpi-label">UCs Aprovados</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">11</div>
+    <div class="kpi-label">RFs Cobertos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-num">96</div>
+    <div class="kpi-label">Screenshots</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-num">100%</div>
+    <div class="kpi-label">Taxa de Aprovação</div>
+  </div>
+</div>
+
+<!-- ===== SECTIONS ===== -->
+<div class="section-wrapper">
+
+  <!-- ============================================================ -->
+  <!-- UC-032 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-032">
+    <div class="uc-header">
+      <div>
+        <h2>UC-032 — Validacao Legal do Edital com IA</h2>
+        <div class="uc-meta">Modulo: ImpugnacaoPage.tsx — Aba Validacao Legal | Backend: POST /api/editais/{id}/validacao-legal</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-043-01</span>
+            <div>
+              <div class="req-text">Validacao Legal do Edital</div>
+              <div class="req-desc">IA le edital completo, identifica leis/normas citadas, compara clausulas com legislacao vigente (Lei 14.133/2021, decretos estaduais/municipais) e detecta inconsistencias com base de legislacao indexada (RAG juridico).</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-043-02</span>
+            <div>
+              <div class="req-text">Classificacao de Gravidade das Inconsistencias</div>
+              <div class="req-desc">Cada inconsistencia recebe classificacao de gravidade: ALTA (ilegalidade clara, impede participacao), MEDIA (restricao questionavel), BAIXA (imprecisao sem impacto direto). Badges coloridos: vermelho/amarelo/azul.</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-043-03</span>
+            <div>
+              <div class="req-text">Sugestao Automatica de Esclarecimento ou Impugnacao</div>
+              <div class="req-desc">Com base na gravidade, o sistema sugere automaticamente a acao: Impugnacao (ALTA) ou Esclarecimento (MEDIA/BAIXA). Usuario pode alterar a sugestao antes de prosseguir para UC-033.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa ImpugnacaoPage &mdash; aba Validacao Legal</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P01_acao.png" alt="UC-032 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P01_resp.png" alt="UC-032 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario seleciona edital no SelectInput (numero - orgao)</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P02_acao.png" alt="UC-032 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P02_resp.png" alt="UC-032 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Usuario clica &ldquo;Analisar Edital&rdquo; &rarr; backend executa tool_validacao_legal_edital (DeepSeek)</span>
+            <span class="step-type loading">Loading IA</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P03_acao.png" alt="UC-032 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P03_loading.png" alt="UC-032 P03 Loading">
+              <div class="step-img-caption">P03_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P03_resp.png" alt="UC-032 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>DataTable renderiza inconsistencias com badges de gravidade (ALTA/MEDIA/BAIXA)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P04_acao.png" alt="UC-032 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P04_resp.png" alt="UC-032 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Botao &ldquo;Gerar Peticao&rdquo; habilitado &rarr; usuario prossegue para UC-033</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P05_acao.png" alt="UC-032 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-032/P05_resp.png" alt="UC-032 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>POST /api/editais/{id}/validacao-legal</code> — app.py linha 13054</li>
+          <li><code>tool_validacao_legal_edital</code> — tools.py linha 10122</li>
+          <li>Frontend ImpugnacaoPage.tsx (820 linhas): handleAnalisarEdital, DataTable de inconsistencias, badges ALTA/MEDIA/BAIXA, botao Gerar Peticao condicional</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Todos os 7 criterios de aceite verificados. Endpoint retorna JSON com campo inconsistencias, badges de gravidade com cores corretas, botao Gerar Peticao condicional e analise completa em menos de 60 segundos.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-033 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-033">
+    <div class="uc-header">
+      <div>
+        <h2>UC-033 — Gerar Peticao de Impugnacao com IA</h2>
+        <div class="uc-meta">Modulo: ImpugnacaoPage.tsx — Aba Peticoes | Backend: POST /api/impugnacoes + tool_gerar_peticao_impugnacao</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-043-04</span>
+            <div>
+              <div class="req-text">Geracao Automatica de Peticao de Impugnacao</div>
+              <div class="req-desc">Sistema gera automaticamente peticao juridicamente fundamentada com estrutura completa: Qualificacao do Impugnante, Dos Fatos, Do Direito (subsecoes por inconsistencia), Das Jurisprudencias, Do Pedido. Geracao via IA com createSession + sendMessage.</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-043-05</span>
+            <div>
+              <div class="req-text">Templates de Peticao Parametrizaveis</div>
+              <div class="req-desc">Templates carregados de crudList("recurso-templates") com CRUD completo. Ao selecionar template, conteudo_md pre-preenche o editor. Templates parametrizaveis com variaveis automaticas (empresa, CNPJ, edital, orgao, datas).</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-043-06</span>
+            <div>
+              <div class="req-text">Edicao Completa da Peticao com LOG</div>
+              <div class="req-desc">Peticao 100% editavel em editor rich-text. LOG imutavel com usuario, data e hora a cada edicao. Estrutura formatada para protocolo (Salvar Rascunho, Exportar PDF, Exportar DOCX).</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba Peticoes &mdash; visualiza DataTable e botao &ldquo;Nova Peticao&rdquo;</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P01_acao.png" alt="UC-033 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P01_resp.png" alt="UC-033 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario clica &ldquo;Nova Peticao&rdquo; &rarr; modal abre com campos edital, tipo e template</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P02_acao.png" alt="UC-033 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P02_resp.png" alt="UC-033 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Usuario seleciona edital, tipo (esclarecimento/impugnacao) e template &rarr; sistema pre-preenche TextArea</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P03_acao.png" alt="UC-033 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P03_resp.png" alt="UC-033 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Usuario clica &ldquo;Salvar&rdquo; &rarr; crudCreate("recursos") persiste peticao com status &ldquo;rascunho&rdquo;</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P04_acao.png" alt="UC-033 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P04_resp.png" alt="UC-033 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Nova peticao aparece na DataTable com badge &ldquo;rascunho&rdquo; e acoes disponíveis</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P05_acao.png" alt="UC-033 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-033/P05_resp.png" alt="UC-033 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>POST /api/impugnacoes</code> — app.py linha 13089</li>
+          <li><code>tool_gerar_peticao_impugnacao</code> — tools.py linha 10232</li>
+          <li>Frontend ImpugnacaoPage.tsx: modal showNovaPeticaoModal, crudCreate("recursos"), DataTable de peticoes com badges rascunho/revisao/enviada</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Modal abre corretamente, template pre-preenche TextArea, peticao salva com status "rascunho", DataTable atualizada. Geracao via IA contem formato formal obrigatorio.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-034 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-034">
+    <div class="uc-header">
+      <div>
+        <h2>UC-034 — Upload de Peticao Externa</h2>
+        <div class="uc-meta">Modulo: ImpugnacaoPage.tsx — Aba Peticoes (botao Upload) | Backend: POST /api/impugnacoes/upload</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-043-07</span>
+            <div>
+              <div class="req-text">Upload de Peticao Externa</div>
+              <div class="req-desc">Usuario pode fazer upload de peticao elaborada fora do sistema (DOCX ou PDF, limite 50 MB). Peticao importada e vinculada ao edital selecionado, segue mesmo fluxo de status (rascunho, revisao, protocolada) e origem registrada em LOG de rastreabilidade.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba Peticoes &mdash; botao &ldquo;Upload&rdquo; visivel na ActionBar</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P01_acao.png" alt="UC-034 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P01_resp.png" alt="UC-034 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Clica &ldquo;Upload&rdquo; &rarr; modal abre com SelectInput edital e campo de arquivo (PDF/DOCX)</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P02_acao.png" alt="UC-034 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P02_resp.png" alt="UC-034 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Usuario seleciona edital, tipo de peticao e arquivo &rarr; sistema valida formato e tamanho</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P03_acao.png" alt="UC-034 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P03_resp.png" alt="UC-034 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Usuario clica &ldquo;Enviar&rdquo; &rarr; backend armazena arquivo e cria registro com status &ldquo;rascunho&rdquo;</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P04_acao.png" alt="UC-034 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P04_resp.png" alt="UC-034 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Modal fecha &rarr; peticao uploadada aparece na DataTable com status &ldquo;rascunho&rdquo;</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P05_acao.png" alt="UC-034 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-034/P05_resp.png" alt="UC-034 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>POST /api/impugnacoes/upload</code> — app.py linha 13133</li>
+          <li>Frontend ImpugnacaoPage.tsx: botao Upload, modal showUploadModal, input type=file, crudList("recursos") apos upload</li>
+          <li>Estado uploadFile (File) e uploadEditalId (string) gerenciados separadamente</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Modal de upload funcional, aceita PDF e DOCX, peticao aparece na DataTable com status "rascunho", edital vinculado exibido corretamente, modal fecha apos upload.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-035 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-035">
+    <div class="uc-header">
+      <div>
+        <h2>UC-035 — Controle de Prazo de Impugnacao</h2>
+        <div class="uc-meta">Modulo: ImpugnacaoPage.tsx — Aba Prazos | Calculo: calcularPrazoLimite (frontend) | Referencia legal: Art. 164, Lei 14.133/2021</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-043-08</span>
+            <div>
+              <div class="req-text">Controle de Prazo de Impugnacao</div>
+              <div class="req-desc">Sistema calcula e monitora prazo legal para impugnacao: 3 dias uteis antes da data de abertura (Art. 164, Lei 14.133/2021). Calculo exclui sabados e domingos. Indicacao visual por cores: verde (&gt;5 dias), amarelo (3-5 dias), vermelho (&lt;3 dias). Lista ordenada por urgencia (mais urgente primeiro).</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba &ldquo;Prazos&rdquo; &rarr; sistema carrega editais e calcula prazos automaticamente</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P01_acao.png" alt="UC-035 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P01_resp.png" alt="UC-035 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>DataTable exibe editais com colunas: numero, orgao, data_abertura, prazo_limite, dias_restantes, status</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P02_acao.png" alt="UC-035 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P02_resp.png" alt="UC-035 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Badges de urgencia: verde (&gt;5 dias), amarelo (3-5 dias), vermelho (&lt;3 dias), preto (expirado)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P03_acao.png" alt="UC-035 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P03_resp.png" alt="UC-035 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Lista ordenada por dias_restantes crescente (mais urgente no topo)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P04_acao.png" alt="UC-035 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P04_resp.png" alt="UC-035 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Referencia legal exibida: Art. 164 Lei 14.133/2021 (3 dias uteis antes da abertura)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P05_acao.png" alt="UC-035 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-035/P05_resp.png" alt="UC-035 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>GET /api/editais/{id}/prazo-impugnacao</code> — app.py linha 13192</li>
+          <li>Frontend ImpugnacaoPage.tsx: calcularPrazoLimite (3 dias uteis, exclui sabado/domingo), getPrazoColor (classes CSS), DataTable ordenada por urgencia, badges ativo/expirado</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Prazo calculado corretamente como 3 dias uteis antes da abertura. Cores de urgencia corretas. Status "expirado" para diasRestantes negativo. Lista ordenada por urgencia.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-036 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-036">
+    <div class="uc-header">
+      <div>
+        <h2>UC-036 — Monitorar Janela de Recurso</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Monitoramento | Backend: APScheduler + notifications.py</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-01</span>
+            <div>
+              <div class="req-text">Monitoramento de Janela de Recurso</div>
+              <div class="req-desc">Sistema monitora abertura da janela de recurso (10 minutos apos declaracao do vencedor). Alertas imediatos via WhatsApp, email e in-app. Cronometro regressivo visivel na interface. Status da janela: aguardando (amarelo), aberta (verde), encerrada (cinza). APScheduler verifica a cada hora.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa RecursosPage &mdash; aba &ldquo;Monitoramento&rdquo; com SelectInput de edital</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P01_acao.png" alt="UC-036 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P01_resp.png" alt="UC-036 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario seleciona edital e configura canais de alerta: WhatsApp, Email, Sistema (checkboxes)</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P02_acao.png" alt="UC-036 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P02_resp.png" alt="UC-036 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Usuario clica &ldquo;Ativar Monitoramento&rdquo; &rarr; createSession("monitorar-janela") + sendMessage para status via IA</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P03_acao.png" alt="UC-036 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P03_resp.png" alt="UC-036 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Badge de status atualizado &rarr; APScheduler agenda verificacoes horarias nos canais configurados</span>
+            <span class="step-type loading">Monitoramento Ativo</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P04_acao.png" alt="UC-036 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P04_loading.png" alt="UC-036 P04 Loading">
+              <div class="step-img-caption">P04_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P04_resp.png" alt="UC-036 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Janela detectada &rarr; botao &ldquo;Registrar Intencao de Recurso&rdquo; habilitado com timer regressivo</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P05_acao.png" alt="UC-036 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-036/P05_resp.png" alt="UC-036 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li>Frontend RecursosPage.tsx (1097 linhas): aba Monitoramento, createSession("monitorar-janela") + sendMessage para status via IA</li>
+          <li>SelectInput de edital, checkboxes alertaWhatsapp/alertaEmail/alertaSistema, MonitoramentoState, monitorLoading</li>
+          <li>Backend: APScheduler + notifications.py para alertas automaticos multi-canal</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Monitoramento ativa corretamente, status exibido com badge correto, checkboxes de canais independentes, botao Registrar Intencao funcional.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-037 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-037">
+    <div class="uc-header">
+      <div>
+        <h2>UC-037 — Analisar Proposta Vencedora com IA</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Analise | Backend: POST /api/editais/{id}/analisar-vencedora + tool_analisar_proposta_vencedora</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-02</span>
+            <div>
+              <div class="req-text">Analise da Proposta Vencedora</div>
+              <div class="req-desc">IA analisa proposta vencedora comparando-a com edital, leis (Lei 14.133/2021), normas tecnicas e jurisprudencias. Lista inconsistencias com gravidade (ALTA/MEDIA/BAIXA) e motivacao de recurso. Resultado exibido em markdown e DataTable. Sessao de chat criada automaticamente para UC-038.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba &ldquo;Analise&rdquo; &mdash; SelectInput de edital e campo de texto opcional da proposta</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P01_acao.png" alt="UC-037 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P01_resp.png" alt="UC-037 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario seleciona edital e cola texto da proposta vencedora (opcional)</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P02_acao.png" alt="UC-037 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P02_resp.png" alt="UC-037 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Clica &ldquo;Analisar Vencedora&rdquo; &rarr; POST /api/editais/{id}/analisar-vencedora &rarr; tool_analisar_proposta_vencedora (DeepSeek)</span>
+            <span class="step-type loading">Loading IA</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P03_acao.png" alt="UC-037 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P03_loading.png" alt="UC-037 P03 Loading">
+              <div class="step-img-caption">P03_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P03_resp.png" alt="UC-037 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Resultado em markdown (analiseResultadoMd) e DataTable de inconsistencias renderizados</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P04_acao.png" alt="UC-037 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P04_resp.png" alt="UC-037 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Chatbox interativo habilitado (chatSessionId criado) &rarr; sessao disponivel para UC-038</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P05_acao.png" alt="UC-037 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-037/P05_resp.png" alt="UC-037 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>tool_gerar_laudo_recurso</code> — tools.py linha 10491 (gera analise e laudo combinados)</li>
+          <li>Frontend RecursosPage.tsx (1097 linhas): handleAnalisarVencedora, analiseResultadoMd, inconsistenciasVencedora, chatSessionId criado apos analise</li>
+          <li>Aba Analise com SelectInput, TextArea propostaVencedoraTexto, botao Analisar com Loader2, badges de gravidade ALTA/MEDIA/BAIXA</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Endpoint retorna JSON com success e analise_ia, inconsistencias com campos corretos, badges de gravidade com cores corretas, resultado markdown renderizado, chatbox habilitado apos analise.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-038 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-038">
+    <div class="uc-header">
+      <div>
+        <h2>UC-038 — Chatbox de Analise Interativo</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Analise &gt; Chatbox (aparece apos UC-037) | Infraestrutura: createSession + sendMessage</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-03</span>
+            <div>
+              <div class="req-text">Chatbox para Analise Especifica</div>
+              <div class="req-desc">Interface de chat contextualizado para perguntas sobre desvios da proposta vencedora. Contexto automatico: edital + proposta analisada + inconsistencias + legislacao. Respostas com citacao de fontes em markdown. Historico de conversa salvo e vinculado ao edital para uso em laudos (UC-039/040).</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Apos analise (UC-037) concluida &mdash; chatbox aparece com campo de input e historico vazio</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P01_acao.png" alt="UC-038 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P01_resp.png" alt="UC-038 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario digita pergunta sobre desvio e clica &ldquo;Enviar&rdquo; &rarr; mensagem adicionada ao historico</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P02_acao.png" alt="UC-038 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P02_resp.png" alt="UC-038 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>sendMessage(chatSessionId, chatInput) &rarr; IA processa com contexto da analise anterior &rarr; resposta em markdown</span>
+            <span class="step-type loading">Aguardando IA</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P03_acao.png" alt="UC-038 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P03_loading.png" alt="UC-038 P03 Loading">
+              <div class="step-img-caption">P03_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P03_resp.png" alt="UC-038 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Historico exibe conversa: bolhas usuario (direita) e IA (esquerda em markdown) com scroll automatico</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P04_acao.png" alt="UC-038 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-038/P04_resp.png" alt="UC-038 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li>Frontend RecursosPage.tsx (1097 linhas): container chatbox condicional (aparece apos chatSessionId valido)</li>
+          <li>chatMessages: ChatMsg[] com role "user"/"assistant", sendMessage(chatSessionId, chatInput)</li>
+          <li>ReactMarkdown + remarkGfm para respostas, chatLoading com Loader2, chatInput resetado apos envio</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Chatbox aparece somente apos analise concluida, mensagens com alinhamento correto, respostas em markdown, campo limpo apos envio, historico mantém contexto da analise.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-039 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-039">
+    <div class="uc-header">
+      <div>
+        <h2>UC-039 — Gerar Laudo de Recurso com IA</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Laudos (tipo: recurso) | Backend: POST /api/recursos + tool_gerar_laudo_recurso</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-07</span>
+            <div>
+              <div class="req-text">Geracao de Laudo de Recurso</div>
+              <div class="req-desc">Sistema gera laudo de recurso com arquitetura padrao ou customizada. Secoes obrigatorias: Qualificacao do Recorrente, Secao Juridica (Fatos + Direito + Jurisprudencias), Secao Tecnica (analise por inconsistencia), Do Pedido. Formatado profissionalmente para protocolo no portal.</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-044-09</span>
+            <div>
+              <div class="req-text">Templates Distintos para Recurso e Contra-Razao</div>
+              <div class="req-desc">Matrizes de arquitetura separadas para Recurso e Contra-Razao. CRUD de templates customizados por tipo via crudList("recurso-templates"). Variaveis automaticas (empresa, edital, orgao, datas). Template padrao por tipo de licitacao.</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-044-10</span>
+            <div>
+              <div class="req-text">Edicao Completa dos Laudos com LOG</div>
+              <div class="req-desc">Laudos 100% editaveis em editor rico com Toolbar (Negrito, Italico, Titulo H1/H2, Lista, Tabela). LOG imutavel de todas as alteracoes com usuario, data e hora. Botoes: Salvar Rascunho, Exportar PDF, Exportar DOCX, Submeter (UC-041).</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba &ldquo;Laudos&rdquo; &mdash; visualiza DataTable e botao &ldquo;Novo Laudo&rdquo;</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P01_acao.png" alt="UC-039 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P01_resp.png" alt="UC-039 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Clica &ldquo;Novo Laudo&rdquo; &rarr; modal abre com campos: edital, tipo=recurso, subtipo, empresa_alvo, template</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P02_acao.png" alt="UC-039 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P02_resp.png" alt="UC-039 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Usuario preenche campos e clica &ldquo;Salvar&rdquo; &rarr; tool_gerar_laudo_recurso gera secoes Juridica e Tecnica via DeepSeek</span>
+            <span class="step-type loading">Loading IA</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P03_acao.png" alt="UC-039 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P03_resp.png" alt="UC-039 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Laudo salvo com status &ldquo;rascunho&rdquo; &rarr; aparece na DataTable com tipo, subtipo e empresa_alvo</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P04_acao.png" alt="UC-039 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P04_loading.png" alt="UC-039 P04 Loading">
+              <div class="step-img-caption">P04_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P04_resp.png" alt="UC-039 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Icones de acao disponiveis: Eye (visualizar), Edit3 (editar), Trash2 (excluir), Download (exportar), Send (submeter)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P05_acao.png" alt="UC-039 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-039/P05_resp.png" alt="UC-039 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>POST /api/recursos</code> — app.py linha 13327, chama tool_gerar_laudo_recurso</li>
+          <li><code>tool_gerar_laudo_recurso</code> — tools.py linha 10491 (gera secoes juridica e tecnica)</li>
+          <li>Frontend RecursosPage.tsx: aba Laudos, modal showNovoLaudoModal, SelectInput tipo=recurso/contra_razao, DataTable com badges de status, icones Eye/Edit3/Trash2/Download/Send</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Modal abre com campos corretos, tipo "recurso" selecionavel com subtipos, laudo gerado contem secoes juridica e tecnica, status "rascunho" inicial, empresa_alvo visivel na DataTable.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-040 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-040">
+    <div class="uc-header">
+      <div>
+        <h2>UC-040 — Gerar Laudo de Contra-Razao com IA</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Laudos (tipo: contra_razao) | Backend: POST /api/recursos + tool_gerar_contra_razao</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-08</span>
+            <div>
+              <div class="req-text">Geracao de Laudo de Contra-Razao</div>
+              <div class="req-desc">Sistema gera laudo de Contra-Razao com duas secoes principais: Secao de Defesa (rebater argumentos do recurso ponto-a-ponto, conformidade da proposta, base legal) e Secao de Ataque (irregularidades da proposta do recorrente, fundamentacao legal). Ambas as secoes incluem jurisprudencias.</div>
+            </div>
+          </li>
+          <li class="req-item">
+            <span class="req-tag">RF-044-09</span>
+            <div>
+              <div class="req-text">Templates Distintos para Recurso e Contra-Razao</div>
+              <div class="req-desc">Templates filtrados por tipo "contra_razao" via crudList("recurso-templates"). Modal compartilhado com UC-039, diferenciado pelo campo tipo. Badge "contra_razao" diferenciado visualmente na DataTable.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario acessa aba Laudos &mdash; clica &ldquo;Novo Laudo&rdquo; e seleciona tipo &ldquo;Contra-Razao&rdquo;</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P01_acao.png" alt="UC-040 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P01_resp.png" alt="UC-040 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Usuario preenche: edital, subtipo, empresa recorrente (empresa_alvo) e template de contra-razao</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P02_acao.png" alt="UC-040 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P02_resp.png" alt="UC-040 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Clica &ldquo;Salvar&rdquo; &rarr; tool_gerar_contra_razao gera Secao de Defesa e Secao de Ataque via DeepSeek</span>
+            <span class="step-type loading">Loading IA</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P03_acao.png" alt="UC-040 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P03_loading.png" alt="UC-040 P03 Loading">
+              <div class="step-img-caption">P03_loading.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P03_resp.png" alt="UC-040 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Contra-razao salva com badge &ldquo;contra_razao&rdquo; diferenciado na DataTable, status &ldquo;rascunho&rdquo;</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P04_acao.png" alt="UC-040 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-040/P04_resp.png" alt="UC-040 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li><code>POST /api/recursos</code> — app.py linha 13327 (mesmo endpoint do UC-039, tipo=contra_razao)</li>
+          <li><code>tool_gerar_laudo_recurso</code> — tools.py linha 10491 (gera secoes Defesa+Ataque quando tipo=contra_razao)</li>
+          <li>Frontend RecursosPage.tsx: modal compartilhado, SelectInput tipo com opcao "contra_razao", badge diferenciado na DataTable</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Tipo "contra_razao" selecionavel e diferenciado visualmente, laudo gerado contem secoes Defesa e Ataque, empresa_alvo (recorrente) registrada corretamente, status "rascunho" inicial.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- UC-041 -->
+  <!-- ============================================================ -->
+  <section class="uc" id="uc-041">
+    <div class="uc-header">
+      <div>
+        <h2>UC-041 — Submissao Assistida no Portal</h2>
+        <div class="uc-meta">Modulo: RecursosPage.tsx — Aba Laudos (icone Send) | Backend: crudUpdate("recursos") para status &ldquo;protocolado&rdquo;</div>
+      </div>
+      <span class="badge-pass">&#10003; APROVADO</span>
+    </div>
+    <div class="uc-body">
+
+      <div class="req-block">
+        <h3>Requisitos Implementados</h3>
+        <ul class="req-list">
+          <li class="req-item">
+            <span class="req-tag">RF-044-12</span>
+            <div>
+              <div class="req-text">Submissao Assistida no Portal do Governo</div>
+              <div class="req-desc">Fluxo guiado em 3 passos para submissao de recurso ou contra-razao no portal externo (ComprasNet/gov.br). Passo 1: Checklist de validacao documental (6 itens: tamanho, formato, prazo, secoes, assinatura). Passo 2: Exportar documento + link para acessar portal. Passo 3: Registrar numero de protocolo &rarr; status atualizado para "protocolado" via crudUpdate. Rastreabilidade por data/hora de submissao.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="seq-block">
+        <h3>Sequencia de Eventos Validada</h3>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P01</span>
+            <span>Usuario clica icone &ldquo;Send&rdquo; em laudo existente na DataTable &rarr; modal de submissao assistida abre</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P01_acao.png" alt="UC-041 P01 Acao">
+              <div class="step-img-caption">P01_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P01_resp.png" alt="UC-041 P01 Resposta">
+              <div class="step-img-caption">P01_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P02</span>
+            <span>Passo 1 &mdash; Checklist de validacao: 6 itens verificados (tamanho, formato, prazo, secoes, assinatura)</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P02_acao.png" alt="UC-041 P02 Acao">
+              <div class="step-img-caption">P02_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P02_resp.png" alt="UC-041 P02 Resposta">
+              <div class="step-img-caption">P02_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P03</span>
+            <span>Passo 2 &mdash; Usuario clica &ldquo;Exportar&rdquo; (DOCX/PDF) e &ldquo;Acessar Portal&rdquo; (window.open) &rarr; submete manualmente no gov.br</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P03_acao.png" alt="UC-041 P03 Acao">
+              <div class="step-img-caption">P03_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P03_resp.png" alt="UC-041 P03 Resposta">
+              <div class="step-img-caption">P03_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P04</span>
+            <span>Passo 3 &mdash; Usuario digita numero de protocolo recebido &rarr; clica &ldquo;Confirmar Protocolo&rdquo;</span>
+            <span class="step-type acao">Acao do Ator</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P04_acao.png" alt="UC-041 P04 Acao">
+              <div class="step-img-caption">P04_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P04_resp.png" alt="UC-041 P04 Resposta">
+              <div class="step-img-caption">P04_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-label">
+            <span class="step-num">P05</span>
+            <span>Status atualizado para &ldquo;protocolado&rdquo; via crudUpdate &rarr; badge &ldquo;protocolado&rdquo; na DataTable</span>
+            <span class="step-type resp">Resposta do Sistema</span>
+          </div>
+          <div class="step-imgs">
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P05_acao.png" alt="UC-041 P05 Acao">
+              <div class="step-img-caption">P05_acao.png</div>
+            </div>
+            <div class="step-img-wrap">
+              <img src="../../runtime/screenshots/UC-041/P05_resp.png" alt="UC-041 P05 Resposta">
+              <div class="step-img-caption">P05_resp.png</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="impl-block">
+        <h4>Evidencias de Implementacao</h4>
+        <ul>
+          <li>Frontend RecursosPage.tsx (1097 linhas): handleRegistrarSubmissao, modal showSubmissaoModal</li>
+          <li>crudUpdate("recursos", id) para atualizar status para "protocolado" e registrar submissaoProtocolo</li>
+          <li>Checklist de validacao pre-envio, botao Exportar, link Acessar Portal (window.open), campo submissaoProtocolo</li>
+          <li>Nota: versao assistida (nao automatica) — portais gov.br nao oferecem API de submissao publica</li>
+        </ul>
+      </div>
+
+      <div class="result-bar">
+        <div class="result-info"><strong>Resultado da Validacao:</strong> Modal com 3 passos sequenciais, checklist funcional, exportacao de documento, link abre portal externo em nova aba, campo de protocolo valida preenchimento, status atualizado para "protocolado", badge exibido corretamente.</div>
+        <span class="badge-pass">&#10003; APROVADO</span>
+      </div>
+
+    </div>
+  </section>
+
+</div><!-- /section-wrapper -->
+
+<!-- ===== FOOTER ===== -->
+<footer class="report-footer">
+  <p>
+    <strong>facilicita.ia — Agente de Editais</strong> &nbsp;|&nbsp;
+    Relatorio de Aceitacao Sprint 4 &nbsp;|&nbsp;
+    Gerado em: <strong>31/03/2026</strong> &nbsp;|&nbsp;
+    Requisitos base: <strong>requisitos_completosv6.md</strong> &nbsp;|&nbsp;
+    UC-032 a UC-041 &nbsp;|&nbsp;
+    10 casos de uso &mdash; <strong>100% aprovados</strong>
+  </p>
+</footer>
+
+</body>
+</html>

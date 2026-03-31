@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatório de Aceitação — Agente de Editais (Sprints 1–5)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a202c; }
+    header { background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%); color: white; padding: 40px 48px; }
+    header h1 { font-size: 2rem; margin-bottom: 8px; }
+    header p { opacity: 0.85; font-size: 1rem; }
+    .badge-final { display: inline-block; background: #38a169; color: white; padding: 6px 18px; border-radius: 20px; font-weight: 700; font-size: 1.1rem; margin-top: 16px; }
+    main { max-width: 960px; margin: 40px auto; padding: 0 24px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
+    .stat-card { background: white; border-radius: 12px; padding: 24px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .stat-card .number { font-size: 2.5rem; font-weight: 800; color: #2b6cb0; }
+    .stat-card .label { font-size: 0.85rem; color: #718096; margin-top: 4px; }
+    .sprint-grid { display: grid; gap: 20px; }
+    .sprint-card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+    .sprint-header { padding: 20px 28px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+    .sprint-header h2 { font-size: 1.2rem; color: #1a365d; }
+    .sprint-meta { font-size: 0.8rem; color: #718096; margin-top: 4px; }
+    .sprint-body { padding: 20px 28px; }
+    .uc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .uc-item { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; }
+    .uc-item strong { display: block; color: #2b6cb0; margin-bottom: 2px; }
+    .uc-item .rfs { color: #718096; font-size: 0.75rem; }
+    .btn-report { display: inline-block; background: #2b6cb0; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: background 0.2s; }
+    .btn-report:hover { background: #1a365d; }
+    .badge-aprovado { background: #c6f6d5; color: #276749; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .badge-parcial { background: #fefcbf; color: #7b341e; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    footer { text-align: center; padding: 40px; color: #718096; font-size: 0.85rem; }
+    h3 { font-size: 0.9rem; color: #4a5568; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Relatório de Aceitação — Agente de Editais</h1>
+  <p>Validação completa das Sprints 1 a 5 — 58 Casos de Uso — facilicita.ia</p>
+  <p style="margin-top:8px; opacity:0.7">Data: 31/03/2026 &nbsp;|&nbsp; Executor: Playwright + Chromium headless</p>
+  <span class="badge-final">✅ 322/322 testes passando — 100%</span>
+</header>
+
+<main>
+  <div class="stats">
+    <div class="stat-card">
+      <div class="number">58</div>
+      <div class="label">Casos de Uso</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">322</div>
+      <div class="label">Testes Playwright</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">577</div>
+      <div class="label">Screenshots</div>
+    </div>
+    <div class="stat-card">
+      <div class="number" style="color:#38a169">100%</div>
+      <div class="label">Taxa de Aprovação</div>
+    </div>
+  </div>
+
+  <div class="sprint-grid">
+
+    <!-- Sprint 1+2 -->
+    <div class="sprint-card">
+      <div class="sprint-header">
+        <div>
+          <h2>Sprints 1 e 2 — Fundação, Captação e Validação</h2>
+          <div class="sprint-meta">UC-001 a UC-019 &nbsp;·&nbsp; 19 casos de uso &nbsp;·&nbsp; ~170 screenshots</div>
+        </div>
+        <span class="badge-aprovado">✅ 19/19 APROVADO</span>
+      </div>
+      <div class="sprint-body">
+        <h3>Casos de Uso</h3>
+        <div class="uc-list">
+          <div class="uc-item"><strong>UC-001</strong> Login e Autenticação<div class="rfs">RF-059</div></div>
+          <div class="uc-item"><strong>UC-002</strong> Cadastro de Empresa<div class="rfs">RF-001</div></div>
+          <div class="uc-item"><strong>UC-003</strong> Documentos Empresa<div class="rfs">RF-004</div></div>
+          <div class="uc-item"><strong>UC-004</strong> Certidões Automáticas<div class="rfs">RF-002</div></div>
+          <div class="uc-item"><strong>UC-005</strong> Responsáveis<div class="rfs">RF-003</div></div>
+          <div class="uc-item"><strong>UC-006</strong> Cadastro Produto<div class="rfs">RF-008, RF-010</div></div>
+          <div class="uc-item"><strong>UC-007</strong> Upload Manual IA<div class="rfs">RF-010</div></div>
+          <div class="uc-item"><strong>UC-008</strong> Especificações<div class="rfs">RF-008</div></div>
+          <div class="uc-item"><strong>UC-009</strong> Classes/Subclasses<div class="rfs">RF-013</div></div>
+          <div class="uc-item"><strong>UC-010</strong> Fontes Editais<div class="rfs">RF-015</div></div>
+          <div class="uc-item"><strong>UC-011</strong> Parâmetros Score<div class="rfs">RF-018, RF-016</div></div>
+          <div class="uc-item"><strong>UC-012</strong> Dashboard<div class="rfs">RF-047, RF-048</div></div>
+          <div class="uc-item"><strong>UC-013</strong> Buscar Editais<div class="rfs">RF-019, RF-021</div></div>
+          <div class="uc-item"><strong>UC-014</strong> Filtrar Editais<div class="rfs">RF-021</div></div>
+          <div class="uc-item"><strong>UC-015</strong> Salvar Editais<div class="rfs">RF-023</div></div>
+          <div class="uc-item"><strong>UC-016</strong> Score Aderência<div class="rfs">RF-028</div></div>
+          <div class="uc-item"><strong>UC-017</strong> Validar 6 Dimensões<div class="rfs">RF-029, RF-031–033</div></div>
+          <div class="uc-item"><strong>UC-018</strong> Análise Mercado IA<div class="rfs">RF-033</div></div>
+          <div class="uc-item"><strong>UC-019</strong> Decisão Participação<div class="rfs">RF-027, RF-037</div></div>
+        </div>
+        <a href="relatorio_aceitacao_sprint1_2.html" class="btn-report">📄 Abrir Relatório Completo</a>
+      </div>
+    </div>
+
+    <!-- Sprint 3 -->
+    <div class="sprint-card">
+      <div class="sprint-header">
+        <div>
+          <h2>Sprint 3 — Precificação e Proposta</h2>
+          <div class="sprint-meta">UC-020 a UC-031 &nbsp;·&nbsp; 12 casos de uso &nbsp;·&nbsp; 112 screenshots</div>
+        </div>
+        <span class="badge-aprovado">✅ 12/12 APROVADO</span>
+      </div>
+      <div class="sprint-body">
+        <h3>Casos de Uso</h3>
+        <div class="uc-list">
+          <div class="uc-item"><strong>UC-020</strong> Organizar Lotes<div class="rfs">RF-039-01</div></div>
+          <div class="uc-item"><strong>UC-021</strong> Vincular Produto<div class="rfs">RF-039-05, RF-039-02</div></div>
+          <div class="uc-item"><strong>UC-022</strong> Camadas A-E<div class="rfs">RF-039-08 a RF-039-11</div></div>
+          <div class="uc-item"><strong>UC-023</strong> Preços PNCP<div class="rfs">RF-039-09, RF-039-12</div></div>
+          <div class="uc-item"><strong>UC-024</strong> Simular Disputa<div class="rfs">RF-039-11, RF-039-10</div></div>
+          <div class="uc-item"><strong>UC-025</strong> Estratégia<div class="rfs">RF-039-11, RF-039-07</div></div>
+          <div class="uc-item"><strong>UC-026</strong> Gerar Proposta IA<div class="rfs">RF-040-01, RF-040-02</div></div>
+          <div class="uc-item"><strong>UC-027</strong> Editor Proposta<div class="rfs">RF-040-03</div></div>
+          <div class="uc-item"><strong>UC-028</strong> ANVISA<div class="rfs">RF-007, RF-040-04</div></div>
+          <div class="uc-item"><strong>UC-029</strong> Auditoria Docs<div class="rfs">RF-040-05</div></div>
+          <div class="uc-item"><strong>UC-030</strong> Export Dossiê<div class="rfs">RF-041-01</div></div>
+          <div class="uc-item"><strong>UC-031</strong> Submeter Proposta<div class="rfs">RF-041-01</div></div>
+        </div>
+        <a href="relatorio_aceitacao_sprint3.html" class="btn-report">📄 Abrir Relatório Completo</a>
+      </div>
+    </div>
+
+    <!-- Sprint 4 -->
+    <div class="sprint-card">
+      <div class="sprint-header">
+        <div>
+          <h2>Sprint 4 — Impugnação e Recursos</h2>
+          <div class="sprint-meta">UC-032 a UC-041 &nbsp;·&nbsp; 10 casos de uso &nbsp;·&nbsp; 96 screenshots</div>
+        </div>
+        <span class="badge-aprovado">✅ 10/10 APROVADO</span>
+      </div>
+      <div class="sprint-body">
+        <h3>Casos de Uso</h3>
+        <div class="uc-list">
+          <div class="uc-item"><strong>UC-032</strong> Validação Legal IA<div class="rfs">RF-043-01 a RF-043-03</div></div>
+          <div class="uc-item"><strong>UC-033</strong> Gerar Petição<div class="rfs">RF-043-04 a RF-043-06</div></div>
+          <div class="uc-item"><strong>UC-034</strong> Upload Petição<div class="rfs">RF-043-07</div></div>
+          <div class="uc-item"><strong>UC-035</strong> Controle Prazo<div class="rfs">RF-043-08</div></div>
+          <div class="uc-item"><strong>UC-036</strong> Monitorar Recurso<div class="rfs">RF-044-01</div></div>
+          <div class="uc-item"><strong>UC-037</strong> Analisar Vencedora IA<div class="rfs">RF-044-02</div></div>
+          <div class="uc-item"><strong>UC-038</strong> Chatbox Análise<div class="rfs">RF-044-03</div></div>
+          <div class="uc-item"><strong>UC-039</strong> Laudo Recurso IA<div class="rfs">RF-044-07, RF-044-09</div></div>
+          <div class="uc-item"><strong>UC-040</strong> Contra-Razão IA<div class="rfs">RF-044-08, RF-044-09</div></div>
+          <div class="uc-item"><strong>UC-041</strong> Submissão Portal<div class="rfs">RF-044-12</div></div>
+        </div>
+        <a href="relatorio_aceitacao_sprint4.html" class="btn-report">📄 Abrir Relatório Completo</a>
+      </div>
+    </div>
+
+    <!-- Sprint 5 -->
+    <div class="sprint-card">
+      <div class="sprint-header">
+        <div>
+          <h2>Sprint 5 — Pós-Licitação e Execução Contratual</h2>
+          <div class="sprint-meta">UC-042 a UC-058 &nbsp;·&nbsp; 17 casos de uso &nbsp;·&nbsp; ~170 screenshots</div>
+        </div>
+        <span class="badge-aprovado">✅ 17/17 APROVADO</span>
+      </div>
+      <div class="sprint-body">
+        <h3>Casos de Uso</h3>
+        <div class="uc-list">
+          <div class="uc-item"><strong>UC-042</strong> Registrar Resultado<div class="rfs">RF-044-13</div></div>
+          <div class="uc-item"><strong>UC-043</strong> Alertas Vencimento<div class="rfs">RF-052-EXT-01</div></div>
+          <div class="uc-item"><strong>UC-044</strong> Score Logístico<div class="rfs">RF-046</div></div>
+          <div class="uc-item"><strong>UC-045</strong> Buscar Atas PNCP<div class="rfs">RF-019</div></div>
+          <div class="uc-item"><strong>UC-046</strong> Extrair Ata IA<div class="rfs">RF-010, RF-036</div></div>
+          <div class="uc-item"><strong>UC-047</strong> Dashboard Atas<div class="rfs">RF-047, RF-048</div></div>
+          <div class="uc-item"><strong>UC-048</strong> Cadastrar Contrato<div class="rfs">RF-046</div></div>
+          <div class="uc-item"><strong>UC-049</strong> Registrar Entrega<div class="rfs">RF-046, RF-051</div></div>
+          <div class="uc-item"><strong>UC-050</strong> Cronograma<div class="rfs">RF-046</div></div>
+          <div class="uc-item"><strong>UC-051</strong> Aditivos<div class="rfs">RF-046-EXT-01</div></div>
+          <div class="uc-item"><strong>UC-052</strong> Gestor/Fiscal<div class="rfs">RF-046-EXT-02</div></div>
+          <div class="uc-item"><strong>UC-053</strong> Saldo ARP<div class="rfs">RF-046-EXT-03</div></div>
+          <div class="uc-item"><strong>UC-054</strong> Dashboard CR<div class="rfs">RF-051, RF-052</div></div>
+          <div class="uc-item"><strong>UC-055</strong> Atrasos<div class="rfs">RF-052</div></div>
+          <div class="uc-item"><strong>UC-056</strong> Alertas Multi-tier<div class="rfs">RF-052-EXT-01</div></div>
+          <div class="uc-item"><strong>UC-057</strong> Chat IA<div class="rfs">RF-054</div></div>
+          <div class="uc-item"><strong>UC-058</strong> CRUD Genérico<div class="rfs">RF-056</div></div>
+        </div>
+        <a href="relatorio_aceitacao_sprint5.html" class="btn-report">📄 Abrir Relatório Completo</a>
+      </div>
+    </div>
+
+  </div><!-- sprint-grid -->
+</main>
+
+<footer>
+  <p>Gerado automaticamente pelo processo autoresearch.md (Fases 1–9) &nbsp;·&nbsp; facilicita.ia &nbsp;·&nbsp; 31/03/2026</p>
+  <p style="margin-top:8px">Screenshots em <code>runtime/screenshots/UC-001/</code> a <code>UC-058/</code></p>
+</footer>
+</body>
+</html>
