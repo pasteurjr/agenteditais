@@ -669,59 +669,68 @@ CRUD_TABLES = {
 
 # ─── Helper: set column value with type coercion ───────────────────────────────
 
+def _get_attr_name(model_class, col_name):
+    """Retorna o nome do atributo Python para uma coluna DB (pode diferir quando Column tem alias)."""
+    for attr_name, mapped_col in model_class.__mapper__.columns.items():
+        if mapped_col.name == col_name:
+            return attr_name
+    return col_name  # fallback: mesmo nome
+
+
 def _set_column_value(instance, col_name, value, model_class):
     """Set a column value with proper type coercion for SQLAlchemy."""
     col = model_class.__table__.columns.get(col_name)
     if col is None:
         return
+    attr_name = _get_attr_name(model_class, col_name)
 
     col_type = str(col.type)
 
     # Skip None values for nullable columns
     if value is None or value == "":
         if col.nullable:
-            setattr(instance, col_name, None)
+            setattr(instance, attr_name, None)
         return
 
     try:
         if "DECIMAL" in col_type or "NUMERIC" in col_type:
-            setattr(instance, col_name, Decimal(str(value)))
+            setattr(instance, attr_name, Decimal(str(value)))
         elif "INTEGER" in col_type or "INT" in col_type:
-            setattr(instance, col_name, int(value))
+            setattr(instance, attr_name, int(value))
         elif "BOOLEAN" in col_type or "TINYINT" in col_type:
             if isinstance(value, bool):
-                setattr(instance, col_name, value)
+                setattr(instance, attr_name, value)
             elif isinstance(value, str):
-                setattr(instance, col_name, value.lower() in ("true", "1", "yes", "sim"))
+                setattr(instance, attr_name, value.lower() in ("true", "1", "yes", "sim"))
             else:
-                setattr(instance, col_name, bool(value))
+                setattr(instance, attr_name, bool(value))
         elif "DATETIME" in col_type:
             if isinstance(value, str):
                 # Try ISO format
                 for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
                     try:
-                        setattr(instance, col_name, datetime.strptime(value, fmt))
+                        setattr(instance, attr_name, datetime.strptime(value, fmt))
                         break
                     except ValueError:
                         continue
             else:
-                setattr(instance, col_name, value)
+                setattr(instance, attr_name, value)
         elif "DATE" in col_type and "DATETIME" not in col_type:
             if isinstance(value, str):
                 from datetime import date
-                setattr(instance, col_name, date.fromisoformat(value))
+                setattr(instance, attr_name, date.fromisoformat(value))
             else:
-                setattr(instance, col_name, value)
+                setattr(instance, attr_name, value)
         elif "JSON" in col_type:
             if isinstance(value, str):
                 import json
-                setattr(instance, col_name, json.loads(value))
+                setattr(instance, attr_name, json.loads(value))
             else:
-                setattr(instance, col_name, value)
+                setattr(instance, attr_name, value)
         else:
-            setattr(instance, col_name, value)
+            setattr(instance, attr_name, value)
     except (ValueError, InvalidOperation, TypeError):
-        setattr(instance, col_name, value)
+        setattr(instance, attr_name, value)
 
 
 # ─── Schema endpoint ───────────────────────────────────────────────────────────
