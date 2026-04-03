@@ -222,6 +222,30 @@ function AppContent() {
     return <LoginPage onSwitchToRegister={() => setAuthMode("register")} />;
   }
 
+  // Usuário autenticado mas sem nenhuma empresa vinculada
+  if (isAuthenticated && !empresa && minhasEmpresasList.length === 0) {
+    return (
+      <div className="login-page">
+        <div className="login-container" style={{ maxWidth: 480, textAlign: "center" }}>
+          <div className="login-header">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <h1 style={{ marginTop: 16 }}>Sem empresa vinculada</h1>
+            <p>Seu usuário ainda não foi alocado a nenhuma empresa.<br />Entre em contato com o administrador do sistema.</p>
+          </div>
+          <button
+            className="login-btn"
+            style={{ marginTop: 24 }}
+            onClick={logout}
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Toggle da sidebar */}
