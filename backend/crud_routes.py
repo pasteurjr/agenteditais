@@ -71,7 +71,14 @@ def require_auth(f):
     return decorated
 
 
-SUPER_ONLY_TABLES: set = set()  # controle de acesso feito por papel/is_super no frontend e rotas dedicadas
+SUPER_ONLY_TABLES: set = set()  # checagens inline abaixo
+# Tabelas que só superuser pode criar/editar/deletar
+SUPER_WRITE_TABLES = {'empresas', 'users'}
+# Tabelas que exigem ao menos admin (is_super ou papel=admin) para escrita
+ADMIN_WRITE_TABLES = {'produtos', 'produtos-especificacoes', 'produtos-documentos',
+                      'areas-produto', 'classes-produto-v2', 'subclasses-produto',
+                      'empresa-documentos', 'empresa-certidoes', 'empresa-responsaveis',
+                      'parametros-score', 'fontes-editais', 'fontes-certidoes'}
 
 
 def get_current_user_id():
@@ -928,8 +935,12 @@ def crud_create(table_slug):
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
 
-    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
-        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+    _is_super = getattr(request, 'is_super', False)
+    _is_admin = _is_super or getattr(request, 'papel', None) == 'admin'
+    if table_slug in SUPER_WRITE_TABLES and not _is_super:
+        return jsonify({"error": "Apenas superusuários podem criar/editar esta tabela"}), 403
+    if table_slug in ADMIN_WRITE_TABLES and not _is_admin:
+        return jsonify({"error": "Apenas administradores podem criar/editar este recurso"}), 403
 
     model = config["model"]
     user_id = get_current_user_id()
@@ -1030,8 +1041,12 @@ def crud_update(table_slug, record_id):
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
 
-    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
-        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+    _is_super = getattr(request, 'is_super', False)
+    _is_admin = _is_super or getattr(request, 'papel', None) == 'admin'
+    if table_slug in SUPER_WRITE_TABLES and not _is_super:
+        return jsonify({"error": "Apenas superusuários podem criar/editar esta tabela"}), 403
+    if table_slug in ADMIN_WRITE_TABLES and not _is_admin:
+        return jsonify({"error": "Apenas administradores podem criar/editar este recurso"}), 403
 
     model = config["model"]
     user_id = get_current_user_id()
@@ -1116,8 +1131,12 @@ def crud_delete(table_slug, record_id):
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
 
-    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
-        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+    _is_super = getattr(request, 'is_super', False)
+    _is_admin = _is_super or getattr(request, 'papel', None) == 'admin'
+    if table_slug in SUPER_WRITE_TABLES and not _is_super:
+        return jsonify({"error": "Apenas superusuários podem criar/editar esta tabela"}), 403
+    if table_slug in ADMIN_WRITE_TABLES and not _is_admin:
+        return jsonify({"error": "Apenas administradores podem criar/editar este recurso"}), 403
 
     model = config["model"]
     user_id = get_current_user_id()

@@ -196,7 +196,7 @@ function AppContent() {
       case "parametros":
         return <ParametrizacoesPage onSendToChat={handleSendToChat} />;
       case "associar-empresa":
-        return isAdmin ? <AssociarEmpresaUsuario /> : <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
+        return isSuper ? <AssociarEmpresaUsuario /> : <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
       case "selecionar-empresa":
         return <SelecionarEmpresaPage />;
       default:
@@ -240,7 +240,7 @@ function AppContent() {
           onNavigate={setCurrentPage}
           user={user}
           onLogout={handleLogout}
-          isAdmin={isAdmin}
+          isSuper={isSuper}
         />
       </div>
 

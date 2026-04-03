@@ -228,7 +228,7 @@ interface SidebarProps {
   onNavigate: (page: string) => void;
   user?: User | null;
   onLogout?: () => void;
-  isAdmin?: boolean;
+  isSuper?: boolean;
 }
 
 export function Sidebar({
@@ -236,7 +236,7 @@ export function Sidebar({
   onNavigate,
   user,
   onLogout,
-  isAdmin = false,
+  isSuper = false,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["fluxo"]));
   const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(new Set());
@@ -306,7 +306,7 @@ export function Sidebar({
 
             {expandedSections.has(section.id) && (
               <div className="nav-section-items">
-                {section.items.filter(item => !item.superOnly || isAdmin).map((item) => {
+                {section.items.filter(item => !item.superOnly || isSuper).map((item) => {
                   if (isSubSection(item)) {
                     // Render sub-section with expandable items
                     return (
