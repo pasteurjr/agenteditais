@@ -13,6 +13,7 @@ interface User {
   email: string;
   name: string;
   picture_url: string | null;
+  super?: boolean;
 }
 
 interface MenuItem {
@@ -20,6 +21,7 @@ interface MenuItem {
   icon: React.ReactNode;
   label: string;
   page: string;
+  superOnly?: boolean;
 }
 
 interface MenuSection {
@@ -34,6 +36,7 @@ interface MenuSubSection {
   icon: React.ReactNode;
   label: string;
   items: MenuItem[];
+  superOnly?: boolean;
 }
 
 function isSubSection(item: MenuItem | MenuSubSection): item is MenuSubSection {
@@ -65,11 +68,13 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
     icon: <Database size={18} />,
     label: "Cadastros",
     items: [
-      { id: "crud-users", icon: <UserPlus size={16} />, label: "Usuarios", page: "crud:users" },
+      { id: "crud-users", icon: <UserPlus size={16} />, label: "Usuarios", page: "crud:users", superOnly: true },
+      { id: "associar-empresa", icon: <UserPlus size={16} />, label: "Associar Empresa/Usuario", page: "associar-empresa", superOnly: true },
       {
         id: "cad-empresa",
         icon: <Building size={16} />,
         label: "Empresa",
+        superOnly: true,
         items: [
           { id: "crud-empresas", icon: <Building size={14} />, label: "Dados Cadastrais", page: "crud:empresas" },
           { id: "crud-empresa-documentos", icon: <FileText size={14} />, label: "Documentos", page: "crud:empresa-documentos" },
@@ -213,6 +218,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
       { id: "empresa", icon: <Building size={16} />, label: "Empresa", page: "empresa" },
       { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio", page: "portfolio" },
       { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes", page: "parametros" },
+      { id: "selecionar-empresa", icon: <Building size={16} />, label: "Selecionar Empresa", page: "selecionar-empresa" },
     ]
   }
 ];
@@ -222,6 +228,7 @@ interface SidebarProps {
   onNavigate: (page: string) => void;
   user?: User | null;
   onLogout?: () => void;
+  isAdmin?: boolean;
 }
 
 export function Sidebar({
@@ -229,6 +236,7 @@ export function Sidebar({
   onNavigate,
   user,
   onLogout,
+  isAdmin = false,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["fluxo"]));
   const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(new Set());
@@ -298,7 +306,7 @@ export function Sidebar({
 
             {expandedSections.has(section.id) && (
               <div className="nav-section-items">
-                {section.items.map((item) => {
+                {section.items.filter(item => !item.superOnly || isAdmin).map((item) => {
                   if (isSubSection(item)) {
                     // Render sub-section with expandable items
                     return (

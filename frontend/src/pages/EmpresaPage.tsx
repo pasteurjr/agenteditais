@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Pencil, Search, Sparkles, Globe, Info } from "lucide-react";
 import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
-import { crudList, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
+import { crudList, crudGet, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
 import type { CrudListResponse } from "../api/crud";
+import { useAuth } from "../contexts/AuthContext";
 
 interface EmpresaPageProps {
   onSendToChat?: (message: string, file?: File) => Promise<void>;
@@ -98,6 +99,7 @@ function calcDocStatus(hasArquivo: boolean, dataVencimento: string | null): "ok"
 }
 
 export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
+  const { isAdmin, empresa: empresaCtx } = useAuth();
   // Empresa data
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [razaoSocial, setRazaoSocial] = useState("");
@@ -191,9 +193,14 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     try {
       setLoading(true);
       setError(null);
-      const res: CrudListResponse = await crudList("empresas", { limit: 1 });
-      if (res.items.length > 0) {
-        const emp = res.items[0] as Record<string, unknown>;
+      let emp: Record<string, unknown> | null = null;
+      if (empresaCtx?.id) {
+        emp = await crudGet("empresas", empresaCtx.id);
+      } else {
+        const res: CrudListResponse = await crudList("empresas", { limit: 1 });
+        emp = res.items.length > 0 ? res.items[0] as Record<string, unknown> : null;
+      }
+      if (emp) {
         const id = String(emp.id ?? "");
         setEmpresaId(id);
         setRazaoSocial(String(emp.razao_social ?? ""));
@@ -223,7 +230,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [empresaCtx?.id]);
 
   const loadSubTables = async (id: string) => {
     try {
@@ -1048,12 +1055,14 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           </div>
 
           <div className="form-actions">
-            <ActionButton
-              label="Salvar Alteracoes"
-              variant="primary"
-              onClick={handleSave}
-              loading={saving}
-            />
+            {isAdmin && (
+              <ActionButton
+                label="Salvar Alteracoes"
+                variant="primary"
+                onClick={handleSave}
+                loading={saving}
+              />
+            )}
           </div>
         </Card>
 

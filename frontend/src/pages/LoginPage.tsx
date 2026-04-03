@@ -1,18 +1,19 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { FileText } from "lucide-react";
+import { FileText, Building } from "lucide-react";
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
 }
 
 export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
-  const { login } = useAuth();
+  const { login, isAuthenticated, empresa, minhasEmpresasList, selecionarEmpresa } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selecting, setSelecting] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -28,10 +29,84 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
     }
   };
 
+  const handleSelecionarEmpresa = async (empresaId: string) => {
+    setSelecting(true);
+    setError("");
+    try {
+      await selecionarEmpresa(empresaId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao selecionar empresa");
+      setSelecting(false);
+    }
+  };
+
   const handleGoogleLogin = () => {
     // TODO: Implementar login com Google OAuth
     alert("Login com Google será implementado em breve!");
   };
+
+  // Step 2: show company picker when authenticated but empresa not yet selected
+  if (isAuthenticated && !empresa && minhasEmpresasList.length > 0) {
+    return (
+      <div className="login-page">
+        <div className="login-container" style={{ maxWidth: 520 }}>
+          <div className="login-header">
+            <Building size={48} className="login-icon" />
+            <h1>Selecionar Empresa</h1>
+            <p>Escolha a empresa com que deseja trabalhar</p>
+          </div>
+
+          {error && <div className="login-error">{error}</div>}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
+            {minhasEmpresasList.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => handleSelecionarEmpresa(e.id)}
+                disabled={selecting}
+                style={{
+                  padding: "16px 20px",
+                  border: "2px solid var(--border-color, #e5e7eb)",
+                  borderRadius: 10,
+                  background: "var(--bg-card, #fff)",
+                  cursor: selecting ? "not-allowed" : "pointer",
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  opacity: selecting ? 0.6 : 1,
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+                onMouseEnter={(ev) => {
+                  if (!selecting) {
+                    (ev.currentTarget as HTMLButtonElement).style.borderColor = "var(--primary, #3b82f6)";
+                    (ev.currentTarget as HTMLButtonElement).style.background = "var(--primary-light, #eff6ff)";
+                  }
+                }}
+                onMouseLeave={(ev) => {
+                  (ev.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-color, #e5e7eb)";
+                  (ev.currentTarget as HTMLButtonElement).style.background = "var(--bg-card, #fff)";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Building size={18} style={{ color: "var(--primary, #3b82f6)", flexShrink: 0 }} />
+                  <strong style={{ fontSize: 15 }}>{e.razao_social}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", paddingLeft: 26 }}>CNPJ: {e.cnpj}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted, #6b7280)", paddingLeft: 26, textTransform: "capitalize" }}>Papel: {e.papel}</div>
+              </button>
+            ))}
+          </div>
+
+          {selecting && (
+            <p style={{ textAlign: "center", marginTop: 16, color: "var(--text-muted, #6b7280)", fontSize: 14 }}>
+              Entrando...
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="login-page">

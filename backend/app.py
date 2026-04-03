@@ -12,6 +12,7 @@ from models import (
     Edital, Analise, Proposta, FonteEdital, Contrato, EstrategiaEdital, Monitoramento,
     ModalidadeLicitacao, OrigemOrgao, AreaProduto, ClasseProdutoV2, SubclasseProduto,
     Empresa, PropostaLog, PropostaTemplate, AnvisaValidacao, ProdutoDocumento,
+    UsuarioEmpresa,
     # Sprint 4: Recursos e Impugnações
     Impugnacao, RecursoDetalhado, RecursoTemplate, MonitoramentoJanela, ValidacaoLegal,
     # Sprint 5: Pós-Licitação
@@ -793,11 +794,13 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str, empresa_id: str = None) -> str:
+def create_access_token(user_id: str, email: str, empresa_id: str = None, is_super: bool = False, papel: str = None) -> str:
     payload = {
         "user_id": user_id,
         "email": email,
         "empresa_id": empresa_id,
+        "is_super": is_super,
+        "papel": papel,
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
@@ -820,6 +823,8 @@ def require_auth(f):
             request.user_id = payload["user_id"]
             request.user_email = payload["email"]
             request.empresa_id = payload.get("empresa_id")
+            request.is_super = payload.get("is_super", False)
+            request.papel = payload.get("papel")
             # Fallback: se JWT sem empresa_id, buscar primeira empresa do user
             if not request.empresa_id:
                 db = get_db()
@@ -833,6 +838,15 @@ def require_auth(f):
         except jwt.InvalidTokenError:
             return jsonify({"error": "Token inválido"}), 401
 
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_super(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not getattr(request, 'is_super', False):
+            return jsonify({"error": "Acesso restrito ao superusuário"}), 403
         return f(*args, **kwargs)
     return decorated
 
@@ -869,8 +883,11 @@ def login():
 
         user.last_login_at = datetime.now()
 
-        # Buscar empresa do user
-        empresa = db.query(Empresa).filter(Empresa.user_id == user.id).first()
+        # Buscar empresa do user (via usuario_empresa N:N, fallback para user_id direto)
+        ue = db.query(UsuarioEmpresa).filter(
+            UsuarioEmpresa.user_id == user.id, UsuarioEmpresa.ativo == True
+        ).first()
+        empresa = ue.empresa if ue else db.query(Empresa).filter(Empresa.user_id == user.id).first()
         empresa_id = empresa.id if empresa else None
 
         # Create refresh token
@@ -883,7 +900,7 @@ def login():
         db.add(refresh_token)
         db.commit()
 
-        access_token = create_access_token(user.id, user.email, empresa_id=empresa_id)
+        access_token = create_access_token(user.id, user.email, empresa_id=empresa_id, is_super=user.is_super)
 
         resp = {
             "access_token": access_token,
@@ -1037,18 +1054,180 @@ def switch_empresa():
 
     db = get_db()
     try:
-        empresa = db.query(Empresa).filter(
-            Empresa.id == empresa_id,
-            Empresa.user_id == request.user_id
-        ).first()
+        # Verificar se superuser ou se tem vínculo via usuario_empresa
+        papel = None
+        if request.is_super:
+            empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+            papel = "super"
+        else:
+            ue = db.query(UsuarioEmpresa).filter(
+                UsuarioEmpresa.user_id == request.user_id,
+                UsuarioEmpresa.empresa_id == empresa_id,
+                UsuarioEmpresa.ativo == True
+            ).first()
+            empresa = ue.empresa if ue else None
+            papel = ue.papel if ue else None
+
         if not empresa:
             return jsonify({"error": "Empresa não encontrada ou sem permissão"}), 404
 
-        access_token = create_access_token(request.user_id, request.user_email, empresa_id=empresa.id)
+        user = db.query(User).filter(User.id == request.user_id).first()
+        access_token = create_access_token(
+            request.user_id, request.user_email,
+            empresa_id=empresa.id, is_super=user.is_super if user else False,
+            papel=papel
+        )
         return jsonify({
             "access_token": access_token,
             "empresa": empresa.to_dict(),
+            "papel": papel,
         })
+    finally:
+        db.close()
+
+
+@app.route("/api/empresa/atual", methods=["GET"])
+@require_auth
+def get_empresa_atual():
+    """Retorna dados da empresa selecionada no JWT. Qualquer usuário autenticado com empresa."""
+    if not request.empresa_id:
+        return jsonify({"error": "Nenhuma empresa selecionada"}), 404
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(Empresa.id == request.empresa_id).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+        return jsonify(empresa.to_dict())
+    finally:
+        db.close()
+
+
+@app.route("/api/empresa/atual", methods=["PUT"])
+@require_auth
+def update_empresa_atual():
+    """Atualiza dados da empresa selecionada. Somente admin ou superuser."""
+    if not request.empresa_id:
+        return jsonify({"error": "Nenhuma empresa selecionada"}), 404
+    papel = getattr(request, 'papel', None)
+    if not request.is_super and papel != 'admin':
+        return jsonify({"error": "Apenas administradores podem editar a empresa"}), 403
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(Empresa.id == request.empresa_id).first()
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+        data = request.json or {}
+        skip = {"id", "user_id", "created_at", "updated_at"}
+        for key, val in data.items():
+            if key not in skip and hasattr(empresa, key):
+                setattr(empresa, key, val if val != "" else None)
+        db.commit()
+        db.refresh(empresa)
+        return jsonify(empresa.to_dict())
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 400
+    finally:
+        db.close()
+
+
+@app.route("/api/admin/associar-empresa", methods=["POST"])
+@require_auth
+@require_super
+def associar_usuario_empresa():
+    """Vincula ou desvincula usuário↔empresa. Somente superuser."""
+    data = request.json or {}
+    user_id = data.get("user_id", "").strip()
+    empresa_id = data.get("empresa_id", "").strip()
+    papel = data.get("papel", "operador").strip()
+    acao = data.get("acao", "vincular").strip()
+
+    if not user_id or not empresa_id:
+        return jsonify({"error": "user_id e empresa_id são obrigatórios"}), 400
+
+    db = get_db()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+        if not user:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        if not empresa:
+            return jsonify({"error": "Empresa não encontrada"}), 404
+
+        if acao == "vincular":
+            ue = db.query(UsuarioEmpresa).filter(
+                UsuarioEmpresa.user_id == user_id,
+                UsuarioEmpresa.empresa_id == empresa_id
+            ).first()
+            if ue:
+                ue.ativo = True
+                ue.papel = papel
+            else:
+                ue = UsuarioEmpresa(user_id=user_id, empresa_id=empresa_id, papel=papel)
+                db.add(ue)
+            db.commit()
+            return jsonify({"message": "Vínculo criado/atualizado", "vinculo": ue.to_dict()})
+        elif acao == "desvincular":
+            db.query(UsuarioEmpresa).filter(
+                UsuarioEmpresa.user_id == user_id,
+                UsuarioEmpresa.empresa_id == empresa_id
+            ).delete()
+            db.commit()
+            return jsonify({"message": "Vínculo removido"})
+        else:
+            return jsonify({"error": "acao deve ser 'vincular' ou 'desvincular'"}), 400
+    finally:
+        db.close()
+
+
+@app.route("/api/admin/vinculos", methods=["GET"])
+@require_auth
+@require_super
+def listar_vinculos():
+    """Lista vínculos usuario_empresa. Filtra por empresa_id ou user_id via query params."""
+    empresa_id = request.args.get("empresa_id")
+    user_id = request.args.get("user_id")
+    db = get_db()
+    try:
+        q = db.query(UsuarioEmpresa)
+        if empresa_id:
+            q = q.filter(UsuarioEmpresa.empresa_id == empresa_id)
+        if user_id:
+            q = q.filter(UsuarioEmpresa.user_id == user_id)
+        vinculos = q.filter(UsuarioEmpresa.ativo == True).all()
+        result = []
+        for v in vinculos:
+            d = v.to_dict()
+            d["user_name"] = v.user.name if v.user else None
+            d["user_email"] = v.user.email if v.user else None
+            d["empresa_nome"] = v.empresa.razao_social if v.empresa else None
+            result.append(d)
+        return jsonify({"vinculos": result})
+    finally:
+        db.close()
+
+
+@app.route("/api/auth/minhas-empresas", methods=["GET"])
+@require_auth
+def minhas_empresas():
+    """Retorna empresas vinculadas ao usuário logado via usuario_empresa."""
+    db = get_db()
+    try:
+        if request.is_super:
+            # Superuser vê todas as empresas
+            empresas = db.query(Empresa).filter(Empresa.ativo == True).all()
+            result = [{"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": "super"} for e in empresas]
+        else:
+            ues = db.query(UsuarioEmpresa).filter(
+                UsuarioEmpresa.user_id == request.user_id,
+                UsuarioEmpresa.ativo == True
+            ).all()
+            result = []
+            for ue in ues:
+                e = ue.empresa
+                if e:
+                    result.append({"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": ue.papel})
+        return jsonify({"empresas": result})
     finally:
         db.close()
 
@@ -14103,6 +14282,22 @@ if __name__ == "__main__":
 
     print("Inicializando banco de dados...")
     init_db()
+
+    # Criar superuser se não existir
+    _db = get_db()
+    try:
+        if not _db.query(User).filter(User.email == "superuser@sistema.local").first():
+            _db.add(User(
+                id=str(uuid.uuid4()),
+                email="superuser@sistema.local",
+                name="Super Admin",
+                password_hash=hash_password("super"),
+                is_super=True
+            ))
+            _db.commit()
+            print("Superuser criado: superuser@sistema.local / super")
+    finally:
+        _db.close()
 
     # Iniciar scheduler para alertas e monitoramentos (Sprint 2)
     # Proteger contra inicialização dupla em debug mode (Flask reloader cria 2 processos)

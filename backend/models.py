@@ -27,6 +27,7 @@ class User(Base):
     picture_url = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     last_login_at = Column(DateTime, nullable=True)
+    is_super = Column("super", Boolean, nullable=False, default=False, server_default='0')
 
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
@@ -57,6 +58,7 @@ class User(Base):
     preco_camadas = relationship("PrecoCamada", back_populates="user", cascade="all, delete-orphan")
     lances = relationship("Lance", back_populates="user", cascade="all, delete-orphan")
     comodatos = relationship("Comodato", back_populates="user", cascade="all, delete-orphan")
+    usuario_empresas = relationship("UsuarioEmpresa", back_populates="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -65,6 +67,7 @@ class User(Base):
             "name": self.name,
             "picture_url": self.picture_url,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "super": self.is_super,
         }
 
 
@@ -1354,6 +1357,7 @@ class Empresa(Base):
 
     user = relationship("User", back_populates="empresas")
     area_padrao = relationship("AreaProduto", foreign_keys=[area_padrao_id], lazy="joined")
+    usuario_empresas = relationship("UsuarioEmpresa", back_populates="empresa", cascade="all, delete-orphan")
     documentos = relationship("EmpresaDocumento", back_populates="empresa", cascade="all, delete-orphan")
     certidoes = relationship("EmpresaCertidao", back_populates="empresa", cascade="all, delete-orphan")
     responsaveis = relationship("EmpresaResponsavel", back_populates="empresa", cascade="all, delete-orphan")
@@ -1385,6 +1389,33 @@ class Empresa(Base):
             "frequencia_busca_certidoes": self.frequencia_busca_certidoes,
             "area_padrao_id": self.area_padrao_id,
             "area_padrao_nome": self.area_padrao.nome if self.area_padrao else None,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class UsuarioEmpresa(Base):
+    """Tabela N:N entre usuários e empresas"""
+    __tablename__ = 'usuario_empresa'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
+    papel = Column(String(50), nullable=False, default='operador')
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (UniqueConstraint('user_id', 'empresa_id'),)
+
+    user = relationship("User", back_populates="usuario_empresas")
+    empresa = relationship("Empresa", back_populates="usuario_empresas")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "papel": self.papel,
             "ativo": self.ativo,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

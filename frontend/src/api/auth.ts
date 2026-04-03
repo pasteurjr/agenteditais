@@ -5,6 +5,7 @@ export interface User {
   email: string;
   name: string;
   picture_url: string | null;
+  super: boolean;
 }
 
 export interface EmpresaInfo {
@@ -92,4 +93,13 @@ export async function register(name: string, email: string, password: string): P
     throw new Error(err.error || "Erro ao criar conta");
   }
   return res.json();
+}
+
+export async function minhasEmpresas(accessToken: string): Promise<{ id: string; razao_social: string; cnpj: string; nome_fantasia?: string; papel: string }[]> {
+  const res = await fetch(`${API_BASE}/api/auth/minhas-empresas`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.empresas || [];
 }

@@ -183,6 +183,7 @@ export const usersConfig: CrudPageConfig = {
     { name: "email", label: "Email", type: "email", required: true, width: "half" },
     { name: "password", label: "Senha", type: "password", required: true, width: "full", confirmField: "password_confirm", placeholder: "Digite a senha" },
     { name: "picture_url", label: "URL da Foto", type: "text", width: "full" },
+    { name: "super", label: "Superusuário", type: "boolean", width: "half" },
   ],
 };
 

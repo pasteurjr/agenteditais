@@ -53,6 +53,8 @@ def require_auth(f):
             payload = pyjwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             request.user_id = payload["user_id"]
             request.empresa_id = payload.get("empresa_id")
+            request.is_super = payload.get("is_super", False)
+            request.papel = payload.get("papel")
             # Fallback: se JWT sem empresa_id, buscar primeira empresa do user
             if not request.empresa_id:
                 db = get_db()
@@ -67,6 +69,9 @@ def require_auth(f):
             return jsonify({"error": "Token inválido"}), 401
         return f(*args, **kwargs)
     return decorated
+
+
+SUPER_ONLY_TABLES: set = set()  # controle de acesso feito por papel/is_super no frontend e rotas dedicadas
 
 
 def get_current_user_id():
@@ -769,6 +774,9 @@ def crud_list(table_slug):
     if not config:
         return jsonify({"error": f"Tabela '{table_slug}' não encontrada"}), 404
 
+    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
+        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+
     model = config["model"]
     user_id = get_current_user_id()
     empresa_id = get_current_empresa_id()
@@ -781,10 +789,20 @@ def crud_list(table_slug):
     try:
         query = db.query(model)
 
+        is_super = getattr(request, 'is_super', False)
+        papel = getattr(request, 'papel', None)
+        is_admin = is_super or papel == 'admin'
+
         # Scope by empresa if empresa_scoped
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
             query = query.filter(model.empresa_id == empresa_id)
-        elif config.get("user_scoped") and hasattr(model, "user_id"):
+        elif table_slug == 'empresas':
+            # Filtra somente a empresa selecionada no JWT (admin/super veem todas as suas empresas)
+            if is_admin and not empresa_id:
+                pass  # superuser sem empresa selecionada: vê todas
+            elif empresa_id:
+                query = query.filter(model.id == empresa_id)
+        elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
         elif config.get("parent_fk") and parent_id:
             fk_col = getattr(model, config["parent_fk"], None)
@@ -868,15 +886,20 @@ def crud_get(table_slug, record_id):
     if not config:
         return jsonify({"error": f"Tabela '{table_slug}' não encontrada"}), 404
 
+    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
+        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+
     model = config["model"]
     user_id = get_current_user_id()
     empresa_id = get_current_empresa_id()
+    is_super = getattr(request, 'is_super', False)
+    is_admin = is_super or getattr(request, 'papel', None) == 'admin'
     db = get_db()
     try:
         query = db.query(model).filter(model.id == record_id)
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
             query = query.filter(model.empresa_id == empresa_id)
-        elif config.get("user_scoped") and hasattr(model, "user_id"):
+        elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
         item = query.first()
@@ -904,6 +927,9 @@ def crud_create(table_slug):
 
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
+
+    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
+        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
 
     model = config["model"]
     user_id = get_current_user_id()
@@ -1004,8 +1030,13 @@ def crud_update(table_slug, record_id):
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
 
+    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
+        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+
     model = config["model"]
     user_id = get_current_user_id()
+    is_super = getattr(request, 'is_super', False)
+    is_admin = is_super or getattr(request, 'papel', None) == 'admin'
     data = request.json or {}
 
     db = get_db()
@@ -1014,7 +1045,7 @@ def crud_update(table_slug, record_id):
         empresa_id = get_current_empresa_id()
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
             query = query.filter(model.empresa_id == empresa_id)
-        elif config.get("user_scoped") and hasattr(model, "user_id"):
+        elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()
@@ -1085,8 +1116,13 @@ def crud_delete(table_slug, record_id):
     if config.get("read_only"):
         return jsonify({"error": f"{config['label']} é somente leitura"}), 403
 
+    if table_slug in SUPER_ONLY_TABLES and not getattr(request, 'is_super', False):
+        return jsonify({"error": "Acesso restrito ao superusuário"}), 403
+
     model = config["model"]
     user_id = get_current_user_id()
+    is_super = getattr(request, 'is_super', False)
+    is_admin = is_super or getattr(request, 'papel', None) == 'admin'
 
     db = get_db()
     try:
@@ -1094,7 +1130,7 @@ def crud_delete(table_slug, record_id):
         empresa_id = get_current_empresa_id()
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
             query = query.filter(model.empresa_id == empresa_id)
-        elif config.get("user_scoped") and hasattr(model, "user_id"):
+        elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()

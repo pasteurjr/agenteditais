@@ -25,6 +25,8 @@ import { EmpresaPage } from "./pages/EmpresaPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ParametrizacoesPage } from "./pages/ParametrizacoesPage";
 import { CRMPage } from "./pages/CRMPage";
+import { AssociarEmpresaUsuario } from "./pages/AssociarEmpresaUsuario";
+import { SelecionarEmpresaPage } from "./pages/SelecionarEmpresaPage";
 import { CrudPage } from "./components/CrudPage";
 import { ALL_CRUD_CONFIGS } from "./config/crudTables";
 import { useSessions } from "./hooks/useSessions";
@@ -37,7 +39,7 @@ import { PanelLeftClose, PanelLeft } from "lucide-react";
 import "./styles/globals.css";
 
 function AppContent() {
-  const { user, isAuthenticated, isLoading: authLoading, logout, getAccessToken } = useAuth();
+  const { user, isAuthenticated, isSuper, isAdmin, isLoading: authLoading, logout, getAccessToken, empresa, minhasEmpresasList } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>("dashboard");
   const [chatOpen, setChatOpen] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -193,6 +195,10 @@ function AppContent() {
         return <PortfolioPage onSendToChat={handleSendToChat} />;
       case "parametros":
         return <ParametrizacoesPage onSendToChat={handleSendToChat} />;
+      case "associar-empresa":
+        return isAdmin ? <AssociarEmpresaUsuario /> : <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
+      case "selecionar-empresa":
+        return <SelecionarEmpresaPage />;
       default:
         return <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
     }
@@ -209,8 +215,8 @@ function AppContent() {
   }
 
   // Auth pages
-  if (!isAuthenticated) {
-    if (authMode === "register") {
+  if (!isAuthenticated || (isAuthenticated && !empresa && minhasEmpresasList.length > 1)) {
+    if (authMode === "register" && !isAuthenticated) {
       return <RegisterPage onSwitchToLogin={() => setAuthMode("login")} />;
     }
     return <LoginPage onSwitchToRegister={() => setAuthMode("register")} />;
@@ -234,6 +240,7 @@ function AppContent() {
           onNavigate={setCurrentPage}
           user={user}
           onLogout={handleLogout}
+          isAdmin={isAdmin}
         />
       </div>
 
