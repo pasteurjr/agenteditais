@@ -2,15 +2,80 @@ import { Page } from "@playwright/test";
 
 export const BASE = "http://localhost:5175";
 
-export async function login(page: Page) {
+// ID fixo da empresa CH Hospitalar no banco de dados
+const CH_HOSPITALAR_ID = "7dbdc60a-b806-4614-a024-a1d4841dc8c9";
+
+export async function login(page: Page, _empresaNome?: string) {
   await page.setViewportSize({ width: 1400, height: 900 });
+  // Limpar localStorage para forçar novo login
   await page.goto(BASE, { waitUntil: "networkidle", timeout: 15000 });
+  await page.evaluate(() => {
+    Object.keys(localStorage).filter(k => k.startsWith("editais_ia_")).forEach(k => localStorage.removeItem(k));
+  });
+  await page.reload({ waitUntil: "networkidle", timeout: 15000 });
   await page.waitForTimeout(2000);
   try {
     await page.waitForSelector('input[type="email"]', { timeout: 5000 });
-    await page.fill('input[type="email"]', "pasteurjr@gmail.com");
+    await page.fill('input[type="email"]', "valida1@valida.com.br");
     await page.fill('input[type="password"]', "123456");
     await page.click('button[type="submit"]');
+    await page.waitForTimeout(3000);
+
+    // Verificar se apareceu tela de seleção de empresa
+    const h1Text = await page.locator('h1').innerText().catch(() => "");
+    const isEmpresaSelection = h1Text.includes("Selecionar Empresa") || h1Text.includes("Selecione");
+
+    if (isEmpresaSelection) {
+      // Clicar no botão da empresa CH Hospitalar usando o ID no data attribute ou texto parcial
+      const chBtn = page.locator('button:has-text("CH Hospitalar")').first();
+      if (await chBtn.count() > 0) {
+        await chBtn.click();
+        await page.waitForTimeout(3000);
+      } else {
+        // Usar API diretamente via fetch no contexto da página
+        await page.evaluate(async (empresaId: string) => {
+          const token = localStorage.getItem("editais_ia_access_token");
+          if (!token) return;
+          const res = await fetch('/api/auth/switch-empresa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ empresa_id: empresaId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("editais_ia_access_token", data.access_token);
+            localStorage.setItem("editais_ia_empresa", JSON.stringify(data.empresa));
+            if (data.papel) localStorage.setItem("editais_ia_papel", data.papel);
+          }
+        }, CH_HOSPITALAR_ID);
+        await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+        await page.waitForTimeout(2000);
+      }
+    } else {
+      // Empresa já selecionada automaticamente — verificar se é a correta
+      // Se não for CH Hospitalar, fazer switch via evaluate
+      const currentCnpj = await page.locator('body').innerText().catch(() => "");
+      if (!currentCnpj.includes("43.712.232") && !currentCnpj.includes("CH Hospitalar")) {
+        await page.evaluate(async (empresaId: string) => {
+          const token = localStorage.getItem("editais_ia_access_token");
+          if (!token) return;
+          const res = await fetch('/api/auth/switch-empresa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ empresa_id: empresaId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("editais_ia_access_token", data.access_token);
+            localStorage.setItem("editais_ia_empresa", JSON.stringify(data.empresa));
+            if (data.papel) localStorage.setItem("editais_ia_papel", data.papel);
+          }
+        }, CH_HOSPITALAR_ID);
+        await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+        await page.waitForTimeout(2000);
+      }
+    }
+
     await page.waitForSelector("text=Dashboard", { timeout: 15000 });
     await page.waitForTimeout(2000);
   } catch {

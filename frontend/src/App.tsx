@@ -214,15 +214,20 @@ function AppContent() {
     );
   }
 
-  // Auth pages
-  if (!isAuthenticated || (isAuthenticated && !empresa && minhasEmpresasList.length > 1)) {
-    if (authMode === "register" && !isAuthenticated) {
+  // Auth pages — só mostra login se NÃO está autenticado
+  if (!isAuthenticated) {
+    if (authMode === "register") {
       return <RegisterPage onSwitchToLogin={() => setAuthMode("login")} />;
     }
     return <LoginPage onSwitchToRegister={() => setAuthMode("register")} />;
   }
 
-  // Usuário autenticado mas sem nenhuma empresa vinculada
+  // Autenticado mas sem empresa selecionada — redirecionar para seleção
+  if (isAuthenticated && !empresa && minhasEmpresasList.length > 0) {
+    return <SelecionarEmpresaPage />;
+  }
+
+  // Autenticado mas sem nenhuma empresa disponível (user normal sem vínculo)
   if (isAuthenticated && !empresa && minhasEmpresasList.length === 0) {
     return (
       <div className="login-page">

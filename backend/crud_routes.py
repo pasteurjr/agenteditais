@@ -813,9 +813,9 @@ def crud_list(table_slug):
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
             query = query.filter(model.empresa_id == empresa_id)
         elif table_slug == 'empresas':
-            # Filtra somente a empresa selecionada no JWT (admin/super veem todas as suas empresas)
-            if is_admin and not empresa_id:
-                pass  # superuser sem empresa selecionada: vê todas
+            # Superuser sempre vê todas as empresas (independente da empresa_id no JWT)
+            if is_super:
+                pass  # vê todas
             elif empresa_id:
                 query = query.filter(model.id == empresa_id)
         elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
