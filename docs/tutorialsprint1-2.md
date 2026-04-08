@@ -42,7 +42,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 4. A empresa fica associada automaticamente a valida2
 
 ### Fluxo de login (após associação)
-1. Acessar `http://localhost:5175`
+1. Acessar `http://pasteurjr.servehttp.com:5179`
 2. Email: `valida2@valida.com.br` / Senha: `123456`
 3. Tela de seleção de empresa → clicar "RP3X Comércio e Representações Ltda."
 4. Dashboard carrega com RP3X como empresa ativa

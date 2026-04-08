@@ -57,7 +57,7 @@ A Sprint 2 cobre a busca de editais publicos (PNCP, BEC-SP), analise por IA com 
 ## Como usar para validacao manual
 
 1. Acessar http://pasteurjr.servehttp.com:5179
-2. Login: **valida2@valida.com.br** / senha: **123456**
+2. Login: **valida2@valida.com.br** / senha: **123456** (usuario do Conjunto 2)
 3. Na tela de selecao de empresa, escolher **RP3X Biotecnologia**
 4. Seguir o tutorial da sprint desejada:
    - Sprint 1: `tutorialsprint1-2.md`
