@@ -1,211 +1,76 @@
-# LEIAME — Documentacao de Validacao por Sprints
+# LEIAME — Documentos de Validacao Sprints 1 e 2
 
 **Sistema:** Facilitia.ia — Sistema de Gestao de Editais com IA
 **URL de acesso:** http://pasteurjr.servehttp.com:5179
-**Repositorio:** github.com/pasteurjr/agenteditais
+**Data:** 08/04/2026
 
 ---
 
-## Visao Geral
+## O que sao estes documentos
 
-Este projeto utiliza um processo de validacao baseado em **casos de uso**, **dados de teste**, **tutoriais de automacao** e **relatorios de validacao**. Cada sprint possui um conjunto de documentos que se complementam em cadeia:
+Cada sprint possui 3 documentos que formam um ciclo completo de validacao:
+
+1. **Casos de Uso** — Especificacao do que o sistema deve fazer (requisitos, telas, campos, eventos, respostas esperadas)
+2. **Tutorial de Validacao** — Roteiro passo a passo para um testador humano executar todos os casos de uso no sistema real, usando dados de uma empresa especifica
+3. **Relatorio de Validacao** — Resultado da execucao do tutorial com screenshots de cada acao e resposta do sistema, analise de conformidade e verificacao de banco de dados
 
 ```
-CASOS DE USO  -->  DADOS DE TESTE  -->  TUTORIAL  -->  SPEC PLAYWRIGHT  -->  RELATORIO
-(requisitos)      (o que inserir)     (como testar)   (automacao)          (resultado)
+CASOS DE USO (o que deve fazer) → TUTORIAL (como testar) → RELATORIO (o que aconteceu)
 ```
-
-Cada sprint e validada com **2 conjuntos de dados** para 2 empresas diferentes, garantindo que o sistema funciona para qualquer empresa:
-- **Conjunto 1** — Automacao Playwright (empresa CH Hospitalar)
-- **Conjunto 2** — Validacao humana manual (empresa RP3X)
 
 ---
 
 ## Sprint 1 — Empresa, Portfolio e Parametrizacoes
 
-A Sprint 1 cobre o cadastro da empresa, seus produtos (portfolio) e as parametrizacoes do sistema (areas, classes, subclasses, fontes, certidoes, palavras-chave, NCMs, pesos GO/NO-GO).
+A Sprint 1 cobre o cadastro inicial: dados da empresa, produtos do portfolio, e todas as parametrizacoes do sistema (areas, classes, subclasses, fontes de busca, certidoes, palavras-chave, NCMs, pesos e limiares GO/NO-GO).
 
-### Documentos
+| # | Documento | O que contem |
+|---|-----------|-------------|
+| 1 | **CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V2.md** | 58 casos de uso (UC-001 a UC-058). Cada UC descreve: pagina, pre-condicoes, layout da tela com campos e botoes, sequencia de eventos do ator, respostas esperadas do sistema, e assertions para verificacao. |
+| 2 | **tutorialsprint1-2.md** | Tutorial de validacao manual para a empresa **RP3X Biotecnologia**. Roteiro completo com dados reais para inserir em cada tela: CNPJ, razao social, endereco, 2 produtos (analisador hematologico e leitor de ELISA), areas, classes, subclasses, fontes, certidoes, NCMs, pesos GO/NO-GO. Cada passo indica o que clicar, o que preencher e o que verificar na resposta. |
+| 3 | **RELATORIO_VALIDACAO_SPRINT1_TUTORIAL1.md** | Relatorio da validacao automatizada (Playwright) executada com a empresa **CH Hospitalar**. 322 testes executados, screenshots de cada acao do ator e resposta do sistema, analise de conformidade com os casos de uso. Resultado: 322/322 aprovados. |
 
-| Documento | Descricao |
-|-----------|-----------|
-| `CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V2.md` | Especificacao dos 58 casos de uso (UC-001 a UC-058) — telas, campos, eventos, respostas do sistema |
-| `dadosempportpar-1.md` | Dados de teste Conjunto 1 — empresa CH Hospitalar, 2 produtos, parametrizacoes completas |
-| `dadosempportpar-2.md` | Dados de teste Conjunto 2 — empresa RP3X Biotecnologia, 2 produtos, parametrizacoes completas |
-| `tutorialsprint1-1.md` | Tutorial Playwright (Conjunto 1) — roteiro passo a passo para automacao dos 58 UCs com CH Hospitalar |
-| `tutorialsprint1-2.md` | Tutorial de validacao humana (Conjunto 2) — roteiro manual para RP3X |
-| `RELATORIO_VALIDACAO_SPRINT1_TUTORIAL1.md` | Relatorio de validacao automatizada — 322 testes, screenshots, analise de conformidade |
-| `relatorio_aceitacao_sprint1_2.md` | Relatorio de aceitacao consolidado das Sprints 1 e 2 |
+### Dados complementares da Sprint 1
 
-### Testes Playwright
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `tests/e2e/playwright/tutorial-sprint1-1.spec.ts` | Spec completo — 58 UCs (UC-001 a UC-058), ~322 testes |
-| `tests/e2e/playwright/uc-001.spec.ts` a `uc-058.spec.ts` | Specs individuais por UC (validacao anterior) |
-| `tests/e2e/playwright/helpers.ts` | Helpers compartilhados: login(), navTo(), clickTab(), waitForIA() |
-
-### Como executar os testes da Sprint 1
-
-```bash
-# Pre-requisito: sistema rodando em http://pasteurjr.servehttp.com:5179
-# Ou localmente em http://localhost:5175 (frontend) + http://localhost:5007 (backend)
-
-# Todos os testes da Sprint 1 (Conjunto 1 — CH Hospitalar):
-npx playwright test tests/e2e/playwright/tutorial-sprint1-1.spec.ts --reporter=list
-
-# Um UC especifico (ex: UC-005):
-npx playwright test tests/e2e/playwright/uc-005.spec.ts --reporter=list
-```
-
-### Credenciais Sprint 1
-
-| Conjunto | Email | Senha | Empresa |
-|----------|-------|-------|---------|
-| 1 (Playwright) | valida1@valida.com.br | 123456 | CH Hospitalar |
-| 2 (Manual) | valida2@valida.com.br | 123456 | RP3X Biotecnologia |
+- `dadosempportpar-1.md` — Dados usados na validacao automatizada (CH Hospitalar)
+- `dadosempportpar-2.md` — Dados usados no tutorial manual (RP3X Biotecnologia)
 
 ---
 
-## Sprint 2 — Captacao e Validacao
+## Sprint 2 — Captacao e Validacao de Editais
 
-A Sprint 2 cobre a busca de editais publicos (PNCP, BEC-SP), analise por IA com scores multidimensionais, decisoes GO/NO-GO, monitoramento automatico, confrontacao documental, analise de riscos/mercado/concorrentes, e IA interativa.
+A Sprint 2 cobre a busca de editais publicos (PNCP, BEC-SP), analise por IA com scores multidimensionais (6 dimensoes), decisoes GO/NO-GO com justificativa, monitoramento automatico, confrontacao documental, analise de riscos/mercado/concorrentes, e IA interativa (resumo, perguntas, requisitos tecnicos).
 
-### Documentos
+| # | Documento | O que contem |
+|---|-----------|-------------|
+| 1 | **CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V2.md** | 13 casos de uso (UC-CV01 a UC-CV13). Cada UC descreve as telas de Captacao e Validacao com seus campos, selects, botoes, tabelas de resultados, painel lateral, abas de analise (Aderencia, Lotes, Documentos, Riscos, Mercado, IA), e as respostas esperadas do sistema incluindo chamadas de API. |
+| 2 | **tutorialsprint2-2.md** | Tutorial de validacao manual para a empresa **RP3X Biotecnologia**. Roteiro com 13 UCs: buscar editais com 4 modos de score, explorar painel lateral, salvar editais, definir estrategias, exportar CSV, criar monitoramentos, calcular scores IA, decidir GO/NO-GO, importar itens PNCP, confrontar documentacao, analisar riscos/atas/concorrentes/mercado, usar IA para resumos e perguntas. Termos de busca especificos para o portfolio da RP3X (analisador hematologico, leitor ELISA). |
+| 3 | **RESULTADO VALIDACAO SPRINT2.md** | Relatorio da validacao automatizada (Playwright) executada com a empresa **CH Hospitalar**. 18 testes com assertions reais (nao smoke tests), 48 screenshots diferenciadas (acao do ator vs resposta do sistema), verificacao de banco MySQL (28 editais, 3 estrategias, 2 monitoramentos, 21 validacoes legais, 1 decisao GO, 6 lotes). Mapeamento de cada teste para os passos do documento de casos de uso. Resultado: 18/18 aprovados. |
 
-| Documento | Descricao |
-|-----------|-----------|
-| `CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V2.md` | Especificacao dos 13 casos de uso (UC-CV01 a UC-CV13) — telas, campos, eventos, respostas |
-| `dadoscapval-1.md` | Dados de teste Conjunto 1 — termos de busca, filtros, estrategias para CH Hospitalar |
-| `dadoscapval-2.md` | Dados de teste Conjunto 2 — termos de busca, filtros, estrategias para RP3X |
-| `tutorialsprint2-1.md` | Tutorial Playwright (Conjunto 1) — roteiro passo a passo para os 13 UCs com CH Hospitalar |
-| `tutorialsprint2-2.md` | Tutorial de validacao humana (Conjunto 2) — roteiro manual para RP3X |
-| `RESULTADO VALIDACAO SPRINT2.md` | Relatorio de validacao automatizada — 18 testes, 48 screenshots, verificacao de banco, analise de conformidade |
+### Dados complementares da Sprint 2
 
-### Testes Playwright
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `tests/e2e/playwright/validacao-sprint2.spec.ts` | Spec completo — 13 UCs (UC-CV01 a UC-CV13), 18 testes com assertions reais |
-| `tests/verificar_banco_sprint2.py` | Script de verificacao de banco MySQL — 9 checks (editais, estrategias, monitoramentos, validacoes legais, decisoes GO) |
-
-### Como executar os testes da Sprint 2
-
-```bash
-# Pre-requisito: sistema rodando (backend + frontend)
-# O spec aponta para http://localhost:5175
-
-# Todos os testes da Sprint 2 (Conjunto 1 — CH Hospitalar):
-npx playwright test tests/e2e/playwright/validacao-sprint2.spec.ts --reporter=list
-
-# Verificacao de banco apos os testes:
-python3 tests/verificar_banco_sprint2.py
-
-# Screenshots sao salvas em:
-# runtime/screenshots/validacao-sprint2/
-```
-
-### Credenciais Sprint 2
-
-| Conjunto | Email | Senha | Empresa |
-|----------|-------|-------|---------|
-| 1 (Playwright) | valida1@valida.com.br | 123456 | CH Hospitalar |
-| 2 (Manual) | valida2@valida.com.br | 123456 | RP3X Biotecnologia |
+- `dadoscapval-1.md` — Dados usados na validacao automatizada (CH Hospitalar)
+- `dadoscapval-2.md` — Dados usados no tutorial manual (RP3X Biotecnologia)
 
 ---
 
-## Sprints 3-5 — Documentos de requisitos disponíveis
+## Como usar para validacao manual
 
-As Sprints 3 a 5 possuem documentos de casos de uso mas ainda **nao possuem tutoriais nem specs Playwright** no formato V2:
+1. Acessar http://pasteurjr.servehttp.com:5179
+2. Login: **valida2@valida.com.br** / senha: **123456**
+3. Na tela de selecao de empresa, escolher **RP3X Biotecnologia**
+4. Seguir o tutorial da sprint desejada:
+   - Sprint 1: `tutorialsprint1-2.md`
+   - Sprint 2: `tutorialsprint2-2.md`
+5. Os dados a inserir estao no proprio tutorial e nos documentos de dados (`dadosempportpar-2.md` ou `dadoscapval-2.md`)
 
-| Sprint | Documento de Casos de Uso | Escopo |
-|--------|--------------------------|--------|
-| 3 | `CASOS DE USO PRECIFICACAO E PROPOSTA V2.md` | Precificacao por camadas, propostas, submissao |
-| 4 | `CASOS DE USO RECURSOS E IMPUGNACOES V2.md` | Impugnacoes, recursos, contra-razoes |
-| 5 | `CASOS DE USO SPRINT5 V2.md` | Followup, CRM, execucao de contrato, atas |
+### Observacoes
 
-Relatorios de aceitacao anteriores (validacao em formato antigo):
-- `relatorio_aceitacao_sprint3.md`
-- `relatorio_aceitacao_sprint4.md`
-- `relatorio_aceitacao_sprint5.md`
-
----
-
-## Estrutura de diretórios relevante
-
-```
-docs/
-  CASOS DE USO ... V2.md          # Especificacoes de requisitos (por sprint)
-  dadosempportpar-1.md / -2.md    # Dados de teste Sprint 1 (2 conjuntos)
-  dadoscapval-1.md / -2.md        # Dados de teste Sprint 2 (2 conjuntos)
-  tutorialsprint1-1.md / -2.md    # Tutoriais Sprint 1 (Playwright + manual)
-  tutorialsprint2-1.md / -2.md    # Tutoriais Sprint 2 (Playwright + manual)
-  RELATORIO_VALIDACAO_SPRINT1...  # Resultado da validacao Sprint 1
-  RESULTADO VALIDACAO SPRINT2.md  # Resultado da validacao Sprint 2
-  relatorio_aceitacao_sprint*.md  # Relatorios de aceitacao (Sprints 1-5)
-
-tests/e2e/playwright/
-  helpers.ts                      # Helpers: login, navTo, clickTab, waitForIA
-  tutorial-sprint1-1.spec.ts      # Spec Sprint 1 (58 UCs, ~322 testes)
-  validacao-sprint2.spec.ts       # Spec Sprint 2 (13 UCs, 18 testes)
-  uc-001.spec.ts ... uc-058.spec.ts  # Specs individuais Sprint 1
-
-tests/
-  verificar_banco_sprint2.py      # Verificacao MySQL pos-teste
-
-runtime/screenshots/              # Screenshots capturadas pelos testes
-```
+- A Sprint 1 deve ser executada antes da Sprint 2 (os dados de empresa e portfolio sao pre-requisito para captacao e validacao)
+- O tutorial da Sprint 1 inclui cadastro de empresa, produtos, areas, classes, subclasses, fontes, certidoes, NCMs e parametrizacoes — execute todos os passos na ordem
+- O tutorial da Sprint 2 inclui buscas que dependem de APIs externas (PNCP, BEC-SP) — os editais retornados podem variar conforme a data de execucao
+- Scores de IA podem levar de 30 segundos (rapido) a 5 minutos (profundo) para processar
 
 ---
 
-## Cadeia de documentos — como usar
-
-### Para entender o que o sistema faz:
-1. Leia o documento de **CASOS DE USO** da sprint desejada
-
-### Para validar automaticamente (Conjunto 1 — CH Hospitalar):
-1. Leia o **tutorial** (ex: `tutorialsprint2-1.md`) para entender o roteiro
-2. Execute o **spec Playwright** correspondente
-3. Verifique as **screenshots** em `runtime/screenshots/`
-4. Consulte o **relatorio de validacao** para ver resultados e analises
-
-### Para validar manualmente (Conjunto 2 — RP3X):
-1. Acesse http://pasteurjr.servehttp.com:5179
-2. Login: valida2@valida.com.br / 123456
-3. Siga o **tutorial manual** (ex: `tutorialsprint2-2.md`)
-4. Use os **dados de teste** do Conjunto 2 (ex: `dadoscapval-2.md`)
-
----
-
-## Acesso ao sistema
-
-| Recurso | URL |
-|---------|-----|
-| Aplicacao (producao) | http://pasteurjr.servehttp.com:5179 |
-| Aplicacao (dev local) | http://localhost:5175 |
-| Backend API | http://localhost:5007 |
-
-### Usuarios de teste
-
-| Email | Senha | Perfil | Empresas |
-|-------|-------|--------|----------|
-| valida1@valida.com.br | 123456 | Superusuario | CH Hospitalar, RP3X, HBSJ |
-| valida2@valida.com.br | 123456 | Superusuario | CH Hospitalar, RP3X, HBSJ |
-
----
-
-## Convencao de nomenclatura
-
-| Padrao | Significado | Exemplo |
-|--------|------------|---------|
-| `V2` | Versao 2 do documento (revisada) | `CASOS DE USO ... V2.md` |
-| `-1` / `-2` | Conjunto 1 (Playwright) / Conjunto 2 (manual) | `dadoscapval-1.md` |
-| `UC-XXX` | Caso de uso Sprint 1 (001-058) | `UC-005` |
-| `UC-CVXX` | Caso de uso Sprint 2 Captacao/Validacao | `UC-CV08` |
-| `uc-xxx.spec.ts` | Spec individual por UC | `uc-005.spec.ts` |
-| `tutorial-sprint1-1` | Spec consolidado do tutorial | Todos os UCs num arquivo |
-| `validacao-sprint2` | Spec de validacao completa | 18 testes, assertions reais |
-
----
-
-*Documento criado em 08/04/2026*
+*Facilitia.ia — Sistema de Gestao de Editais com IA*
