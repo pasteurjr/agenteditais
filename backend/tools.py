@@ -1146,7 +1146,7 @@ def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db, campos_ma
     return specs_totais
 
 
-def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
+def tool_processar_upload(filepath: str, user_id: str, empresa_id: str = None, nome_produto: str = None,
                           categoria: str = None, fabricante: str = None,
                           modelo: str = None, subclasse_id: str = None) -> Dict[str, Any]:
     """
@@ -1205,7 +1205,7 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
         nome_normalizado = normalizar_nome(nome_produto)
 
         # Buscar todos os produtos do usuário para comparação normalizada
-        produtos_usuario = db.query(Produto).filter(Produto.user_id == user_id).all()
+        produtos_usuario = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
         produto_existente = None
 
         for p in produtos_usuario:
@@ -1322,9 +1322,8 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
             else:
                 print(f"[TOOLS] Nenhuma subclasse encontrada para '{nome_produto}'")
 
-        # 5. Buscar empresa_id do usuário
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
-        empresa_id = empresa.id if empresa else None
+        # 5. Buscar empresa pelo empresa_id
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first() if empresa_id else None
 
         # 5.1 Criar produto no banco
         produto = Produto(
@@ -1401,7 +1400,7 @@ def tool_processar_upload(filepath: str, user_id: str, nome_produto: str = None,
         db.close()
 
 
-def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str) -> Dict[str, Any]:
+def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Extrai especificações de um texto e salva no banco.
     """
@@ -1410,7 +1409,7 @@ def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str) -> Di
         # Verificar se produto existe e pertence ao usuário
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -1453,7 +1452,7 @@ def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str) -> Di
         db.close()
 
 
-def tool_reprocessar_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
+def tool_reprocessar_produto(produto_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Reprocessa um produto existente para extrair especificações novamente.
     Útil quando a extração inicial falhou ou foi incompleta.
@@ -1464,7 +1463,7 @@ def tool_reprocessar_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
         # Verificar se produto existe e pertence ao usuário
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -1518,7 +1517,7 @@ def tool_reprocessar_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
         db.close()
 
 
-def tool_atualizar_produto(produto_id: str, user_id: str, nome: str = None,
+def tool_atualizar_produto(produto_id: str, user_id: str, empresa_id: str = None, nome: str = None,
                            fabricante: str = None, modelo: str = None,
                            categoria: str = None) -> Dict[str, Any]:
     """
@@ -1528,7 +1527,7 @@ def tool_atualizar_produto(produto_id: str, user_id: str, nome: str = None,
     try:
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -1565,7 +1564,7 @@ def tool_atualizar_produto(produto_id: str, user_id: str, nome: str = None,
         db.close()
 
 
-def tool_excluir_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
+def tool_excluir_produto(produto_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Exclui um produto e todas suas especificações e documentos associados.
     """
@@ -1573,7 +1572,7 @@ def tool_excluir_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
     try:
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -1611,7 +1610,7 @@ def tool_excluir_produto(produto_id: str, user_id: str) -> Dict[str, Any]:
         db.close()
 
 
-def tool_excluir_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
+def tool_excluir_edital(edital_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Exclui um edital e todos seus requisitos e análises associados.
     """
@@ -1619,7 +1618,7 @@ def tool_excluir_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -1665,7 +1664,7 @@ def tool_excluir_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
         db.close()
 
 
-def tool_excluir_editais_multiplos(edital_ids: List[str], user_id: str) -> Dict[str, Any]:
+def tool_excluir_editais_multiplos(edital_ids: List[str], user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Exclui múltiplos editais de uma vez.
     """
@@ -1675,7 +1674,7 @@ def tool_excluir_editais_multiplos(edital_ids: List[str], user_id: str) -> Dict[
         erros = []
 
         for edital_id in edital_ids:
-            resultado = tool_excluir_edital(edital_id, user_id)
+            resultado = tool_excluir_edital(edital_id, user_id, empresa_id=empresa_id)
             if resultado.get("success"):
                 excluidos.append(edital_id)
             else:
@@ -1692,7 +1691,7 @@ def tool_excluir_editais_multiplos(edital_ids: List[str], user_id: str) -> Dict[
         db.close()
 
 
-def tool_atualizar_edital(edital_id: str, user_id: str, numero: str = None,
+def tool_atualizar_edital(edital_id: str, user_id: str, empresa_id: str = None, numero: str = None,
                           orgao: str = None, objeto: str = None,
                           modalidade: str = None, status: str = None,
                           valor_referencia: float = None,
@@ -1704,7 +1703,7 @@ def tool_atualizar_edital(edital_id: str, user_id: str, numero: str = None,
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -1824,7 +1823,7 @@ def tool_listar_fontes() -> Dict[str, Any]:
         db.close()
 
 
-def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
+def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str, empresa_id: str = None,
                                uf: str = None, modalidade: str = None,
                                buscar_detalhes: bool = True,
                                incluir_encerrados: bool = False,
@@ -2104,7 +2103,7 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str,
         if not editais_encontrados:
             print(f"[TOOLS] Buscando no banco local por '{termo}'")
             editais_db = db.query(Edital).filter(
-                Edital.user_id == user_id,
+                Edital.empresa_id == empresa_id,
                 Edital.objeto.ilike(f"%{termo}%")
             ).order_by(Edital.created_at.desc()).limit(10).all()
 
@@ -2587,7 +2586,7 @@ def tool_buscar_editais_comprasnet(termo: str, user_id: str,
         }
 
 
-def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str) -> Dict[str, Any]:
+def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Extrai requisitos de um texto de edital e salva no banco.
     """
@@ -2595,7 +2594,7 @@ def tool_extrair_requisitos(edital_id: str, texto: str, user_id: str) -> Dict[st
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -2688,14 +2687,14 @@ REQUISITOS EXTRAÍDOS (JSON):
         db.close()
 
 
-def tool_listar_editais(user_id: str, status: str = None,
+def tool_listar_editais(user_id: str, empresa_id: str = None, status: str = None,
                         uf: str = None, categoria: str = None) -> Dict[str, Any]:
     """
     Lista editais salvos do usuário com filtros opcionais.
     """
     db = get_db()
     try:
-        query = db.query(Edital).filter(Edital.user_id == user_id)
+        query = db.query(Edital).filter(Edital.empresa_id == empresa_id)
 
         if status:
             query = query.filter(Edital.status == status)
@@ -2715,14 +2714,14 @@ def tool_listar_editais(user_id: str, status: str = None,
         db.close()
 
 
-def tool_listar_produtos(user_id: str, categoria: str = None,
+def tool_listar_produtos(user_id: str, empresa_id: str = None, categoria: str = None,
                          nome: str = None) -> Dict[str, Any]:
     """
     Lista produtos do usuário com filtros opcionais.
     """
     db = get_db()
     try:
-        query = db.query(Produto).filter(Produto.user_id == user_id)
+        query = db.query(Produto).filter(Produto.empresa_id == empresa_id)
 
         if categoria:
             query = query.filter(Produto.categoria == categoria)
@@ -2740,12 +2739,12 @@ def tool_listar_produtos(user_id: str, categoria: str = None,
         db.close()
 
 
-def _get_pesos_score(db, user_id: str) -> Dict[str, float]:
+def _get_pesos_score(db, user_id: str, empresa_id: str = None) -> Dict[str, float]:
     """
     Lê pesos da tabela parametros_score para o user_id.
     Retorna defaults se não houver configuração cadastrada.
     """
-    params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
+    params = db.query(ParametroScore).filter(ParametroScore.empresa_id == empresa_id).first()
     if params:
         return {
             "peso_tecnico": float(params.peso_tecnico) if params.peso_tecnico else 0.40,
@@ -2765,7 +2764,7 @@ def _get_pesos_score(db, user_id: str) -> Dict[str, float]:
     }
 
 
-def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str) -> Dict[str, Any]:
+def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Calcula a aderência de um produto a um edital.
     Compara especificações do produto com requisitos do edital.
@@ -2773,19 +2772,19 @@ def tool_calcular_aderencia(produto_id: str, edital_id: str, user_id: str) -> Di
     db = get_db()
     try:
         # Carregar pesos configurados pelo usuário (ou defaults)
-        pesos = _get_pesos_score(db, user_id)
+        pesos = _get_pesos_score(db, user_id, empresa_id)
         limiar_go = pesos["limiar_go"]
         limiar_nogo = pesos["limiar_nogo"]
 
         # Buscar produto e edital
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -3054,7 +3053,7 @@ Exemplo:
         db.close()
 
 
-def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
+def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str, empresa_id: str = None,
                         preco: float = None, lote_id: str = None,
                         template_id: str = None) -> Dict[str, Any]:
     """
@@ -3067,12 +3066,12 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
         # Buscar dados
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -3130,13 +3129,13 @@ def tool_gerar_proposta(edital_id: str, produto_id: str, user_id: str,
                 .filter(
                     LoteItem.lote_id == lote_id,
                     EditalItemProduto.produto_id == produto_id,
-                    EditalItemProduto.user_id == user_id
+                    EditalItemProduto.empresa_id == empresa_id
                 ).all()
             )
             for vinculo in vinculos:
                 camada = db.query(PrecoCamada).filter(
                     PrecoCamada.edital_item_produto_id == vinculo.id,
-                    PrecoCamada.user_id == user_id
+                    PrecoCamada.empresa_id == empresa_id
                 ).first()
                 if camada:
                     custo = float(camada.custo_base_final) if camada.custo_base_final else None
@@ -3842,7 +3841,7 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
         if empresa_id:
             produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
         else:
-            produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+            produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
 
         if not produtos:
             return {
@@ -4708,7 +4707,7 @@ def _parse_generico(soup, url: str) -> Dict[str, Any]:
     return dados
 
 
-def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[str, Any]:
+def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Salva editais selecionados no banco, verificando duplicatas.
     """
@@ -4769,7 +4768,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
 
             # Verificar se já existe
             existe = db.query(Edital).filter(
-                Edital.user_id == user_id,
+                Edital.empresa_id == empresa_id,
                 Edital.numero == numero,
                 Edital.orgao == orgao
             ).first()
@@ -4922,7 +4921,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str) -> Dict[
                         produto_id = produtos_aderentes[0].get('produto_id')
                     else:
                         # Pegar primeiro produto do usuário
-                        primeiro_produto = db.query(Produto).filter(Produto.user_id == user_id).first()
+                        primeiro_produto = db.query(Produto).filter(Produto.empresa_id == empresa_id).first()
                         produto_id = primeiro_produto.id if primeiro_produto else None
 
                     if produto_id:
@@ -5085,7 +5084,7 @@ Retorne APENAS um JSON válido:
 }}"""
 
 
-def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, Any]:
+def tool_registrar_resultado(message: str, user_id: str, empresa_id: str = None, db=None) -> Dict[str, Any]:
     """
     Registra resultado de certame (vitória/derrota) e alimenta base de preços históricos.
 
@@ -5135,7 +5134,7 @@ def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, A
         # Busca exata primeiro
         edital = db.query(Edital).filter(
             Edital.numero.ilike(f"%{edital_numero}%"),
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -5152,7 +5151,7 @@ def tool_registrar_resultado(message: str, user_id: str, db=None) -> Dict[str, A
 
                 # Buscar editais que contenham tanto o tipo quanto o número
                 query = db.query(Edital).filter(
-                    Edital.user_id == user_id
+                    Edital.empresa_id == empresa_id
                 )
 
                 # Adicionar filtro por tipo se parece ser tipo de edital
@@ -5390,7 +5389,7 @@ Retorne APENAS um JSON válido:
 }}"""
 
 
-def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any]:
+def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, empresa_id: str = None, db=None) -> Dict[str, Any]:
     """
     Extrai resultados de uma ata de sessão de pregão eletrônico.
 
@@ -5466,7 +5465,7 @@ def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, db=None) -> Dict[str, Any
         if dados.get("edital"):
             edital = db.query(Edital).filter(
                 Edital.numero.ilike(f"%{dados['edital']}%"),
-                Edital.user_id == user_id
+                Edital.empresa_id == empresa_id
             ).first()
 
         itens_processados = []
@@ -6326,7 +6325,7 @@ def tool_buscar_precos_pncp(termo: str, meses: int = 12, user_id: str = None) ->
 
 # ==================== SPRINT 1 - FUNCIONALIDADE 5: HISTÓRICO DE PREÇOS ====================
 
-def tool_historico_precos(termo: str = None, produto_id: int = None, user_id: str = None) -> Dict[str, Any]:
+def tool_historico_precos(termo: str = None, produto_id: int = None, user_id: str = None, empresa_id: str = None) -> Dict[str, Any]:
     """
     Consulta histórico de preços registrados no banco de dados local.
 
@@ -6352,7 +6351,7 @@ def tool_historico_precos(termo: str = None, produto_id: int = None, user_id: st
             query = query.filter(PrecoHistorico.produto_id == produto_id)
 
         if user_id:
-            query = query.filter(PrecoHistorico.user_id == user_id)
+            query = query.filter(PrecoHistorico.empresa_id == empresa_id)
 
         # Se tem termo, buscar por objeto do edital ou produto
         if termo:
@@ -6928,7 +6927,7 @@ def formatar_tempo_restante(delta: timedelta) -> str:
     return " ".join(partes) if partes else "menos de 1 minuto"
 
 
-def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: List[int] = None,
+def tool_configurar_alertas(user_id: str, empresa_id: str = None, edital_numero: str = None, tempos_minutos: List[int] = None,
                             tipo: str = "abertura", canais: List[str] = None) -> Dict:
     """
     Configura alertas de prazo para um edital.
@@ -6945,7 +6944,7 @@ def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: Li
         # Buscar edital
         edital = db.query(Edital).filter(
             Edital.numero.ilike(f"%{edital_numero}%"),
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -6991,7 +6990,7 @@ def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: Li
 
             # Verificar se já existe alerta similar
             existente = db.query(Alerta).filter(
-                Alerta.user_id == user_id,
+                Alerta.empresa_id == empresa_id,
                 Alerta.edital_id == edital.id,
                 Alerta.tipo == tipo,
                 Alerta.tempo_antes_minutos == tempo,
@@ -7042,7 +7041,7 @@ def tool_configurar_alertas(user_id: str, edital_numero: str, tempos_minutos: Li
         db.close()
 
 
-def tool_listar_alertas(user_id: str, apenas_agendados: bool = True,
+def tool_listar_alertas(user_id: str, empresa_id: str = None, apenas_agendados: bool = True,
                         periodo_dias: int = 30) -> Dict:
     """
     Lista alertas do usuário.
@@ -7057,7 +7056,7 @@ def tool_listar_alertas(user_id: str, apenas_agendados: bool = True,
         data_limite = datetime.now() + timedelta(days=periodo_dias)
 
         query = db.query(Alerta).filter(
-            Alerta.user_id == user_id
+            Alerta.empresa_id == empresa_id
         )
 
         if apenas_agendados:
@@ -7116,7 +7115,7 @@ def tool_listar_alertas(user_id: str, apenas_agendados: bool = True,
         db.close()
 
 
-def tool_dashboard_prazos(user_id: str, dias: int = 30) -> Dict:
+def tool_dashboard_prazos(user_id: str, empresa_id: str = None, dias: int = 30) -> Dict:
     """
     Retorna dashboard de prazos com editais próximos.
 
@@ -7131,7 +7130,7 @@ def tool_dashboard_prazos(user_id: str, dias: int = 30) -> Dict:
 
         # Buscar editais com data de abertura no período
         editais = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.data_abertura != None,
             Edital.data_abertura >= agora,
             Edital.data_abertura <= data_limite,
@@ -7145,7 +7144,7 @@ def tool_dashboard_prazos(user_id: str, dias: int = 30) -> Dict:
             # Buscar alertas configurados
             alertas = db.query(Alerta).filter(
                 Alerta.edital_id == edital.id,
-                Alerta.user_id == user_id,
+                Alerta.empresa_id == empresa_id,
                 Alerta.status == 'agendado'
             ).all()
 
@@ -7213,7 +7212,7 @@ def tool_dashboard_prazos(user_id: str, dias: int = 30) -> Dict:
         db.close()
 
 
-def tool_calendario_editais(user_id: str, mes: int = None, ano: int = None) -> Dict:
+def tool_calendario_editais(user_id: str, empresa_id: str = None, mes: int = None, ano: int = None) -> Dict:
     """
     Retorna calendário de editais do mês.
 
@@ -7239,7 +7238,7 @@ def tool_calendario_editais(user_id: str, mes: int = None, ano: int = None) -> D
 
         # Buscar editais no período
         editais = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.data_abertura != None,
             Edital.data_abertura >= inicio,
             Edital.data_abertura < fim
@@ -7280,7 +7279,7 @@ def tool_calendario_editais(user_id: str, mes: int = None, ano: int = None) -> D
         db.close()
 
 
-def tool_configurar_monitoramento(user_id: str, termo: str, fontes: List[str] = None,
+def tool_configurar_monitoramento(user_id: str, empresa_id: str = None, termo: str = None, fontes: List[str] = None,
                                    ufs: List[str] = None, frequencia_horas: int = 4,
                                    score_minimo: int = 70, valor_minimo: float = None,
                                    valor_maximo: float = None) -> Dict:
@@ -7301,7 +7300,7 @@ def tool_configurar_monitoramento(user_id: str, termo: str, fontes: List[str] = 
     try:
         # Verificar se já existe monitoramento similar
         existente = db.query(Monitoramento).filter(
-            Monitoramento.user_id == user_id,
+            Monitoramento.empresa_id == empresa_id,
             Monitoramento.termo == termo.lower(),
             Monitoramento.ativo == True
         ).first()
@@ -7347,7 +7346,7 @@ def tool_configurar_monitoramento(user_id: str, termo: str, fontes: List[str] = 
         db.close()
 
 
-def tool_listar_monitoramentos(user_id: str, apenas_ativos: bool = True) -> Dict:
+def tool_listar_monitoramentos(user_id: str, empresa_id: str = None, apenas_ativos: bool = True) -> Dict:
     """
     Lista monitoramentos do usuário.
 
@@ -7358,7 +7357,7 @@ def tool_listar_monitoramentos(user_id: str, apenas_ativos: bool = True) -> Dict
     db = get_db()
     try:
         query = db.query(Monitoramento).filter(
-            Monitoramento.user_id == user_id
+            Monitoramento.empresa_id == empresa_id
         )
 
         if apenas_ativos:
@@ -7399,7 +7398,7 @@ def tool_listar_monitoramentos(user_id: str, apenas_ativos: bool = True) -> Dict
         db.close()
 
 
-def tool_desativar_monitoramento(user_id: str, termo: str = None,
+def tool_desativar_monitoramento(user_id: str, empresa_id: str = None, termo: str = None,
                                   monitoramento_id: str = None) -> Dict:
     """
     Desativa um monitoramento.
@@ -7412,7 +7411,7 @@ def tool_desativar_monitoramento(user_id: str, termo: str = None,
     db = get_db()
     try:
         query = db.query(Monitoramento).filter(
-            Monitoramento.user_id == user_id,
+            Monitoramento.empresa_id == empresa_id,
             Monitoramento.ativo == True
         )
 
@@ -7500,7 +7499,7 @@ def tool_configurar_preferencias_notificacao(user_id: str, email_habilitado: boo
         db.close()
 
 
-def tool_historico_notificacoes(user_id: str, limite: int = 50,
+def tool_historico_notificacoes(user_id: str, empresa_id: str = None, limite: int = 50,
                                  apenas_nao_lidas: bool = False) -> Dict:
     """
     Retorna histórico de notificações do usuário.
@@ -7513,7 +7512,7 @@ def tool_historico_notificacoes(user_id: str, limite: int = 50,
     db = get_db()
     try:
         query = db.query(Notificacao).filter(
-            Notificacao.user_id == user_id
+            Notificacao.empresa_id == empresa_id
         )
 
         if apenas_nao_lidas:
@@ -7523,7 +7522,7 @@ def tool_historico_notificacoes(user_id: str, limite: int = 50,
 
         # Contar não lidas
         nao_lidas = db.query(Notificacao).filter(
-            Notificacao.user_id == user_id,
+            Notificacao.empresa_id == empresa_id,
             Notificacao.lida == False
         ).count()
 
@@ -7558,7 +7557,7 @@ def tool_historico_notificacoes(user_id: str, limite: int = 50,
         db.close()
 
 
-def tool_marcar_notificacao_lida(user_id: str, notificacao_id: str = None,
+def tool_marcar_notificacao_lida(user_id: str, empresa_id: str = None, notificacao_id: str = None,
                                   marcar_todas: bool = False) -> Dict:
     """
     Marca notificação(ões) como lida(s).
@@ -7572,7 +7571,7 @@ def tool_marcar_notificacao_lida(user_id: str, notificacao_id: str = None,
     try:
         if marcar_todas:
             db.query(Notificacao).filter(
-                Notificacao.user_id == user_id,
+                Notificacao.empresa_id == empresa_id,
                 Notificacao.lida == False
             ).update({"lida": True, "lida_em": datetime.now()})
             db.commit()
@@ -7581,7 +7580,7 @@ def tool_marcar_notificacao_lida(user_id: str, notificacao_id: str = None,
         if notificacao_id:
             notif = db.query(Notificacao).filter(
                 Notificacao.id == notificacao_id,
-                Notificacao.user_id == user_id
+                Notificacao.empresa_id == empresa_id
             ).first()
 
             if not notif:
@@ -7601,7 +7600,7 @@ def tool_marcar_notificacao_lida(user_id: str, notificacao_id: str = None,
         db.close()
 
 
-def tool_extrair_datas_edital(user_id: str, texto_edital: str = None,
+def tool_extrair_datas_edital(user_id: str, empresa_id: str = None, texto_edital: str = None,
                                edital_numero: str = None) -> Dict:
     """
     Extrai datas importantes de um edital usando IA.
@@ -7668,7 +7667,7 @@ Retorne APENAS um JSON válido:
             numero = edital_numero or dados.get("numero")
             edital = db.query(Edital).filter(
                 Edital.numero.ilike(f"%{numero}%"),
-                Edital.user_id == user_id
+                Edital.empresa_id == empresa_id
             ).first()
 
             if edital:
@@ -7700,7 +7699,7 @@ Retorne APENAS um JSON válido:
         db.close()
 
 
-def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
+def tool_cancelar_alerta(user_id: str, empresa_id: str = None, alerta_id: str = None,
                           edital_numero: str = None, cancelar_todos: bool = False) -> Dict:
     """
     Cancela alerta(s).
@@ -7715,7 +7714,7 @@ def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
     try:
         if cancelar_todos:
             count = db.query(Alerta).filter(
-                Alerta.user_id == user_id,
+                Alerta.empresa_id == empresa_id,
                 Alerta.status == 'agendado'
             ).update({"status": "cancelado"})
             db.commit()
@@ -7724,7 +7723,7 @@ def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
         if alerta_id:
             alerta = db.query(Alerta).filter(
                 Alerta.id == alerta_id,
-                Alerta.user_id == user_id,
+                Alerta.empresa_id == empresa_id,
                 Alerta.status == 'agendado'
             ).first()
 
@@ -7738,7 +7737,7 @@ def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
         if edital_numero:
             edital = db.query(Edital).filter(
                 Edital.numero.ilike(f"%{edital_numero}%"),
-                Edital.user_id == user_id
+                Edital.empresa_id == empresa_id
             ).first()
 
             if not edital:
@@ -7746,7 +7745,7 @@ def tool_cancelar_alerta(user_id: str, alerta_id: str = None,
 
             count = db.query(Alerta).filter(
                 Alerta.edital_id == edital.id,
-                Alerta.user_id == user_id,
+                Alerta.empresa_id == empresa_id,
                 Alerta.status == 'agendado'
             ).update({"status": "cancelado"})
             db.commit()
@@ -8005,7 +8004,7 @@ def _match_produto_edital(produtos, edital_objeto, db):
     return candidatos[0]
 
 
-def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str = None) -> Dict[str, Any]:
+def tool_calcular_scores_validacao(edital_id: str, user_id: str, empresa_id: str = None, produto_id: str = None) -> Dict[str, Any]:
     """
     Calcula 6 dimensões de score de validação para um edital:
     técnico, documental, complexidade, jurídico, logístico, comercial.
@@ -8025,7 +8024,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         # Buscar edital
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -8033,7 +8032,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
 
         # Carregar pesos e limiares do banco
         params = db.query(ParametroScore).filter(
-            ParametroScore.user_id == user_id
+            ParametroScore.empresa_id == empresa_id
         ).first()
         if not params:
             class _Defaults:
@@ -8052,7 +8051,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         if produto_id:
             produto = db.query(Produto).filter(
                 Produto.id == produto_id,
-                Produto.user_id == user_id
+                Produto.empresa_id == empresa_id
             ).first()
             if produto:
                 nivel_match = "exato"
@@ -8060,7 +8059,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         if not produto:
             # Matching hierárquico: exato → subclasse → classe → genérico
             todos_produtos = db.query(Produto).filter(
-                Produto.user_id == user_id
+                Produto.empresa_id == empresa_id
             ).all()
 
             if todos_produtos:
@@ -8094,7 +8093,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         # Carregar dados da empresa (porte, regime tributário)
         empresa_info = "Dados da empresa não disponíveis."
         try:
-            empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+            empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first() if empresa_id else None
             if empresa:
                 porte_map = {'me': 'Microempresa (ME)', 'epp': 'Empresa de Pequeno Porte (EPP)',
                              'medio': 'Médio Porte', 'grande': 'Grande Empresa'}
@@ -8203,7 +8202,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
         # Salvar na análise existente ou criar nova
         analise = db.query(Analise).filter(
             Analise.edital_id == edital_id,
-            Analise.user_id == user_id
+            Analise.empresa_id == empresa_id
         ).first()
 
         import json as _json
@@ -8298,7 +8297,7 @@ def tool_calcular_scores_validacao(edital_id: str, user_id: str, produto_id: str
 # Onda 2 - T11: tool_atualizar_status_proposta
 # =============================================================================
 
-def tool_atualizar_status_proposta(proposta_id: str, user_id: str, novo_status: str,
+def tool_atualizar_status_proposta(proposta_id: str, user_id: str, empresa_id: str = None, novo_status: str = None,
                                     observacao: str = None) -> Dict[str, Any]:
     """
     Atualiza o status de uma proposta seguindo workflow:
@@ -8333,7 +8332,7 @@ def tool_atualizar_status_proposta(proposta_id: str, user_id: str, novo_status: 
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
 
         if not proposta:
@@ -8466,7 +8465,7 @@ def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
     Se não há PDF ou a IA não consegue, cria lote único com todos os itens."""
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
 
@@ -8488,7 +8487,7 @@ def tool_organizar_lotes(edital_id: str, user_id: str, empresa_id: str = None,
             return {"success": False, "error": "Nenhum item encontrado no edital. Importe itens do PNCP primeiro."}
 
         # 2. Verificar se já existem lotes
-        lotes_existentes = db.query(Lote).filter(Lote.edital_id == edital_id, Lote.user_id == user_id).all()
+        lotes_existentes = db.query(Lote).filter(Lote.edital_id == edital_id, Lote.empresa_id == empresa_id).all()
         if lotes_existentes and not forcar:
             # Retornar lotes existentes com seus itens
             lotes_resp = []
@@ -8672,14 +8671,14 @@ def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = 
 
         # Se produto_id fornecido, vincular diretamente
         if produto_id:
-            produto = db.query(Produto).filter(Produto.id == produto_id, Produto.user_id == user_id).first()
+            produto = db.query(Produto).filter(Produto.id == produto_id, Produto.empresa_id == empresa_id).first()
             if not produto:
                 return {"success": False, "error": "Produto não encontrado"}
 
             # Verificar vínculo existente
             vinculo = db.query(EditalItemProduto).filter(
                 EditalItemProduto.edital_item_id == edital_item_id,
-                EditalItemProduto.user_id == user_id
+                EditalItemProduto.empresa_id == empresa_id
             ).first()
 
             if vinculo:
@@ -8704,7 +8703,7 @@ def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = 
             }
 
         # Buscar sugestões: produtos do portfolio que podem atender o item
-        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
         if not produtos:
             return {"success": False, "error": "Nenhum produto cadastrado no portfolio"}
 
@@ -8751,7 +8750,7 @@ def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = 
             melhor = sugestoes[0]
             vinculo = db.query(EditalItemProduto).filter(
                 EditalItemProduto.edital_item_id == edital_item_id,
-                EditalItemProduto.user_id == user_id
+                EditalItemProduto.empresa_id == empresa_id
             ).first()
             if vinculo:
                 vinculo.produto_id = melhor["produto_id"]
@@ -8793,7 +8792,7 @@ def tool_selecao_portfolio(edital_item_id: str, user_id: str, empresa_id: str = 
         db.close()
 
 
-def tool_calcular_volumetria(edital_item_produto_id: str, user_id: str,
+def tool_calcular_volumetria(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                               volume_edital: float = None,
                               rendimento_produto: float = None,
                               repeticoes_amostras: int = 0,
@@ -8804,7 +8803,7 @@ def tool_calcular_volumetria(edital_item_produto_id: str, user_id: str,
     try:
         vinculo = db.query(EditalItemProduto).filter(
             EditalItemProduto.id == edital_item_produto_id,
-            EditalItemProduto.user_id == user_id
+            EditalItemProduto.empresa_id == empresa_id
         ).first()
         if not vinculo:
             return {"success": False, "error": "Vínculo item-produto não encontrado"}
@@ -8865,7 +8864,7 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
     try:
         vinculo = db.query(EditalItemProduto).filter(
             EditalItemProduto.id == edital_item_produto_id,
-            EditalItemProduto.user_id == user_id
+            EditalItemProduto.empresa_id == empresa_id
         ).first()
         if not vinculo:
             return {"success": False, "error": "Vínculo item-produto não encontrado"}
@@ -8891,7 +8890,7 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
             beneficio = melhor
 
         # 2) Carregar parâmetros da empresa (fallback)
-        params = db.query(ParametroScore).filter(ParametroScore.user_id == user_id).first()
+        params = db.query(ParametroScore).filter(ParametroScore.empresa_id == empresa_id).first()
 
         # 3) Determinar valores tributários: parâmetro explícito > tabela NCM > params empresa > default
         if beneficio:
@@ -8919,7 +8918,7 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
         # Buscar ou criar PrecoCamada
         camada = db.query(PrecoCamada).filter(
             PrecoCamada.edital_item_produto_id == edital_item_produto_id,
-            PrecoCamada.user_id == user_id
+            PrecoCamada.empresa_id == empresa_id
         ).first()
 
         if not camada:
@@ -8973,7 +8972,7 @@ def tool_configurar_custos(edital_item_produto_id: str, user_id: str,
         db.close()
 
 
-def tool_montar_preco_base(edital_item_produto_id: str, user_id: str,
+def tool_montar_preco_base(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                             modo: str = 'manual',
                             preco_base: float = None,
                             markup_percentual: float = None,
@@ -8983,7 +8982,7 @@ def tool_montar_preco_base(edital_item_produto_id: str, user_id: str,
     try:
         camada = db.query(PrecoCamada).filter(
             PrecoCamada.edital_item_produto_id == edital_item_produto_id,
-            PrecoCamada.user_id == user_id
+            PrecoCamada.empresa_id == empresa_id
         ).first()
         if not camada:
             return {"success": False, "error": "Configure a base de custos (Camada A) primeiro"}
@@ -9031,7 +9030,7 @@ def tool_montar_preco_base(edital_item_produto_id: str, user_id: str,
         db.close()
 
 
-def tool_definir_referencia(edital_item_produto_id: str, user_id: str,
+def tool_definir_referencia(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                              valor_referencia: float = None,
                              percentual_sobre_base: float = None) -> Dict[str, Any]:
     """UC-P06: Define valor de referência/target (Camada C)."""
@@ -9039,7 +9038,7 @@ def tool_definir_referencia(edital_item_produto_id: str, user_id: str,
     try:
         camada = db.query(PrecoCamada).filter(
             PrecoCamada.edital_item_produto_id == edital_item_produto_id,
-            PrecoCamada.user_id == user_id
+            PrecoCamada.empresa_id == empresa_id
         ).first()
         if not camada:
             return {"success": False, "error": "Configure preço base (Camada B) primeiro"}
@@ -9093,7 +9092,7 @@ def tool_definir_referencia(edital_item_produto_id: str, user_id: str,
         db.close()
 
 
-def tool_estruturar_lances(edital_item_produto_id: str, user_id: str,
+def tool_estruturar_lances(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                             lance_inicial: float = None,
                             lance_minimo: float = None,
                             modo_inicial: str = 'absoluto',
@@ -9104,7 +9103,7 @@ def tool_estruturar_lances(edital_item_produto_id: str, user_id: str,
     try:
         camada = db.query(PrecoCamada).filter(
             PrecoCamada.edital_item_produto_id == edital_item_produto_id,
-            PrecoCamada.user_id == user_id
+            PrecoCamada.empresa_id == empresa_id
         ).first()
         if not camada:
             return {"success": False, "error": "Configure camadas A-C primeiro"}
@@ -9172,7 +9171,7 @@ def tool_estrategia_competitiva(edital_id: str, user_id: str,
         # Buscar ou criar estratégia
         estrategia = db.query(EstrategiaEdital).filter(
             EstrategiaEdital.edital_id == edital_id,
-            EstrategiaEdital.user_id == user_id
+            EstrategiaEdital.empresa_id == empresa_id
         ).first()
 
         if not estrategia:
@@ -9188,7 +9187,7 @@ def tool_estrategia_competitiva(edital_id: str, user_id: str,
 
         # Buscar camadas do edital para simulação
         vinculos = db.query(EditalItemProduto).filter(
-            EditalItemProduto.user_id == user_id
+            EditalItemProduto.empresa_id == empresa_id
         ).join(EditalItem).filter(EditalItem.edital_id == edital_id).all()
 
         cenarios = []
@@ -9237,14 +9236,14 @@ def tool_estrategia_competitiva(edital_id: str, user_id: str,
         db.close()
 
 
-def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str,
+def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                                     termo: str = None) -> Dict[str, Any]:
     """UC-P09: Consulta histórico de preços e preenche Camada F."""
     db = get_db()
     try:
         vinculo = db.query(EditalItemProduto).filter(
             EditalItemProduto.id == edital_item_produto_id,
-            EditalItemProduto.user_id == user_id
+            EditalItemProduto.empresa_id == empresa_id
         ).first()
 
         produto = db.query(Produto).filter(Produto.id == vinculo.produto_id).first() if vinculo else None
@@ -9258,7 +9257,7 @@ def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str,
 
         # Buscar histórico interno
         historico_db = db.query(PrecoHistorico).filter(
-            PrecoHistorico.user_id == user_id
+            PrecoHistorico.empresa_id == empresa_id
         ).order_by(PrecoHistorico.created_at.desc()).limit(50).all()
 
         # Calcular estatísticas
@@ -9281,7 +9280,7 @@ def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str,
         if vinculo:
             camada = db.query(PrecoCamada).filter(
                 PrecoCamada.edital_item_produto_id == edital_item_produto_id,
-                PrecoCamada.user_id == user_id
+                PrecoCamada.empresa_id == empresa_id
             ).first()
 
             if camada:
@@ -9326,7 +9325,7 @@ def tool_gestao_comodato(edital_id: str, user_id: str,
     try:
         if comodato_id:
             comodato = db.query(Comodato).filter(
-                Comodato.id == comodato_id, Comodato.user_id == user_id
+                Comodato.id == comodato_id, Comodato.empresa_id == empresa_id
             ).first()
             if not comodato:
                 return {"success": False, "error": "Comodato não encontrado"}
@@ -9390,14 +9389,13 @@ TOOLS_MAP["historico_precos_camada_f"] = tool_historico_precos_camada_f
 TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
 
 
-def tool_extrair_vencedores_atas(atas: list, user_id: str, edital_id: str = None) -> Dict[str, Any]:
+def tool_extrair_vencedores_atas(atas: list, user_id: str, empresa_id: str = None, edital_id: str = None) -> Dict[str, Any]:
     """Extrai vencedores e preços de atas PNCP e salva em precos_historicos + concorrentes."""
     import requests as req
     import re as _re
     db = get_db()
     try:
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
-        empresa_id = empresa.id if empresa else None
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first() if empresa_id else None
         resultados = []
         precos_extraidos = []
 
@@ -9531,13 +9529,13 @@ def tool_extrair_vencedores_atas(atas: list, user_id: str, edital_id: str = None
 TOOLS_MAP["extrair_vencedores_atas"] = tool_extrair_vencedores_atas
 
 
-def tool_insights_precificacao(eip_id: str, user_id: str) -> Dict[str, Any]:
+def tool_insights_precificacao(eip_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """Pipeline completo: histórico local → buscar atas PNCP → extrair preços → sugerir valores."""
     import re, unicodedata
     db = get_db()
     try:
         vinculo = db.query(EditalItemProduto).filter(
-            EditalItemProduto.id == eip_id, EditalItemProduto.user_id == user_id
+            EditalItemProduto.id == eip_id, EditalItemProduto.empresa_id == empresa_id
         ).first()
         if not vinculo:
             return {"success": False, "error": "Vínculo não encontrado"}
@@ -9809,7 +9807,7 @@ Responda em português, direto ao ponto, sem enrolação."""
             import json as _json
             camada = db.query(PrecoCamada).filter(
                 PrecoCamada.edital_item_produto_id == eip_id,
-                PrecoCamada.user_id == user_id
+                PrecoCamada.empresa_id == empresa_id
             ).first()
             if camada:
                 camada.analise_ia_json = _json.dumps(resultado, ensure_ascii=False, default=str)
@@ -9835,7 +9833,7 @@ TOOLS_MAP["insights_precificacao"] = tool_insights_precificacao
 # FASE 2 — PROPOSTA: Novas tools (UC-R01 a UC-R07)
 # =============================================================================
 
-def tool_verificar_anvisa_proposta(proposta_id: str, user_id: str) -> Dict[str, Any]:
+def tool_verificar_anvisa_proposta(proposta_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Verifica status ANVISA do produto vinculado à proposta.
     Calcula semáforo: valido (verde), atencao (amarelo <6 meses), vencido (vermelho), sem_registro.
@@ -9845,7 +9843,7 @@ def tool_verificar_anvisa_proposta(proposta_id: str, user_id: str) -> Dict[str, 
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
         if not proposta:
             return {"success": False, "error": "Proposta não encontrada"}
@@ -9926,7 +9924,7 @@ def tool_verificar_anvisa_proposta(proposta_id: str, user_id: str) -> Dict[str, 
 TOOLS_MAP["verificar_anvisa_proposta"] = tool_verificar_anvisa_proposta
 
 
-def tool_auditoria_documental(proposta_id: str, user_id: str) -> Dict[str, Any]:
+def tool_auditoria_documental(proposta_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     Audita documentos necessários para a proposta.
     Compara documentos exigidos (DocumentoNecessario) com documentos disponíveis do produto e empresa.
@@ -9937,7 +9935,7 @@ def tool_auditoria_documental(proposta_id: str, user_id: str) -> Dict[str, Any]:
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
         if not proposta:
             return {"success": False, "error": "Proposta não encontrada"}
@@ -10119,7 +10117,7 @@ TOOLS_MAP["smart_split_pdf"] = tool_smart_split_pdf
 # SPRINT 4 — RECURSOS E IMPUGNAÇÕES: Novas tools (UC-I01 a UC-RE05)
 # =============================================================================
 
-def tool_validacao_legal_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
+def tool_validacao_legal_edital(edital_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
     """
     UC-I01: Validação legal do edital.
     Lê o texto do PDF do edital, envia ao DeepSeek para identificar inconsistências
@@ -10132,7 +10130,7 @@ def tool_validacao_legal_edital(edital_id: str, user_id: str) -> Dict[str, Any]:
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
@@ -10229,7 +10227,7 @@ Responda APENAS com o JSON, sem texto adicional."""
 TOOLS_MAP["validacao_legal_edital"] = tool_validacao_legal_edital
 
 
-def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, inconsistencias: list = None,
+def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, empresa_id: str = None, inconsistencias: list = None,
                                    template_id: str = None, tipo: str = 'impugnacao') -> Dict[str, Any]:
     """
     UC-I02/I03: Gera petição de impugnação ou pedido de esclarecimento.
@@ -10241,7 +10239,7 @@ def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, inconsistencias:
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
@@ -10250,7 +10248,7 @@ def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, inconsistencias:
         if not inconsistencias:
             validacao = db.query(ValidacaoLegal).filter(
                 ValidacaoLegal.edital_id == edital_id,
-                ValidacaoLegal.user_id == user_id
+                ValidacaoLegal.empresa_id == empresa_id
             ).order_by(ValidacaoLegal.created_at.desc()).first()
             if validacao and validacao.inconsistencias_json:
                 try:
@@ -10371,7 +10369,7 @@ Formate em Markdown."""
 TOOLS_MAP["gerar_peticao_impugnacao"] = tool_gerar_peticao_impugnacao
 
 
-def tool_analisar_proposta_vencedora(edital_id: str, user_id: str,
+def tool_analisar_proposta_vencedora(edital_id: str, user_id: str, empresa_id: str = None,
                                       proposta_vencedora_texto: str = None) -> Dict[str, Any]:
     """
     UC-RE02: Analisa proposta vencedora contra requisitos do edital e leis.
@@ -10382,7 +10380,7 @@ def tool_analisar_proposta_vencedora(edital_id: str, user_id: str,
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
@@ -10488,7 +10486,7 @@ Responda APENAS com o JSON."""
 TOOLS_MAP["analisar_proposta_vencedora"] = tool_analisar_proposta_vencedora
 
 
-def tool_gerar_laudo_recurso(edital_id: str, user_id: str, tipo: str = 'recurso',
+def tool_gerar_laudo_recurso(edital_id: str, user_id: str, empresa_id: str = None, tipo: str = 'recurso',
                               inconsistencias: list = None, template_id: str = None,
                               empresa_alvo: str = None) -> Dict[str, Any]:
     """
@@ -10501,7 +10499,7 @@ def tool_gerar_laudo_recurso(edital_id: str, user_id: str, tipo: str = 'recurso'
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
@@ -10649,18 +10647,18 @@ TOOLS_MAP["gerar_laudo_recurso"] = tool_gerar_laudo_recurso
 # ==================== SPRINT 5 — PÓS-LICITAÇÃO ====================
 
 
-def tool_calcular_score_logistico(edital_id, user_id, db=None):
+def tool_calcular_score_logistico(edital_id, user_id, empresa_id=None, db=None):
     """Calcula score logístico de viabilidade para um edital (RF-011)"""
     close_db = False
     if db is None:
         db = get_db()
         close_db = True
     try:
-        edital = db.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        edital = db.query(Edital).filter_by(id=edital_id, empresa_id=empresa_id).first()
         if not edital:
             return {"erro": "Edital não encontrado"}
 
-        empresa = db.query(Empresa).filter_by(user_id=user_id).first()
+        empresa = db.query(Empresa).filter_by(id=empresa_id).first() if empresa_id else None
         origem_uf = empresa.uf if empresa and hasattr(empresa, 'uf') and empresa.uf else 'SP'
         destino_uf = edital.uf if hasattr(edital, 'uf') and edital.uf else ''
 
@@ -10688,7 +10686,7 @@ def tool_calcular_score_logistico(edital_id, user_id, db=None):
 
         # Dimensão 2: Histórico de entregas (25%)
         entregas_count = db.query(ContratoEntrega).join(Contrato).filter(
-            Contrato.user_id == user_id,
+            Contrato.empresa_id == empresa_id,
             ContratoEntrega.status == 'entregue'
         ).count()
         if entregas_count > 10:
@@ -10756,7 +10754,7 @@ def tool_calcular_score_logistico(edital_id, user_id, db=None):
 TOOLS_MAP["calcular_score_logistico"] = tool_calcular_score_logistico
 
 
-def tool_registrar_resultado_api(data, user_id, db=None):
+def tool_registrar_resultado_api(data, user_id, empresa_id=None, db=None):
     """Registra resultado de licitação via API direta — vitória/derrota/cancelado (RF-017)"""
     close_db = False
     if db is None:
@@ -10770,7 +10768,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
         motivo_derrota = data.get('motivo_derrota', '')
         observacoes = data.get('observacoes', '')
 
-        edital = db.query(Edital).filter_by(id=edital_id, user_id=user_id).first()
+        edital = db.query(Edital).filter_by(id=edital_id, empresa_id=empresa_id).first()
         if not edital:
             return {"success": False, "error": "Edital não encontrado"}
 
@@ -10780,7 +10778,7 @@ def tool_registrar_resultado_api(data, user_id, db=None):
             edital.status = 'ganho'
             # Auto-gerar número do contrato
             ano = datetime.now().year
-            count = db.query(Contrato).filter_by(user_id=user_id).count() + 1
+            count = db.query(Contrato).filter_by(empresa_id=empresa_id).count() + 1
             numero_contrato = f"CT-{ano}/{count:03d}"
 
             contrato = Contrato(
@@ -10858,14 +10856,14 @@ def tool_registrar_resultado_api(data, user_id, db=None):
 TOOLS_MAP["registrar_resultado_api"] = tool_registrar_resultado_api
 
 
-def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_id=None, orgao=None):
+def tool_dashboard_contratado_realizado(user_id, empresa_id=None, db=None, periodo='6m', produto_id=None, orgao=None):
     """Agrega dados de contratado vs realizado para dashboard (RF-051)"""
     close_db = False
     if db is None:
         db = get_db()
         close_db = True
     try:
-        query = db.query(Contrato).filter_by(user_id=user_id)
+        query = db.query(Contrato).filter_by(empresa_id=empresa_id)
 
         # Filtro período
         if periodo and periodo != 'tudo':
@@ -10933,7 +10931,7 @@ def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_
         # Próximos vencimentos (contratos com data_fim nos próximos 90 dias)
         data_limite = datetime.now() + timedelta(days=90)
         vencimentos = db.query(Contrato).filter(
-            Contrato.user_id == user_id,
+            Contrato.empresa_id == empresa_id,
             Contrato.data_fim != None,
             Contrato.data_fim <= data_limite,
             Contrato.data_fim >= datetime.now(),
@@ -10981,7 +10979,7 @@ def tool_dashboard_contratado_realizado(user_id, db=None, periodo='6m', produto_
 TOOLS_MAP["dashboard_contratado_realizado"] = tool_dashboard_contratado_realizado
 
 
-def tool_alertas_vencimento_multi_tier(user_id, db=None):
+def tool_alertas_vencimento_multi_tier(user_id, empresa_id=None, db=None):
     """Consolida vencimentos de contratos, atas e entregas com urgência multi-tier (RF-052-EXT-01)"""
     close_db = False
     if db is None:
@@ -10995,7 +10993,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
 
         # Contratos com vencimento próximo
         contratos = db.query(Contrato).filter(
-            Contrato.user_id == user_id,
+            Contrato.empresa_id == empresa_id,
             Contrato.data_fim != None,
             Contrato.data_fim <= limite_90d,
             Contrato.data_fim >= agora,
@@ -11014,7 +11012,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
 
         # Atas com vigência próxima do fim
         atas = db.query(AtaConsultada).filter(
-            AtaConsultada.user_id == user_id,
+            AtaConsultada.empresa_id == empresa_id,
             AtaConsultada.data_vigencia_fim != None,
             AtaConsultada.data_vigencia_fim <= limite_90d,
             AtaConsultada.data_vigencia_fim >= agora,
@@ -11032,7 +11030,7 @@ def tool_alertas_vencimento_multi_tier(user_id, db=None):
 
         # Entregas pendentes com prazo próximo
         entregas = db.query(ContratoEntrega).join(Contrato).filter(
-            Contrato.user_id == user_id,
+            Contrato.empresa_id == empresa_id,
             ContratoEntrega.status == 'pendente',
             ContratoEntrega.data_prevista != None,
             ContratoEntrega.data_prevista <= limite_30d,

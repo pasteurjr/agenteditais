@@ -96,7 +96,6 @@ CRUD_TABLES = {
     # === Empresa ===
     "empresas": {
         "model": Empresa,
-        "user_scoped": True,
         "search_fields": ["cnpj", "razao_social", "nome_fantasia", "cidade"],
         "label": "Empresa",
         "required": ["cnpj", "razao_social"],
@@ -186,7 +185,6 @@ CRUD_TABLES = {
     # === Portfolio ===
     "produtos": {
         "model": Produto,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["nome", "codigo_interno", "fabricante", "modelo", "ncm"],
         "label": "Produto",
@@ -221,7 +219,6 @@ CRUD_TABLES = {
     },
     "fontes-certidoes": {
         "model": FonteCertidao,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["nome", "tipo_certidao", "orgao_emissor", "url_portal", "uf", "cidade"],
         "label": "Fonte de Certidão",
@@ -231,7 +228,6 @@ CRUD_TABLES = {
     # === Editais ===
     "editais": {
         "model": Edital,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["numero", "orgao", "objeto", "uf", "cidade"],
         "label": "Edital",
@@ -267,7 +263,6 @@ CRUD_TABLES = {
     # === Análises ===
     "analises": {
         "model": Analise,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["recomendacao"],
         "label": "Análise",
@@ -285,7 +280,6 @@ CRUD_TABLES = {
     # === Propostas ===
     "propostas": {
         "model": Proposta,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["texto_tecnico"],
         "label": "Proposta",
@@ -294,14 +288,14 @@ CRUD_TABLES = {
     # === Concorrência ===
     "orgaos-perfil": {
         "model": OrgaoPerfil,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["nome", "cnpj", "uf"],
         "label": "Perfil de Órgão",
         "required": ["cnpj"],
     },
     "atas-consultadas": {
         "model": AtaConsultada,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["titulo", "orgao", "cnpj_orgao", "numero_controle_pncp"],
         "label": "Ata Consultada",
         "required": [],
@@ -316,7 +310,6 @@ CRUD_TABLES = {
     },
     "precos-historicos": {
         "model": PrecoHistorico,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["empresa_vencedora", "cnpj_vencedor", "fonte"],
         "label": "Preço Histórico",
@@ -334,7 +327,6 @@ CRUD_TABLES = {
     # === Alertas e Monitoramento ===
     "alertas": {
         "model": Alerta,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["titulo", "mensagem", "tipo"],
         "label": "Alerta",
@@ -342,7 +334,6 @@ CRUD_TABLES = {
     },
     "monitoramentos": {
         "model": Monitoramento,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["termo"],
         "label": "Monitoramento",
@@ -350,7 +341,6 @@ CRUD_TABLES = {
     },
     "notificacoes": {
         "model": Notificacao,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["titulo", "mensagem"],
         "label": "Notificação",
@@ -366,7 +356,6 @@ CRUD_TABLES = {
     # === Documentos Gerados ===
     "documentos": {
         "model": Documento,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["titulo", "tipo"],
         "label": "Documento Gerado",
@@ -375,7 +364,6 @@ CRUD_TABLES = {
     # === Contratos ===
     "contratos": {
         "model": Contrato,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["numero_contrato", "orgao", "objeto"],
         "label": "Contrato",
@@ -393,7 +381,6 @@ CRUD_TABLES = {
     # === Recursos ===
     "recursos": {
         "model": Recurso,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["motivo", "fundamentacao_legal"],
         "label": "Recurso",
@@ -402,7 +389,6 @@ CRUD_TABLES = {
     # === CRM ===
     "leads-crm": {
         "model": LeadCRM,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["orgao", "cnpj_orgao", "contato_nome", "contato_email"],
         "label": "Lead CRM",
@@ -410,7 +396,6 @@ CRUD_TABLES = {
     },
     "acoes-pos-perda": {
         "model": AcaoPosPerda,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["descricao", "responsavel"],
         "label": "Ação Pós-Perda",
@@ -427,7 +412,6 @@ CRUD_TABLES = {
     },
     "aprendizado-feedback": {
         "model": AprendizadoFeedback,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["tipo_evento", "entidade"],
         "label": "Feedback de Aprendizado",
@@ -436,7 +420,6 @@ CRUD_TABLES = {
     # === Parâmetros ===
     "parametros-score": {
         "model": ParametroScore,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": [],
         "label": "Parâmetros de Score",
@@ -444,7 +427,6 @@ CRUD_TABLES = {
     },
     "dispensas": {
         "model": Dispensa,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["artigo", "justificativa"],
         "label": "Dispensa",
@@ -452,7 +434,6 @@ CRUD_TABLES = {
     },
     "estrategias-editais": {
         "model": EstrategiaEdital,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["justificativa", "decidido_por", "edital_id"],
         "label": "Estratégia de Edital",
@@ -461,7 +442,6 @@ CRUD_TABLES = {
     # === Classes de Produtos ===
     "classes-produtos": {
         "model": ClasseProduto,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["nome"],
         "label": "Classe de Produto",
@@ -486,7 +466,6 @@ CRUD_TABLES = {
     # === FASE 1 — Precificação ===
     "lotes": {
         "model": Lote,
-        "user_scoped": True,
         "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
@@ -505,7 +484,6 @@ CRUD_TABLES = {
     },
     "edital-item-produto": {
         "model": EditalItemProduto,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": [],
         "label": "Vínculo Item-Produto",
@@ -513,7 +491,6 @@ CRUD_TABLES = {
     },
     "preco-camadas": {
         "model": PrecoCamada,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": [],
         "label": "Camada de Preço",
@@ -521,7 +498,6 @@ CRUD_TABLES = {
     },
     "lances": {
         "model": Lance,
-        "user_scoped": True,
         "empresa_scoped": True,
         "search_fields": ["observacao"],
         "label": "Lance",
@@ -529,7 +505,6 @@ CRUD_TABLES = {
     },
     "comodatos": {
         "model": Comodato,
-        "user_scoped": True,
         "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
@@ -548,7 +523,7 @@ CRUD_TABLES = {
     },
     "proposta-logs": {
         "model": PropostaLog,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "proposta_id",
         "parent_model": Proposta,
         "search_fields": ["campo"],
@@ -568,7 +543,7 @@ CRUD_TABLES = {
     # === SPRINT 4 — Recursos e Impugnações ===
     "impugnacoes": {
         "model": Impugnacao,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
         "search_fields": ["texto", "tipo", "status"],
@@ -577,7 +552,7 @@ CRUD_TABLES = {
     },
     "recursos-detalhados": {
         "model": RecursoDetalhado,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
         "search_fields": ["texto_juridico", "texto_tecnico", "empresa_alvo"],
@@ -594,7 +569,7 @@ CRUD_TABLES = {
     },
     "monitoramento-janelas": {
         "model": MonitoramentoJanela,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
         "search_fields": ["status"],
@@ -603,7 +578,7 @@ CRUD_TABLES = {
     },
     "validacoes-legais": {
         "model": ValidacaoLegal,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "edital_id",
         "parent_model": Edital,
         "search_fields": ["analise_ia"],
@@ -614,7 +589,7 @@ CRUD_TABLES = {
     # === SPRINT 5 — Gestão Contratual ===
     "contrato-aditivos": {
         "model": ContratoAditivo,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "contrato_id",
         "parent_model": Contrato,
         "search_fields": ["tipo", "justificativa", "fundamentacao_legal"],
@@ -623,7 +598,7 @@ CRUD_TABLES = {
     },
     "contrato-designacoes": {
         "model": ContratoDesignacao,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "contrato_id",
         "parent_model": Contrato,
         "search_fields": ["nome", "cargo", "tipo", "portaria_numero"],
@@ -632,7 +607,7 @@ CRUD_TABLES = {
     },
     "atividades-fiscais": {
         "model": AtividadeFiscal,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "designacao_id",
         "parent_model": ContratoDesignacao,
         "search_fields": ["tipo", "descricao"],
@@ -641,7 +616,7 @@ CRUD_TABLES = {
     },
     "arp-saldos": {
         "model": ARPSaldo,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "ata_id",
         "parent_model": AtaConsultada,
         "search_fields": ["item_descricao", "catmat_catser"],
@@ -650,7 +625,7 @@ CRUD_TABLES = {
     },
     "solicitacoes-carona": {
         "model": SolicitacaoCarona,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "parent_fk": "arp_saldo_id",
         "parent_model": ARPSaldo,
         "search_fields": ["orgao_solicitante", "cnpj_solicitante"],
@@ -659,7 +634,7 @@ CRUD_TABLES = {
     },
     "alerta-regras": {
         "model": AlertaVencimentoRegra,
-        "user_scoped": True,
+        "empresa_scoped": True,
         "search_fields": ["tipo_entidade"],
         "label": "Regras de Alerta de Vencimento",
         "required": ["tipo_entidade"],
@@ -824,23 +799,23 @@ def crud_list(table_slug):
             fk_col = getattr(model, config["parent_fk"], None)
             if fk_col is not None:
                 query = query.filter(fk_col == parent_id)
-            # Verify parent ownership
+            # Verify parent ownership by empresa
             parent_model = config.get("parent_model")
-            if parent_model and hasattr(parent_model, "user_id"):
+            if parent_model and hasattr(parent_model, "empresa_id") and empresa_id:
                 parent = db.query(parent_model).filter(
                     parent_model.id == parent_id,
-                    parent_model.user_id == user_id
+                    parent_model.empresa_id == empresa_id
                 ).first()
                 if not parent:
                     return jsonify({"error": "Registro pai não encontrado"}), 404
         elif not config.get("global"):
-            # For child tables without parent_id, try to scope by user through parent
+            # For child tables without parent_id, try to scope by empresa through parent
             if config.get("parent_fk"):
                 parent_model = config.get("parent_model")
-                if parent_model and hasattr(parent_model, "user_id"):
+                if parent_model and hasattr(parent_model, "empresa_id") and empresa_id:
                     fk_col = getattr(model, config["parent_fk"], None)
                     parent_ids = [p.id for p in db.query(parent_model.id).filter(
-                        parent_model.user_id == user_id
+                        parent_model.empresa_id == empresa_id
                     ).all()]
                     if fk_col is not None:
                         query = query.filter(fk_col.in_(parent_ids))
@@ -965,8 +940,8 @@ def crud_create(table_slug):
         instance = model()
         instance.id = str(uuid.uuid4())
 
-        # Set user_id if user-scoped
-        if config.get("user_scoped") and hasattr(model, "user_id"):
+        # Set user_id (trilha de auditoria: quem criou)
+        if hasattr(model, "user_id"):
             instance.user_id = user_id
 
         # Set empresa_id if empresa-scoped
@@ -980,7 +955,7 @@ def crud_create(table_slug):
         for col in model.__table__.columns:
             if col.name in skip_fields:
                 continue
-            if col.name == "user_id" and config.get("user_scoped"):
+            if col.name == "user_id" and hasattr(model, "user_id"):
                 continue
             if col.name == "empresa_id" and config.get("empresa_scoped"):
                 continue

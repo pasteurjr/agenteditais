@@ -253,14 +253,21 @@ function AppContent() {
 
   return (
     <div className="app-container">
-      {/* Toggle da sidebar */}
-      <button
-        className="menu-toggle"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        title={sidebarOpen ? "Fechar menu" : "Abrir menu"}
-      >
-        {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeft size={20} />}
-      </button>
+      {/* Top bar: toggle + empresa */}
+      <div className="top-bar">
+        <button
+          className="menu-toggle"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title={sidebarOpen ? "Fechar menu" : "Abrir menu"}
+        >
+          {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeft size={20} />}
+        </button>
+        {empresa && (
+          <span className="top-bar-empresa" title={empresa.razao_social}>
+            {empresa.nome_fantasia || empresa.razao_social}
+          </span>
+        )}
+      </div>
 
       {/* Sidebar */}
       <div className={`sidebar-wrapper ${sidebarOpen ? "open" : "closed"}`}>

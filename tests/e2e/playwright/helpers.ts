@@ -8,11 +8,12 @@ const CH_HOSPITALAR_ID = "7dbdc60a-b806-4614-a024-a1d4841dc8c9";
 export async function login(page: Page, _empresaNome?: string) {
   await page.setViewportSize({ width: 1400, height: 900 });
   // Limpar localStorage para forçar novo login
-  await page.goto(BASE, { waitUntil: "networkidle", timeout: 15000 });
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForTimeout(2000);
   await page.evaluate(() => {
     Object.keys(localStorage).filter(k => k.startsWith("editais_ia_")).forEach(k => localStorage.removeItem(k));
   });
-  await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForTimeout(2000);
   try {
     await page.waitForSelector('input[type="email"]', { timeout: 5000 });
@@ -48,7 +49,7 @@ export async function login(page: Page, _empresaNome?: string) {
             if (data.papel) localStorage.setItem("editais_ia_papel", data.papel);
           }
         }, CH_HOSPITALAR_ID);
-        await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(2000);
       }
     } else {
@@ -71,7 +72,7 @@ export async function login(page: Page, _empresaNome?: string) {
             if (data.papel) localStorage.setItem("editais_ia_papel", data.papel);
           }
         }, CH_HOSPITALAR_ID);
-        await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(2000);
       }
     }

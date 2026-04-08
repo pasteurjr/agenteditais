@@ -825,12 +825,12 @@ def require_auth(f):
             request.empresa_id = payload.get("empresa_id")
             request.is_super = payload.get("is_super", False)
             request.papel = payload.get("papel")
-            # Fallback: se JWT sem empresa_id, buscar primeira empresa do user
+            # Fallback: se JWT sem empresa_id, buscar primeira empresa do user via UsuarioEmpresa
             if not request.empresa_id:
                 db = get_db()
                 try:
-                    empresa = db.query(Empresa).filter(Empresa.user_id == request.user_id).first()
-                    request.empresa_id = empresa.id if empresa else None
+                    ue = db.query(UsuarioEmpresa).filter(UsuarioEmpresa.user_id == request.user_id, UsuarioEmpresa.ativo == True).first()
+                    request.empresa_id = ue.empresa_id if ue else None
                 finally:
                     db.close()
         except jwt.ExpiredSignatureError:
@@ -1928,6 +1928,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         tipo_produto: Filtro pós-busca por tipo de produto inferido do objeto (ex: "Reagentes").
         origem: Filtro pós-busca por origem do órgão inferida (ex: "Hospital").
     """
+    empresa_id = get_current_empresa_id()
     import re
     from datetime import datetime as _dt
     hoje = _dt.now()
@@ -1981,7 +1982,7 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     # 1. Buscar no PNCP (API oficial) — com tratamento de erro
     if buscar_pncp:
         try:
-            resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, uf=uf,
+            resultado_pncp = tool_buscar_editais_fonte("PNCP", termo, user_id, empresa_id=empresa_id, uf=uf,
                                                         buscar_detalhes=buscar_detalhes,
                                                         incluir_encerrados=incluir_encerrados,
                                                         dias_busca=dias_busca)
@@ -2921,6 +2922,7 @@ def processar_buscar_edital_numero(message: str, user_id: str, buscar_apenas_ban
     Returns:
         Tuple (response_text, resultado)
     """
+    empresa_id = get_current_empresa_id()
     import re
     import requests
 
@@ -2971,7 +2973,7 @@ Por favor, informe o número no formato:
     try:
         edital_local = db.query(Edital).filter(
             Edital.numero.ilike(f"%{numero_edital}%"),
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if edital_local:
@@ -3108,8 +3110,9 @@ O edital **{numero_edital}** não está cadastrado no sistema.
 
 
 def processar_listar_produtos(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa ação: Listar produtos do usuário"""
-    resultado = tool_listar_produtos(user_id)
+    resultado = tool_listar_produtos(user_id, empresa_id=empresa_id)
 
     if resultado.get("success"):
         produtos = resultado.get("produtos", [])
@@ -3138,13 +3141,14 @@ def processar_listar_produtos(message: str, user_id: str):
 
 
 def processar_reprocessar_produto(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """
     Reprocessa um produto para extrair especificações novamente.
     Útil quando a extração inicial falhou ou foi incompleta.
     """
     # Tentar identificar o produto na mensagem
     # Primeiro listar produtos do usuário
-    produtos_resultado = tool_listar_produtos(user_id)
+    produtos_resultado = tool_listar_produtos(user_id, empresa_id=empresa_id)
 
     if not produtos_resultado.get("success"):
         return "Erro ao buscar seus produtos.", produtos_resultado
@@ -3180,7 +3184,7 @@ def processar_reprocessar_produto(message: str, user_id: str):
 
     # Reprocessar
     print(f"[APP] Reprocessando produto: {produto_nome} ({produto_id})")
-    resultado = tool_reprocessar_produto(produto_id, user_id)
+    resultado = tool_reprocessar_produto(produto_id, user_id, empresa_id=empresa_id)
 
     if resultado.get("success"):
         specs = resultado.get("specs", [])
@@ -3209,6 +3213,7 @@ def processar_reprocessar_produto(message: str, user_id: str):
 
 
 def processar_excluir_edital(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """
     Processa ação: Excluir edital(is).
     Identifica editais por número, ID ou palavras-chave na mensagem.
@@ -3219,12 +3224,12 @@ def processar_excluir_edital(message: str, user_id: str):
 
     # Verificar se é exclusão de todos
     if "todos" in msg_lower:
-        editais_resultado = tool_listar_editais(user_id)
+        editais_resultado = tool_listar_editais(user_id, empresa_id=empresa_id)
         if not editais_resultado.get("success") or not editais_resultado.get("editais"):
             return "Você não tem editais salvos para excluir.", {"success": False}
 
         edital_ids = [e["id"] for e in editais_resultado.get("editais", [])]
-        resultado = tool_excluir_editais_multiplos(edital_ids, user_id)
+        resultado = tool_excluir_editais_multiplos(edital_ids, user_id, empresa_id=empresa_id)
 
         if resultado.get("success"):
             return f"✅ {resultado.get('excluidos', 0)} edital(is) excluído(s) com sucesso!", resultado
@@ -3232,7 +3237,7 @@ def processar_excluir_edital(message: str, user_id: str):
             return f"❌ Erro ao excluir editais: {resultado.get('error')}", resultado
 
     # Listar editais para identificar qual excluir
-    editais_resultado = tool_listar_editais(user_id)
+    editais_resultado = tool_listar_editais(user_id, empresa_id=empresa_id)
     if not editais_resultado.get("success"):
         return "Erro ao buscar seus editais.", editais_resultado
 
@@ -3262,7 +3267,7 @@ def processar_excluir_edital(message: str, user_id: str):
         return response, {"success": False, "editais": editais}
 
     # Excluir o edital encontrado
-    resultado = tool_excluir_edital(edital_a_excluir["id"], user_id)
+    resultado = tool_excluir_edital(edital_a_excluir["id"], user_id, empresa_id=empresa_id)
 
     if resultado.get("success"):
         return f"✅ Edital **{edital_a_excluir.get('numero')}** excluído com sucesso!", resultado
@@ -3271,6 +3276,7 @@ def processar_excluir_edital(message: str, user_id: str):
 
 
 def processar_excluir_produto(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """
     Processa ação: Excluir produto.
     Identifica produto por nome ou ID na mensagem.
@@ -3280,7 +3286,7 @@ def processar_excluir_produto(message: str, user_id: str):
     msg_lower = message.lower()
 
     # Listar produtos para identificar qual excluir
-    produtos_resultado = tool_listar_produtos(user_id)
+    produtos_resultado = tool_listar_produtos(user_id, empresa_id=empresa_id)
     if not produtos_resultado.get("success"):
         return "Erro ao buscar seus produtos.", produtos_resultado
 
@@ -3293,7 +3299,7 @@ def processar_excluir_produto(message: str, user_id: str):
         excluidos = 0
         erros = 0
         for p in produtos:
-            resultado = tool_excluir_produto(p["id"], user_id)
+            resultado = tool_excluir_produto(p["id"], user_id, empresa_id=empresa_id)
             if resultado.get("success"):
                 excluidos += 1
             else:
@@ -3327,7 +3333,7 @@ def processar_excluir_produto(message: str, user_id: str):
         return response, {"success": False, "produtos": produtos}
 
     # Excluir o produto encontrado
-    resultado = tool_excluir_produto(produto_a_excluir["id"], user_id)
+    resultado = tool_excluir_produto(produto_a_excluir["id"], user_id, empresa_id=empresa_id)
 
     if resultado.get("success"):
         return f"✅ Produto **{produto_a_excluir.get('nome')}** excluído com sucesso!", resultado
@@ -3336,6 +3342,7 @@ def processar_excluir_produto(message: str, user_id: str):
 
 
 def processar_atualizar_edital(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """
     Processa ação: Atualizar/Editar edital.
     Usa IA para extrair o que o usuário quer alterar.
@@ -3343,7 +3350,7 @@ def processar_atualizar_edital(message: str, user_id: str):
     from tools import tool_atualizar_edital, tool_listar_editais
 
     # Listar editais para identificar qual atualizar
-    editais_resultado = tool_listar_editais(user_id)
+    editais_resultado = tool_listar_editais(user_id, empresa_id=empresa_id)
     if not editais_resultado.get("success"):
         return "Erro ao buscar seus editais.", editais_resultado
 
@@ -3476,7 +3483,7 @@ def processar_cadastrar_produto(message: str, user_id: str):
 
         # Verificar duplicidade
         existente = db.query(Produto).filter(
-            Produto.user_id == user_id,
+            Produto.empresa_id == empresa_id,
             Produto.nome == nome
         ).first()
         if existente:
@@ -3581,6 +3588,7 @@ def processar_buscar_anvisa(message: str, user_id: str):
     Aceita número de registro ou nome do produto.
     Atualiza campo registro_anvisa e anvisa_status do produto se encontrar.
     """
+    empresa_id = get_current_empresa_id()
     import re
     db = get_db()
     try:
@@ -3649,7 +3657,7 @@ def processar_buscar_anvisa(message: str, user_id: str):
         produto_atualizado = None
         if registro_encontrado and nome_produto:
             produto = db.query(Produto).filter(
-                Produto.user_id == user_id,
+                Produto.empresa_id == empresa_id,
                 Produto.nome.ilike(f"%{nome_produto}%")
             ).first()
             if produto:
@@ -3659,7 +3667,7 @@ def processar_buscar_anvisa(message: str, user_id: str):
                 produto_atualizado = produto.nome
         elif registro_encontrado:
             produto = db.query(Produto).filter(
-                Produto.user_id == user_id,
+                Produto.empresa_id == empresa_id,
                 Produto.registro_anvisa == None  # noqa: E711
             ).first()
             if produto:
@@ -3703,10 +3711,11 @@ def processar_atualizar_produto(message: str, user_id: str):
     Processa ação: Atualizar/Editar produto.
     Usa IA para extrair o que o usuário quer alterar.
     """
+    empresa_id = get_current_empresa_id()
     from tools import tool_atualizar_produto, tool_listar_produtos
 
     # Listar produtos para identificar qual atualizar
-    produtos_resultado = tool_listar_produtos(user_id)
+    produtos_resultado = tool_listar_produtos(user_id, empresa_id=empresa_id)
     if not produtos_resultado.get("success"):
         return "Erro ao buscar seus produtos.", produtos_resultado
 
@@ -3818,10 +3827,11 @@ def processar_listar_fontes(message: str):
 
 def processar_listar_propostas(message: str, user_id: str):
     """Processa ação: Listar propostas geradas pelo usuário"""
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         propostas = db.query(Proposta).filter(
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).order_by(Proposta.created_at.desc()).limit(20).all()
 
         if propostas:
@@ -3864,6 +3874,7 @@ def processar_listar_propostas(message: str, user_id: str):
 
 
 def processar_buscar_editais_score(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa ação: Buscar editais + calcular score"""
     # Primeiro buscar editais (sem score — score é calculado abaixo separadamente)
     response_busca, resultado_busca = processar_buscar_editais(message, user_id, calcular_score=False)
@@ -3872,7 +3883,7 @@ def processar_buscar_editais_score(message: str, user_id: str):
         return response_busca, resultado_busca
 
     # Depois calcular score para cada edital com os produtos do usuário
-    produtos = tool_listar_produtos(user_id)
+    produtos = tool_listar_produtos(user_id, empresa_id=empresa_id)
 
     if not produtos.get("produtos"):
         return response_busca + "\n\n⚠️ Você não tem produtos cadastrados para calcular aderência.", resultado_busca
@@ -3882,7 +3893,7 @@ def processar_buscar_editais_score(message: str, user_id: str):
 
     for edital in resultado_busca.get("editais", [])[:3]:
         for produto in produtos.get("produtos", [])[:2]:
-            analise = tool_calcular_aderencia(produto["id"], edital["id"], user_id)
+            analise = tool_calcular_aderencia(produto["id"], edital["id"], user_id, empresa_id=empresa_id)
             if analise.get("success"):
                 analises.append(analise)
                 response += f"\n- {produto['nome']} x {edital['numero']}: **{analise.get('score_tecnico', 0):.0f}%** - {analise.get('recomendacao', '')}"
@@ -3892,6 +3903,7 @@ def processar_buscar_editais_score(message: str, user_id: str):
 
 
 def processar_listar_editais(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa ação: Listar editais salvos"""
     # Extrair filtros da mensagem
     uf = None
@@ -3914,7 +3926,7 @@ def processar_listar_editais(message: str, user_id: str):
     mostrar_todos = any(p in message_lower for p in ["todos", "all", "completo", "completa"])
     limite = 100 if mostrar_todos else 20  # Default 20, ou 100 se pedir todos
 
-    resultado = tool_listar_editais(user_id, status=status, uf=uf)
+    resultado = tool_listar_editais(user_id, empresa_id=empresa_id, status=status, uf=uf)
 
     if resultado.get("success"):
         editais = resultado.get("editais", [])
@@ -4010,10 +4022,11 @@ def _encontrar_produto(produtos: list, message_lower: str):
 
 
 def processar_calcular_aderencia(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa ação: Calcular aderência"""
     # Listar produtos e editais disponíveis
-    produtos = tool_listar_produtos(user_id)
-    editais = tool_listar_editais(user_id)
+    produtos = tool_listar_produtos(user_id, empresa_id=empresa_id)
+    editais = tool_listar_editais(user_id, empresa_id=empresa_id)
 
     if not produtos.get("produtos"):
         return "Você não tem produtos cadastrados. Faça upload de um manual primeiro.", {"status": "sem_produtos"}
@@ -4040,7 +4053,8 @@ def processar_calcular_aderencia(message: str, user_id: str):
         resultado = tool_calcular_aderencia(
             produto_encontrado["id"],
             edital_encontrado["id"],
-            user_id
+            user_id,
+            empresa_id=empresa_id
         )
 
         if resultado.get("success"):
@@ -4093,10 +4107,11 @@ def processar_calcular_aderencia(message: str, user_id: str):
 
 
 def processar_gerar_proposta(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa ação: Gerar proposta"""
     # Similar ao calcular aderência, precisa identificar produto e edital
-    produtos = tool_listar_produtos(user_id)
-    editais = tool_listar_editais(user_id)
+    produtos = tool_listar_produtos(user_id, empresa_id=empresa_id)
+    editais = tool_listar_editais(user_id, empresa_id=empresa_id)
 
     if not produtos.get("produtos") or not editais.get("editais"):
         return "Você precisa ter produtos e editais cadastrados para gerar uma proposta.", {"status": "incompleto"}
@@ -4164,6 +4179,7 @@ def processar_gerar_proposta(message: str, user_id: str):
 
 
 def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
+    empresa_id = get_current_empresa_id()
     """
     Processa ação: Salvar editais
 
@@ -4304,7 +4320,7 @@ def processar_salvar_editais(message: str, user_id: str, session_id: str, db):
 """, {"status": "sem_editais"}
 
     # Salvar os editais selecionados (com verificação de duplicatas)
-    resultado_salvar = tool_salvar_editais_selecionados(editais_para_salvar, user_id)
+    resultado_salvar = tool_salvar_editais_selecionados(editais_para_salvar, user_id, empresa_id=empresa_id)
 
     if resultado_salvar.get("success"):
         salvos = resultado_salvar.get("salvos", [])
@@ -4465,13 +4481,14 @@ Não foi possível processar a consulta analítica.
 
 
 def processar_registrar_resultado(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """
     Processa registro de resultado de certame (vitória/derrota).
     Alimenta a base de preços históricos e concorrentes.
     """
     from tools import tool_registrar_resultado
 
-    resultado = tool_registrar_resultado(message, user_id)
+    resultado = tool_registrar_resultado(message, user_id, empresa_id=empresa_id)
 
     if not resultado.get("success"):
         error = resultado.get("error", "Erro desconhecido")
@@ -4560,6 +4577,7 @@ def processar_consultar_resultado(message: str, user_id: str):
     Consulta resultado de um certame já registrado.
     Suporta consulta de um edital específico ou de todos os editais.
     """
+    empresa_id = get_current_empresa_id()
     from models import get_db, Edital, PrecoHistorico, Concorrente, ParticipacaoEdital
     import re
 
@@ -4588,7 +4606,7 @@ def processar_consultar_resultado(message: str, user_id: str):
         # Buscar edital
         edital = db.query(Edital).filter(
             Edital.numero.ilike(f"%{numero_edital}%"),
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -4596,7 +4614,7 @@ def processar_consultar_resultado(message: str, user_id: str):
             numero_limpo = match.group(1)
             edital = db.query(Edital).filter(
                 Edital.numero.ilike(f"%{numero_limpo}%"),
-                Edital.user_id == user_id
+                Edital.empresa_id == empresa_id
             ).first()
 
         if not edital:
@@ -4698,6 +4716,7 @@ def processar_consultar_todos_resultados(user_id: str, db):
     Consulta resultados de TODOS os editais do usuário.
     Retorna uma tabela markdown com os resultados.
     """
+    empresa_id = get_current_empresa_id()
     from models import Edital, PrecoHistorico
 
     try:
@@ -4705,13 +4724,13 @@ def processar_consultar_todos_resultados(user_id: str, db):
         status_com_resultado = ['vencedor', 'perdedor', 'cancelado', 'deserto', 'revogado']
 
         editais = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.status.in_(status_com_resultado)
         ).order_by(Edital.data_abertura.desc()).all()
 
         if not editais:
             # Verificar se tem editais sem resultado
-            total_editais = db.query(Edital).filter(Edital.user_id == user_id).count()
+            total_editais = db.query(Edital).filter(Edital.empresa_id == empresa_id).count()
             if total_editais > 0:
                 return f"""📊 **Resultados de Certames**
 
@@ -4783,6 +4802,7 @@ Para registrar um resultado, use:
 
 
 def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename: str):
+    empresa_id = get_current_empresa_id()
     """
     Processa extração de resultados de uma ata de sessão de pregão.
 
@@ -4797,7 +4817,7 @@ def processar_extrair_ata(texto_pdf: str, filepath: str, user_id: str, filename:
     """
     from tools import tool_extrair_ata_pdf
 
-    resultado = tool_extrair_ata_pdf(texto_pdf, user_id)
+    resultado = tool_extrair_ata_pdf(texto_pdf, user_id, empresa_id=empresa_id)
 
     if not resultado.get("success"):
         response = f"""## ❌ Erro ao Extrair Ata
@@ -5131,6 +5151,7 @@ def extrair_termo(message: str, palavras_remover: list) -> str:
 # ==================== SPRINT 1 - FUNCIONALIDADE 5: HISTÓRICO DE PREÇOS ====================
 
 def processar_historico_precos(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa consulta de histórico de preços."""
     from tools import tool_historico_precos
 
@@ -5140,7 +5161,7 @@ def processar_historico_precos(message: str, user_id: str):
                 "quais", "já", "ja"]
     termo = extrair_termo(message, palavras)
 
-    resultado = tool_historico_precos(termo=termo if termo else None, user_id=user_id)
+    resultado = tool_historico_precos(termo=termo if termo else None, user_id=user_id, empresa_id=empresa_id)
 
     if not resultado.get("success"):
         return f"""## ❌ Histórico de Preços
@@ -5516,6 +5537,7 @@ def processar_cadastrar_edital(message: str, user_id: str, intencao_resultado: d
     - Data de abertura (opcional)
     - UF (opcional)
     """
+    empresa_id = get_current_empresa_id()
     from models import Edital
     from database import SessionLocal
     import re
@@ -5580,7 +5602,7 @@ Cadastre o edital PE-001/2026, órgão Hospital das Clínicas UFMG, objeto: Aqui
             # Verificar se já existe
             edital_existente = db.query(Edital).filter(
                 Edital.numero == dados["numero"],
-                Edital.user_id == user_id
+                Edital.empresa_id == empresa_id
             ).first()
 
             if edital_existente:
@@ -5595,6 +5617,7 @@ Se deseja atualizar, use: "Atualize o edital {dados['numero']} com..." """, None
             # Criar novo edital
             novo_edital = Edital(
                 user_id=user_id,
+                empresa_id=empresa_id,
                 numero=dados["numero"],
                 orgao=dados["orgao"],
                 objeto=dados["objeto"],
@@ -5791,6 +5814,7 @@ def processar_listar_alertas(message: str, user_id: str):
 
 
 def processar_dashboard_prazos(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa exibição do dashboard de prazos."""
     from tools import tool_dashboard_prazos
     msg = message.lower()
@@ -5803,7 +5827,7 @@ def processar_dashboard_prazos(message: str, user_id: str):
     elif "semana" in msg or "7" in msg:
         dias = 7
 
-    resultado = tool_dashboard_prazos(user_id=user_id, dias=dias)
+    resultado = tool_dashboard_prazos(user_id=user_id, empresa_id=empresa_id, dias=dias)
 
     if resultado.get("success"):
         editais = resultado.get("editais", [])
@@ -5850,6 +5874,7 @@ def processar_dashboard_prazos(message: str, user_id: str):
 
 
 def processar_calendario_editais(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa exibição do calendário de editais."""
     from datetime import datetime
     from tools import tool_calendario_editais
@@ -5879,7 +5904,7 @@ def processar_calendario_editais(message: str, user_id: str):
     if match_ano:
         ano = int(match_ano.group())
 
-    resultado = tool_calendario_editais(user_id=user_id, mes=mes, ano=ano)
+    resultado = tool_calendario_editais(user_id=user_id, empresa_id=empresa_id, mes=mes, ano=ano)
 
     if resultado.get("success"):
         calendario = resultado.get("calendario", {})
@@ -5992,12 +6017,13 @@ def processar_configurar_monitoramento(message: str, user_id: str):
 
 
 def processar_listar_monitoramentos(message: str, user_id: str):
+    empresa_id = get_current_empresa_id()
     """Processa listagem de monitoramentos configurados."""
     from tools import tool_listar_monitoramentos
     msg = message.lower()
     apenas_ativos = "todos" not in msg and "inativos" not in msg
 
-    resultado = tool_listar_monitoramentos(user_id=user_id, apenas_ativos=apenas_ativos)
+    resultado = tool_listar_monitoramentos(user_id=user_id, empresa_id=empresa_id, apenas_ativos=apenas_ativos)
 
     if resultado.get("success"):
         monitoramentos = resultado.get("monitoramentos", [])
@@ -6257,6 +6283,7 @@ def processar_resumir_edital(message: str, user_id: str, intencao_resultado: dic
 
     Returns: (response_text, resultado_dict)
     """
+    empresa_id = get_current_empresa_id()
     import re
     db = get_db()
 
@@ -6284,7 +6311,7 @@ def processar_resumir_edital(message: str, user_id: str, intencao_resultado: dic
 
         # Buscar edital no banco
         edital = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
         ).first()
 
@@ -6374,6 +6401,7 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
 
     Returns: (response_text, resultado_dict)
     """
+    empresa_id = get_current_empresa_id()
     import re
     import os
     db = get_db()
@@ -6402,7 +6430,7 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
 
         # Buscar edital no banco
         edital = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
         ).first()
 
@@ -6678,6 +6706,7 @@ Para responder sua pergunta, preciso do **PDF do edital**.
 
 
 def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: dict = None):
+    empresa_id = get_current_empresa_id()
     """
     Processa ação: Baixar o PDF de um edital cadastrado.
 
@@ -6689,6 +6718,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
 
     Returns: (response_text, resultado_dict)
     """
+    empresa_id = get_current_empresa_id()
     import re
     import os
     import requests
@@ -6719,7 +6749,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
 
         # Buscar edital no banco
         edital = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
         ).first()
 
@@ -6826,7 +6856,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
                     requisitos_extraidos = 0
                     if texto_extraido and len(texto_extraido) > 200:
                         try:
-                            resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id)
+                            resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id, empresa_id=empresa_id)
                             requisitos_extraidos = resultado_req.get("requisitos_extraidos", 0)
                             if requisitos_extraidos > 0:
                                 response_text += f"📋 **Requisitos extraídos:** {requisitos_extraidos} (técnicos, documentais e comerciais)\n\n"
@@ -7047,7 +7077,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
             requisitos_extraidos = 0
             if texto_extraido and len(texto_extraido) > 200:
                 try:
-                    resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id)
+                    resultado_req = tool_extrair_requisitos(edital.id, texto_extraido, user_id, empresa_id=empresa_id)
                     requisitos_extraidos = resultado_req.get("requisitos_extraidos", 0)
                     if requisitos_extraidos > 0:
                         response_text += f"📋 **Requisitos extraídos:** {requisitos_extraidos} (técnicos, documentais e comerciais)\n\n"
@@ -7088,6 +7118,7 @@ def processar_baixar_pdf_edital(message: str, user_id: str, intencao_resultado: 
 
 def processar_atualizar_url_edital(message: str, user_id: str, intencao_resultado: dict = None):
     """Atualiza a URL de um edital cadastrado"""
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         import re
@@ -7134,7 +7165,7 @@ def processar_atualizar_url_edital(message: str, user_id: str, intencao_resultad
         nova_url = url_match.group(1)
 
         # Buscar edital no banco
-        editais = db.query(Edital).filter(Edital.user_id == user_id).all()
+        editais = db.query(Edital).filter(Edital.empresa_id == empresa_id).all()
 
         # Normalizar número para comparação
         numero_busca = edital_numero.replace('-', '').replace('/', '').upper()
@@ -7207,7 +7238,7 @@ def processar_precif_organizar_lotes(message: str, user_id: str, empresa_id: str
         edital_id = _extrair_id_da_mensagem(message)
         if not edital_id:
             # Pegar último edital do usuário
-            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital = db.query(Edital).filter(Edital.empresa_id == empresa_id).order_by(Edital.created_at.desc()).first()
             edital_id = edital.id if edital else None
         if not edital_id:
             return "❌ Nenhum edital encontrado. Salve um edital primeiro.", None
@@ -7433,7 +7464,7 @@ def processar_precif_estrategia(message: str, user_id: str, empresa_id: str = No
     if not edital_id:
         db = get_db()
         try:
-            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital = db.query(Edital).filter(Edital.empresa_id == empresa_id).order_by(Edital.created_at.desc()).first()
             edital_id = edital.id if edital else None
         finally:
             db.close()
@@ -7503,7 +7534,7 @@ def processar_precif_comodato(message: str, user_id: str, empresa_id: str = None
     if not edital_id:
         db = get_db()
         try:
-            edital = db.query(Edital).filter(Edital.user_id == user_id).order_by(Edital.created_at.desc()).first()
+            edital = db.query(Edital).filter(Edital.empresa_id == empresa_id).order_by(Edital.created_at.desc()).first()
             edital_id = edital.id if edital else None
         finally:
             db.close()
@@ -8136,10 +8167,11 @@ def update_session(session_id):
 @require_auth
 def listar_produtos_api():
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     categoria = request.args.get("categoria")
     nome = request.args.get("nome")
 
-    resultado = tool_listar_produtos(user_id, categoria=categoria, nome=nome)
+    resultado = tool_listar_produtos(user_id, empresa_id=empresa_id, categoria=categoria, nome=nome)
     return jsonify(resultado)
 
 
@@ -8147,11 +8179,12 @@ def listar_produtos_api():
 @require_auth
 def get_produto(produto_id):
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
 
         if not produto:
@@ -8182,11 +8215,12 @@ def get_produto_completude(produto_id):
 @require_auth
 def listar_editais_api():
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     status = request.args.get("status")
     uf = request.args.get("uf")
     categoria = request.args.get("categoria")
 
-    resultado = tool_listar_editais(user_id, status=status, uf=uf, categoria=categoria)
+    resultado = tool_listar_editais(user_id, empresa_id=empresa_id, status=status, uf=uf, categoria=categoria)
     return jsonify(resultado)
 
 
@@ -8194,11 +8228,12 @@ def listar_editais_api():
 @require_auth
 def get_edital(edital_id):
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -8221,11 +8256,12 @@ def download_edital_pdf(edital_id):
     from models import EditalDocumento
     from datetime import datetime
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
 
         if not edital:
@@ -8457,6 +8493,7 @@ def view_edital_pdf(edital_id):
     """Serve PDF já baixado para visualização inline (iframe/object).
     Usa token via query param para permitir acesso direto pelo browser.
     """
+    empresa_id = get_current_empresa_id()
     from models import EditalDocumento
     token = request.args.get('token')
     if not token:
@@ -8469,7 +8506,7 @@ def view_edital_pdf(edital_id):
 
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
@@ -8511,7 +8548,7 @@ def listar_lotes_edital(edital_id):
     try:
         lotes = db.query(Lote).filter(
             Lote.edital_id == edital_id,
-            Lote.user_id == user_id
+            Lote.empresa_id == empresa_id
         ).order_by(Lote.numero_lote).all()
 
         lotes_resp = []
@@ -8549,7 +8586,7 @@ def extrair_lotes_edital(edital_id):
     """Extrai lotes do edital via IA (lê PDF) e cria no banco."""
     from tools import tool_organizar_lotes
     user_id = get_current_user_id()
-    empresa_id = getattr(request, 'empresa_id', None)
+    empresa_id = get_current_empresa_id()
     forcar = request.json.get("forcar", False) if request.is_json else False
 
     result = tool_organizar_lotes(
@@ -8570,6 +8607,7 @@ def download_edital_pdf_by_numero(numero):
     """Download ou visualização do PDF do edital pelo número"""
     from models import EditalDocumento
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         # Normalizar número para busca
@@ -8577,7 +8615,7 @@ def download_edital_pdf_by_numero(numero):
 
         # Buscar edital pelo número
         edital = db.query(Edital).filter(
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).all()
 
         # Encontrar edital com número similar
@@ -8721,10 +8759,11 @@ def listar_fontes_api():
 @require_auth
 def listar_analises():
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         analises = db.query(Analise).filter(
-            Analise.user_id == user_id
+            Analise.empresa_id == empresa_id
         ).order_by(Analise.created_at.desc()).limit(50).all()
 
         return jsonify({"analises": [a.to_dict() for a in analises]})
@@ -8736,11 +8775,12 @@ def listar_analises():
 @require_auth
 def get_analise(analise_id):
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         analise = db.query(Analise).filter(
             Analise.id == analise_id,
-            Analise.user_id == user_id
+            Analise.empresa_id == empresa_id
         ).first()
 
         if not analise:
@@ -8759,10 +8799,11 @@ def get_analise(analise_id):
 @require_auth
 def listar_propostas():
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         propostas = db.query(Proposta).filter(
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).order_by(Proposta.created_at.desc()).limit(50).all()
 
         return jsonify({"propostas": [p.to_dict() for p in propostas]})
@@ -8774,11 +8815,12 @@ def listar_propostas():
 @require_auth
 def get_proposta(proposta_id):
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
 
         if not proposta:
@@ -8885,11 +8927,12 @@ def auditoria_documental(proposta_id):
 def smart_split(proposta_id):
     """Divide PDF da proposta em partes menores que 25MB."""
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
         if not proposta:
             return jsonify({"error": "Proposta não encontrada"}), 404
@@ -8912,11 +8955,12 @@ def gerar_dossie(proposta_id):
     import zipfile
     import io
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
         if not proposta:
             return jsonify({"error": "Proposta não encontrada"}), 404
@@ -8983,27 +9027,28 @@ def get_dashboard_stats():
     from datetime import date, timedelta
 
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         # Total de editais
-        total_editais = db.query(Edital).filter(Edital.user_id == user_id).count()
+        total_editais = db.query(Edital).filter(Edital.empresa_id == empresa_id).count()
 
         # Editais por status
         status_rows = (
             db.query(Edital.status, func.count(Edital.id))
-            .filter(Edital.user_id == user_id)
+            .filter(Edital.empresa_id == empresa_id)
             .group_by(Edital.status)
             .all()
         )
         editais_por_status = {row[0]: row[1] for row in status_rows}
 
         # Total de propostas
-        total_propostas = db.query(Proposta).filter(Proposta.user_id == user_id).count()
+        total_propostas = db.query(Proposta).filter(Proposta.empresa_id == empresa_id).count()
 
         # Propostas por status
         prop_status_rows = (
             db.query(Proposta.status, func.count(Proposta.id))
-            .filter(Proposta.user_id == user_id)
+            .filter(Proposta.empresa_id == empresa_id)
             .group_by(Proposta.status)
             .all()
         )
@@ -9018,7 +9063,7 @@ def get_dashboard_stats():
         # Valor total contratado
         valor_row = (
             db.query(func.coalesce(func.sum(Contrato.valor_total), 0))
-            .filter(Contrato.user_id == user_id)
+            .filter(Contrato.empresa_id == empresa_id)
             .scalar()
         )
         valor_total_contratado = float(valor_row) if valor_row else 0.0
@@ -9040,7 +9085,7 @@ def get_dashboard_stats():
                 func.count(Edital.id).label('total')
             )
             .filter(
-                Edital.user_id == user_id,
+                Edital.empresa_id == empresa_id,
                 Edital.created_at >= data_inicio
             )
             .group_by('mes')
@@ -9055,7 +9100,7 @@ def get_dashboard_stats():
         prazo_rows = (
             db.query(Edital.numero, Edital.data_abertura)
             .filter(
-                Edital.user_id == user_id,
+                Edital.empresa_id == empresa_id,
                 Edital.data_abertura >= hoje,
                 Edital.data_abertura <= em_30_dias,
                 Edital.status.in_(['novo', 'analisando', 'participando'])
@@ -9228,7 +9273,7 @@ def _salvar_edital_temp_para_score(edital_data, user_id, empresa_id):
 
         # Verificar se já existe
         existe = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.numero == numero,
             Edital.orgao == orgao
         ).first()
@@ -9353,7 +9398,7 @@ def _calcular_score_profundo(editais, user_id, empresa_id):
     try:
         db = get_db()
         temp_deletados = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.status == "temp_score"
         ).delete()
         db.commit()
@@ -9453,7 +9498,7 @@ def buscar_editais_rest():
                 termo_words = {w for w in termo_norm.split() if len(w) > 3}
 
                 db_termos = get_db()
-                produtos_user = db_termos.query(Produto).filter(Produto.user_id == user_id).all()
+                produtos_user = db_termos.query(Produto).filter(Produto.empresa_id == empresa_id).all()
                 termos_busca_extras = set()
 
                 # Só extrair termos de produtos relevantes ao termo buscado
@@ -9659,6 +9704,7 @@ def listar_editais_salvos():
     Query params: status, uf, categoria, com_score (bool), com_estrategia (bool)
     """
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     status = request.args.get("status")
     uf = request.args.get("uf")
     categoria = request.args.get("categoria")
@@ -9670,7 +9716,7 @@ def listar_editais_salvos():
     db = get_db()
     try:
         query = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.status != "temp_score",  # Excluir editais temporários criados pelo score profundo
         )
 
@@ -9692,7 +9738,7 @@ def listar_editais_salvos():
             if com_score:
                 melhor_analise = db.query(Analise).filter(
                     Analise.edital_id == edital.id,
-                    Analise.user_id == user_id
+                    Analise.empresa_id == empresa_id
                 ).order_by(Analise.score_final.desc()).first()
                 if melhor_analise:
                     edital_dict["score_tecnico"] = float(melhor_analise.score_tecnico) if melhor_analise.score_tecnico else None
@@ -9737,7 +9783,7 @@ def listar_editais_salvos():
             if com_estrategia:
                 estrategia = db.query(EstrategiaEdital).filter(
                     EstrategiaEdital.edital_id == edital.id,
-                    EstrategiaEdital.user_id == user_id
+                    EstrategiaEdital.empresa_id == empresa_id
                 ).first()
                 if estrategia:
                     edital_dict["decisao"] = estrategia.decisao
@@ -9795,6 +9841,7 @@ def calcular_scores_validacao_rest(edital_id):
 def salvar_scores_captacao():
     """Salva scores calculados na Captação para que a Validação não precise recalcular."""
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json()
     edital_id = data.get("edital_id")
     if not edital_id:
@@ -9802,16 +9849,15 @@ def salvar_scores_captacao():
 
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
-        empresa_id = empresa.id if empresa else None
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
 
         # Buscar produto correspondente (necessário para Analise — produto_id é NOT NULL)
         from models import Produto
-        produto = db.query(Produto).filter(Produto.user_id == user_id).first()
+        produto = db.query(Produto).filter(Produto.empresa_id == empresa_id).first()
         if not produto:
             return jsonify({"error": "Nenhum produto cadastrado"}), 400
         produto_id = produto.id
@@ -9819,7 +9865,7 @@ def salvar_scores_captacao():
         # Verificar se já existe análise para este edital
         analise_existente = db.query(Analise).filter(
             Analise.edital_id == edital_id,
-            Analise.user_id == user_id
+            Analise.empresa_id == empresa_id
         ).first()
 
         score_tecnico = data.get("score_tecnico", 0)
@@ -9880,17 +9926,13 @@ def score_profundo_sob_demanda():
     calcula score profundo e retorna resultado.
     """
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
 
     if not data.get("objeto"):
         return jsonify({"success": False, "error": "Campo 'objeto' obrigatório"}), 400
 
     try:
-        # Buscar empresa_id do usuário
-        db = get_db()
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
-        empresa_id = str(empresa.id) if empresa else user_id
-        db.close()
 
         # Salvar edital temporário
         edital_id = _salvar_edital_temp_para_score(data, user_id, empresa_id)
@@ -9925,6 +9967,7 @@ def atualizar_status_proposta(proposta_id):
     rascunho -> revisao -> aprovada -> enviada -> aceita/rejeitada
     """
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
     novo_status = data.get("status", "").strip()
 
@@ -9951,7 +9994,7 @@ def atualizar_status_proposta(proposta_id):
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
 
         if not proposta:
@@ -9997,6 +10040,7 @@ def exportar_proposta(proposta_id):
     Query param: formato (pdf | docx), padrão = pdf
     """
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     formato = request.args.get("formato", "pdf").lower()
 
     if formato not in ("pdf", "docx"):
@@ -10006,7 +10050,7 @@ def exportar_proposta(proposta_id):
     try:
         proposta = db.query(Proposta).filter(
             Proposta.id == proposta_id,
-            Proposta.user_id == user_id
+            Proposta.empresa_id == empresa_id
         ).first()
 
         if not proposta:
@@ -10229,10 +10273,8 @@ def upload_empresa_documento():
 
     db = get_db()
     try:
-        # Verificar que a empresa pertence ao usuário
         empresa = db.query(Empresa).filter(
-            Empresa.id == empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Empresa não encontrada"}), 404
@@ -10307,8 +10349,7 @@ def download_empresa_documento(doc_id):
 
         # Verificar propriedade via empresa
         empresa = db.query(Empresa).filter(
-            Empresa.id == doc.empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == doc.empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Acesso negado"}), 403
@@ -10351,8 +10392,7 @@ def download_empresa_certidao(certidao_id):
             return jsonify({"error": "Certidão não encontrada"}), 404
 
         empresa = db.query(Empresa).filter(
-            Empresa.id == cert.empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == cert.empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Acesso negado"}), 403
@@ -10467,8 +10507,7 @@ def upload_empresa_certidao(certidao_id):
             return jsonify({"error": "Certidão não encontrada"}), 404
 
         empresa = db.query(Empresa).filter(
-            Empresa.id == cert.empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == cert.empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Acesso negado"}), 403
@@ -10570,10 +10609,11 @@ def gerar_classes_ia():
     """
     from models import Produto
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
 
     db = get_db()
     try:
-        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
 
         if not produtos:
             return jsonify({"error": "Nenhum produto cadastrado. Cadastre produtos primeiro."}), 400
@@ -10667,6 +10707,7 @@ def vincular_documento_edital(edital_id):
     """
     from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
 
     documento_id = data.get('documento_id')
@@ -10681,7 +10722,7 @@ def vincular_documento_edital(edital_id):
         # Verificar edital pertence ao usuário
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
@@ -10732,17 +10773,18 @@ def documentacao_necessaria(edital_id):
     from models import Empresa, EmpresaDocumento, EmpresaCertidao, EditalRequisito, Edital
     from datetime import date
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
 
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
 
         # Requisitos documentais extraídos do edital (se houver)
         requisitos_doc = db.query(EditalRequisito).filter(
@@ -10964,11 +11006,11 @@ def precif_vincular_ia(item_id):
     """UC-P02: Seleção inteligente — IA analisa item e sugere melhor produto do portfolio."""
     from tools import tool_selecao_portfolio
     user_id = get_current_user_id()
-    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
+    empresa_id = get_current_empresa_id()
     resultado = tool_selecao_portfolio(
         edital_item_id=item_id,
         user_id=user_id,
-        empresa_id=empresa.id if empresa else None,
+        empresa_id=empresa_id,
     )
     return jsonify(resultado)
 
@@ -10979,14 +11021,14 @@ def precif_custos(eip_id):
     """UC-P04: Configurar custos (Camada A) — calcula tributos e isenção ICMS."""
     from tools import tool_configurar_custos
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json() or {}
-    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
     resultado = tool_configurar_custos(
         edital_item_produto_id=eip_id, user_id=user_id,
         custo_unitario=data.get("custo_unitario"),
         custo_fonte=data.get("custo_fonte", "manual"),
         icms=data.get("icms"), ipi=data.get("ipi"), pis_cofins=data.get("pis_cofins"),
-        empresa_id=empresa.id if empresa else None,
+        empresa_id=empresa_id,
     )
     return jsonify(resultado)
 
@@ -11046,12 +11088,12 @@ def precif_estrategia(edital_id):
     """UC-P08: Definir estratégia competitiva."""
     from tools import tool_estrategia_competitiva
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json() or {}
-    empresa = get_db().query(Empresa).filter(Empresa.user_id == user_id).first()
     resultado = tool_estrategia_competitiva(
         edital_id=edital_id, user_id=user_id,
         perfil=data.get("perfil", "quero_ganhar"),
-        empresa_id=empresa.id if empresa else None,
+        empresa_id=empresa_id,
     )
     return jsonify(resultado)
 
@@ -11167,7 +11209,8 @@ def precif_insights(eip_id):
     """Agrega histórico + recomendação IA + concorrentes para um item-produto."""
     from tools import tool_insights_precificacao
     user_id = get_current_user_id()
-    resultado = tool_insights_precificacao(eip_id, user_id)
+    empresa_id = get_current_empresa_id()
+    resultado = tool_insights_precificacao(eip_id, user_id, empresa_id=empresa_id)
     return jsonify(resultado)
 
 
@@ -11182,7 +11225,7 @@ def precif_insights_salvos(eip_id):
         from models import PrecoCamada
         camada = db.query(PrecoCamada).filter(
             PrecoCamada.edital_item_produto_id == eip_id,
-            PrecoCamada.user_id == user_id
+            PrecoCamada.empresa_id == empresa_id
         ).first()
         if camada and camada.analise_ia_json:
             data = _json.loads(camada.analise_ia_json)
@@ -11204,9 +11247,10 @@ def analisar_mercado_edital(edital_id):
     from datetime import datetime, timedelta
 
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
@@ -11299,7 +11343,7 @@ def analisar_mercado_edital(edital_id):
 
         # Compras similares — usar palavras-chave do objeto + produto
         produto_match = None
-        analise_exist = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.user_id == user_id).first()
+        analise_exist = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.empresa_id == empresa_id).first()
         if analise_exist and analise_exist.produto_id:
             from models import Produto
             produto_match = db.query(Produto).filter(Produto.id == analise_exist.produto_id).first()
@@ -11474,9 +11518,10 @@ Responda APENAS o texto da análise, sem JSON."""
 
 def _calcular_historico_interno(db, nome_orgao, user_id):
     """Calcula decisões internas GO/NO-GO para um órgão."""
+    empresa_id = get_current_empresa_id()
     try:
         editais_orgao = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.orgao.ilike(f"%{nome_orgao[:20]}%"),
             Edital.status != "temp_score",
         ).all()
@@ -11500,22 +11545,22 @@ def analisar_riscos_edital(edital_id):
     from datetime import datetime
 
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
         # === PASSO 1: Identificar produto match ===
         produto_match = None
-        analise_existente = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.user_id == user_id).first()
+        analise_existente = db.query(Analise).filter(Analise.edital_id == edital_id, Analise.empresa_id == empresa_id).first()
         if analise_existente and analise_existente.produto_id:
             produto_match = db.query(Produto).filter(Produto.id == analise_existente.produto_id).first()
         if not produto_match:
-            produto_match = db.query(Produto).filter(Produto.user_id == user_id).first()
+            produto_match = db.query(Produto).filter(Produto.empresa_id == empresa_id).first()
 
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
-        empresa_id = empresa.id if empresa else None
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
 
         # === PASSO 2: Buscar atas no PNCP ===
         # Usar palavras-chave do objeto (mesmo critério do endpoint historico-vencedores)
@@ -11770,9 +11815,10 @@ def historico_vencedores_edital(edital_id):
     """Busca atas de registro de preço no PNCP para o mesmo objeto do edital, identificando vencedores anteriores."""
     from tools import tool_buscar_atas_pncp
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
-        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.user_id == user_id).first()
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
 
@@ -11877,12 +11923,13 @@ def extrair_requisitos_edital(edital_id):
     """
     from models import Edital, EditalDocumento, EditalRequisito
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
 
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
@@ -11920,7 +11967,7 @@ def extrair_requisitos_edital(edital_id):
             }), 400
 
         # Extrair requisitos via IA
-        resultado = tool_extrair_requisitos(edital_id, doc.texto_extraido, user_id)
+        resultado = tool_extrair_requisitos(edital_id, doc.texto_extraido, user_id, empresa_id=empresa_id)
 
         if resultado.get("success"):
             return jsonify({
@@ -12313,6 +12360,7 @@ def sincronizar_fontes_certidoes():
     """
     from models import Empresa, EmpresaCertidao, FonteCertidao
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
     empresa_id = data.get('empresa_id')
     if not empresa_id:
@@ -12321,15 +12369,14 @@ def sincronizar_fontes_certidoes():
     db = get_db()
     try:
         empresa = db.query(Empresa).filter(
-            Empresa.id == empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Empresa não encontrada"}), 404
 
         # Buscar fontes ativas
         fontes = db.query(FonteCertidao).filter(
-            FonteCertidao.user_id == user_id,
+            FonteCertidao.empresa_id == empresa_id,
             FonteCertidao.ativo == True
         ).all()
 
@@ -12392,6 +12439,7 @@ def buscar_certidoes_automatica():
     """
     from models import Empresa, EmpresaCertidao, FonteCertidao
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
 
     empresa_id = data.get('empresa_id')
@@ -12401,8 +12449,7 @@ def buscar_certidoes_automatica():
     db = get_db()
     try:
         empresa = db.query(Empresa).filter(
-            Empresa.id == empresa_id,
-            Empresa.user_id == user_id
+            Empresa.id == empresa_id
         ).first()
         if not empresa:
             return jsonify({"error": "Empresa não encontrada"}), 404
@@ -12414,7 +12461,7 @@ def buscar_certidoes_automatica():
 
         # Buscar TODAS as fontes ativas do usuário
         fontes = db.query(FonteCertidao).filter(
-            FonteCertidao.user_id == user_id,
+            FonteCertidao.empresa_id == empresa_id,
             FonteCertidao.ativo == True
         ).all()
 
@@ -12620,6 +12667,7 @@ def buscar_certidoes_stream():
     from datetime import date, datetime
 
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
     empresa_id = data.get('empresa_id')
 
@@ -12630,8 +12678,7 @@ def buscar_certidoes_stream():
         db = get_db()
         try:
             empresa = db.query(Empresa).filter(
-                Empresa.id == empresa_id,
-                Empresa.user_id == user_id
+                Empresa.id == empresa_id
             ).first()
             if not empresa:
                 yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Empresa não encontrada'})}\n\n"
@@ -12643,7 +12690,7 @@ def buscar_certidoes_stream():
             cnpj = empresa.cnpj.replace('.', '').replace('/', '').replace('-', '').strip()
 
             fontes = db.query(FonteCertidao).filter(
-                FonteCertidao.user_id == user_id,
+                FonteCertidao.empresa_id == empresa_id,
                 FonteCertidao.ativo == True
             ).all()
 
@@ -12851,17 +12898,18 @@ def inicializar_fontes_certidoes():
     """
     from models import FonteCertidao, Empresa
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         # Verificar se já tem fontes
         existentes = db.query(FonteCertidao).filter(
-            FonteCertidao.user_id == user_id
+            FonteCertidao.empresa_id == empresa_id
         ).count()
         if existentes > 0:
             return jsonify({"success": True, "message": f"Já existem {existentes} fontes cadastradas", "criadas": 0})
 
         # Buscar empresa para personalizar fontes estadual/municipal
-        empresa = db.query(Empresa).filter(Empresa.user_id == user_id).first()
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
         uf = empresa.uf if empresa and empresa.uf else "SP"
         cidade = empresa.cidade if empresa and empresa.cidade else ""
 
@@ -13192,11 +13240,12 @@ def reprocessar_metadados(produto_id):
     """Reprocessa CATMAT/CATSER e termos de busca para um produto."""
     from tools import processar_metadados_produto
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         produto = db.query(Produto).filter(
             Produto.id == produto_id,
-            Produto.user_id == user_id
+            Produto.empresa_id == empresa_id
         ).first()
         if not produto:
             return jsonify({"success": False, "error": "Produto não encontrado"}), 404
@@ -13213,9 +13262,10 @@ def reprocessar_todos_metadados():
     """Reprocessa CATMAT/CATSER e termos de busca para todos os produtos do usuário."""
     from tools import processar_metadados_produto
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
-        produtos = db.query(Produto).filter(Produto.user_id == user_id).all()
+        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
         ids = [p.id for p in produtos]
     finally:
         db.close()
@@ -13236,7 +13286,8 @@ def validacao_legal_edital(edital_id):
     """UC-I01: Validação legal do edital via IA."""
     from tools import tool_validacao_legal_edital
     user_id = get_current_user_id()
-    resultado = tool_validacao_legal_edital(edital_id=edital_id, user_id=user_id)
+    empresa_id = get_current_empresa_id()
+    resultado = tool_validacao_legal_edital(edital_id=edital_id, user_id=user_id, empresa_id=empresa_id)
     if resultado.get("success"):
         return jsonify(resultado)
     return jsonify(resultado), 400 if resultado.get("sem_pdf") else 500
@@ -13282,7 +13333,7 @@ def criar_impugnacao():
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
@@ -13339,7 +13390,7 @@ def upload_impugnacao():
             # Atualizar impugnação existente
             impugnacao = db.query(Impugnacao).filter(
                 Impugnacao.id == impugnacao_id,
-                Impugnacao.user_id == user_id
+                Impugnacao.empresa_id == empresa_id
             ).first()
             if impugnacao:
                 impugnacao.arquivo_path = filepath
@@ -13374,12 +13425,13 @@ def prazo_impugnacao_edital(edital_id):
     """UC-I05: Calcula prazo de impugnação (3 dias úteis antes da abertura)."""
     from models import get_db, Edital
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
 
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
@@ -13425,13 +13477,14 @@ def monitorar_janela_recurso(edital_id):
     """UC-RE01: Cadastrar monitoramento de janela de recurso."""
     from models import get_db, Edital, MonitoramentoJanela
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json(silent=True) or {}
 
     db = get_db()
     try:
         edital = db.query(Edital).filter(
             Edital.id == edital_id,
-            Edital.user_id == user_id
+            Edital.empresa_id == empresa_id
         ).first()
         if not edital:
             return jsonify({"error": "Edital não encontrado"}), 404
@@ -13439,7 +13492,7 @@ def monitorar_janela_recurso(edital_id):
         # Verificar se já existe monitoramento
         existente = db.query(MonitoramentoJanela).filter(
             MonitoramentoJanela.edital_id == edital_id,
-            MonitoramentoJanela.user_id == user_id,
+            MonitoramentoJanela.empresa_id == empresa_id,
             MonitoramentoJanela.status != 'encerrada'
         ).first()
 
@@ -13558,7 +13611,7 @@ def upload_recurso():
             # Atualizar recurso existente
             recurso = db.query(RecursoDetalhado).filter(
                 RecursoDetalhado.id == recurso_id,
-                RecursoDetalhado.user_id == user_id
+                RecursoDetalhado.empresa_id == empresa_id
             ).first()
             if recurso:
                 recurso.arquivo_path = filepath
@@ -13593,11 +13646,12 @@ def listar_recursos_detalhados():
     """Listar recursos/contra-razões de um edital."""
     from models import get_db, RecursoDetalhado
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     edital_id = request.args.get("edital_id")
 
     db = get_db()
     try:
-        query = db.query(RecursoDetalhado).filter(RecursoDetalhado.user_id == user_id)
+        query = db.query(RecursoDetalhado).filter(RecursoDetalhado.empresa_id == empresa_id)
         if edital_id:
             query = query.filter(RecursoDetalhado.edital_id == edital_id)
         query = query.order_by(RecursoDetalhado.created_at.desc())
@@ -13620,6 +13674,7 @@ def atualizar_status_recurso(recurso_id):
     """Atualizar status de um recurso."""
     from models import get_db, RecursoDetalhado
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json(silent=True) or {}
     novo_status = data.get("status")
 
@@ -13634,7 +13689,7 @@ def atualizar_status_recurso(recurso_id):
     try:
         recurso = db.query(RecursoDetalhado).filter(
             RecursoDetalhado.id == recurso_id,
-            RecursoDetalhado.user_id == user_id
+            RecursoDetalhado.empresa_id == empresa_id
         ).first()
         if not recurso:
             return jsonify({"error": "Recurso não encontrado"}), 404
@@ -13664,8 +13719,9 @@ def api_followup_registrar_resultado():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         data = request.get_json()
-        result = tool_registrar_resultado_api(data, user_id, db)
+        result = tool_registrar_resultado_api(data, user_id, empresa_id=empresa_id, db=db)
         if result.get('success'):
             return jsonify(result)
         return jsonify(result), 400
@@ -13681,8 +13737,9 @@ def api_followup_pendentes():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         editais = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.status.in_(['submetido', 'proposta_enviada', 'em_pregao'])
         ).all()
         return jsonify([e.to_dict() for e in editais])
@@ -13698,8 +13755,9 @@ def api_followup_resultados():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         editais = db.query(Edital).filter(
-            Edital.user_id == user_id,
+            Edital.empresa_id == empresa_id,
             Edital.status.in_(['ganho', 'perdido', 'cancelado'])
         ).order_by(Edital.updated_at.desc()).all()
         return jsonify([e.to_dict() for e in editais])
@@ -13717,7 +13775,8 @@ def api_score_logistico(edital_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        result = tool_calcular_score_logistico(edital_id, user_id, db)
+        empresa_id = get_current_empresa_id()
+        result = tool_calcular_score_logistico(edital_id, user_id, empresa_id=empresa_id, db=db)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -13750,6 +13809,7 @@ def api_atas_extrair_pdf():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         data = request.get_json()
         url = data.get('url', '')
         texto = data.get('texto', '')
@@ -13763,7 +13823,7 @@ def api_atas_extrair_pdf():
         if not texto:
             return jsonify({"error": "Texto ou URL obrigatório"}), 400
 
-        result = tool_extrair_ata_pdf(texto, user_id, db)
+        result = tool_extrair_ata_pdf(texto, user_id, empresa_id=empresa_id, db=db)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -13777,7 +13837,8 @@ def api_atas_minhas():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        atas = db.query(AtaConsultada).filter_by(user_id=user_id).order_by(AtaConsultada.created_at.desc()).all()
+        empresa_id = get_current_empresa_id()
+        atas = db.query(AtaConsultada).filter_by(empresa_id=empresa_id).order_by(AtaConsultada.created_at.desc()).all()
         now = datetime.now()
         total = len(atas)
         vigentes = sum(1 for a in atas if a.data_vigencia_fim and a.data_vigencia_fim > now)
@@ -13829,10 +13890,11 @@ def api_dashboard_contratado_realizado():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         periodo = request.args.get('periodo', '6m')
         produto_id = request.args.get('produto_id')
         orgao = request.args.get('orgao')
-        result = tool_dashboard_contratado_realizado(user_id, db, periodo, produto_id, orgao)
+        result = tool_dashboard_contratado_realizado(user_id, empresa_id=empresa_id, db=db, periodo=periodo, produto_id=produto_id, orgao=orgao)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -13848,7 +13910,8 @@ def api_contrato_cronograma(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, empresa_id=empresa_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
@@ -13915,7 +13978,8 @@ def api_contrato_aditivos(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, empresa_id=empresa_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
@@ -13969,7 +14033,8 @@ def api_contrato_aditivo_detail(contrato_id, aditivo_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        aditivo = db.query(ContratoAditivo).filter_by(id=aditivo_id, contrato_id=contrato_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        aditivo = db.query(ContratoAditivo).filter_by(id=aditivo_id, contrato_id=contrato_id, empresa_id=empresa_id).first()
         if not aditivo:
             return jsonify({"error": "Aditivo não encontrado"}), 404
 
@@ -14006,7 +14071,8 @@ def api_contrato_designacoes(contrato_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        contrato = db.query(Contrato).filter_by(id=contrato_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        contrato = db.query(Contrato).filter_by(id=contrato_id, empresa_id=empresa_id).first()
         if not contrato:
             return jsonify({"error": "Contrato não encontrado"}), 404
 
@@ -14043,7 +14109,8 @@ def api_contrato_designacao_detail(contrato_id, designacao_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        desig = db.query(ContratoDesignacao).filter_by(id=designacao_id, contrato_id=contrato_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        desig = db.query(ContratoDesignacao).filter_by(id=designacao_id, contrato_id=contrato_id, empresa_id=empresa_id).first()
         if not desig:
             return jsonify({"error": "Designação não encontrada"}), 404
 
@@ -14075,8 +14142,9 @@ def api_contrato_atividades(contrato_id, designacao_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         if request.method == 'GET':
-            atividades = db.query(AtividadeFiscal).filter_by(designacao_id=designacao_id, user_id=user_id).order_by(AtividadeFiscal.data_atividade.desc()).all()
+            atividades = db.query(AtividadeFiscal).filter_by(designacao_id=designacao_id, empresa_id=empresa_id).order_by(AtividadeFiscal.data_atividade.desc()).all()
             return jsonify([a.to_dict() for a in atividades])
 
         data = request.get_json()
@@ -14106,8 +14174,9 @@ def api_ata_saldos(ata_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         if request.method == 'GET':
-            saldos = db.query(ARPSaldo).filter_by(ata_id=ata_id, user_id=user_id).all()
+            saldos = db.query(ARPSaldo).filter_by(ata_id=ata_id, empresa_id=empresa_id).all()
             return jsonify([s.to_dict() for s in saldos])
 
         data = request.get_json()
@@ -14138,7 +14207,8 @@ def api_ata_caronas(ata_id, saldo_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        saldo = db.query(ARPSaldo).filter_by(id=saldo_id, ata_id=ata_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        saldo = db.query(ARPSaldo).filter_by(id=saldo_id, ata_id=ata_id, empresa_id=empresa_id).first()
         if not saldo:
             return jsonify({"error": "Saldo ARP não encontrado"}), 404
 
@@ -14193,7 +14263,8 @@ def api_ata_carona_detail(ata_id, saldo_id, carona_id):
     db = get_db()
     try:
         user_id = get_current_user_id()
-        carona = db.query(SolicitacaoCarona).filter_by(id=carona_id, arp_saldo_id=saldo_id, user_id=user_id).first()
+        empresa_id = get_current_empresa_id()
+        carona = db.query(SolicitacaoCarona).filter_by(id=carona_id, arp_saldo_id=saldo_id, empresa_id=empresa_id).first()
         if not carona:
             return jsonify({"error": "Solicitação não encontrada"}), 404
 
@@ -14227,8 +14298,9 @@ def api_alertas_vencimento_regras():
     db = get_db()
     try:
         user_id = get_current_user_id()
+        empresa_id = get_current_empresa_id()
         if request.method == 'GET':
-            regras = db.query(AlertaVencimentoRegra).filter_by(user_id=user_id).all()
+            regras = db.query(AlertaVencimentoRegra).filter_by(empresa_id=empresa_id).all()
             return jsonify([r.to_dict() for r in regras])
 
         # PUT — upsert rules
@@ -14237,9 +14309,9 @@ def api_alertas_vencimento_regras():
         results = []
         for rd in regras_data:
             tipo = rd.get('tipo_entidade')
-            regra = db.query(AlertaVencimentoRegra).filter_by(user_id=user_id, tipo_entidade=tipo).first()
+            regra = db.query(AlertaVencimentoRegra).filter_by(empresa_id=empresa_id, tipo_entidade=tipo).first()
             if not regra:
-                regra = AlertaVencimentoRegra(user_id=user_id, tipo_entidade=tipo)
+                regra = AlertaVencimentoRegra(empresa_id=empresa_id, tipo_entidade=tipo)
                 db.add(regra)
             for field in ['dias_30', 'dias_15', 'dias_7', 'dias_1', 'canal_email', 'canal_push', 'canal_whatsapp', 'escalation_enabled', 'escalation_email', 'ativo']:
                 if field in rd:
@@ -14260,7 +14332,8 @@ def api_alertas_vencimento_consolidado():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        result = tool_alertas_vencimento_multi_tier(user_id, db)
+        empresa_id = get_current_empresa_id()
+        result = tool_alertas_vencimento_multi_tier(user_id, empresa_id=empresa_id, db=db)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
