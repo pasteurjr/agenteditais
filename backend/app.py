@@ -55,6 +55,12 @@ CORS(app, origins=["http://localhost:5173", "http://localhost:5175", "http://loc
 from crud_routes import crud_bp
 app.register_blueprint(crud_bp)
 
+# Sprint 5 V3 — Blueprints de Empenhos e CRM
+from empenho_routes import empenho_bp
+app.register_blueprint(empenho_bp)
+from crm_routes import crm_bp
+app.register_blueprint(crm_bp)
+
 # JWT Config
 JWT_SECRET = "editais-ia-secret-key-change-in-production-2024"
 JWT_EXPIRY_HOURS = 24

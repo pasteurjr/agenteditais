@@ -1,6 +1,6 @@
 import { Page } from "@playwright/test";
 
-export const BASE = "http://localhost:5175";
+export const BASE = "http://localhost:5179";
 
 // ID fixo da empresa CH Hospitalar no banco de dados
 const CH_HOSPITALAR_ID = "7dbdc60a-b806-4614-a024-a1d4841dc8c9";
@@ -234,4 +234,80 @@ export async function waitForIA(
 
 export function ssPath(ucCode: string, step: string): string {
   return `runtime/screenshots/UC-${ucCode}/${step}.png`;
+}
+
+/**
+ * Garante que a tela tem dados reais antes do screenshot de resposta.
+ * Uso: await assertDataVisible(page, { anyText: ['EMPH-', 'R$'], minCount: 2 })
+ * Ou: await assertDataVisible(page, { selector: 'table tbody tr', minCount: 3 })
+ * Falha o teste se não encontrar — preserva princípio "nunca screenshot de tela vazia".
+ */
+export async function assertDataVisible(
+  page: Page,
+  opts: { selector?: string; anyText?: string[]; minCount?: number; timeout?: number }
+) {
+  const timeout = opts.timeout ?? 15000;
+  const minCount = opts.minCount ?? 1;
+
+  if (opts.selector) {
+    try {
+      await page.waitForSelector(opts.selector, { timeout });
+    } catch {
+      throw new Error(`assertDataVisible: selector '${opts.selector}' não encontrado em ${timeout}ms`);
+    }
+    const count = await page.locator(opts.selector).count();
+    if (count < minCount) {
+      throw new Error(`assertDataVisible: esperava >=${minCount} de '${opts.selector}', achou ${count} — tela vazia`);
+    }
+    return;
+  }
+
+  if (opts.anyText && opts.anyText.length > 0) {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const body = (await page.innerText("body").catch(() => "")) || "";
+      const found = opts.anyText.filter(t => body.includes(t)).length;
+      if (found >= minCount) return;
+      await page.waitForTimeout(500);
+    }
+    const body = (await page.innerText("body").catch(() => "")) || "";
+    const found = opts.anyText.filter(t => body.includes(t));
+    throw new Error(`assertDataVisible: esperava >=${minCount} de [${opts.anyText.join(", ")}], achou ${found.length} [${found.join(", ")}] — tela vazia`);
+  }
+
+  throw new Error("assertDataVisible: precisa de 'selector' ou 'anyText'");
+}
+
+/**
+ * Seleciona primeiro contrato da tabela de contratos (ProducaoPage).
+ * Clica no botão "Selecionar" da primeira linha disponível.
+ */
+export async function selectFirstContrato(page: Page, preferNumero?: string) {
+  // Aguarda a tabela de contratos renderizar
+  await page.waitForTimeout(2000);
+  const clicked = await page.evaluate((prefer: string | undefined) => {
+    // Estratégia 1: achar linha que contém prefer e clicar no Selecionar dela
+    if (prefer) {
+      const rows = Array.from(document.querySelectorAll("tr"));
+      for (const row of rows) {
+        if ((row.textContent || "").includes(prefer)) {
+          const btn = row.querySelector("button");
+          if (btn && (btn.textContent || "").toLowerCase().includes("selecionar")) {
+            (btn as HTMLElement).click();
+            return "prefer";
+          }
+        }
+      }
+    }
+    // Estratégia 2: primeiro botão Selecionar da página
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const btn = buttons.find(b => (b.textContent || "").trim().toLowerCase() === "selecionar");
+    if (btn) {
+      (btn as HTMLElement).click();
+      return "first";
+    }
+    return "";
+  }, preferNumero);
+  await page.waitForTimeout(2500);
+  return clicked;
 }

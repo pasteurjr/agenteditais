@@ -459,6 +459,13 @@ class Edital(Base):
     # RF-013: Vinculo edital -> classe/subclasse de produto
     classe_produto_id = Column(String(36), ForeignKey("classes_produto_v2.id"), nullable=True)
     subclasse_produto_id = Column(String(36), ForeignKey("subclasses_produto.id"), nullable=True)
+    # Sprint 5 V3: CRM Pipeline
+    pipeline_stage = Column(String(50), nullable=True)
+    pipeline_substage = Column(String(50), nullable=True)
+    pipeline_tipo_venda = Column(String(20), nullable=True)  # pontual, recorrente
+    tipo_edital_id = Column(String(36), nullable=True)
+    agrupamento_portfolio_id = Column(String(36), nullable=True)
+    vendedor_responsavel = Column(String(200), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -517,6 +524,12 @@ class Edital(Base):
             "seq_compra": self.seq_compra,
             "classe_produto_id": self.classe_produto_id,
             "subclasse_produto_id": self.subclasse_produto_id,
+            "pipeline_stage": self.pipeline_stage,
+            "pipeline_substage": self.pipeline_substage,
+            "pipeline_tipo_venda": self.pipeline_tipo_venda,
+            "tipo_edital_id": self.tipo_edital_id,
+            "agrupamento_portfolio_id": self.agrupamento_portfolio_id,
+            "vendedor_responsavel": self.vendedor_responsavel,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_requisitos:
@@ -1687,6 +1700,10 @@ class Contrato(Base):
     status = Column(Enum('vigente', 'encerrado', 'rescindido', 'suspenso'), default='vigente')
     arquivo_path = Column(String(500), nullable=True)
     observacoes = Column(Text, nullable=True)
+    # Sprint 5 V3: workflow de vencimento/renovação
+    tratativa_status = Column(String(30), nullable=True)  # em_tratativa, renovado, nao_renovado
+    tratativa_observacoes = Column(Text, nullable=True)
+    data_renovacao = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1711,6 +1728,9 @@ class Contrato(Base):
             "status": self.status,
             "arquivo_path": self.arquivo_path,
             "observacoes": self.observacoes,
+            "tratativa_status": self.tratativa_status,
+            "tratativa_observacoes": self.tratativa_observacoes,
+            "data_renovacao": self.data_renovacao.isoformat() if self.data_renovacao else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1730,6 +1750,9 @@ class ContratoEntrega(Base):
     data_realizada = Column(Date, nullable=True)
     nota_fiscal = Column(String(100), nullable=True)
     numero_empenho = Column(String(100), nullable=True)
+    # Sprint 5 V3: vinculo com empenho/fatura
+    fatura_id = Column(String(36), nullable=True)
+    empenho_item_id = Column(String(36), nullable=True)
     status = Column(Enum('pendente', 'entregue', 'atrasado', 'cancelado'), default='pendente')
     observacoes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -1751,6 +1774,8 @@ class ContratoEntrega(Base):
             "data_realizada": self.data_realizada.isoformat() if self.data_realizada else None,
             "nota_fiscal": self.nota_fiscal,
             "numero_empenho": self.numero_empenho,
+            "fatura_id": self.fatura_id,
+            "empenho_item_id": self.empenho_item_id,
             "status": self.status,
             "observacoes": self.observacoes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -2124,6 +2149,222 @@ class AcaoPosPerda(Base):
             "resultado": self.resultado,
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== SPRINT 5 V3 — EMPENHOS, CRM PIPELINE ====================
+
+class Empenho(Base):
+    """Empenhos vinculados a contratos"""
+    __tablename__ = 'empenhos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contrato_id = Column(String(36), ForeignKey('contratos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    numero_empenho = Column(String(100), nullable=False)
+    tipo = Column(String(50), nullable=True)  # ordinario, estimativo, global
+    valor_empenhado = Column(DECIMAL(15, 2), nullable=False)
+    data_empenho = Column(Date, nullable=False)
+    fonte_recurso = Column(String(200), nullable=True)
+    natureza_despesa = Column(String(100), nullable=True)
+    observacoes = Column(Text, nullable=True)
+    status = Column(String(30), default='ativo')  # ativo, cancelado, anulado
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    contrato = relationship("Contrato", backref="empenhos")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "contrato_id": self.contrato_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "numero_empenho": self.numero_empenho,
+            "tipo": self.tipo,
+            "valor_empenhado": float(self.valor_empenhado) if self.valor_empenhado else None,
+            "data_empenho": self.data_empenho.isoformat() if self.data_empenho else None,
+            "fonte_recurso": self.fonte_recurso,
+            "natureza_despesa": self.natureza_despesa,
+            "observacoes": self.observacoes,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class EmpenhoItem(Base):
+    """Itens/consumíveis de um empenho"""
+    __tablename__ = 'empenho_itens'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empenho_id = Column(String(36), ForeignKey('empenhos.id', ondelete='CASCADE'), nullable=False)
+    produto_id = Column(String(36), ForeignKey('produtos.id', ondelete='SET NULL'), nullable=True)
+    descricao = Column(Text, nullable=False)
+    quantidade = Column(DECIMAL(15, 4), nullable=False)
+    valor_unitario = Column(DECIMAL(15, 2), nullable=False)
+    valor_total = Column(DECIMAL(15, 2), nullable=False)
+    gera_valor = Column(Boolean, default=True)  # False para calibradores, controles
+    limite_consumo_pct = Column(Float, nullable=True)  # threshold de alerta para itens sem valor
+    created_at = Column(DateTime, default=datetime.now)
+
+    empenho = relationship("Empenho", backref="itens")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empenho_id": self.empenho_id,
+            "produto_id": self.produto_id,
+            "descricao": self.descricao,
+            "quantidade": float(self.quantidade) if self.quantidade else None,
+            "valor_unitario": float(self.valor_unitario) if self.valor_unitario else None,
+            "valor_total": float(self.valor_total) if self.valor_total else None,
+            "gera_valor": self.gera_valor,
+            "limite_consumo_pct": self.limite_consumo_pct,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EmpenhoFatura(Base):
+    """Faturas vinculadas a empenhos"""
+    __tablename__ = 'empenho_faturas'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empenho_id = Column(String(36), ForeignKey('empenhos.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    numero_fatura = Column(String(100), nullable=False)
+    valor_fatura = Column(DECIMAL(15, 2), nullable=False)
+    data_emissao = Column(Date, nullable=False)
+    data_vencimento = Column(Date, nullable=True)
+    data_pagamento = Column(Date, nullable=True)
+    nota_fiscal = Column(String(100), nullable=True)
+    status = Column(String(30), default='pendente')  # pendente, paga, cancelada
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empenho = relationship("Empenho", backref="faturas")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empenho_id": self.empenho_id,
+            "user_id": self.user_id,
+            "numero_fatura": self.numero_fatura,
+            "valor_fatura": float(self.valor_fatura) if self.valor_fatura else None,
+            "data_emissao": self.data_emissao.isoformat() if self.data_emissao else None,
+            "data_vencimento": self.data_vencimento.isoformat() if self.data_vencimento else None,
+            "data_pagamento": self.data_pagamento.isoformat() if self.data_pagamento else None,
+            "nota_fiscal": self.nota_fiscal,
+            "status": self.status,
+            "observacoes": self.observacoes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class CRMParametrizacao(Base):
+    """Parametrizações do CRM: tipos de edital, agrupamento portfolio, motivos de derrota"""
+    __tablename__ = 'crm_parametrizacoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo = Column(String(50), nullable=False)  # tipo_edital, agrupamento_portfolio, motivo_derrota
+    valor = Column(String(200), nullable=False)
+    ordem = Column(Integer, default=0)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "user_id": self.user_id,
+            "tipo": self.tipo,
+            "valor": self.valor,
+            "ordem": self.ordem,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class EditalDecisao(Base):
+    """Decisões sobre editais: não-participação e motivo de perda"""
+    __tablename__ = 'edital_decisoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    tipo = Column(String(50), nullable=False)  # nao_participacao, perda
+    motivo_id = Column(String(36), ForeignKey('crm_parametrizacoes.id', ondelete='SET NULL'), nullable=True)
+    motivo_texto = Column(String(500), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    teve_contra_razao = Column(Boolean, default=False)
+    pipeline_stage_anterior = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    edital = relationship("Edital", backref="decisoes")
+    motivo = relationship("CRMParametrizacao")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "motivo_id": self.motivo_id,
+            "motivo_texto": self.motivo_texto,
+            "justificativa": self.justificativa,
+            "teve_contra_razao": self.teve_contra_razao,
+            "pipeline_stage_anterior": self.pipeline_stage_anterior,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class CRMAgendaItem(Base):
+    """Itens de agenda do CRM — prazos e compromissos por etapa do pipeline"""
+    __tablename__ = 'crm_agenda_items'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=True)
+    contrato_id = Column(String(36), ForeignKey('contratos.id', ondelete='CASCADE'), nullable=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    titulo = Column(String(300), nullable=False)
+    descricao = Column(Text, nullable=True)
+    responsavel = Column(String(200), nullable=True)
+    data_limite = Column(DateTime, nullable=False)
+    urgencia = Column(String(20), default='normal')  # critica, alta, normal, baixa
+    pipeline_stage = Column(String(50), nullable=True)
+    concluido = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", backref="agenda_items")
+    contrato = relationship("Contrato", backref="agenda_items")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "contrato_id": self.contrato_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "titulo": self.titulo,
+            "descricao": self.descricao,
+            "responsavel": self.responsavel,
+            "data_limite": self.data_limite.isoformat() if self.data_limite else None,
+            "urgencia": self.urgencia,
+            "pipeline_stage": self.pipeline_stage,
+            "concluido": self.concluido,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 
@@ -2948,6 +3189,20 @@ def init_db():
             "ALTER TABLE propostas ADD COLUMN descricao_personalizada LONGTEXT NULL",
             # Sprint 5: expandir enum Alerta.tipo
             "ALTER TABLE alertas MODIFY COLUMN tipo ENUM('abertura','impugnacao','recursos','proposta','personalizado','contrato_vencimento','arp_vencimento','garantia_vencimento','entrega_prazo') NOT NULL DEFAULT 'abertura'",
+            # Sprint 5 V3: pipeline CRM no edital
+            "ALTER TABLE editais ADD COLUMN pipeline_stage VARCHAR(50) DEFAULT NULL",
+            "ALTER TABLE editais ADD COLUMN pipeline_substage VARCHAR(50) DEFAULT NULL",
+            "ALTER TABLE editais ADD COLUMN pipeline_tipo_venda VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE editais ADD COLUMN tipo_edital_id VARCHAR(36) DEFAULT NULL",
+            "ALTER TABLE editais ADD COLUMN agrupamento_portfolio_id VARCHAR(36) DEFAULT NULL",
+            "ALTER TABLE editais ADD COLUMN vendedor_responsavel VARCHAR(200) DEFAULT NULL",
+            # Sprint 5 V3: FK empenho na entrega
+            "ALTER TABLE contrato_entregas ADD COLUMN fatura_id VARCHAR(36) DEFAULT NULL",
+            "ALTER TABLE contrato_entregas ADD COLUMN empenho_item_id VARCHAR(36) DEFAULT NULL",
+            # Sprint 5 V3: workflow vencimento no contrato
+            "ALTER TABLE contratos ADD COLUMN tratativa_status VARCHAR(30) DEFAULT NULL",
+            "ALTER TABLE contratos ADD COLUMN tratativa_observacoes TEXT DEFAULT NULL",
+            "ALTER TABLE contratos ADD COLUMN data_renovacao DATE DEFAULT NULL",
         ]
         for stmt in alter_stmts:
             try:

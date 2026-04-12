@@ -33,6 +33,8 @@ from models import (
     # SPRINT 5 Gestão Contratual
     ContratoAditivo, ContratoDesignacao, AtividadeFiscal, ARPSaldo, SolicitacaoCarona,
     AlertaVencimentoRegra,
+    # SPRINT 5 V3 — Empenhos, CRM Pipeline
+    Empenho, EmpenhoItem, EmpenhoFatura, CRMParametrizacao, EditalDecisao, CRMAgendaItem,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -638,6 +640,58 @@ CRUD_TABLES = {
         "search_fields": ["tipo_entidade"],
         "label": "Regras de Alerta de Vencimento",
         "required": ["tipo_entidade"],
+    },
+    # === SPRINT 5 V3 — Empenhos ===
+    "empenhos": {
+        "model": Empenho,
+        "empresa_scoped": True,
+        "parent_fk": "contrato_id",
+        "parent_model": Contrato,
+        "search_fields": ["numero_empenho", "fonte_recurso", "natureza_despesa"],
+        "label": "Empenhos",
+        "required": ["contrato_id", "numero_empenho", "valor_empenhado", "data_empenho"],
+    },
+    "empenho-itens": {
+        "model": EmpenhoItem,
+        "empresa_scoped": True,
+        "parent_fk": "empenho_id",
+        "parent_model": Empenho,
+        "search_fields": ["descricao"],
+        "label": "Itens do Empenho",
+        "required": ["empenho_id", "descricao", "quantidade", "valor_unitario", "valor_total"],
+    },
+    "empenho-faturas": {
+        "model": EmpenhoFatura,
+        "empresa_scoped": True,
+        "parent_fk": "empenho_id",
+        "parent_model": Empenho,
+        "search_fields": ["numero_fatura", "nota_fiscal"],
+        "label": "Faturas do Empenho",
+        "required": ["empenho_id", "numero_fatura", "valor_fatura", "data_emissao"],
+    },
+    # === SPRINT 5 V3 — CRM Pipeline ===
+    "crm-parametrizacoes": {
+        "model": CRMParametrizacao,
+        "empresa_scoped": True,
+        "search_fields": ["valor", "tipo"],
+        "label": "Parametrizações CRM",
+        "required": ["tipo", "valor"],
+    },
+    "edital-decisoes": {
+        "model": EditalDecisao,
+        "empresa_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["motivo_texto", "justificativa", "tipo"],
+        "label": "Decisões sobre Editais",
+        "required": ["edital_id", "tipo"],
+    },
+    "crm-agenda-items": {
+        "model": CRMAgendaItem,
+        "empresa_scoped": True,
+        "search_fields": ["titulo", "responsavel", "descricao"],
+        "label": "Agenda CRM",
+        "required": ["titulo", "data_limite"],
     },
 }
 

@@ -1,343 +1,521 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { Users, Target, TrendingUp, Award, Phone, Mail, Plus, Eye, MessageSquare } from "lucide-react";
-import { Card, DataTable, ActionButton, FilterBar, FormField, SelectInput, Modal, TextInput } from "../components/common";
-import type { Column } from "../components/common";
+import { Plus, Loader2, RefreshCw, TrendingUp, Target, Award, AlertTriangle } from "lucide-react";
+import { Card, ActionButton, FormField, TextInput, TextArea, SelectInput, Modal, TabPanel } from "../components/common";
+import { crudList, crudCreate, crudDelete } from "../api/crud";
 
-interface Lead {
-  [key: string]: unknown;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PipelineStage {
+  stage: string;
+  label: string;
+  color: string;
+  count: number;
+  editais: PipelineEdital[];
+}
+
+interface PipelineEdital {
   id: string;
-  edital: string;
+  numero: string;
   orgao: string;
+  uf: string | null;
   objeto: string;
-  valor: number;
-  scoreAderencia: number;
-  dataAbertura: string;
-  status: "novo" | "contatado" | "qualificado" | "proposta" | "ganho" | "perdido";
-  responsavel: string;
-  ultimoContato: string | null;
+  valor_referencia: number | null;
+  data_abertura: string | null;
+  pipeline_stage: string;
+  pipeline_substage: string | null;
+  pipeline_tipo_venda: string | null;
+  vendedor_responsavel: string | null;
+  status: string;
 }
 
-interface Meta {
-  [key: string]: unknown;
+interface CRMParametrizacao {
   id: string;
-  vendedor: string;
-  metaMensal: number;
-  realizado: number;
-  editaisGanhos: number;
-  percentual: number;
+  tipo: string;
+  valor: string;
+  ordem: number;
+  ativo: boolean;
 }
 
-interface AcaoPosPerda {
-  [key: string]: unknown;
+interface EditalDecisao {
   id: string;
-  edital: string;
-  orgao: string;
-  motivo: string;
-  acao: string;
-  responsavel: string;
-  prazo: string;
-  status: "pendente" | "em_andamento" | "concluida";
+  edital_id: string;
+  tipo: string;
+  motivo_texto: string | null;
+  justificativa: string | null;
+  teve_contra_razao: boolean;
+  pipeline_stage_anterior: string | null;
+  created_at: string | null;
 }
 
-// Dados mock
-const mockLeads: Lead[] = [
-  { id: "1", edital: "PE-055/2026", orgao: "UFMG", objeto: "Microscopios opticos", valor: 150000, scoreAderencia: 92, dataAbertura: "20/02/2026", status: "novo", responsavel: "Joao Silva", ultimoContato: null },
-  { id: "2", edital: "PE-048/2026", orgao: "USP", objeto: "Centrifugas laboratorio", valor: 85000, scoreAderencia: 88, dataAbertura: "18/02/2026", status: "contatado", responsavel: "Maria Santos", ultimoContato: "10/02/2026" },
-  { id: "3", edital: "PE-042/2026", orgao: "UNICAMP", objeto: "Reagentes diagnostico", valor: 45000, scoreAderencia: 75, dataAbertura: "15/02/2026", status: "qualificado", responsavel: "Joao Silva", ultimoContato: "08/02/2026" },
-  { id: "4", edital: "PE-038/2026", orgao: "UNESP", objeto: "Autoclaves", valor: 120000, scoreAderencia: 95, dataAbertura: "12/02/2026", status: "proposta", responsavel: "Maria Santos", ultimoContato: "09/02/2026" },
-  { id: "5", edital: "PE-030/2026", orgao: "Pref. BH", objeto: "Equipamentos lab", valor: 200000, scoreAderencia: 82, dataAbertura: "10/02/2026", status: "ganho", responsavel: "Joao Silva", ultimoContato: "05/02/2026" },
-];
+interface MapaUF {
+  uf: string;
+  lat: number;
+  lon: number;
+  editais: Array<{ id: string; numero: string; orgao: string; pipeline_stage: string; valor_referencia: number | null }>;
+  stages: Record<string, number>;
+}
 
-const mockMetas: Meta[] = [
-  { id: "1", vendedor: "Joao Silva", metaMensal: 500000, realizado: 350000, editaisGanhos: 3, percentual: 70 },
-  { id: "2", vendedor: "Maria Santos", metaMensal: 400000, realizado: 280000, editaisGanhos: 2, percentual: 70 },
-  { id: "3", vendedor: "Pedro Oliveira", metaMensal: 300000, realizado: 150000, editaisGanhos: 1, percentual: 50 },
-];
+interface AgendaItem {
+  id: string;
+  origem: "manual" | "auto";
+  titulo: string;
+  descricao: string | null;
+  responsavel: string | null;
+  data_limite: string | null;
+  urgencia: string;
+  concluido: boolean;
+  pipeline_stage: string | null;
+  edital_id: string | null;
+  contrato_id: string | null;
+}
 
-const mockAcoesPosPerda: AcaoPosPerda[] = [
-  { id: "1", edital: "PE-025/2026", orgao: "CEMIG", motivo: "Preco acima do mercado", acao: "Revisar politica de precos para equipamentos de alta tensao", responsavel: "Gerente Comercial", prazo: "28/02/2026", status: "em_andamento" },
-  { id: "2", edital: "PE-020/2026", orgao: "Pref. SP", motivo: "Documentacao incompleta", acao: "Atualizar certidoes e criar checklist pre-submissao", responsavel: "Administrativo", prazo: "15/02/2026", status: "concluida" },
-  { id: "3", edital: "PE-015/2026", orgao: "UFOP", motivo: "Requisito tecnico nao atendido", acao: "Avaliar inclusao de novo produto no portfolio", responsavel: "Tecnico", prazo: "10/03/2026", status: "pendente" },
-];
+interface KPIsCRM {
+  kpis: {
+    total_editais: number;
+    analisados: number;
+    participados: number;
+    nao_participados: number;
+    ganhos: number;
+    perdidos: number;
+    em_recurso: number;
+    em_contra_razao: number;
+    taxa_participacao_pct: number;
+    taxa_vitoria_pct: number;
+    valor_ganhos: number;
+    valor_participados: number;
+    ticket_medio_ganhos: number;
+    ticket_medio_participados: number;
+  };
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function CRMPage(_props?: PageProps) {
-  const [leads] = useState<Lead[]>(mockLeads);
-  const [metas] = useState<Meta[]>(mockMetas);
-  const [acoes] = useState<AcaoPosPerda[]>(mockAcoesPosPerda);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("todos");
-  const [responsavelFilter, setResponsavelFilter] = useState("todos");
-  const [showContatoModal, setShowContatoModal] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const token = localStorage.getItem("editais_ia_access_token");
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const fmt = (v: number | null | undefined) => v != null ? `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  // State
+  const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
+  const [loadingPipeline, setLoadingPipeline] = useState(false);
+  const [parametrizacoes, setParametrizacoes] = useState<CRMParametrizacao[]>([]);
+  const [decisoes, setDecisoes] = useState<EditalDecisao[]>([]);
+  const [mapaUFs, setMapaUFs] = useState<MapaUF[]>([]);
+  const [agenda, setAgenda] = useState<AgendaItem[]>([]);
+  const [kpis, setKpis] = useState<KPIsCRM | null>(null);
+
+  // Parametrizacoes sub-tab
+  const [tipoParam, setTipoParam] = useState<"tipo_edital" | "agrupamento_portfolio" | "motivo_derrota">("tipo_edital");
+  const [novoParam, setNovoParam] = useState("");
+
+  // Decisao modal
+  const [showDecisaoModal, setShowDecisaoModal] = useState(false);
+  const [formDecisao, setFormDecisao] = useState({ edital_id: "", tipo: "nao_participacao", motivo_texto: "", justificativa: "", teve_contra_razao: false });
+
+  // ─── Fetchers ───────────────────────────────────────────────────────────────
+  const fetchPipeline = useCallback(async () => {
+    setLoadingPipeline(true);
+    try {
+      const res = await fetch("/api/crm/pipeline", { headers });
+      if (res.ok) { const data = await res.json(); setPipeline(data.pipeline || []); }
+    } catch (e) { console.error(e); }
+    setLoadingPipeline(false);
+  }, []);
+
+  const fetchParametrizacoes = useCallback(async () => {
+    try {
+      const res = await crudList("crm-parametrizacoes", { limit: 500 });
+      setParametrizacoes(res.items || []);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchDecisoes = useCallback(async () => {
+    try {
+      const res = await crudList("edital-decisoes", { limit: 200 });
+      setDecisoes(res.items || []);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchMapa = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/mapa", { headers });
+      if (res.ok) { const data = await res.json(); setMapaUFs(data.ufs || []); }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchAgenda = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/agenda", { headers });
+      if (res.ok) { const data = await res.json(); setAgenda(data.items || []); }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchKPIs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/crm/kpis", { headers });
+      if (res.ok) setKpis(await res.json());
+    } catch (e) { console.error(e); }
+  }, []);
+
+  useEffect(() => {
+    fetchPipeline();
+    fetchParametrizacoes();
+    fetchDecisoes();
+    fetchMapa();
+    fetchAgenda();
+    fetchKPIs();
+  }, [fetchPipeline, fetchParametrizacoes, fetchDecisoes, fetchMapa, fetchAgenda, fetchKPIs]);
+
+  // ─── Actions ────────────────────────────────────────────────────────────────
+  const handleMoveStage = async (editalId: string, newStage: string) => {
+    try {
+      await fetch(`/api/editais/${editalId}/pipeline-stage`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ pipeline_stage: newStage }),
+      });
+      fetchPipeline();
+    } catch (e) { console.error(e); }
   };
 
-  const filteredLeads = leads.filter((lead) => {
-    const matchSearch = lead.edital.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.orgao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.objeto.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = statusFilter === "todos" || lead.status === statusFilter;
-    const matchResponsavel = responsavelFilter === "todos" || lead.responsavel === responsavelFilter;
-    return matchSearch && matchStatus && matchResponsavel;
-  });
-
-  const getStatusBadge = (status: Lead["status"]) => {
-    const config: Record<string, { class: string; label: string }> = {
-      novo: { class: "status-badge-info", label: "Novo" },
-      contatado: { class: "status-badge-warning", label: "Contatado" },
-      qualificado: { class: "status-badge-primary", label: "Qualificado" },
-      proposta: { class: "status-badge-warning", label: "Proposta" },
-      ganho: { class: "status-badge-success", label: "Ganho" },
-      perdido: { class: "status-badge-error", label: "Perdido" },
-    };
-    const { class: className, label } = config[status];
-    return <span className={`status-badge ${className}`}>{label}</span>;
+  const handleMigrate = async () => {
+    try {
+      await fetch("/api/crm/pipeline/migrate", { method: "POST", headers });
+      fetchPipeline();
+    } catch (e) { console.error(e); }
   };
 
-  const getAcaoStatusBadge = (status: AcaoPosPerda["status"]) => {
-    const config: Record<string, { class: string; label: string }> = {
-      pendente: { class: "status-badge-error", label: "Pendente" },
-      em_andamento: { class: "status-badge-warning", label: "Em Andamento" },
-      concluida: { class: "status-badge-success", label: "Concluida" },
-    };
-    const { class: className, label } = config[status];
-    return <span className={`status-badge ${className}`}>{label}</span>;
+  const handleSeedParam = async () => {
+    try {
+      await fetch("/api/crm/parametrizacoes/seed", { method: "POST", headers });
+      fetchParametrizacoes();
+    } catch (e) { console.error(e); }
   };
 
-  // Calculos
-  const totalLeads = leads.length;
-  const leadsNovos = leads.filter(l => l.status === "novo").length;
-  const leadsGanhos = leads.filter(l => l.status === "ganho").length;
-  const valorPipeline = leads.filter(l => !["ganho", "perdido"].includes(l.status)).reduce((acc, l) => acc + l.valor, 0);
+  const handleAddParam = async () => {
+    if (!novoParam.trim()) return;
+    try {
+      await crudCreate("crm-parametrizacoes", { tipo: tipoParam, valor: novoParam, ordem: parametrizacoes.filter(p => p.tipo === tipoParam).length, ativo: true });
+      setNovoParam("");
+      fetchParametrizacoes();
+    } catch (e) { console.error(e); }
+  };
 
-  const leadsColumns: Column<Lead>[] = [
-    { key: "edital", header: "Edital", sortable: true },
-    { key: "orgao", header: "Orgao" },
-    { key: "objeto", header: "Objeto", render: (l) => <span title={l.objeto}>{l.objeto.length > 25 ? l.objeto.slice(0, 25) + "..." : l.objeto}</span> },
-    { key: "valor", header: "Valor", render: (l) => formatCurrency(l.valor) },
-    {
-      key: "scoreAderencia",
-      header: "Score",
-      render: (l) => (
-        <span className={`score-badge ${l.scoreAderencia >= 80 ? "success" : l.scoreAderencia >= 60 ? "warning" : "error"}`}>
-          {l.scoreAderencia}%
-        </span>
-      )
-    },
-    { key: "dataAbertura", header: "Abertura" },
-    { key: "status", header: "Status", render: (l) => getStatusBadge(l.status) },
-    { key: "responsavel", header: "Responsavel" },
-    {
-      key: "acoes",
-      header: "Acoes",
-      width: "120px",
-      render: (l) => (
-        <div className="table-actions">
-          <button title="Ver detalhes" onClick={() => setSelectedLead(l)}><Eye size={16} /></button>
-          <button title="Registrar contato" onClick={() => { setSelectedLead(l); setShowContatoModal(true); }}><Phone size={16} /></button>
-          <button title="Enviar email"><Mail size={16} /></button>
+  const handleDeleteParam = async (id: string) => {
+    try {
+      await crudDelete("crm-parametrizacoes", id);
+      fetchParametrizacoes();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleCreateDecisao = async () => {
+    try {
+      await crudCreate("edital-decisoes", { ...formDecisao });
+      setShowDecisaoModal(false);
+      setFormDecisao({ edital_id: "", tipo: "nao_participacao", motivo_texto: "", justificativa: "", teve_contra_razao: false });
+      fetchDecisoes();
+    } catch (e) { console.error(e); }
+  };
+
+  // ─── TAB: Pipeline Kanban ────────────────────────────────────────────────────
+  const tabPipeline = (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <h3>Pipeline de Vendas ({pipeline.reduce((s, p) => s + p.count, 0)} editais)</h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <ActionButton label="Migrar Legado" onClick={handleMigrate} variant="secondary" icon={<RefreshCw size={14} />} />
+          <ActionButton label="Atualizar" onClick={fetchPipeline} icon={<RefreshCw size={14} />} />
         </div>
-      ),
-    },
-  ];
+      </div>
+      {loadingPipeline ? <Loader2 className="animate-spin" /> : (
+        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 16 }}>
+          {pipeline.map(col => (
+            <div key={col.stage} style={{ minWidth: 260, maxWidth: 260 }}>
+              <Card>
+                <div style={{ borderLeft: `4px solid ${col.color}`, paddingLeft: 8, marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{col.label}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280" }}>{col.count} editais</div>
+                </div>
+                <div style={{ maxHeight: 500, overflowY: "auto" }}>
+                  {col.editais.map(e => (
+                    <div key={e.id} style={{ padding: 8, marginBottom: 6, background: "#f9fafb", borderRadius: 6, borderLeft: `3px solid ${col.color}` }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{e.numero}</div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{e.orgao} {e.uf ? `(${e.uf})` : ""}</div>
+                      <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>{e.objeto.substring(0, 60)}{e.objeto.length > 60 ? "..." : ""}</div>
+                      {e.valor_referencia && <div style={{ fontSize: 11, fontWeight: 600, color: "#16a34a", marginTop: 4 }}>{fmt(e.valor_referencia)}</div>}
+                      <div style={{ marginTop: 6 }}>
+                        <select
+                          value={e.pipeline_stage}
+                          onChange={ev => handleMoveStage(e.id, ev.target.value)}
+                          style={{ width: "100%", fontSize: 10, padding: 4, border: "1px solid #e5e7eb", borderRadius: 4 }}
+                        >
+                          {pipeline.map(s => <option key={s.stage} value={s.stage}>{s.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                  {col.count === 0 && <div style={{ padding: 16, textAlign: "center", color: "#9ca3af", fontSize: 11 }}>Vazio</div>}
+                </div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
-  const metasColumns: Column<Meta>[] = [
-    { key: "vendedor", header: "Vendedor", sortable: true },
-    { key: "metaMensal", header: "Meta Mensal", render: (m) => formatCurrency(m.metaMensal) },
-    { key: "realizado", header: "Realizado", render: (m) => formatCurrency(m.realizado) },
-    { key: "editaisGanhos", header: "Editais Ganhos" },
-    {
-      key: "percentual",
-      header: "Atingimento",
-      render: (m) => (
-        <div className="progress-cell">
-          <div className="progress-bar-small">
-            <div
-              className={`progress-fill ${m.percentual >= 80 ? "success" : m.percentual >= 50 ? "warning" : "error"}`}
-              style={{ width: `${Math.min(m.percentual, 100)}%` }}
-            />
+  // ─── TAB: Parametrizacoes ────────────────────────────────────────────────────
+  const paramsFiltered = parametrizacoes.filter(p => p.tipo === tipoParam);
+  const tabParametrizacoes = (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <h3>Parametrizações CRM</h3>
+        <ActionButton label="Popular Padrões" onClick={handleSeedParam} variant="secondary" />
+      </div>
+      <Card>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {(["tipo_edital", "agrupamento_portfolio", "motivo_derrota"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTipoParam(t)}
+              style={{
+                padding: "8px 16px",
+                background: tipoParam === t ? "#3b82f6" : "#f3f4f6",
+                color: tipoParam === t ? "white" : "#374151",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              {t === "tipo_edital" ? "Tipos de Edital" : t === "agrupamento_portfolio" ? "Agrupamento Portfolio" : "Motivos de Derrota"}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <TextInput value={novoParam} onChange={setNovoParam} placeholder="Novo valor..." />
+          <ActionButton label="Adicionar" onClick={handleAddParam} icon={<Plus size={14} />} />
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "2px solid #e5e7eb" }}>
+            <th style={{ padding: 8, textAlign: "left" }}>Ordem</th>
+            <th style={{ padding: 8, textAlign: "left" }}>Valor</th>
+            <th style={{ padding: 8, textAlign: "center" }}>Ativo</th>
+            <th style={{ padding: 8, textAlign: "right" }}>Ação</th>
+          </tr></thead>
+          <tbody>{paramsFiltered.map(p => (
+            <tr key={p.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+              <td style={{ padding: 8 }}>{p.ordem}</td>
+              <td style={{ padding: 8 }}>{p.valor}</td>
+              <td style={{ padding: 8, textAlign: "center" }}>{p.ativo ? "✅" : "❌"}</td>
+              <td style={{ padding: 8, textAlign: "right" }}>
+                <ActionButton label="Excluir" onClick={() => handleDeleteParam(p.id)} size="sm" variant="danger" />
+              </td>
+            </tr>
+          ))}
+          {paramsFiltered.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: "center", color: "#9ca3af" }}>Nenhum valor cadastrado</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+
+  // ─── TAB: Decisões ───────────────────────────────────────────────────────────
+  const motivosDerrota = parametrizacoes.filter(p => p.tipo === "motivo_derrota" && p.ativo);
+  const tabDecisoes = (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <h3>Decisões de Editais</h3>
+        <ActionButton label="Nova Decisão" onClick={() => setShowDecisaoModal(true)} icon={<Plus size={16} />} />
+      </div>
+      <Card>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "2px solid #e5e7eb" }}>
+            <th style={{ padding: 8, textAlign: "left" }}>Data</th>
+            <th style={{ padding: 8, textAlign: "left" }}>Tipo</th>
+            <th style={{ padding: 8, textAlign: "left" }}>Edital</th>
+            <th style={{ padding: 8, textAlign: "left" }}>Motivo</th>
+            <th style={{ padding: 8, textAlign: "center" }}>Contra-Razão</th>
+          </tr></thead>
+          <tbody>{decisoes.map(d => (
+            <tr key={d.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+              <td style={{ padding: 8 }}>{d.created_at ? new Date(d.created_at).toLocaleDateString("pt-BR") : "—"}</td>
+              <td style={{ padding: 8 }}>
+                <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 11, background: d.tipo === "perda" ? "#fee2e2" : "#fef3c7", color: d.tipo === "perda" ? "#991b1b" : "#92400e" }}>
+                  {d.tipo === "perda" ? "Perda" : "Não Participação"}
+                </span>
+              </td>
+              <td style={{ padding: 8, fontSize: 11 }}>{d.edital_id.substring(0, 8)}...</td>
+              <td style={{ padding: 8 }}>{d.motivo_texto || "—"}</td>
+              <td style={{ padding: 8, textAlign: "center" }}>{d.teve_contra_razao ? "✅" : "—"}</td>
+            </tr>
+          ))}
+          {decisoes.length === 0 && <tr><td colSpan={5} style={{ padding: 20, textAlign: "center", color: "#9ca3af" }}>Nenhuma decisão registrada</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+
+  // ─── TAB: Mapa (simples lista por UF com coords) ─────────────────────────────
+  const tabMapa = (
+    <div>
+      <h3 style={{ marginBottom: 16 }}>Distribuição Geográfica ({mapaUFs.reduce((s, u) => s + u.editais.length, 0)} editais)</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+        {mapaUFs.map(uf => (
+          <Card key={uf.uf}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{uf.uf}</div>
+            <div style={{ fontSize: 11, color: "#9ca3af" }}>lat {uf.lat.toFixed(2)}, lon {uf.lon.toFixed(2)}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: "#3b82f6", marginTop: 8 }}>{uf.editais.length}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>editais</div>
+            <div style={{ marginTop: 8, fontSize: 11 }}>
+              {Object.entries(uf.stages).map(([stage, count]) => (
+                <div key={stage} style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "#6b7280" }}>{stage.replace(/_/g, " ")}</span>
+                  <span style={{ fontWeight: 600 }}>{count}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+        {mapaUFs.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Nenhum edital com UF cadastrada</div>}
+      </div>
+    </div>
+  );
+
+  // ─── TAB: Agenda ─────────────────────────────────────────────────────────────
+  const urgencyColor = (u: string) => u === "critica" ? "#dc2626" : u === "alta" ? "#eab308" : u === "baixa" ? "#9ca3af" : "#3b82f6";
+  const tabAgenda = (
+    <div>
+      <h3 style={{ marginBottom: 16 }}>Agenda de Compromissos ({agenda.length} itens)</h3>
+      <Card>
+        {agenda.map(it => (
+          <div key={it.id} style={{ padding: 12, borderLeft: `4px solid ${urgencyColor(it.urgencia)}`, marginBottom: 8, background: "#f9fafb", borderRadius: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>{it.titulo}</div>
+                {it.descricao && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{it.descricao}</div>}
+                {it.responsavel && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>👤 {it.responsavel}</div>}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: urgencyColor(it.urgencia), fontWeight: 700 }}>{it.urgencia.toUpperCase()}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>{it.data_limite ? new Date(it.data_limite).toLocaleDateString("pt-BR") : "—"}</div>
+                <div style={{ fontSize: 10, color: "#9ca3af" }}>{it.origem === "auto" ? "automático" : "manual"}</div>
+              </div>
+            </div>
           </div>
-          <span className="progress-text">{m.percentual}%</span>
-        </div>
-      ),
-    },
-  ];
+        ))}
+        {agenda.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Nenhum item na agenda</div>}
+      </Card>
+    </div>
+  );
 
-  const acoesColumns: Column<AcaoPosPerda>[] = [
-    { key: "edital", header: "Edital" },
-    { key: "orgao", header: "Orgao" },
-    { key: "motivo", header: "Motivo da Perda", render: (a) => <span title={a.motivo}>{a.motivo.length > 30 ? a.motivo.slice(0, 30) + "..." : a.motivo}</span> },
-    { key: "acao", header: "Acao", render: (a) => <span title={a.acao}>{a.acao.length > 35 ? a.acao.slice(0, 35) + "..." : a.acao}</span> },
-    { key: "responsavel", header: "Responsavel" },
-    { key: "prazo", header: "Prazo" },
-    { key: "status", header: "Status", render: (a) => getAcaoStatusBadge(a.status) },
-  ];
+  // ─── TAB: KPIs ───────────────────────────────────────────────────────────────
+  const tabKPIs = !kpis ? <Loader2 className="animate-spin" /> : (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 20 }}>
+        {[
+          { label: "Total Editais", value: kpis.kpis.total_editais, color: "#3b82f6", icon: <Target size={24} /> },
+          { label: "Analisados", value: kpis.kpis.analisados, color: "#8b5cf6", icon: <TrendingUp size={24} /> },
+          { label: "Participados", value: kpis.kpis.participados, color: "#eab308", icon: <TrendingUp size={24} /> },
+          { label: "Não Participados", value: kpis.kpis.nao_participados, color: "#6b7280", icon: <AlertTriangle size={24} /> },
+          { label: "Ganhos", value: kpis.kpis.ganhos, color: "#16a34a", icon: <Award size={24} /> },
+          { label: "Perdidos", value: kpis.kpis.perdidos, color: "#dc2626", icon: <AlertTriangle size={24} /> },
+          { label: "Em Recurso", value: kpis.kpis.em_recurso, color: "#0891b2", icon: <TrendingUp size={24} /> },
+          { label: "Em Contra-Razão", value: kpis.kpis.em_contra_razao, color: "#06b6d4", icon: <TrendingUp size={24} /> },
+        ].map((s, i) => (
+          <Card key={i}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ background: s.color + "20", color: s.color, borderRadius: 8, padding: 8 }}>{s.icon}</div>
+              <div><div style={{ fontSize: 11, color: "#6b7280" }}>{s.label}</div><div style={{ fontSize: 22, fontWeight: 700 }}>{s.value}</div></div>
+            </div>
+          </Card>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+        <Card>
+          <h4 style={{ marginBottom: 12 }}>Taxas de Conversão</h4>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+              <span>Taxa Participação (Analisados)</span>
+              <span style={{ fontWeight: 700 }}>{kpis.kpis.taxa_participacao_pct}%</span>
+            </div>
+            <div style={{ width: "100%", height: 8, background: "#e5e7eb", borderRadius: 4 }}>
+              <div style={{ width: `${Math.min(kpis.kpis.taxa_participacao_pct, 100)}%`, height: "100%", borderRadius: 4, background: "#3b82f6" }} />
+            </div>
+          </div>
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+              <span>Taxa Vitória (Participados)</span>
+              <span style={{ fontWeight: 700 }}>{kpis.kpis.taxa_vitoria_pct}%</span>
+            </div>
+            <div style={{ width: "100%", height: 8, background: "#e5e7eb", borderRadius: 4 }}>
+              <div style={{ width: `${Math.min(kpis.kpis.taxa_vitoria_pct, 100)}%`, height: "100%", borderRadius: 4, background: "#16a34a" }} />
+            </div>
+          </div>
+        </Card>
+        <Card>
+          <h4 style={{ marginBottom: 12 }}>Valores e Tickets</h4>
+          <div style={{ fontSize: 13, display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span>Valor Ganhos</span><span style={{ fontWeight: 700, color: "#16a34a" }}>{fmt(kpis.kpis.valor_ganhos)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span>Valor Participados</span><span style={{ fontWeight: 700 }}>{fmt(kpis.kpis.valor_participados)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span>Ticket Médio Ganhos</span><span style={{ fontWeight: 700 }}>{fmt(kpis.kpis.ticket_medio_ganhos)}</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span>Ticket Médio Participados</span><span style={{ fontWeight: 700 }}>{fmt(kpis.kpis.ticket_medio_participados)}</span></div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <div className="page-header-left">
-          <Users size={24} />
-          <div>
-            <h1>CRM - Gestao de Oportunidades</h1>
-            <p>Leads, metas de vendedores e acoes pos-perda</p>
-          </div>
-        </div>
-        <div className="page-header-actions">
-          <ActionButton icon={<Plus size={16} />} label="Novo Lead" variant="primary" onClick={() => {}} />
-        </div>
-      </div>
+    <div style={{ padding: 24 }}>
+      <h2 style={{ marginBottom: 20, fontSize: 22, fontWeight: 700 }}>CRM — Gestão Comercial</h2>
+      <TabPanel tabs={[
+        { id: "pipeline", label: "Pipeline" },
+        { id: "parametrizacoes", label: "Parametrizações" },
+        { id: "mapa", label: "Mapa" },
+        { id: "agenda", label: "Agenda" },
+        { id: "kpis", label: "KPIs" },
+        { id: "decisoes", label: "Decisões" },
+      ]}>
+        {(activeTab) => {
+          if (activeTab === "pipeline") return tabPipeline;
+          if (activeTab === "parametrizacoes") return tabParametrizacoes;
+          if (activeTab === "mapa") return tabMapa;
+          if (activeTab === "agenda") return tabAgenda;
+          if (activeTab === "kpis") return tabKPIs;
+          return tabDecisoes;
+        }}
+      </TabPanel>
 
-      <div className="page-content">
-        {/* KPIs */}
-        <div className="stats-row">
-          <div className="stat-card">
-            <div className="stat-icon info"><Target size={24} /></div>
-            <div className="stat-content">
-              <span className="stat-value">{totalLeads}</span>
-              <span className="stat-label">Total de Leads</span>
-            </div>
+      {showDecisaoModal && (
+        <Modal title="Nova Decisão" onClose={() => setShowDecisaoModal(false)}>
+          <FormField label="ID do Edital"><TextInput value={formDecisao.edital_id} onChange={v => setFormDecisao(p => ({ ...p, edital_id: v }))} /></FormField>
+          <FormField label="Tipo"><SelectInput value={formDecisao.tipo} onChange={v => setFormDecisao(p => ({ ...p, tipo: v }))} options={[
+            { value: "nao_participacao", label: "Não Participação" },
+            { value: "perda", label: "Perda Definitiva" },
+          ]} /></FormField>
+          <FormField label="Motivo">
+            <SelectInput
+              value={formDecisao.motivo_texto}
+              onChange={v => setFormDecisao(p => ({ ...p, motivo_texto: v }))}
+              options={[{ value: "", label: "Selecione..." }, ...motivosDerrota.map(m => ({ value: m.valor, label: m.valor }))]}
+            />
+          </FormField>
+          <FormField label="Justificativa"><TextArea value={formDecisao.justificativa} onChange={v => setFormDecisao(p => ({ ...p, justificativa: v }))} /></FormField>
+          <FormField label="Teve Contra-Razão?">
+            <SelectInput
+              value={formDecisao.teve_contra_razao ? "sim" : "nao"}
+              onChange={v => setFormDecisao(p => ({ ...p, teve_contra_razao: v === "sim" }))}
+              options={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]}
+            />
+          </FormField>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
+            <ActionButton label="Cancelar" onClick={() => setShowDecisaoModal(false)} variant="secondary" />
+            <ActionButton label="Salvar" onClick={handleCreateDecisao} />
           </div>
-          <div className="stat-card">
-            <div className="stat-icon warning"><Users size={24} /></div>
-            <div className="stat-content">
-              <span className="stat-value">{leadsNovos}</span>
-              <span className="stat-label">Leads Novos</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon success"><Award size={24} /></div>
-            <div className="stat-content">
-              <span className="stat-value">{leadsGanhos}</span>
-              <span className="stat-label">Ganhos no Mes</span>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon primary"><TrendingUp size={24} /></div>
-            <div className="stat-content">
-              <span className="stat-value">{formatCurrency(valorPipeline)}</span>
-              <span className="stat-label">Pipeline</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Leads / Oportunidades */}
-        <Card title="Leads (Editais com Aderencia)" icon={<Target size={18} />}>
-          <FilterBar
-            searchValue={searchTerm}
-            onSearchChange={setSearchTerm}
-            searchPlaceholder="Buscar edital, orgao..."
-            filters={[
-              {
-                key: "status",
-                label: "Status",
-                value: statusFilter,
-                onChange: setStatusFilter,
-                options: [
-                  { value: "todos", label: "Todos" },
-                  { value: "novo", label: "Novo" },
-                  { value: "contatado", label: "Contatado" },
-                  { value: "qualificado", label: "Qualificado" },
-                  { value: "proposta", label: "Proposta" },
-                  { value: "ganho", label: "Ganho" },
-                  { value: "perdido", label: "Perdido" },
-                ],
-              },
-              {
-                key: "responsavel",
-                label: "Responsavel",
-                value: responsavelFilter,
-                onChange: setResponsavelFilter,
-                options: [
-                  { value: "todos", label: "Todos" },
-                  { value: "Joao Silva", label: "Joao Silva" },
-                  { value: "Maria Santos", label: "Maria Santos" },
-                  { value: "Pedro Oliveira", label: "Pedro Oliveira" },
-                ],
-              },
-            ]}
-          />
-          <DataTable
-            data={filteredLeads}
-            columns={leadsColumns}
-            idKey="id"
-            emptyMessage="Nenhum lead encontrado"
-          />
-        </Card>
-
-        {/* Metas dos Vendedores */}
-        <Card title="Metas dos Vendedores" icon={<Award size={18} />}>
-          <DataTable
-            data={metas}
-            columns={metasColumns}
-            idKey="id"
-            emptyMessage="Nenhuma meta cadastrada"
-          />
-        </Card>
-
-        {/* Acoes Pos-Perda */}
-        <Card title="Acoes Pos-Perda" icon={<MessageSquare size={18} />}>
-          <DataTable
-            data={acoes}
-            columns={acoesColumns}
-            idKey="id"
-            emptyMessage="Nenhuma acao registrada"
-          />
-        </Card>
-      </div>
-
-      {/* Modal de Contato */}
-      <Modal
-        isOpen={showContatoModal}
-        onClose={() => { setShowContatoModal(false); setSelectedLead(null); }}
-        title={`Registrar Contato - ${selectedLead?.edital}`}
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setShowContatoModal(false)}>Cancelar</button>
-            <button className="btn btn-primary">Salvar</button>
-          </>
-        }
-      >
-        <FormField label="Tipo de Contato" required>
-          <SelectInput
-            value=""
-            onChange={() => {}}
-            options={[
-              { value: "telefone", label: "Telefone" },
-              { value: "email", label: "Email" },
-              { value: "reuniao", label: "Reuniao" },
-              { value: "visita", label: "Visita" },
-            ]}
-            placeholder="Selecione..."
-          />
-        </FormField>
-        <FormField label="Data do Contato" required>
-          <input type="date" className="text-input" />
-        </FormField>
-        <FormField label="Observacoes">
-          <textarea className="text-input" rows={3} placeholder="Descreva o contato realizado..." />
-        </FormField>
-        <FormField label="Proximo Passo">
-          <TextInput value="" onChange={() => {}} placeholder="Ex: Agendar reuniao tecnica" />
-        </FormField>
-        <FormField label="Novo Status">
-          <SelectInput
-            value={selectedLead?.status || ""}
-            onChange={() => {}}
-            options={[
-              { value: "novo", label: "Novo" },
-              { value: "contatado", label: "Contatado" },
-              { value: "qualificado", label: "Qualificado" },
-              { value: "proposta", label: "Proposta Enviada" },
-              { value: "ganho", label: "Ganho" },
-              { value: "perdido", label: "Perdido" },
-            ]}
-          />
-        </FormField>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 }

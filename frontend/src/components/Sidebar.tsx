@@ -152,6 +152,9 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
         items: [
           { id: "crud-contratos", icon: <Briefcase size={14} />, label: "Contratos", page: "crud:contratos" },
           { id: "crud-entregas", icon: <Clock size={14} />, label: "Entregas", page: "crud:contrato-entregas" },
+          { id: "crud-empenhos", icon: <DollarSign size={14} />, label: "Empenhos", page: "crud:empenhos" },
+          { id: "crud-empenho-itens", icon: <Layers size={14} />, label: "Itens Empenho", page: "crud:empenho-itens" },
+          { id: "crud-empenho-faturas", icon: <FileText size={14} />, label: "Faturas Empenho", page: "crud:empenho-faturas" },
         ],
       },
       {
@@ -170,6 +173,9 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
         items: [
           { id: "crud-leads", icon: <TrendingUp size={14} />, label: "Leads", page: "crud:leads-crm" },
           { id: "crud-acoes-perda", icon: <AlertTriangle size={14} />, label: "Acoes Pos-Perda", page: "crud:acoes-pos-perda" },
+          { id: "crud-crm-param", icon: <Sliders size={14} />, label: "Parametrizacoes CRM", page: "crud:crm-parametrizacoes" },
+          { id: "crud-edital-decisoes", icon: <Gavel size={14} />, label: "Decisoes Editais", page: "crud:edital-decisoes" },
+          { id: "crud-crm-agenda", icon: <Clock size={14} />, label: "Agenda CRM", page: "crud:crm-agenda-items" },
         ],
       },
       {
