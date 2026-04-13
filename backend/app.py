@@ -884,6 +884,23 @@ def get_current_empresa_id():
 
 
 # =============================================================================
+# RN-037 — Consulta de audit log
+# =============================================================================
+
+@app.route("/api/auditoria", methods=["GET"])
+def api_auditoria():
+    """RN-037: consulta log de auditoria. Query params: entidade, entidade_id, limit."""
+    from rn_audit import get_auditoria
+    entidade = request.args.get("entidade")
+    entidade_id = request.args.get("entidade_id")
+    try:
+        limit = int(request.args.get("limit", 100))
+    except (TypeError, ValueError):
+        limit = 100
+    return jsonify(get_auditoria(entidade=entidade, entidade_id=entidade_id, limit=limit))
+
+
+# =============================================================================
 # Auth Routes
 # =============================================================================
 

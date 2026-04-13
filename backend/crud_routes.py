@@ -45,6 +45,7 @@ from rn_validators import (
     validar_cnpj, validar_cpf, validar_ncm, validar_email, validar_uf,
     validar_gestor_diferente_fiscal, RNValidationError,
 )
+from rn_audit import log_transicao as _rn_log_transicao
 _ENFORCE_RN = os.environ.get("ENFORCE_RN_VALIDATORS", "false").lower() == "true"
 
 def _rn_warn_or_raise(rn_code: str, condition: bool, message: str):
@@ -1140,6 +1141,25 @@ def crud_create(table_slug):
         db.commit()
         db.refresh(instance)
 
+        # RN-037: audit log universal (best-effort, nao quebra fluxo)
+        try:
+            _AUDITED_TABLES = {
+                "empresas", "produtos", "editais", "propostas", "contratos",
+                "contrato-aditivos", "contrato-designacoes", "empresa-responsaveis",
+                "impugnacoes", "recursos-detalhados",
+            }
+            if table_slug in _AUDITED_TABLES:
+                _rn_log_transicao(
+                    entidade=table_slug,
+                    entidade_id=str(instance.id),
+                    acao="create",
+                    dados_antes=None,
+                    dados_depois={k: (str(v) if hasattr(v, "isoformat") else v) for k, v in (data or {}).items() if k not in ("password", "senha")},
+                    user_id=user_id,
+                )
+        except Exception as _audit_e:
+            print(f"[RN-037] log_transicao create error: {_audit_e}")
+
         # Background: processar metadados (CATMAT + termos) para produtos
         if table_slug == "produtos":
             try:
@@ -1219,6 +1239,14 @@ def crud_update(table_slug, record_id):
         if not instance:
             return jsonify({"error": f"{config['label']} não encontrado(a)"}), 404
 
+        # RN-037: capturar snapshot "antes" para audit log (best-effort)
+        _dados_antes_audit = None
+        try:
+            if hasattr(instance, "to_dict"):
+                _dados_antes_audit = instance.to_dict()
+        except Exception:
+            _dados_antes_audit = None
+
         # Update fields
         skip_fields = {"id", "created_at", "user_id"}
         password_field = config.get("password_field")
@@ -1253,6 +1281,25 @@ def crud_update(table_slug, record_id):
 
         db.commit()
         db.refresh(instance)
+
+        # RN-037: audit log universal para update (best-effort)
+        try:
+            _AUDITED_TABLES = {
+                "empresas", "produtos", "editais", "propostas", "contratos",
+                "contrato-aditivos", "contrato-designacoes", "empresa-responsaveis",
+                "impugnacoes", "recursos-detalhados",
+            }
+            if table_slug in _AUDITED_TABLES:
+                _rn_log_transicao(
+                    entidade=table_slug,
+                    entidade_id=str(record_id),
+                    acao="update",
+                    dados_antes=_dados_antes_audit,
+                    dados_depois=instance.to_dict() if hasattr(instance, "to_dict") else None,
+                    user_id=user_id,
+                )
+        except Exception as _audit_e:
+            print(f"[RN-037] log_transicao update error: {_audit_e}")
 
         result = instance.to_dict()
         if password_field and hasattr(instance, "password_hash"):
