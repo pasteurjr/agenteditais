@@ -38,6 +38,55 @@ from models import (
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
+import os
+
+# RN validators — Secao 13 de requisitos_completosv8.md
+from rn_validators import (
+    validar_cnpj, validar_cpf, validar_ncm, validar_email, validar_uf,
+    validar_gestor_diferente_fiscal, RNValidationError,
+)
+_ENFORCE_RN = os.environ.get("ENFORCE_RN_VALIDATORS", "false").lower() == "true"
+
+def _rn_warn_or_raise(rn_code: str, condition: bool, message: str):
+    """Helper: se enforce=true levanta, senao apenas loga warning."""
+    if not condition:
+        if _ENFORCE_RN:
+            raise RNValidationError(rn_code, message)
+        else:
+            print(f"[RN-WARN {rn_code}] {message}")
+
+def _validar_rns_payload(table_slug: str, data: dict):
+    """Dispatcher de RN validators por table_slug. Aplicado em create e update."""
+    if table_slug == "empresas":
+        cnpj = data.get("cnpj")
+        if cnpj:
+            _rn_warn_or_raise("RN-028", validar_cnpj(cnpj), f"CNPJ invalido: {cnpj}")
+        email = data.get("email")
+        if email:
+            _rn_warn_or_raise("RN-042", validar_email(email), f"Email invalido: {email}")
+        uf = data.get("uf") or data.get("estado")
+        if uf:
+            _rn_warn_or_raise("RN-078", validar_uf(uf), f"UF invalida: {uf}")
+
+    elif table_slug == "empresa-responsaveis":
+        cpf = data.get("cpf")
+        if cpf:
+            _rn_warn_or_raise("RN-029", validar_cpf(cpf), f"CPF invalido: {cpf}")
+        email = data.get("email")
+        if email:
+            _rn_warn_or_raise("RN-042", validar_email(email), f"Email invalido: {email}")
+
+    elif table_slug == "produtos":
+        ncm = data.get("ncm")
+        if ncm:
+            _rn_warn_or_raise("RN-035", validar_ncm(ncm), f"NCM deve seguir padrao XXXX.XX.XX: {ncm}")
+
+    elif table_slug == "contrato-designacoes":
+        gestor = data.get("gestor_id") or data.get("gestor_user_id")
+        fiscal = data.get("fiscal_id") or data.get("fiscal_user_id")
+        _rn_warn_or_raise("RN-206",
+            validar_gestor_diferente_fiscal(gestor, fiscal),
+            "Gestor e Fiscal nao podem ser a mesma pessoa (Art. 117 Lei 14.133/2021)")
 
 crud_bp = Blueprint('crud', __name__)
 
@@ -989,6 +1038,12 @@ def crud_create(table_slug):
         if field_name not in data or data[field_name] in (None, ""):
             return jsonify({"error": f"Campo '{field_name}' é obrigatório"}), 400
 
+    # RN validators (Secao 13 requisitos_completosv8.md)
+    try:
+        _validar_rns_payload(table_slug, data)
+    except RNValidationError as e:
+        return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
+
     db = get_db()
     try:
         instance = model()
@@ -1091,6 +1146,12 @@ def crud_update(table_slug, record_id):
     is_super = getattr(request, 'is_super', False)
     is_admin = is_super or getattr(request, 'papel', None) == 'admin'
     data = request.json or {}
+
+    # RN validators (Secao 13 requisitos_completosv8.md)
+    try:
+        _validar_rns_payload(table_slug, data)
+    except RNValidationError as e:
+        return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
 
     db = get_db()
     try:

@@ -48,6 +48,24 @@ import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
+# RN validators (Secao 13 de requisitos_completosv8.md)
+# Feature flag default False — wire presente mas dormente ate ENFORCE_RN_VALIDATORS=true
+from rn_validators import (
+    validar_cnpj, validar_cpf, validar_ncm, validar_email, validar_uf,
+    validar_quantidade, validar_lance_d_maior_e, validar_entrega_dentro_saldo,
+    validar_gestor_diferente_fiscal, validar_aditivo_cumulativo,
+    RNValidationError, check as rn_check,
+)
+ENFORCE_RN_VALIDATORS = os.environ.get("ENFORCE_RN_VALIDATORS", "false").lower() == "true"
+
+def rn_enforce(rn_code: str, condition: bool, message: str):
+    """Aplica validador de RN apenas se ENFORCE_RN_VALIDATORS=true. Caso contrario, loga warning."""
+    if not condition:
+        if ENFORCE_RN_VALIDATORS:
+            raise RNValidationError(rn_code, message)
+        else:
+            print(f"[RN-WARN {rn_code}] {message}")
+
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"])
 

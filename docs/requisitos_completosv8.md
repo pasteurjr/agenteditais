@@ -2811,7 +2811,7 @@ Cada RN cita o(s) UC(s) onde se aplica. As referencias cruzadas RN↔UC estao fo
 
 - **RN-039** [FALTANTE]: Documentos da empresa com `data_vencimento` passam a `expirado` automaticamente sem acao manual. Justificativa: `empresa_documentos.data_vencimento` existe mas nao ha transicao automatica como em `empresa_certidoes`. Aplicavel a: UC-F03.
 
-- **RN-040** [FALTANTE]: Ao excluir uma subclasse, produtos vinculados devem permanecer no catalogo (soft-disconnect, `subclasse_id = NULL`), nao cascatear. Justificativa: `ON DELETE SET NULL` ja existe mas a regra nao esta documentada na UC-F13. Aplicavel a: UC-F13.
+- **RN-040**: Ao excluir uma subclasse, produtos vinculados devem permanecer no catalogo (soft-disconnect, `subclasse_id = NULL`), nao cascatear. Fonte: `backend/models.py:150` (`ondelete='SET NULL'` na FK `produtos.subclasse_id`). Aplicavel a: UC-F13.
 
 - **RN-041** [FALTANTE]: Os pesos default pre-configurados devem totalizar 1.00 no primeiro acesso (seed); sem seed valido, primeira-execucao fica travada pelo RN-020. Justificativa: RF-018 criterio 4 nao especifica os valores. Aplicavel a: UC-F14 (inicializacao).
 
@@ -2893,7 +2893,7 @@ Cada RN cita o(s) UC(s) onde se aplica. As referencias cruzadas RN↔UC estao fo
 
 #### RNs faltantes
 
-- **RN-077** [FALTANTE]: Termo de busca deveria exigir comprimento minimo >=3 chars. Justificativa: evitar buscas improdutivas no PNCP com "a" ou "x". Aplicavel a: UC-CV01.
+- **RN-077**: Termo de busca exige comprimento minimo >=3 chars. Fonte: `backend/app.py:4942` e `backend/app.py:5031` (`if not termo or len(termo) < 3`). Aplicavel a: UC-CV01.
 
 - **RN-078** [FALTANTE]: Limite maximo de editais por busca deveria ser cap hard (~500). Justificativa: frontend hoje envia 2000 como limite, sobrecarga backend. Aplicavel a: UC-CV01.
 
