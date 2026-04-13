@@ -88,6 +88,45 @@ def _validar_rns_payload(table_slug: str, data: dict):
             validar_gestor_diferente_fiscal(gestor, fiscal),
             "Gestor e Fiscal nao podem ser a mesma pessoa (Art. 117 Lei 14.133/2021)")
 
+
+def _validar_rns_db(table_slug: str, data: dict, db):
+    """RN validators que precisam consultar o DB (cross-row).
+
+    RN-207: soma cumulativa de aditivos <= 25% do valor_total do contrato.
+    RN-209: soma de entregas + novo valor <= valor_total do contrato.
+    """
+    from rn_validators import validar_aditivo_cumulativo, validar_entrega_dentro_saldo
+    from sqlalchemy import func as _sqlfunc
+
+    if table_slug == "contrato-aditivos":
+        contrato_id = data.get("contrato_id")
+        novo_pct = data.get("percentual")
+        if contrato_id and novo_pct is not None:
+            try:
+                soma_existente = db.query(_sqlfunc.coalesce(_sqlfunc.sum(ContratoAditivo.percentual), 0.0))\
+                    .filter(ContratoAditivo.contrato_id == contrato_id).scalar() or 0.0
+                _rn_warn_or_raise("RN-207",
+                    validar_aditivo_cumulativo(float(soma_existente), float(novo_pct)),
+                    f"Aditivo cumulativo excederia 25% (existente={soma_existente}%, novo={novo_pct}%). Art. 124-126 Lei 14.133/2021.")
+            except (TypeError, ValueError) as _e:
+                print(f"[RN-207] Erro ao validar: {_e}")
+
+    elif table_slug == "contrato-entregas":
+        contrato_id = data.get("contrato_id")
+        novo_valor = data.get("valor_total") or 0
+        if contrato_id and novo_valor:
+            try:
+                contrato = db.query(Contrato).filter(Contrato.id == contrato_id).first()
+                if contrato and contrato.valor_total:
+                    soma_entregas = db.query(_sqlfunc.coalesce(_sqlfunc.sum(ContratoEntrega.valor_total), 0.0))\
+                        .filter(ContratoEntrega.contrato_id == contrato_id).scalar() or 0.0
+                    saldo = float(contrato.valor_total) - float(soma_entregas)
+                    _rn_warn_or_raise("RN-209",
+                        validar_entrega_dentro_saldo(novo_valor, saldo),
+                        f"Valor da entrega ({novo_valor}) excede saldo restante do contrato ({saldo}).")
+            except (TypeError, ValueError) as _e:
+                print(f"[RN-209] Erro ao validar: {_e}")
+
 crud_bp = Blueprint('crud', __name__)
 
 
@@ -1045,6 +1084,13 @@ def crud_create(table_slug):
         return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
 
     db = get_db()
+
+    # RN validators DB-aware (RN-207, RN-209)
+    try:
+        _validar_rns_db(table_slug, data, db)
+    except RNValidationError as e:
+        return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
+
     try:
         instance = model()
         instance.id = str(uuid.uuid4())
@@ -1154,6 +1200,13 @@ def crud_update(table_slug, record_id):
         return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
 
     db = get_db()
+
+    # RN validators DB-aware (RN-207, RN-209)
+    try:
+        _validar_rns_db(table_slug, data, db)
+    except RNValidationError as e:
+        return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
+
     try:
         query = db.query(model).filter(model.id == record_id)
         empresa_id = get_current_empresa_id()
