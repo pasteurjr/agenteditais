@@ -1179,6 +1179,7 @@ def crud_create(table_slug):
                 "empresas", "produtos", "editais", "propostas", "contratos",
                 "contrato-aditivos", "contrato-designacoes", "empresa-responsaveis",
                 "impugnacoes", "recursos-detalhados",
+                "estrategias-editais",  # RN-080: versionamento GO/NO-GO
             }
             if table_slug in _AUDITED_TABLES:
                 _rn_log_transicao(
@@ -1338,6 +1339,7 @@ def crud_update(table_slug, record_id):
                 "empresas", "produtos", "editais", "propostas", "contratos",
                 "contrato-aditivos", "contrato-designacoes", "empresa-responsaveis",
                 "impugnacoes", "recursos-detalhados",
+                "estrategias-editais",  # RN-080: versionamento GO/NO-GO
             }
             if table_slug in _AUDITED_TABLES:
                 _rn_log_transicao(
