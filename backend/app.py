@@ -11481,7 +11481,7 @@ Responda APENAS o texto da análise, sem JSON."""
         else:
             perfil_db = OrgaoPerfil(
                 id=str(uuid.uuid4()),
-                cnpj=cnpj_orgao or f"sem_cnpj_{nome_orgao[:20]}",
+                cnpj=(cnpj_orgao or f"sc_{nome_orgao}")[:20],
                 nome=nome_orgao,
                 uf=uf_orgao,
                 total_compras=len(compras),
