@@ -1290,6 +1290,13 @@ def crud_update(table_slug, record_id):
         except Exception:
             _dados_antes_audit = None
 
+        # RN-034/082/205: validar transicao de estado (se aplicavel)
+        try:
+            from rn_estados import check_transicao_update, TransicaoInvalida
+            check_transicao_update(table_slug, instance, data)
+        except TransicaoInvalida as _te:
+            return jsonify({"error": str(_te), "rn_code": _te.rn_code}), 400
+
         # Update fields
         skip_fields = {"id", "created_at", "user_id"}
         password_field = config.get("password_field")
