@@ -93,11 +93,43 @@ def _validar_rns_payload(table_slug: str, data: dict):
 def _validar_rns_db(table_slug: str, data: dict, db):
     """RN validators que precisam consultar o DB (cross-row).
 
+    RN-031: bloquear proposta se empresa tem certidao vencida.
     RN-207: soma cumulativa de aditivos <= 25% do valor_total do contrato.
     RN-209: soma de entregas + novo valor <= valor_total do contrato.
     """
     from rn_validators import validar_aditivo_cumulativo, validar_entrega_dentro_saldo
     from sqlalchemy import func as _sqlfunc
+    from datetime import date as _date
+
+    if table_slug == "propostas":
+        # RN-031: gate de certidao vencida. Feature flag ENFORCE_CERTIDAO_GATE default false.
+        _enforce_certidao = os.environ.get("ENFORCE_CERTIDAO_GATE", "false").lower() == "true"
+        empresa_id_prop = data.get("empresa_id")
+        if not empresa_id_prop:
+            try:
+                from models import Edital as _Edital
+                ed = db.query(_Edital).filter(_Edital.id == data.get("edital_id")).first()
+                if ed and hasattr(ed, "empresa_id"):
+                    empresa_id_prop = ed.empresa_id
+            except Exception:
+                pass
+        if empresa_id_prop:
+            try:
+                from models import EmpresaCertidao as _EC
+                hoje = _date.today()
+                vencidas = db.query(_EC).filter(
+                    _EC.empresa_id == empresa_id_prop,
+                    _EC.data_vencimento < hoje,
+                ).count()
+                if vencidas > 0:
+                    msg = f"Empresa possui {vencidas} certidao(oes) vencida(s). Regularize antes de submeter proposta."
+                    if _enforce_certidao and _ENFORCE_RN:
+                        raise RNValidationError("RN-031", msg)
+                    print(f"[RN-031 WARN] {msg} (empresa {empresa_id_prop})")
+            except RNValidationError:
+                raise
+            except Exception as _e:
+                print(f"[RN-031] erro ao verificar certidoes: {_e}")
 
     if table_slug == "contrato-aditivos":
         contrato_id = data.get("contrato_id")
