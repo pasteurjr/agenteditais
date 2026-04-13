@@ -1227,6 +1227,17 @@ def crud_update(table_slug, record_id):
     except RNValidationError as e:
         return jsonify({"error": str(e), "rn_code": e.rn_code}), 400
 
+    # RN-086: invalidar scores quando pesos mudam
+    if table_slug == "parametros-score":
+        try:
+            from rn_deepseek import invalidar_scores_empresa
+            _emp_id = data.get("empresa_id") or get_current_empresa_id()
+            if _emp_id:
+                _n = invalidar_scores_empresa(db, _emp_id)
+                print(f"[RN-086] {_n} editais marcados como score_stale para empresa {_emp_id}")
+        except Exception as _e:
+            print(f"[RN-086] erro: {_e}")
+
     try:
         query = db.query(model).filter(model.id == record_id)
         empresa_id = get_current_empresa_id()

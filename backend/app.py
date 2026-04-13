@@ -1333,6 +1333,15 @@ def chat():
     if not session_id or not message:
         return jsonify({"error": "session_id e message são obrigatórios"}), 400
 
+    # RN-084: cooldown DeepSeek (60s por empresa). Modo warn-only por default.
+    try:
+        from rn_deepseek import check_cooldown, CooldownError
+        check_cooldown(empresa_id)
+    except CooldownError as _ce:
+        return jsonify({"error": str(_ce), "rn_code": "RN-084", "wait_seconds": _ce.wait_seconds}), 429
+    except Exception as _e:
+        print(f"[RN-084] cooldown check error: {_e}")
+
     db = get_db()
     try:
         # Verificar sessão
