@@ -5,7 +5,8 @@ import {
   Gavel, Clock, AlertCircle, Package, BarChart2, Flag, Eye, Users,
   TrendingUp, Scale, AlertTriangle, XCircle, Settings, Building,
   Briefcase, Sliders, GitBranch, Database, Shield, Layers, FileCheck,
-  Bell, Mail, Target, BookOpen, Zap, Globe, UserPlus, FolderTree, Tag, Tags
+  Bell, Mail, Target, BookOpen, Zap, Globe, UserPlus, FolderTree, Tag, Tags,
+  Brain, Activity
 } from "lucide-react";
 
 interface User {
@@ -214,6 +215,8 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
       { id: "contratado", icon: <Scale size={16} />, label: "Contratado X Realizado", page: "contratado" },
       { id: "atrasos", icon: <AlertTriangle size={16} />, label: "Pedidos em Atraso", page: "atrasos" },
       { id: "perdas", icon: <XCircle size={16} />, label: "Perdas", page: "perdas" },
+      { id: "analytics", icon: <BarChart2 size={16} />, label: "Analytics", page: "analytics" },
+      { id: "aprendizado", icon: <Brain size={16} />, label: "Aprendizado", page: "aprendizado" },
     ]
   },
   {

@@ -14680,6 +14680,982 @@ def monitoramento_executar(mon_id):
 
 
 # =============================================================================
+# SPRINT 7 — Mercado TAM/SAM/SOM, Analytics, Aprendizado
+# =============================================================================
+
+@app.route("/api/dashboard/mercado/tam-sam-som", methods=["GET"])
+@require_auth
+def api_mercado_tam_sam_som():
+    from models import Edital, Produto, ParametroScore, PrecoHistorico
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        segmento = request.args.get("segmento", "todos")
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        editais_q = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= desde,
+        )
+        if segmento != "todos":
+            editais_q = editais_q.filter(
+                func.lower(Edital.categoria).contains(segmento.lower())
+            )
+        editais = editais_q.all()
+
+        tam_qtd = len(editais)
+        tam_valor = sum(float(e.valor_referencia or 0) for e in editais)
+
+        params = db.query(ParametroScore).filter_by(empresa_id=empresa_id).first()
+        ufs_atuacao = []
+        if params and params.estados_atuacao:
+            ufs_atuacao = params.estados_atuacao if isinstance(params.estados_atuacao, list) else []
+
+        produtos = db.query(Produto).filter_by(empresa_id=empresa_id).all()
+        ncms_portfolio = set(p.ncm for p in produtos if p.ncm)
+
+        sam_editais = []
+        for e in editais:
+            if ufs_atuacao and e.uf and e.uf.upper() not in [u.upper() for u in ufs_atuacao]:
+                continue
+            sam_editais.append(e)
+
+        sam_qtd = len(sam_editais)
+        sam_valor = sum(float(e.valor_referencia or 0) for e in sam_editais)
+
+        total_participados = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id).count()
+        total_ganhos = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id, PrecoHistorico.resultado == 'vitoria').count()
+        taxa_vitoria = total_ganhos / max(total_participados, 1)
+        fator_capacidade = 0.8
+
+        som_qtd = int(sam_qtd * taxa_vitoria * fator_capacidade)
+        som_valor = sam_valor * taxa_vitoria * fator_capacidade
+
+        cobertura = round(sam_qtd / max(tam_qtd, 1) * 100, 1)
+        penetracao = round(som_qtd / max(sam_qtd, 1) * 100, 1)
+
+        meses = {}
+        for e in editais:
+            if not e.created_at:
+                continue
+            chave = e.created_at.strftime("%Y-%m")
+            if chave not in meses:
+                meses[chave] = {"mes": chave, "quantidade": 0, "valor": 0, "som": 0}
+            meses[chave]["quantidade"] += 1
+            meses[chave]["valor"] += float(e.valor_referencia or 0)
+        for m in meses.values():
+            m["som"] = int(m["quantidade"] * taxa_vitoria * fator_capacidade)
+        tendencias = sorted(meses.values(), key=lambda x: x["mes"])
+
+        cat_map = {}
+        for e in editais:
+            cat = e.categoria or "Outros"
+            if cat not in cat_map:
+                cat_map[cat] = {"categoria": cat, "quantidade": 0, "valor": 0}
+            cat_map[cat]["quantidade"] += 1
+            cat_map[cat]["valor"] += float(e.valor_referencia or 0)
+        for c in cat_map.values():
+            c["percentual"] = round(c["quantidade"] / max(tam_qtd, 1) * 100, 1)
+            c["valorMedio"] = c["valor"] / max(c["quantidade"], 1)
+        categorias = sorted(cat_map.values(), key=lambda x: x["quantidade"], reverse=True)[:10]
+
+        seg_precos = {}
+        for e in editais:
+            if not e.created_at or not e.valor_referencia:
+                continue
+            seg = e.categoria or "Outros"
+            mes = e.created_at.strftime("%Y-%m")
+            key = (seg, mes)
+            if key not in seg_precos:
+                seg_precos[key] = {"segmento": seg, "mes": mes, "valores": []}
+            seg_precos[key]["valores"].append(float(e.valor_referencia))
+        evolucao_precos = []
+        for v in seg_precos.values():
+            evolucao_precos.append({
+                "segmento": v["segmento"],
+                "mes": v["mes"],
+                "preco_medio": sum(v["valores"]) / len(v["valores"])
+            })
+        evolucao_precos.sort(key=lambda x: (x["segmento"], x["mes"]))
+
+        return jsonify({
+            "tam": {"qtd": tam_qtd, "valor": round(tam_valor, 2)},
+            "sam": {"qtd": sam_qtd, "valor": round(sam_valor, 2), "cobertura_pct": cobertura},
+            "som": {"qtd": som_qtd, "valor": round(som_valor, 2), "penetracao_pct": penetracao},
+            "stat_cards": {
+                "editais_periodo": tam_qtd,
+                "valor_total_tam": round(tam_valor, 2),
+                "valor_medio": round(tam_valor / max(tam_qtd, 1), 2),
+                "taxa_penetracao": penetracao,
+                "taxa_vitoria": round(taxa_vitoria * 100, 1),
+                "ufs_atuacao": len(ufs_atuacao),
+                "ncms_portfolio": len(ncms_portfolio),
+                "participados": total_participados,
+            },
+            "tendencias": tendencias,
+            "categorias": categorias,
+            "evolucao_precos": evolucao_precos,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/mercado/intrusos", methods=["GET"])
+@require_auth
+def api_mercado_intrusos_list():
+    from models import ItemIntruso, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        criticidade = request.args.get("criticidade", "todos")
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        busca = request.args.get("busca", "")
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        q = db.query(ItemIntruso).filter(
+            ItemIntruso.empresa_id == empresa_id,
+            ItemIntruso.created_at >= desde,
+        )
+        if criticidade != "todos":
+            q = q.filter(ItemIntruso.criticidade == criticidade)
+
+        intrusos = q.order_by(ItemIntruso.created_at.desc()).all()
+
+        result = []
+        editais_afetados = set()
+        valor_risco = 0
+        for it in intrusos:
+            ed = db.query(Edital).filter(Edital.id == it.edital_id).first()
+            edital_num = ed.numero if ed else "—"
+            if busca and busca.lower() not in (edital_num or "").lower():
+                continue
+            editais_afetados.add(it.edital_id)
+            valor_risco += float(it.valor or 0)
+            result.append(it.to_dict() | {"edital_numero": edital_num})
+
+        return jsonify({
+            "intrusos": result,
+            "stat_cards": {
+                "total": len(result),
+                "editais_afetados": len(editais_afetados),
+                "valor_risco": round(valor_risco, 2),
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/mercado/detectar-intrusos", methods=["POST"])
+@require_auth
+def api_mercado_detectar_intrusos():
+    from models import ItemIntruso, Edital, EditalItem, Produto
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        data = request.get_json() or {}
+        edital_id = data.get("edital_id")
+        if not edital_id:
+            return jsonify({"error": "edital_id obrigatorio"}), 400
+
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
+        if not edital:
+            return jsonify({"error": "Edital nao encontrado"}), 404
+
+        itens = db.query(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+        if not itens:
+            return jsonify({"error": "Edital sem itens detalhados"}), 400
+
+        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
+        ncms_portfolio = set(p.ncm for p in produtos if p.ncm)
+
+        valor_total_edital = sum(float(i.valor_total or i.valor_unitario or 0) for i in itens) or 1
+        intrusos_criados = []
+
+        for item in itens:
+            ncm_item = (item.ncm or "").strip()
+            if not ncm_item or ncm_item in ncms_portfolio:
+                continue
+            valor_item = float(item.valor_total or item.valor_unitario or 0)
+            pct = round(valor_item / valor_total_edital * 100, 1)
+            if pct > 10:
+                crit = "critico"
+            elif pct >= 5:
+                crit = "medio"
+            else:
+                crit = "informativo"
+
+            existing = db.query(ItemIntruso).filter_by(
+                edital_id=edital_id, ncm=ncm_item, empresa_id=empresa_id
+            ).first()
+            if existing:
+                continue
+
+            intruso = ItemIntruso(
+                user_id=user_id, empresa_id=empresa_id, edital_id=edital_id,
+                descricao_item=item.descricao_completa or f"Item NCM {ncm_item}",
+                ncm=ncm_item, valor=valor_item, percentual_edital=pct,
+                criticidade=crit,
+                acao_sugerida=f"Item com NCM {ncm_item} nao consta no portfolio. Verificar se e item intruso no edital."
+            )
+            db.add(intruso)
+            intrusos_criados.append(intruso)
+
+        db.commit()
+        return jsonify({
+            "intrusos": [i.to_dict() for i in intrusos_criados],
+            "total": len(intrusos_criados),
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/mercado/share", methods=["GET"])
+@require_auth
+def api_mercado_share():
+    from models import Concorrente, ParticipacaoEdital, PrecoHistorico, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        segmento = request.args.get("segmento", "todos")
+        uf = request.args.get("uf", "todos")
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        conc_ids = db.query(ParticipacaoEdital.concorrente_id).join(
+            Edital, ParticipacaoEdital.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            ParticipacaoEdital.concorrente_id.isnot(None)
+        ).distinct().all()
+        conc_ids = [r[0] for r in conc_ids]
+        concorrentes = db.query(Concorrente).filter(Concorrente.id.in_(conc_ids)).all() if conc_ids else []
+
+        nosso_ganho = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id, PrecoHistorico.resultado == 'vitoria',
+                 PrecoHistorico.data_registro >= desde).count()
+        nosso_part = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id,
+                 PrecoHistorico.resultado.in_(['vitoria', 'derrota']),
+                 PrecoHistorico.data_registro >= desde).count()
+        nossa_taxa = round(nosso_ganho / max(nosso_part, 1) * 100, 1)
+
+        share = [{"nome": "Nossa Empresa", "percentual": nossa_taxa, "is_empresa": True}]
+        tabela = []
+        maior_ameaca = ""
+        maior_vitorias = 0
+        disputas_total = 0
+
+        for c in concorrentes:
+            taxa = round(c.editais_ganhos / max(c.editais_participados, 1) * 100, 1)
+            share.append({"nome": c.nome, "percentual": taxa, "is_empresa": False})
+
+            perdas_para = db.query(PrecoHistorico).join(
+                Edital, PrecoHistorico.edital_id == Edital.id
+            ).filter(
+                Edital.empresa_id == empresa_id,
+                PrecoHistorico.resultado == 'derrota',
+                PrecoHistorico.empresa_vencedora.ilike(f"%{c.nome}%"),
+                PrecoHistorico.data_registro >= desde,
+            ).count()
+            alerta = perdas_para >= 2
+
+            tabela.append({
+                "concorrente": c.nome,
+                "cnpj": c.cnpj[:10] + "..." if c.cnpj and len(c.cnpj) > 10 else c.cnpj,
+                "segmentos": c.segmentos,
+                "participados": c.editais_participados,
+                "ganhos": c.editais_ganhos,
+                "taxa": taxa,
+                "preco_medio": float(c.preco_medio) if c.preco_medio else 0,
+                "alerta": alerta,
+            })
+            disputas_total += c.editais_participados
+            if c.editais_ganhos > maior_vitorias:
+                maior_vitorias = c.editais_ganhos
+                maior_ameaca = c.nome
+
+        share.sort(key=lambda x: x["percentual"], reverse=True)
+
+        return jsonify({
+            "share": share,
+            "tabela": tabela,
+            "stat_cards": {
+                "concorrentes": len(concorrentes),
+                "nossa_taxa": nossa_taxa,
+                "maior_ameaca": maior_ameaca or "—",
+                "disputas_juntos": disputas_total,
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/analytics/funil", methods=["GET"])
+@require_auth
+def api_analytics_funil():
+    from models import Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        STAGES = [
+            "captado_nao_divulgado", "captado_divulgado", "em_analise", "lead_potencial",
+            "monitoramento_concorrencia", "em_impugnacao", "fase_propostas",
+            "proposta_submetida", "espera_resultado", "ganho_provisorio",
+            "processo_recurso", "contra_razao", "resultado_definitivo"
+        ]
+        STAGE_LABELS = {
+            "captado_nao_divulgado": "Nao Divulgados", "captado_divulgado": "Divulgados",
+            "em_analise": "Em Analise", "lead_potencial": "Leads Potenciais",
+            "monitoramento_concorrencia": "Monit. Concorrencia", "em_impugnacao": "Em Impugnacao",
+            "fase_propostas": "Fase Propostas", "proposta_submetida": "Proposta Submetida",
+            "espera_resultado": "Espera Resultado", "ganho_provisorio": "Ganho Provisorio",
+            "processo_recurso": "Processo Recurso", "contra_razao": "Contra Razao",
+            "resultado_definitivo": "Resultado Definitivo"
+        }
+
+        editais = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= desde,
+        ).all()
+
+        stage_counts = {s: 0 for s in STAGES}
+        stage_values = {s: 0.0 for s in STAGES}
+        acum = {s: 0 for s in STAGES}
+
+        for e in editais:
+            stage = e.pipeline_stage or "captado_nao_divulgado"
+            idx = STAGES.index(stage) if stage in STAGES else 0
+            for i in range(idx + 1):
+                acum[STAGES[i]] += 1
+            stage_counts[stage] += 1
+            stage_values[stage] += float(e.valor_referencia or 0)
+
+        funil = []
+        for i, s in enumerate(STAGES):
+            entrada = acum[s]
+            saida = acum[STAGES[i + 1]] if i + 1 < len(STAGES) else acum[s]
+            conv = round(saida / max(entrada, 1) * 100, 1) if i + 1 < len(STAGES) else 100
+            cor = "verde" if conv > 60 else ("amarelo" if conv > 30 else "vermelho")
+            funil.append({
+                "stage": s, "label": STAGE_LABELS.get(s, s), "quantidade": acum[s],
+                "valor": round(stage_values[s], 2), "conversao_pct": conv, "cor": cor,
+            })
+
+        analisados = sum(1 for e in editais if e.pipeline_stage in ["em_analise", "lead_potencial"])
+        participados = sum(1 for e in editais if e.pipeline_stage in [
+            "fase_propostas", "proposta_submetida", "espera_resultado",
+            "ganho_provisorio", "processo_recurso", "contra_razao", "resultado_definitivo"
+        ])
+        resultado = sum(1 for e in editais if e.pipeline_stage == "resultado_definitivo")
+
+        return jsonify({
+            "funil": funil,
+            "stat_cards": {
+                "total_pipeline": len(editais),
+                "analisados": analisados,
+                "participados": participados,
+                "resultado_definitivo": resultado,
+            },
+            "tabela": funil,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/analytics/conversoes", methods=["GET"])
+@require_auth
+def api_analytics_conversoes():
+    from models import Edital, PrecoHistorico, Monitoramento
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+        desde_anterior = desde - timedelta(days=periodo_dias)
+
+        def calc_taxa(filtro_extra=None, desde_d=desde):
+            q = db.query(PrecoHistorico).join(
+                Edital, PrecoHistorico.edital_id == Edital.id
+            ).filter(Edital.empresa_id == empresa_id, PrecoHistorico.data_registro >= desde_d,
+                     PrecoHistorico.resultado.in_(['vitoria', 'derrota']))
+            if filtro_extra:
+                q = q.filter(filtro_extra)
+            total = q.count()
+            ganhos = q.filter(PrecoHistorico.resultado == 'vitoria').count()
+            return round(ganhos / max(total, 1) * 100, 1), total, ganhos
+
+        taxa_geral, _, _ = calc_taxa()
+        taxa_geral_ant, _, _ = calc_taxa(desde_d=desde_anterior)
+
+        tipos_map = {}
+        editais = db.query(Edital).filter(Edital.empresa_id == empresa_id, Edital.created_at >= desde).all()
+        for e in editais:
+            tipo = e.modalidade or "Outro"
+            if tipo not in tipos_map:
+                tipos_map[tipo] = {"tipo": tipo, "participados": 0, "ganhos": 0}
+        precos = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id, PrecoHistorico.data_registro >= desde,
+                 PrecoHistorico.resultado.in_(['vitoria', 'derrota'])).all()
+        for p in precos:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            tipo = ed.modalidade or "Outro" if ed else "Outro"
+            if tipo not in tipos_map:
+                tipos_map[tipo] = {"tipo": tipo, "participados": 0, "ganhos": 0}
+            tipos_map[tipo]["participados"] += 1
+            if p.resultado == 'vitoria':
+                tipos_map[tipo]["ganhos"] += 1
+        por_tipo = []
+        for v in tipos_map.values():
+            v["taxa"] = round(v["ganhos"] / max(v["participados"], 1) * 100, 1)
+            v["benchmark"] = 0
+            por_tipo.append(v)
+
+        uf_map = {}
+        for p in precos:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            uf_e = ed.uf or "N/A" if ed else "N/A"
+            if uf_e not in uf_map:
+                uf_map[uf_e] = {"uf": uf_e, "participados": 0, "ganhos": 0}
+            uf_map[uf_e]["participados"] += 1
+            if p.resultado == 'vitoria':
+                uf_map[uf_e]["ganhos"] += 1
+        por_uf = []
+        melhor_uf = {"nome": "—", "taxa": 0}
+        for v in uf_map.values():
+            v["taxa"] = round(v["ganhos"] / max(v["participados"], 1) * 100, 1)
+            v["benchmark"] = 0
+            por_uf.append(v)
+            if v["taxa"] > melhor_uf["taxa"]:
+                melhor_uf = {"nome": v["uf"], "taxa": v["taxa"]}
+
+        seg_map = {}
+        for p in precos:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            seg = ed.categoria or "Outros" if ed else "Outros"
+            if seg not in seg_map:
+                seg_map[seg] = {"segmento": seg, "participados": 0, "ganhos": 0}
+            seg_map[seg]["participados"] += 1
+            if p.resultado == 'vitoria':
+                seg_map[seg]["ganhos"] += 1
+        por_segmento = []
+        melhor_seg = {"nome": "—", "taxa": 0}
+        for v in seg_map.values():
+            v["taxa"] = round(v["ganhos"] / max(v["participados"], 1) * 100, 1)
+            v["benchmark"] = 0
+            por_segmento.append(v)
+            if v["taxa"] > melhor_seg["taxa"]:
+                melhor_seg = {"nome": v["segmento"], "taxa": v["taxa"]}
+
+        total_editais = len(editais)
+        monit_count = db.query(Monitoramento).filter(Monitoramento.empresa_id == empresa_id).count()
+        contrib_auto = round(monit_count / max(total_editais, 1) * 100, 1)
+
+        return jsonify({
+            "stat_cards": {
+                "taxa_geral": taxa_geral,
+                "melhor_segmento": f"{melhor_seg['nome']} ({melhor_seg['taxa']}%)",
+                "melhor_uf": f"{melhor_uf['nome']} ({melhor_uf['taxa']}%)",
+                "contribuicao_automatica": contrib_auto,
+            },
+            "por_tipo": por_tipo,
+            "por_uf": por_uf,
+            "por_segmento": por_segmento,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/analytics/tempos", methods=["GET"])
+@require_auth
+def api_analytics_tempos():
+    from models import Edital, Empenho, Contrato
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        STAGES = [
+            "captado_nao_divulgado", "captado_divulgado", "em_analise", "lead_potencial",
+            "fase_propostas", "proposta_submetida", "espera_resultado", "resultado_definitivo"
+        ]
+
+        editais = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= desde,
+        ).all()
+
+        timestamps = {}
+        for e in editais:
+            ts = {
+                "captado_nao_divulgado": e.created_at,
+                "captado_divulgado": e.data_publicacao or e.created_at,
+                "em_analise": e.data_publicacao,
+                "lead_potencial": e.data_publicacao,
+                "fase_propostas": e.data_abertura or e.data_limite_proposta,
+                "proposta_submetida": e.data_limite_proposta,
+                "espera_resultado": e.data_limite_proposta,
+                "resultado_definitivo": e.data_homologacao_prevista,
+            }
+            timestamps[e.id] = ts
+
+        transicoes = []
+        for i in range(len(STAGES) - 1):
+            de_s, para_s = STAGES[i], STAGES[i + 1]
+            dias_list = []
+            for eid, ts in timestamps.items():
+                d1, d2 = ts.get(de_s), ts.get(para_s)
+                if d1 and d2 and d2 > d1:
+                    dias_list.append((d2 - d1).days)
+            if dias_list:
+                media = round(sum(dias_list) / len(dias_list), 1)
+                dias_list.sort()
+                mediana = dias_list[len(dias_list) // 2]
+                min_d, max_d = min(dias_list), max(dias_list)
+                mean = sum(dias_list) / len(dias_list)
+                desvio = round((sum((x - mean) ** 2 for x in dias_list) / len(dias_list)) ** 0.5, 1)
+            else:
+                media = mediana = min_d = max_d = desvio = 0
+            cor = "verde" if media < 7 else ("amarelo" if media < 30 else "vermelho")
+            transicoes.append({
+                "de": de_s, "para": para_s,
+                "media_dias": media, "mediana": mediana, "min": min_d, "max": max_d,
+                "desvio": desvio, "cor": cor, "is_gargalo": False,
+            })
+
+        if transicoes:
+            gargalo_idx = max(range(len(transicoes)), key=lambda i: transicoes[i]["media_dias"])
+            transicoes[gargalo_idx]["is_gargalo"] = True
+            mais_lenta = f"{transicoes[gargalo_idx]['de']} → {transicoes[gargalo_idx]['para']}"
+            mais_lenta_dias = transicoes[gargalo_idx]["media_dias"]
+            mais_rapida_idx = min(range(len(transicoes)), key=lambda i: transicoes[i]["media_dias"])
+            mais_rapida = f"{transicoes[mais_rapida_idx]['de']} → {transicoes[mais_rapida_idx]['para']}"
+        else:
+            mais_lenta = mais_rapida = "—"
+            mais_lenta_dias = 0
+
+        tempo_total = sum(t["media_dias"] for t in transicoes)
+
+        tempo_hom_empenho = 0
+        contratos = db.query(Contrato).filter(Contrato.empresa_id == empresa_id).all()
+        hom_emp_dias = []
+        for c in contratos:
+            if not c.edital_id:
+                continue
+            ed = db.query(Edital).filter(Edital.id == c.edital_id).first()
+            if not ed or not ed.data_homologacao_prevista:
+                continue
+            emp = db.query(Empenho).filter(Empenho.contrato_id == c.id).order_by(Empenho.data_emissao).first()
+            if emp and emp.data_emissao and emp.data_emissao > ed.data_homologacao_prevista:
+                hom_emp_dias.append((emp.data_emissao - ed.data_homologacao_prevista).days)
+        if hom_emp_dias:
+            tempo_hom_empenho = round(sum(hom_emp_dias) / len(hom_emp_dias), 1)
+
+        return jsonify({
+            "transicoes": transicoes,
+            "stat_cards": {
+                "tempo_total_medio": round(tempo_total, 1),
+                "etapa_mais_lenta": mais_lenta,
+                "etapa_mais_lenta_dias": mais_lenta_dias,
+                "etapa_mais_rapida": mais_rapida,
+                "tempo_homologacao_empenho": tempo_hom_empenho,
+            },
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/analytics/roi", methods=["GET"])
+@require_auth
+def api_analytics_roi():
+    from sqlalchemy import func
+    from models import Edital, PrecoHistorico, Recurso, ItemIntruso
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        ganhos = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id, PrecoHistorico.resultado == 'vitoria',
+                 PrecoHistorico.data_registro >= desde).all()
+        receita = sum(float(g.nosso_preco or 0) for g in ganhos)
+
+        recursos_ok = db.query(Recurso).join(
+            Edital, Recurso.edital_id == Edital.id
+        ).filter(Edital.empresa_id == empresa_id,
+                 Recurso.resultado == 'deferido',
+                 Recurso.created_at >= desde).all()
+        oportunidades = sum(float(r.valor_envolvido or 0) for r in recursos_ok) if recursos_ok else 0
+
+        produtividade = 40 * 150 * (periodo_dias / 30)
+
+        intrusos_val = db.query(func.sum(ItemIntruso.valor)).filter(
+            ItemIntruso.empresa_id == empresa_id,
+            ItemIntruso.created_at >= desde,
+        ).scalar() or 0
+        prevencao = float(intrusos_val)
+
+        total_beneficio = receita + oportunidades + produtividade + prevencao
+        custo_sistema = 5000 * (periodo_dias / 30)
+        roi_pct = round(total_beneficio / max(custo_sistema, 1) * 100, 1)
+
+        meses_roi = {}
+        for g in ganhos:
+            if not g.data_registro:
+                continue
+            mes = g.data_registro.strftime("%Y-%m")
+            meses_roi[mes] = meses_roi.get(mes, 0) + float(g.nosso_preco or 0)
+        evolucao = []
+        acum_val = 0
+        for m in sorted(meses_roi.keys()):
+            acum_val += meses_roi[m]
+            custo_mes = 5000 * (len(evolucao) + 1)
+            evolucao.append({"mes": m, "roi_pct": round(acum_val / max(custo_mes, 1) * 100, 1)})
+
+        componentes = [
+            {"nome": "Receita Direta", "valor": round(receita, 2), "pct_total": round(receita / max(total_beneficio, 1) * 100, 1), "tendencia": "alta"},
+            {"nome": "Oportunidades Salvas", "valor": round(oportunidades, 2), "pct_total": round(oportunidades / max(total_beneficio, 1) * 100, 1), "tendencia": "alta"},
+            {"nome": "Produtividade", "valor": round(produtividade, 2), "pct_total": round(produtividade / max(total_beneficio, 1) * 100, 1), "tendencia": "estavel"},
+            {"nome": "Prevencao de Perdas", "valor": round(prevencao, 2), "pct_total": round(prevencao / max(total_beneficio, 1) * 100, 1), "tendencia": "alta"},
+        ]
+
+        return jsonify({
+            "roi_pct": roi_pct,
+            "componentes": componentes,
+            "evolucao": evolucao,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/analytics/perdas", methods=["GET"])
+@require_auth
+def api_analytics_perdas():
+    from models import PrecoHistorico, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 180))
+        segmento = request.args.get("segmento", "todos")
+        uf = request.args.get("uf", "todos")
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        q = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.resultado == 'derrota',
+            PrecoHistorico.data_registro >= desde,
+        )
+        if segmento != "todos":
+            q = q.filter(func.lower(Edital.categoria).contains(segmento.lower()))
+        if uf != "todos":
+            q = q.filter(func.upper(Edital.uf) == uf.upper())
+
+        perdas = q.all()
+
+        motivos = {}
+        for p in perdas:
+            m = p.motivo_perda or 'outro'
+            motivos[m] = motivos.get(m, 0) + 1
+        total = len(perdas)
+        motivos_list = [
+            {"motivo": k, "quantidade": v, "percentual": round(v / max(total, 1) * 100, 1)}
+            for k, v in motivos.items()
+        ]
+        top_motivo = max(motivos_list, key=lambda x: x["quantidade"])["motivo"] if motivos_list else "—"
+
+        perdas_list = []
+        for p in perdas:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            perdas_list.append({
+                "id": p.id,
+                "edital": ed.numero if ed else "—",
+                "orgao": ed.orgao if ed else "—",
+                "data": p.data_registro.strftime("%d/%m/%Y") if p.data_registro else "—",
+                "valor": float(p.nosso_preco or 0),
+                "motivo": p.motivo_perda or "outro",
+                "vencedor": p.empresa_vencedora or "—",
+                "preco_vencedor": float(p.preco_vencedor or 0),
+                "gap": round(float((p.nosso_preco or 0) - (p.preco_vencedor or 0)), 2),
+            })
+
+        total_part = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.resultado.in_(['vitoria', 'derrota']),
+            PrecoHistorico.data_registro >= desde,
+        ).count()
+        taxa = round(total / max(total_part, 1) * 100, 1)
+        valor_total = sum(float(p.nosso_preco or 0) for p in perdas)
+
+        recomendacoes = []
+        if motivos_list:
+            top = sorted(motivos_list, key=lambda x: x["quantidade"], reverse=True)
+            if top[0]["quantidade"] >= 3:
+                recomendacoes.append({
+                    "texto": f"Voce perdeu {top[0]['quantidade']} editais por {top[0]['motivo']}. Considere rever sua estrategia neste aspecto.",
+                    "tipo": "preco" if top[0]["motivo"] == "preco" else "geral",
+                })
+            if len(top) > 1 and top[1]["quantidade"] >= 2:
+                recomendacoes.append({
+                    "texto": f"{top[1]['quantidade']} perdas por {top[1]['motivo']} — avalie acoes corretivas especificas.",
+                    "tipo": top[1]["motivo"],
+                })
+            if total >= 5:
+                recomendacoes.append({
+                    "texto": f"Taxa de perda de {taxa}% no periodo. Compare com benchmarks do setor para avaliar competitividade.",
+                    "tipo": "benchmark",
+                })
+
+        return jsonify({
+            "stat_cards": {
+                "total_perdas": total,
+                "valor_perdido": round(valor_total, 2),
+                "taxa_perda": taxa,
+                "top_motivo": top_motivo,
+            },
+            "motivos": motivos_list,
+            "perdas": perdas_list,
+            "recomendacoes": recomendacoes,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/aprendizado/feedbacks", methods=["GET"])
+@require_auth
+def api_aprendizado_feedbacks():
+    from models import AprendizadoFeedback
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        tipo = request.args.get("tipo", "todos")
+        periodo_dias = int(request.args.get("periodo_dias", 365))
+        entidade = request.args.get("entidade", "todos")
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        q = db.query(AprendizadoFeedback).filter(
+            AprendizadoFeedback.empresa_id == empresa_id,
+            AprendizadoFeedback.created_at >= desde,
+        )
+        if tipo != "todos":
+            q = q.filter(AprendizadoFeedback.tipo_evento == tipo)
+        if entidade != "todos":
+            q = q.filter(AprendizadoFeedback.entidade.ilike(f"%{entidade}%"))
+
+        feedbacks = q.order_by(AprendizadoFeedback.created_at.desc()).all()
+
+        total = len(feedbacks)
+        aplicados = sum(1 for f in feedbacks if f.aplicado)
+        pendentes = total - aplicados
+        taxa_adocao = round(aplicados / max(total, 1) * 100, 1)
+
+        return jsonify({
+            "feedbacks": [f.to_dict() for f in feedbacks],
+            "stat_cards": {
+                "total": total,
+                "aplicados": aplicados,
+                "pendentes": pendentes,
+                "taxa_adocao": taxa_adocao,
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/aprendizado/sugestoes", methods=["GET"])
+@require_auth
+def api_aprendizado_sugestoes():
+    from models import SugestaoIA
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        sugestoes = db.query(SugestaoIA).filter(
+            SugestaoIA.empresa_id == empresa_id,
+        ).order_by(SugestaoIA.created_at.desc()).all()
+
+        ativas = [s.to_dict() for s in sugestoes if s.status == 'pendente']
+        historico = [s.to_dict() for s in sugestoes if s.status != 'pendente']
+        pendentes = len(ativas)
+        aceitas = sum(1 for s in sugestoes if s.status == 'aceita')
+        rejeitadas = sum(1 for s in sugestoes if s.status == 'rejeitada')
+
+        return jsonify({
+            "ativas": ativas,
+            "historico": historico,
+            "stat_cards": {
+                "pendentes": pendentes,
+                "aceitas": aceitas,
+                "rejeitadas": rejeitadas,
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/aprendizado/sugestoes/<sug_id>/aceitar", methods=["POST"])
+@require_auth
+def api_sugestao_aceitar(sug_id):
+    from models import SugestaoIA, AprendizadoFeedback
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        sug = db.query(SugestaoIA).filter(SugestaoIA.id == sug_id, SugestaoIA.empresa_id == empresa_id).first()
+        if not sug:
+            return jsonify({"error": "Sugestao nao encontrada"}), 404
+        sug.status = 'aceita'
+
+        fb = AprendizadoFeedback(
+            user_id=user_id, empresa_id=empresa_id,
+            tipo_evento='feedback_usuario', entidade='sugestao_ia',
+            entidade_id=sug_id,
+            dados_entrada={"sugestao": sug.titulo, "tipo": sug.tipo},
+            resultado_real={"acao": "aceita"},
+            aplicado=True,
+        )
+        db.add(fb)
+        sug.feedback_id = fb.id
+        db.commit()
+        return jsonify({"success": True, "sugestao": sug.to_dict(), "feedback_id": fb.id})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/aprendizado/sugestoes/<sug_id>/rejeitar", methods=["POST"])
+@require_auth
+def api_sugestao_rejeitar(sug_id):
+    from models import SugestaoIA, AprendizadoFeedback
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        data = request.get_json() or {}
+        motivo = data.get("motivo", "")
+        if len(motivo) < 10:
+            return jsonify({"error": "Motivo deve ter pelo menos 10 caracteres"}), 400
+
+        sug = db.query(SugestaoIA).filter(SugestaoIA.id == sug_id, SugestaoIA.empresa_id == empresa_id).first()
+        if not sug:
+            return jsonify({"error": "Sugestao nao encontrada"}), 404
+        sug.status = 'rejeitada'
+        sug.rejeitado_motivo = motivo
+
+        fb = AprendizadoFeedback(
+            user_id=user_id, empresa_id=empresa_id,
+            tipo_evento='feedback_usuario', entidade='sugestao_ia',
+            entidade_id=sug_id,
+            dados_entrada={"sugestao": sug.titulo, "tipo": sug.tipo},
+            resultado_real={"acao": "rejeitada", "motivo": motivo},
+            aplicado=False, rejeitado_motivo=motivo,
+        )
+        db.add(fb)
+        sug.feedback_id = fb.id
+        db.commit()
+        return jsonify({"success": True, "sugestao": sug.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dashboard/aprendizado/padroes", methods=["GET"])
+@require_auth
+def api_aprendizado_padroes():
+    from models import PadraoDetectado
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        padroes = db.query(PadraoDetectado).filter(
+            PadraoDetectado.empresa_id == empresa_id,
+            PadraoDetectado.ativo == True,
+        ).order_by(PadraoDetectado.confianca.desc()).all()
+
+        total = len(padroes)
+        alta_confianca = sum(1 for p in padroes if p.confianca and float(p.confianca) >= 70)
+        ultima_analise = max((p.created_at for p in padroes), default=None)
+
+        return jsonify({
+            "padroes": [p.to_dict() for p in padroes],
+            "stat_cards": {
+                "total": total,
+                "alta_confianca": alta_confianca,
+                "ultima_analise": ultima_analise.isoformat() if ultima_analise else "—",
+            },
+            "timeline": [],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/aprendizado/analisar", methods=["POST"])
+@require_auth
+def api_aprendizado_analisar():
+    from models import PadraoDetectado, AprendizadoFeedback
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        feedbacks = db.query(AprendizadoFeedback).filter(
+            AprendizadoFeedback.empresa_id == empresa_id
+        ).all()
+        if len(feedbacks) < 5:
+            return jsonify({"error": "Preciso de pelo menos 5 feedbacks para detectar padroes"}), 400
+
+        return jsonify({"success": True, "novos": 0, "atualizados": 0,
+                        "message": "Analise de padroes executada. Padroes sao gerados pelo job semanal ou via seed."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
 # Main
 # =============================================================================
 

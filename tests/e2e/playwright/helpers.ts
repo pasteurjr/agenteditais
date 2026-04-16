@@ -117,6 +117,13 @@ const PAGE_LABELS: Record<string, string> = {
   "Monitoria": "Monitoria",
   "Auditoria": "Auditoria",
   "SMTP": "SMTP",
+  "Concorrencia": "Concorrencia",
+  "Concorrência": "Concorrencia",
+  "Mercado": "Mercado",
+  "Perdas": "Perdas",
+  "Contratado": "Contratado X Realizado",
+  "Analytics": "Analytics",
+  "Aprendizado": "Aprendizado",
 };
 
 // Mapa de qual seção do sidebar cada página pertence (usar label real do botão de seção)
@@ -139,6 +146,12 @@ const PAGE_SECTION: Record<string, string> = {
   "Atas de Pregao": "Fluxo Comercial",
   "Flags": "Indicadores",
   "Monitoria": "Indicadores",
+  "Concorrencia": "Indicadores",
+  "Mercado": "Indicadores",
+  "Contratado X Realizado": "Indicadores",
+  "Perdas": "Indicadores",
+  "Analytics": "Indicadores",
+  "Aprendizado": "Indicadores",
   "Auditoria": "Governanca",
   "SMTP": "Governanca",
 };

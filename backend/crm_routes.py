@@ -288,7 +288,74 @@ def get_mapa():
             })
             uf_data[uf]["stages"][stage_atual] = uf_data[uf]["stages"].get(stage_atual, 0) + 1
 
-        return jsonify({"ufs": list(uf_data.values()), "total_editais": len(editais)}), 200
+        # Sprint 7 UC-ME02 — filtros e stat cards SAM
+        segmento = request.args.get('segmento')
+        metrica = request.args.get('metrica', 'quantidade')
+
+        if segmento:
+            editais_filtered = [e for e in editais if segmento.lower() in (e.objeto or '').lower()]
+        else:
+            editais_filtered = editais
+
+        # Recalcular uf_data com filtro de segmento
+        if segmento:
+            uf_data = {}
+            for e in editais_filtered:
+                uf = e.uf
+                if not uf or uf not in UF_COORDS:
+                    continue
+                if uf not in uf_data:
+                    lat, lon = UF_COORDS[uf]
+                    uf_data[uf] = {"uf": uf, "lat": lat, "lon": lon, "editais": [], "stages": {}}
+                stage_atual = e.pipeline_stage or STATUS_TO_STAGE.get(e.status or '') or 'captado_divulgado'
+                uf_data[uf]["editais"].append({
+                    "id": e.id, "numero": e.numero, "orgao": e.orgao,
+                    "pipeline_stage": stage_atual,
+                    "valor_referencia": float(e.valor_referencia) if e.valor_referencia else None,
+                })
+                uf_data[uf]["stages"][stage_atual] = uf_data[uf]["stages"].get(stage_atual, 0) + 1
+
+        # Ranking UFs
+        ranking = []
+        for uf_key, uf_info in uf_data.items():
+            total_uf = len(uf_info["editais"])
+            valor_uf = sum(e.get("valor_referencia") or 0 for e in uf_info["editais"])
+            participados = sum(1 for e in uf_info["editais"]
+                               if e["pipeline_stage"] in ('proposta_submetida', 'espera_resultado',
+                                                          'ganho_provisorio', 'resultado_definitivo'))
+            taxa = round(participados / max(total_uf, 1) * 100, 1)
+            ranking.append({
+                "uf": uf_key, "editais": total_uf, "valor": round(valor_uf, 2),
+                "participados": participados, "taxa": taxa,
+                "gap": total_uf - participados,
+            })
+        ranking.sort(key=lambda x: x["valor" if metrica == "valor" else "editais"], reverse=True)
+
+        # Stat cards SAM
+        if ranking:
+            maior_oport = max(ranking, key=lambda x: x["gap"])["uf"]
+            menor_partic = min(ranking, key=lambda x: x["taxa"])["uf"] if ranking else "N/A"
+        else:
+            maior_oport = "N/A"
+            menor_partic = "N/A"
+
+        all_ufs_brasil = set(UF_COORDS.keys())
+        ufs_presentes = set(uf_data.keys())
+        sem_presenca = list(all_ufs_brasil - ufs_presentes)
+
+        stat_cards_sam = {
+            "maior_oportunidade": maior_oport,
+            "menor_participacao": menor_partic,
+            "sem_presenca": len(sem_presenca),
+            "ufs_sem_presenca": sorted(sem_presenca)[:10],
+        }
+
+        return jsonify({
+            "ufs": list(uf_data.values()),
+            "total_editais": len(editais_filtered),
+            "ranking": ranking,
+            "stat_cards_sam": stat_cards_sam,
+        }), 200
     finally:
         db.close()
 

@@ -104,6 +104,10 @@ export function CRMPage(_props?: PageProps) {
   const [parametrizacoes, setParametrizacoes] = useState<CRMParametrizacao[]>([]);
   const [decisoes, setDecisoes] = useState<EditalDecisao[]>([]);
   const [mapaUFs, setMapaUFs] = useState<MapaUF[]>([]);
+  const [mapaRanking, setMapaRanking] = useState<any[]>([]);
+  const [mapaStatsSAM, setMapaStatsSAM] = useState<any>({});
+  const [mapaSegmento, setMapaSegmento] = useState("");
+  const [mapaMetrica, setMapaMetrica] = useState("quantidade");
   const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [kpis, setKpis] = useState<KPIsCRM | null>(null);
 
@@ -141,10 +145,19 @@ export function CRMPage(_props?: PageProps) {
 
   const fetchMapa = useCallback(async () => {
     try {
-      const res = await fetch("/api/crm/mapa", { headers });
-      if (res.ok) { const data = await res.json(); setMapaUFs(data.ufs || []); }
+      const qs = new URLSearchParams();
+      if (mapaSegmento) qs.set("segmento", mapaSegmento);
+      if (mapaMetrica) qs.set("metrica", mapaMetrica);
+      const q = qs.toString() ? `?${qs}` : "";
+      const res = await fetch(`/api/crm/mapa${q}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setMapaUFs(data.ufs || []);
+        setMapaRanking(data.ranking || []);
+        setMapaStatsSAM(data.stat_cards_sam || {});
+      }
     } catch (e) { console.error(e); }
-  }, []);
+  }, [mapaSegmento, mapaMetrica]);
 
   const fetchAgenda = useCallback(async () => {
     try {
@@ -359,9 +372,57 @@ export function CRMPage(_props?: PageProps) {
     </div>
   );
 
-  // ─── TAB: Mapa (Leaflet/OSM real) ─────────────────────────────────────────────
+  // ─── TAB: Mapa (Leaflet/OSM real) — Sprint 7 UC-ME02 expandido ──────────────
+  const ufColor = (editais: any[]) => {
+    const val = editais.reduce((s: number, e: any) => s + (e.valor_referencia || 0), 0);
+    if (val > 500000) return "#166534";
+    if (val > 100000) return "#16a34a";
+    if (val > 0) return "#eab308";
+    return "#9ca3af";
+  };
   const tabMapa = (
     <div>
+      {/* Stat Cards SAM */}
+      <div className="stats-row" style={{ marginBottom: 16 }}>
+        <div className="stat-card">
+          <div className="stat-icon success"><Target size={24} /></div>
+          <div className="stat-content">
+            <span className="stat-value">{mapaStatsSAM.maior_oportunidade || "N/A"}</span>
+            <span className="stat-label">UF Maior Oportunidade</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon warning"><AlertTriangle size={24} /></div>
+          <div className="stat-content">
+            <span className="stat-value">{mapaStatsSAM.menor_participacao || "N/A"}</span>
+            <span className="stat-label">UF Menor Participacao</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{ background: "#fee2e2", color: "#dc2626" }}><AlertTriangle size={24} /></div>
+          <div className="stat-content">
+            <span className="stat-value">{mapaStatsSAM.sem_presenca || 0}</span>
+            <span className="stat-label">UFs sem Presenca</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros Mapa */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <FormField label="Segmento">
+          <SelectInput value={mapaSegmento} onChange={(v: string) => setMapaSegmento(v)} options={[
+            { value: "", label: "Todos" }, { value: "hematologia", label: "Hematologia" },
+            { value: "bioquimica", label: "Bioquimica" }, { value: "coagulacao", label: "Coagulacao" },
+            { value: "imunologia", label: "Imunologia" }, { value: "biomol", label: "Biomol/PCR" },
+          ]} />
+        </FormField>
+        <FormField label="Metrica">
+          <SelectInput value={mapaMetrica} onChange={(v: string) => setMapaMetrica(v)} options={[
+            { value: "quantidade", label: "Quantidade" }, { value: "valor", label: "Valor R$" },
+          ]} />
+        </FormField>
+      </div>
+
       <h3 style={{ marginBottom: 16 }}>Distribuicao Geografica ({mapaUFs.reduce((s, u) => s + u.editais.length, 0)} editais)</h3>
       <div style={{ height: 500, borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb" }}>
         {mapaUFs.length > 0 ? (
@@ -375,12 +436,15 @@ export function CRMPage(_props?: PageProps) {
                 key={uf.uf}
                 center={[uf.lat, uf.lon]}
                 radius={Math.max(8, Math.min(35, uf.editais.length * 3))}
-                pathOptions={{ color: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 0.6, weight: 2 }}
+                pathOptions={{ color: ufColor(uf.editais), fillColor: ufColor(uf.editais), fillOpacity: 0.6, weight: 2 }}
               >
                 <Popup>
-                  <div style={{ minWidth: 160 }}>
+                  <div style={{ minWidth: 180 }}>
                     <strong style={{ fontSize: 16 }}>{uf.uf}</strong>
                     <div style={{ fontSize: 22, fontWeight: 700, color: "#3b82f6", margin: "4px 0" }}>{uf.editais.length} editais</div>
+                    <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>
+                      Valor: {fmt(uf.editais.reduce((s: number, e: any) => s + (e.valor_referencia || 0), 0))}
+                    </div>
                     {Object.entries(uf.stages).map(([stage, count]) => (
                       <div key={stage} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                         <span style={{ color: "#6b7280" }}>{String(stage).replace(/_/g, " ")}</span>
@@ -398,6 +462,37 @@ export function CRMPage(_props?: PageProps) {
           </div>
         )}
       </div>
+
+      {/* Ranking UFs */}
+      {mapaRanking.length > 0 && (
+        <Card title="Ranking de UFs" style={{ marginTop: 16 }}>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>UF</th><th>Editais SAM</th><th>Valor</th><th>Participados</th><th>Taxa %</th><th>Gap</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mapaRanking.slice(0, 15).map((r: any, i: number) => (
+                  <tr key={i}>
+                    <td><strong>{r.uf}</strong></td>
+                    <td>{r.editais}</td>
+                    <td>{fmt(r.valor)}</td>
+                    <td>{r.participados}</td>
+                    <td>
+                      <span style={{ color: r.taxa > 50 ? "#16a34a" : r.taxa > 20 ? "#eab308" : "#dc2626", fontWeight: 600 }}>
+                        {r.taxa}%
+                      </span>
+                    </td>
+                    <td>{r.gap}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 

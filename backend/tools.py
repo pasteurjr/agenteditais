@@ -11327,3 +11327,635 @@ TOOLS_MAP["consultar_auditoria"] = tool_consultar_auditoria
 TOOLS_MAP["exportar_auditoria_compliance"] = tool_exportar_auditoria_compliance
 TOOLS_MAP["testar_smtp"] = tool_testar_smtp
 
+
+# ==================== SPRINT 7 — INTELIGENCIA DE MERCADO E APRENDIZADO ====================
+
+def tool_calcular_tam_sam_som(user_id: str = None, empresa_id: str = None,
+                               segmento: str = None, periodo_meses: int = 12) -> Dict[str, Any]:
+    """
+    Calcula dimensionamento TAM/SAM/SOM do mercado de licitacoes.
+    TAM = total mercado (todos editais). SAM = filtrado UFs+NCMs da empresa.
+    SOM = SAM * taxa_vitoria * fator_capacidade.
+
+    Args:
+        user_id: ID do usuario
+        empresa_id: ID da empresa
+        segmento: Filtro por segmento (Hematologia, Bioquimica, etc.)
+        periodo_meses: Periodo em meses para analise
+
+    Returns:
+        Dict com funil TAM/SAM/SOM, tendencias e recomendacoes
+    """
+    from database import SessionLocal
+    from models import Edital, Empresa, Produto, Contrato
+    from sqlalchemy import func
+    from decimal import Decimal
+
+    db = SessionLocal()
+    try:
+        data_inicio = datetime.now() - timedelta(days=periodo_meses * 30)
+
+        # TAM — todos os editais no periodo
+        q_tam = db.query(
+            func.count(Edital.id).label('total'),
+            func.coalesce(func.sum(Edital.valor_referencia), 0).label('valor')
+        ).filter(Edital.created_at >= data_inicio)
+        tam = q_tam.first()
+        tam_total = tam.total or 0
+        tam_valor = float(tam.valor or 0)
+
+        # SAM — editais na regiao e segmento da empresa
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first() if empresa_id else None
+        ufs_empresa = []
+        ncms_empresa = []
+
+        if empresa:
+            # UFs dos editais que a empresa ja participou
+            ufs_result = db.query(Edital.uf).filter(
+                Edital.empresa_id == empresa_id,
+                Edital.uf.isnot(None)
+            ).distinct().all()
+            ufs_empresa = [r[0] for r in ufs_result if r[0]]
+
+            # NCMs do portfolio
+            prods = db.query(Produto.ncm).filter(
+                Produto.empresa_id == empresa_id,
+                Produto.ncm.isnot(None)
+            ).distinct().all()
+            ncms_empresa = [r[0] for r in prods if r[0]]
+
+        q_sam = db.query(
+            func.count(Edital.id).label('total'),
+            func.coalesce(func.sum(Edital.valor_referencia), 0).label('valor')
+        ).filter(Edital.created_at >= data_inicio)
+
+        if ufs_empresa:
+            q_sam = q_sam.filter(Edital.uf.in_(ufs_empresa))
+        if segmento:
+            q_sam = q_sam.filter(Edital.objeto.ilike(f"%{segmento}%"))
+
+        sam = q_sam.first()
+        sam_total = sam.total or 0
+        sam_valor = float(sam.valor or 0)
+
+        # SOM — participados e ganhos
+        q_part = db.query(func.count(Edital.id)).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= data_inicio,
+            Edital.pipeline_stage.in_(['proposta_submetida', 'espera_resultado',
+                                        'ganho_provisorio', 'resultado_definitivo'])
+        )
+        participados = q_part.scalar() or 0
+
+        q_ganhos = db.query(func.count(Edital.id)).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= data_inicio,
+            Edital.pipeline_stage == 'resultado_definitivo'
+        )
+        ganhos = q_ganhos.scalar() or 0
+
+        taxa_vitoria = (ganhos / participados * 100) if participados > 0 else 0
+        fator_capacidade = min(1.0, participados / max(sam_total, 1) * 3)
+        som_valor = sam_valor * (taxa_vitoria / 100) * fator_capacidade
+        som_total = int(sam_total * (taxa_vitoria / 100) * fator_capacidade)
+
+        # Tendencias por mes
+        from sqlalchemy import extract
+        tendencias = []
+        for i in range(min(periodo_meses, 12)):
+            mes_dt = datetime.now() - timedelta(days=i * 30)
+            mes_inicio = mes_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if mes_inicio.month == 12:
+                mes_fim = mes_inicio.replace(year=mes_inicio.year + 1, month=1)
+            else:
+                mes_fim = mes_inicio.replace(month=mes_inicio.month + 1)
+
+            cnt = db.query(func.count(Edital.id)).filter(
+                Edital.created_at >= mes_inicio,
+                Edital.created_at < mes_fim
+            ).scalar() or 0
+
+            tendencias.append({
+                "mes": mes_inicio.strftime("%Y-%m"),
+                "editais": cnt
+            })
+
+        tendencias.reverse()
+
+        # Prompt DeepSeek para recomendacoes
+        prompt = f"""Analise de mercado TAM/SAM/SOM para empresa de licitacoes:
+- TAM: {tam_total} editais, R$ {tam_valor:,.2f}
+- SAM: {sam_total} editais, R$ {sam_valor:,.2f} ({sam_total/max(tam_total,1)*100:.1f}% do TAM)
+- SOM: {som_total} editais estimados, R$ {som_valor:,.2f}
+- Taxa vitoria: {taxa_vitoria:.1f}%
+- UFs atuacao: {', '.join(ufs_empresa[:10]) if ufs_empresa else 'N/A'}
+- Segmentos NCM: {len(ncms_empresa)} distintos
+- Periodo: {periodo_meses} meses
+
+Gere 3 recomendacoes estrategicas curtas para expandir o SOM. Responda em JSON:
+{{"recomendacoes": ["rec1", "rec2", "rec3"], "oportunidade_principal": "texto curto"}}"""
+
+        recomendacoes = []
+        oportunidade = "Expandir atuacao em novas UFs"
+        try:
+            resp = call_deepseek(prompt, max_tokens=500)
+            import json as json_mod
+            parsed = json_mod.loads(resp)
+            recomendacoes = parsed.get("recomendacoes", [])
+            oportunidade = parsed.get("oportunidade_principal", oportunidade)
+        except Exception:
+            recomendacoes = [
+                "Expandir atuacao para UFs adjacentes com demanda identificada",
+                "Aumentar taxa de participacao em editais SAM para melhorar SOM",
+                "Diversificar portfolio NCM para cobrir mais segmentos do mercado"
+            ]
+
+        return {
+            "success": True,
+            "funil": {
+                "tam": {"editais": tam_total, "valor": tam_valor, "label": "Total Addressable Market"},
+                "sam": {"editais": sam_total, "valor": sam_valor,
+                        "percentual_tam": round(sam_total / max(tam_total, 1) * 100, 1),
+                        "label": "Serviceable Available Market"},
+                "som": {"editais": som_total, "valor": round(som_valor, 2),
+                        "percentual_sam": round(som_total / max(sam_total, 1) * 100, 1),
+                        "label": "Serviceable Obtainable Market"},
+            },
+            "metricas": {
+                "taxa_vitoria": round(taxa_vitoria, 1),
+                "fator_capacidade": round(fator_capacidade, 3),
+                "participados": participados,
+                "ganhos": ganhos,
+                "ufs_atuacao": len(ufs_empresa),
+                "ncms_portfolio": len(ncms_empresa),
+            },
+            "tendencias": tendencias,
+            "recomendacoes": recomendacoes,
+            "oportunidade_principal": oportunidade,
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_detectar_itens_intrusos(edital_id: str, user_id: str = None,
+                                  empresa_id: str = None) -> Dict[str, Any]:
+    """
+    Detecta itens de um edital que estao fora do portfolio da empresa.
+    Compara NCMs dos itens do edital com NCMs dos produtos cadastrados.
+
+    Args:
+        edital_id: ID do edital a analisar
+        user_id: ID do usuario
+        empresa_id: ID da empresa
+
+    Returns:
+        Dict com itens intrusos detectados e classificacao de criticidade
+    """
+    from database import SessionLocal
+    from models import Edital, EditalItem, Produto, ItemIntruso
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id).first()
+        if not edital:
+            return {"success": False, "error": "Edital nao encontrado"}
+
+        # NCMs do portfolio da empresa
+        ncms_portfolio = set()
+        if empresa_id:
+            prods = db.query(Produto.ncm).filter(
+                Produto.empresa_id == empresa_id,
+                Produto.ncm.isnot(None)
+            ).distinct().all()
+            ncms_portfolio = {r[0] for r in prods if r[0]}
+
+        # Itens do edital
+        itens_edital = db.query(EditalItem).filter(
+            EditalItem.edital_id == edital_id
+        ).all()
+
+        if not itens_edital:
+            return {"success": True, "intrusos": [], "total": 0,
+                    "mensagem": "Edital sem itens cadastrados"}
+
+        # Valor total do edital para calcular percentual
+        valor_total_edital = sum(
+            float(it.valor_unitario or 0) * float(it.quantidade or 1)
+            for it in itens_edital
+        ) or 1.0
+
+        intrusos = []
+        prompt_itens = []
+
+        for item in itens_edital:
+            ncm_item = (item.ncm or "").strip()
+            desc_item = item.descricao or item.nome or ""
+            valor_item = float(item.valor_unitario or 0) * float(item.quantidade or 1)
+            pct = (valor_item / valor_total_edital) * 100
+
+            is_intruso = False
+            if ncm_item and ncms_portfolio:
+                # Comparar NCM: se primeiros 4 digitos nao batem com nenhum do portfolio
+                prefixo_item = ncm_item[:4]
+                match = any(ncm.startswith(prefixo_item) for ncm in ncms_portfolio)
+                if not match:
+                    is_intruso = True
+            elif not ncm_item and ncms_portfolio:
+                prompt_itens.append(desc_item)
+
+            if is_intruso:
+                if pct > 10:
+                    criticidade = 'critico'
+                elif pct > 5:
+                    criticidade = 'medio'
+                else:
+                    criticidade = 'informativo'
+
+                intruso = ItemIntruso(
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    edital_id=edital_id,
+                    descricao_item=desc_item[:500],
+                    ncm=ncm_item,
+                    valor=Decimal(str(round(valor_item, 2))),
+                    percentual_edital=Decimal(str(round(pct, 2))),
+                    criticidade=criticidade,
+                    acao_sugerida=f"Item fora do portfolio (NCM {ncm_item}). "
+                                  f"{'ALTO RISCO - representa {:.1f}% do edital'.format(pct) if criticidade == 'critico' else 'Avaliar impacto'}"
+                )
+                db.add(intruso)
+                intrusos.append({
+                    "descricao": desc_item[:200],
+                    "ncm": ncm_item,
+                    "valor": round(valor_item, 2),
+                    "percentual_edital": round(pct, 2),
+                    "criticidade": criticidade,
+                    "acao_sugerida": intruso.acao_sugerida,
+                })
+
+        # Se tem itens sem NCM, usar DeepSeek para classificar
+        if prompt_itens and ncms_portfolio:
+            prompt = f"""Analise estes itens de licitacao e identifique quais NAO pertencem ao portfolio de uma empresa com NCMs: {', '.join(list(ncms_portfolio)[:20])}.
+
+Itens a analisar:
+{chr(10).join(f'- {it}' for it in prompt_itens[:15])}
+
+Responda em JSON: {{"intrusos_indices": [0, 2], "motivos": ["motivo1", "motivo2"]}}
+Retorne indices (0-based) dos itens que parecem fora do portfolio."""
+
+            try:
+                resp = call_deepseek(prompt, max_tokens=300)
+                import json as json_mod
+                parsed = json_mod.loads(resp)
+                for idx in parsed.get("intrusos_indices", []):
+                    if 0 <= idx < len(prompt_itens):
+                        intrusos.append({
+                            "descricao": prompt_itens[idx][:200],
+                            "ncm": None,
+                            "valor": 0,
+                            "percentual_edital": 0,
+                            "criticidade": "informativo",
+                            "acao_sugerida": "Item detectado por IA como potencialmente fora do portfolio",
+                        })
+            except Exception:
+                pass
+
+        db.commit()
+
+        return {
+            "success": True,
+            "edital": {"id": edital_id, "numero": edital.numero, "orgao": edital.orgao},
+            "intrusos": intrusos,
+            "total": len(intrusos),
+            "criticos": sum(1 for i in intrusos if i["criticidade"] == "critico"),
+            "valor_risco": sum(i["valor"] for i in intrusos),
+            "ncms_portfolio": len(ncms_portfolio),
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_gerar_sugestao_aprendizado(user_id: str = None, empresa_id: str = None,
+                                     tipo: str = None) -> Dict[str, Any]:
+    """
+    Analisa feedbacks registrados e gera sugestoes de ajuste para parametros,
+    margens, scores ou estrategias.
+
+    Args:
+        user_id: ID do usuario
+        empresa_id: ID da empresa
+        tipo: Tipo de sugestao (parametro, margem, score, estrategia) ou None para todos
+
+    Returns:
+        Dict com sugestoes geradas
+    """
+    from database import SessionLocal
+    from models import AprendizadoFeedback, SugestaoIA
+    from sqlalchemy import desc
+
+    db = SessionLocal()
+    try:
+        # Buscar feedbacks recentes
+        q = db.query(AprendizadoFeedback).filter(
+            AprendizadoFeedback.user_id == user_id
+        )
+        if empresa_id:
+            q = q.filter(AprendizadoFeedback.empresa_id == empresa_id)
+        q = q.order_by(desc(AprendizadoFeedback.created_at)).limit(50)
+        feedbacks = q.all()
+
+        if len(feedbacks) < 3:
+            return {"success": False, "error": "Minimo de 3 feedbacks necessarios para gerar sugestoes",
+                    "feedbacks_disponiveis": len(feedbacks)}
+
+        # Montar resumo dos feedbacks por tipo
+        por_tipo = {}
+        for fb in feedbacks:
+            t = fb.tipo_evento or 'outro'
+            if t not in por_tipo:
+                por_tipo[t] = []
+            por_tipo[t].append({
+                "entidade": fb.entidade_tipo,
+                "delta": fb.valor_delta,
+                "descricao": (fb.descricao or "")[:100],
+                "aplicado": fb.aplicado,
+            })
+
+        prompt = f"""Analise estes feedbacks de uma empresa de licitacoes e gere sugestoes de melhoria:
+
+Feedbacks por tipo:
+{json.dumps(por_tipo, ensure_ascii=False, indent=2, default=str)[:2000]}
+
+Total feedbacks: {len(feedbacks)}
+Aplicados: {sum(1 for f in feedbacks if f.aplicado)}
+
+Gere 3-5 sugestoes concretas. Responda em JSON:
+{{"sugestoes": [
+  {{"tipo": "parametro|margem|score|estrategia",
+    "titulo": "titulo curto",
+    "descricao": "descricao detalhada da sugestao",
+    "confianca": 75,
+    "acao_sugerida": "acao concreta a tomar"}}
+]}}"""
+
+        sugestoes_geradas = []
+        try:
+            resp = call_deepseek(prompt, max_tokens=1000)
+            import json as json_mod
+            parsed = json_mod.loads(resp)
+
+            for sug in parsed.get("sugestoes", [])[:5]:
+                nova = SugestaoIA(
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    tipo=sug.get("tipo", "estrategia"),
+                    titulo=sug.get("titulo", "Sugestao")[:255],
+                    descricao=sug.get("descricao", "")[:2000],
+                    confianca=Decimal(str(min(100, max(0, sug.get("confianca", 50))))),
+                    base_dados_count=len(feedbacks),
+                    acao_sugerida=sug.get("acao_sugerida", "")[:2000],
+                    status='pendente',
+                )
+                db.add(nova)
+                sugestoes_geradas.append({
+                    "tipo": nova.tipo,
+                    "titulo": nova.titulo,
+                    "descricao": nova.descricao,
+                    "confianca": float(nova.confianca),
+                    "acao_sugerida": nova.acao_sugerida,
+                })
+
+        except Exception as e:
+            # Fallback — sugestoes genericas
+            fallback = [
+                {"tipo": "parametro", "titulo": "Ajustar pesos do score tecnico",
+                 "descricao": f"Com base em {len(feedbacks)} feedbacks, os pesos do score podem ser otimizados.",
+                 "confianca": 60, "acao_sugerida": "Revisar ParametroScore e recalibrar"},
+                {"tipo": "margem", "titulo": "Revisar margens em segmentos com alta perda",
+                 "descricao": "Feedbacks indicam perdas recorrentes por preco. Considerar reducao de margem.",
+                 "confianca": 55, "acao_sugerida": "Analisar gap de preco nos editais perdidos"},
+            ]
+            for sug in fallback:
+                nova = SugestaoIA(
+                    user_id=user_id, empresa_id=empresa_id,
+                    tipo=sug["tipo"], titulo=sug["titulo"],
+                    descricao=sug["descricao"],
+                    confianca=Decimal(str(sug["confianca"])),
+                    base_dados_count=len(feedbacks),
+                    acao_sugerida=sug["acao_sugerida"],
+                    status='pendente',
+                )
+                db.add(nova)
+                sugestoes_geradas.append(sug)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "sugestoes": sugestoes_geradas,
+            "total_geradas": len(sugestoes_geradas),
+            "base_feedbacks": len(feedbacks),
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_analisar_padroes(user_id: str = None, empresa_id: str = None) -> Dict[str, Any]:
+    """
+    Detecta padroes nos dados da empresa: sazonalidade, correlacoes,
+    tendencias de preco, comportamento de orgaos, gargalos no pipeline.
+
+    Args:
+        user_id: ID do usuario
+        empresa_id: ID da empresa
+
+    Returns:
+        Dict com padroes detectados e niveis de confianca
+    """
+    from database import SessionLocal
+    from models import (Edital, AprendizadoFeedback, PrecoHistorico,
+                        PadraoDetectado, Contrato)
+    from sqlalchemy import func, desc
+    from collections import Counter
+
+    db = SessionLocal()
+    try:
+        data_6m = datetime.now() - timedelta(days=180)
+
+        # Coletar dados para analise
+        editais = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= data_6m
+        ).all()
+
+        precos = db.query(PrecoHistorico).filter(
+            PrecoHistorico.user_id == user_id,
+            PrecoHistorico.created_at >= data_6m
+        ).all()
+
+        feedbacks = db.query(AprendizadoFeedback).filter(
+            AprendizadoFeedback.user_id == user_id,
+            AprendizadoFeedback.created_at >= data_6m
+        ).all()
+
+        if len(editais) < 5:
+            return {"success": False, "error": "Minimo de 5 editais nos ultimos 6 meses para detectar padroes",
+                    "editais_disponiveis": len(editais)}
+
+        # Dados para o prompt
+        meses_editais = Counter()
+        ufs_editais = Counter()
+        stages_editais = Counter()
+        for e in editais:
+            if e.created_at:
+                meses_editais[e.created_at.strftime("%m")] += 1
+            if e.uf:
+                ufs_editais[e.uf] += 1
+            if e.pipeline_stage:
+                stages_editais[e.pipeline_stage] += 1
+
+        gaps_preco = []
+        for p in precos:
+            if p.nosso_preco and p.preco_vencedor:
+                gap = float(p.nosso_preco - p.preco_vencedor) / float(p.preco_vencedor) * 100
+                gaps_preco.append(round(gap, 1))
+
+        prompt = f"""Analise estes dados de licitacoes e detecte padroes:
+
+Editais por mes (ultimos 6m): {dict(meses_editais)}
+Editais por UF: {dict(ufs_editais.most_common(10))}
+Pipeline stages: {dict(stages_editais)}
+Total editais: {len(editais)}
+Total precos: {len(precos)}
+Gaps de preco (%): {gaps_preco[:20]}
+Feedbacks: {len(feedbacks)}
+
+Detecte padroes de: sazonalidade, correlacao, tendencia_preco, comportamento_orgao, gargalo_pipeline.
+Responda em JSON:
+{{"padroes": [
+  {{"tipo": "sazonalidade|correlacao|tendencia_preco|comportamento_orgao|gargalo_pipeline",
+    "titulo": "titulo descritivo",
+    "descricao": "descricao do padrao encontrado",
+    "confianca": 85,
+    "dados": {{"chave": "valor"}}
+  }}
+]}}"""
+
+        padroes_detectados = []
+        try:
+            resp = call_deepseek(prompt, max_tokens=1500)
+            import json as json_mod
+            parsed = json_mod.loads(resp)
+
+            for pad in parsed.get("padroes", [])[:6]:
+                tipo = pad.get("tipo", "correlacao")
+                tipos_validos = ['sazonalidade', 'correlacao', 'tendencia_preco',
+                                 'comportamento_orgao', 'gargalo_pipeline']
+                if tipo not in tipos_validos:
+                    tipo = 'correlacao'
+
+                # Desativar padroes antigos do mesmo tipo
+                db.query(PadraoDetectado).filter(
+                    PadraoDetectado.user_id == user_id,
+                    PadraoDetectado.empresa_id == empresa_id,
+                    PadraoDetectado.tipo == tipo,
+                    PadraoDetectado.ativo == True
+                ).update({"ativo": False, "updated_at": datetime.now()})
+
+                novo = PadraoDetectado(
+                    user_id=user_id,
+                    empresa_id=empresa_id,
+                    tipo=tipo,
+                    titulo=pad.get("titulo", "Padrao")[:255],
+                    descricao=pad.get("descricao", "")[:2000],
+                    confianca=Decimal(str(min(100, max(0, pad.get("confianca", 50))))),
+                    base_dados_count=len(editais) + len(precos) + len(feedbacks),
+                    dados_json=pad.get("dados"),
+                    ativo=True,
+                )
+                db.add(novo)
+                padroes_detectados.append({
+                    "tipo": novo.tipo,
+                    "titulo": novo.titulo,
+                    "descricao": novo.descricao,
+                    "confianca": float(novo.confianca),
+                    "dados": novo.dados_json,
+                })
+
+        except Exception:
+            # Fallback — padroes baseados em heuristica
+            if meses_editais:
+                meses_ordenados = sorted(meses_editais.items(), key=lambda x: x[1], reverse=True)
+                novo = PadraoDetectado(
+                    user_id=user_id, empresa_id=empresa_id,
+                    tipo='sazonalidade',
+                    titulo=f"Pico de editais no mes {meses_ordenados[0][0]}",
+                    descricao=f"Concentracao de {meses_ordenados[0][1]} editais no mes {meses_ordenados[0][0]}.",
+                    confianca=Decimal('65'),
+                    base_dados_count=len(editais),
+                    dados_json=dict(meses_editais),
+                    ativo=True,
+                )
+                db.add(novo)
+                padroes_detectados.append({
+                    "tipo": "sazonalidade", "titulo": novo.titulo,
+                    "descricao": novo.descricao, "confianca": 65,
+                })
+
+            # Gargalo pipeline
+            if stages_editais:
+                gargalo = max(stages_editais.items(), key=lambda x: x[1])
+                novo = PadraoDetectado(
+                    user_id=user_id, empresa_id=empresa_id,
+                    tipo='gargalo_pipeline',
+                    titulo=f"Acumulo em {gargalo[0]}",
+                    descricao=f"{gargalo[1]} editais acumulados no stage {gargalo[0]}.",
+                    confianca=Decimal('60'),
+                    base_dados_count=len(editais),
+                    dados_json=dict(stages_editais),
+                    ativo=True,
+                )
+                db.add(novo)
+                padroes_detectados.append({
+                    "tipo": "gargalo_pipeline", "titulo": novo.titulo,
+                    "descricao": novo.descricao, "confianca": 60,
+                })
+
+        db.commit()
+
+        return {
+            "success": True,
+            "padroes": padroes_detectados,
+            "total_detectados": len(padroes_detectados),
+            "base_dados": {
+                "editais": len(editais),
+                "precos": len(precos),
+                "feedbacks": len(feedbacks),
+            },
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+# Sprint 7 — registrar tools no TOOLS_MAP
+TOOLS_MAP["calcular_tam_sam_som"] = tool_calcular_tam_sam_som
+TOOLS_MAP["detectar_itens_intrusos"] = tool_detectar_itens_intrusos
+TOOLS_MAP["gerar_sugestao_aprendizado"] = tool_gerar_sugestao_aprendizado
+TOOLS_MAP["analisar_padroes"] = tool_analisar_padroes
+

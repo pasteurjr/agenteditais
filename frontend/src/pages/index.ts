@@ -21,6 +21,8 @@ export { ConcorrenciaPage } from "./ConcorrenciaPage";
 export { MercadoPage } from "./MercadoPage";
 export { ContratadoRealizadoPage } from "./ContratadoRealizadoPage";
 export { PerdasPage } from "./PerdasPage";
+export { AnalyticsPage } from "./AnalyticsPage";
+export { AprendizadoPage } from "./AprendizadoPage";
 
 // Configuracoes
 export { EmpresaPage } from "./EmpresaPage";

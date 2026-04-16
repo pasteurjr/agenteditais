@@ -37,6 +37,8 @@ from models import (
     Empenho, EmpenhoItem, EmpenhoFatura, CRMParametrizacao, EditalDecisao, CRMAgendaItem,
     # SPRINT 6 — SMTP / Email
     ConfiguracaoSMTP, EmailTemplate, EmailQueue,
+    # SPRINT 7 — Mercado / Analytics / Aprendizado
+    SugestaoIA, PadraoDetectado, ItemIntruso,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -839,6 +841,28 @@ CRUD_TABLES = {
         "label": "Fila de Email",
         "required": ["destinatario", "assunto"],
         "read_only": ["status", "retry_count", "erro_mensagem", "enviado_em"],
+    },
+    # === SPRINT 7 — Mercado / Analytics / Aprendizado ===
+    "sugestoes-ia": {
+        "model": SugestaoIA,
+        "empresa_scoped": True,
+        "search_fields": ["titulo", "tipo", "descricao"],
+        "label": "Sugestao IA",
+        "required": ["tipo", "titulo", "descricao"],
+    },
+    "padroes-detectados": {
+        "model": PadraoDetectado,
+        "empresa_scoped": True,
+        "search_fields": ["titulo", "tipo", "descricao"],
+        "label": "Padrao Detectado",
+        "required": ["tipo", "titulo", "descricao"],
+    },
+    "itens-intrusos": {
+        "model": ItemIntruso,
+        "empresa_scoped": True,
+        "search_fields": ["descricao_item", "ncm", "criticidade"],
+        "label": "Item Intruso",
+        "required": ["edital_id", "descricao_item", "criticidade"],
     },
 }
 

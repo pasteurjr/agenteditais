@@ -635,6 +635,15 @@ def iniciar_scheduler():
             replace_existing=True
         )
 
+        # Sprint 7 — Deteccao de padroes semanal (domingos 5h)
+        scheduler.add_job(
+            job_detectar_padroes_semanal,
+            CronTrigger(day_of_week='sun', hour=5, minute=0),
+            id='detectar_padroes',
+            name='Deteccao de Padroes Semanal',
+            replace_existing=True
+        )
+
         scheduler.start()
         print(f"[SCHEDULER] Iniciado com sucesso!")
         print(f"[SCHEDULER] - Verificação de alertas: a cada {CHECK_ALERTAS_INTERVAL} minutos")
@@ -643,6 +652,7 @@ def iniciar_scheduler():
         print(f"[SCHEDULER] - Verificação de certidões: diária às 6h")
         print(f"[SCHEDULER] - Fila de email: a cada 2 minutos")
         print(f"[SCHEDULER] - Limpeza LGPD auditoria: diária às 4h")
+        print(f"[SCHEDULER] - Deteccao de padroes: semanal domingos 5h")
 
         return True
 
@@ -687,6 +697,53 @@ def job_limpar_notificacoes_antigas():
     except Exception as e:
         print(f"[SCHEDULER] Erro na limpeza: {e}")
         db.rollback()
+    finally:
+        db.close()
+
+
+# =============================================================================
+# SPRINT 7 — JOB: DETECTAR PADROES SEMANAL
+# =============================================================================
+
+def job_detectar_padroes_semanal():
+    """
+    Job semanal que analisa feedbacks e editais para detectar padroes.
+    Executa tool_analisar_padroes para cada empresa com >= 5 feedbacks.
+    """
+    print(f"[SCHEDULER] {datetime.now()} - Executando deteccao de padroes semanal...")
+
+    db = SessionLocal()
+    try:
+        from models import AprendizadoFeedback, UsuarioEmpresa
+        from sqlalchemy import func
+
+        empresas_com_dados = db.query(
+            AprendizadoFeedback.user_id,
+            AprendizadoFeedback.empresa_id,
+            func.count(AprendizadoFeedback.id).label('total')
+        ).group_by(
+            AprendizadoFeedback.user_id,
+            AprendizadoFeedback.empresa_id
+        ).having(func.count(AprendizadoFeedback.id) >= 5).all()
+
+        total_analisados = 0
+        for row in empresas_com_dados:
+            try:
+                from tools import tool_analisar_padroes
+                resultado = tool_analisar_padroes(
+                    user_id=row.user_id,
+                    empresa_id=row.empresa_id
+                )
+                if resultado.get("success"):
+                    total_analisados += 1
+                    print(f"[SCHEDULER] Padroes: empresa {row.empresa_id} — {resultado.get('total_detectados', 0)} padroes")
+            except Exception as e:
+                print(f"[SCHEDULER] Erro padroes empresa {row.empresa_id}: {e}")
+
+        print(f"[SCHEDULER] Deteccao de padroes concluida: {total_analisados} empresas analisadas")
+
+    except Exception as e:
+        print(f"[SCHEDULER] Erro no job de padroes: {e}")
     finally:
         db.close()
 

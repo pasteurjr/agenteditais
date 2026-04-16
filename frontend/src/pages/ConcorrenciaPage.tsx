@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2 } from "lucide-react";
-import { Card, DataTable, FilterBar } from "../components/common";
+import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2, AlertTriangle, Target, Shield } from "lucide-react";
+import { Card, DataTable, FilterBar, FormField, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
+import { fetchMercadoShare } from "../api/sprint7";
 
 interface Concorrente {
   id: string;
@@ -23,12 +24,26 @@ interface HistoricoConcorrente {
   resultado: string;
 }
 
+interface ShareData {
+  nome: string;
+  share: number;
+  is_empresa: boolean;
+}
+
 export function ConcorrenciaPage({ onSendToChat }: PageProps) {
   const [concorrentes, setConcorrentes] = useState<Concorrente[]>([]);
   const [selectedConcorrente, setSelectedConcorrente] = useState<Concorrente | null>(null);
   const [historico, setHistorico] = useState<HistoricoConcorrente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Sprint 7 UC-ME03 — share state
+  const [shareData, setShareData] = useState<ShareData[]>([]);
+  const [shareStats, setShareStats] = useState<any>({});
+  const [alertas, setAlertas] = useState<string[]>([]);
+  const [shareSegmento, setShareSegmento] = useState("");
+  const [shareUF, setShareUF] = useState("");
+  const [sharePeriodo, setSharePeriodo] = useState("180");
 
   const fetchConcorrentes = useCallback(async () => {
     setLoading(true);
@@ -47,9 +62,25 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
     setLoading(false);
   }, []);
 
+  const fetchShare = useCallback(async () => {
+    try {
+      const data = await fetchMercadoShare({
+        segmento: shareSegmento || undefined,
+        uf: shareUF || undefined,
+        periodo_dias: parseInt(sharePeriodo) || 180,
+      });
+      setShareData(data.share || []);
+      setShareStats(data.stat_cards || {});
+      setAlertas(data.alertas || []);
+    } catch (e) {
+      console.error("Erro ao carregar share:", e);
+    }
+  }, [shareSegmento, shareUF, sharePeriodo]);
+
   useEffect(() => {
     fetchConcorrentes();
-  }, [fetchConcorrentes]);
+    fetchShare();
+  }, [fetchConcorrentes, fetchShare]);
 
   const handleSelectConcorrente = useCallback(async (c: Concorrente) => {
     setSelectedConcorrente(c);
@@ -81,28 +112,37 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
     (c.cnpj || "").includes(searchTerm)
   );
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-  };
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+  const maxShare = Math.max(...shareData.map(s => s.share), 1);
 
   const concorrentesColumns: Column<Concorrente>[] = [
-    { key: "nome", header: "Empresa", sortable: true },
+    { key: "nome", header: "Empresa", sortable: true,
+      render: (c) => (
+        <span>
+          {c.nome}
+          {alertas.includes(c.nome) && (
+            <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, background: "#fef3c7", color: "#92400e" }}>
+              ALERTA
+            </span>
+          )}
+        </span>
+      ),
+    },
     { key: "cnpj", header: "CNPJ" },
     {
-      key: "editais_ganhos",
-      header: "Vitorias",
+      key: "editais_ganhos", header: "Vitorias",
       render: (c) => <span className="text-success">{c.editais_ganhos}</span>,
       sortable: true,
     },
     {
-      key: "derrotas",
-      header: "Derrotas",
+      key: "derrotas", header: "Derrotas",
       render: (c) => <span className="text-danger">{c.editais_participados - c.editais_ganhos}</span>,
       sortable: true,
     },
     {
-      key: "taxa_vitoria",
-      header: "Taxa Sucesso",
+      key: "taxa_vitoria", header: "Taxa Sucesso",
       render: (c) => (
         <span className={c.taxa_vitoria >= 60 ? "text-success" : c.taxa_vitoria >= 40 ? "text-warning" : "text-danger"}>
           {c.taxa_vitoria}%
@@ -111,14 +151,11 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
       sortable: true,
     },
     {
-      key: "preco_medio",
-      header: "Preco Medio",
+      key: "preco_medio", header: "Preco Medio",
       render: (c) => c.preco_medio ? formatCurrency(c.preco_medio) : "—",
     },
     {
-      key: "acoes",
-      header: "",
-      width: "80px",
+      key: "acoes", header: "", width: "80px",
       render: (c) => (
         <div className="table-actions">
           <button title="Ver detalhes" onClick={() => handleSelectConcorrente(c)}><Search size={16} /></button>
@@ -134,8 +171,7 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
     { key: "orgao", header: "Orgao" },
     { key: "valor", header: "Valor", render: (h) => h.valor > 0 ? formatCurrency(h.valor) : "—" },
     {
-      key: "resultado",
-      header: "Resultado",
+      key: "resultado", header: "Resultado",
       render: (h) => (
         <span className={`status-badge ${h.resultado === "vitoria" ? "status-badge-success" : "status-badge-error"}`}>
           {h.resultado === "vitoria" ? <><Trophy size={12} /> Vitoria</> : <><XCircle size={12} /> Derrota</>}
@@ -151,12 +187,95 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
           <Users size={24} />
           <div>
             <h1>Analise de Concorrentes</h1>
-            <p>Inteligencia competitiva e historico de concorrentes</p>
+            <p>Inteligencia competitiva, share de mercado e historico</p>
           </div>
         </div>
       </div>
 
       <div className="page-content">
+        {/* Sprint 7 — Stat Cards */}
+        <div className="stats-row">
+          <div className="stat-card">
+            <div className="stat-icon info"><Users size={24} /></div>
+            <div className="stat-content">
+              <span className="stat-value">{shareStats.concorrentes_conhecidos ?? concorrentes.length}</span>
+              <span className="stat-label">Concorrentes Conhecidos</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon success"><Target size={24} /></div>
+            <div className="stat-content">
+              <span className="stat-value">{shareStats.nossa_taxa ?? "—"}%</span>
+              <span className="stat-label">Nossa Taxa</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: "#fef2f2", color: "#dc2626" }}>
+              <Shield size={24} />
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{shareStats.maior_ameaca || "—"}</span>
+              <span className="stat-label">Maior Ameaca</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon warning"><BarChart2 size={24} /></div>
+            <div className="stat-content">
+              <span className="stat-value">{shareStats.editais_disputados ?? 0}</span>
+              <span className="stat-label">Editais Disputados</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Share de Mercado */}
+        <Card title="Share de Mercado" icon={<BarChart2 size={18} />}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            <FormField label="Segmento">
+              <SelectInput value={shareSegmento} onChange={setShareSegmento} options={[
+                { value: "", label: "Todos" }, { value: "hematologia", label: "Hematologia" },
+                { value: "bioquimica", label: "Bioquimica" }, { value: "coagulacao", label: "Coagulacao" },
+              ]} />
+            </FormField>
+            <FormField label="UF">
+              <SelectInput value={shareUF} onChange={setShareUF} options={[
+                { value: "", label: "Todas" }, { value: "SP", label: "SP" }, { value: "RJ", label: "RJ" },
+                { value: "MG", label: "MG" }, { value: "RS", label: "RS" }, { value: "PR", label: "PR" },
+              ]} />
+            </FormField>
+            <FormField label="Periodo">
+              <SelectInput value={sharePeriodo} onChange={setSharePeriodo} options={[
+                { value: "90", label: "3 meses" }, { value: "180", label: "6 meses" }, { value: "365", label: "12 meses" },
+              ]} />
+            </FormField>
+          </div>
+
+          {shareData.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {shareData.map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 150, fontSize: 13, fontWeight: s.is_empresa ? 700 : 400, color: s.is_empresa ? "#2563eb" : "#374151" }}>
+                    {s.nome}
+                  </span>
+                  <div style={{ flex: 1, height: 24, background: "#f3f4f6", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{
+                      width: `${(s.share / maxShare) * 100}%`, height: "100%",
+                      background: s.is_empresa ? "#3b82f6" : "#9ca3af", borderRadius: 4,
+                      display: "flex", alignItems: "center", paddingLeft: 8,
+                    }}>
+                      <span style={{ color: "#fff", fontSize: 11, fontWeight: 600 }}>{s.share}%</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+              Sem dados de share para o periodo selecionado
+            </div>
+          )}
+        </Card>
+
+        {/* Tabela Concorrentes */}
         <Card title="Concorrentes Conhecidos" icon={<Users size={18} />}>
           <FilterBar
             searchValue={searchTerm}

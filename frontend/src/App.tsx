@@ -21,6 +21,8 @@ import { ConcorrenciaPage } from "./pages/ConcorrenciaPage";
 import { MercadoPage } from "./pages/MercadoPage";
 import { ContratadoRealizadoPage } from "./pages/ContratadoRealizadoPage";
 import { PerdasPage } from "./pages/PerdasPage";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { AprendizadoPage } from "./pages/AprendizadoPage";
 import { EmpresaPage } from "./pages/EmpresaPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { ParametrizacoesPage } from "./pages/ParametrizacoesPage";
@@ -191,6 +193,10 @@ function AppContent() {
         return <ContratadoRealizadoPage onSendToChat={handleSendToChat} />; // Atrasos esta integrado na pagina Contratado X Realizado
       case "perdas":
         return <PerdasPage onSendToChat={handleSendToChat} />;
+      case "analytics":
+        return <AnalyticsPage onSendToChat={handleSendToChat} />;
+      case "aprendizado":
+        return <AprendizadoPage onSendToChat={handleSendToChat} />;
       case "empresa":
         return <EmpresaPage onSendToChat={handleSendToChat} />;
       case "portfolio":

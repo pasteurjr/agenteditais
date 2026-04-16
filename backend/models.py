@@ -2426,6 +2426,7 @@ class AprendizadoFeedback(Base):
     resultado_real = Column(JSON, nullable=True)
     delta = Column(JSON, nullable=True)
     aplicado = Column(Boolean, default=False)
+    rejeitado_motivo = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="aprendizado_feedback")
@@ -2434,6 +2435,7 @@ class AprendizadoFeedback(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
             "tipo_evento": self.tipo_evento,
             "entidade": self.entidade,
             "entidade_id": self.entidade_id,
@@ -2441,6 +2443,115 @@ class AprendizadoFeedback(Base):
             "resultado_real": self.resultado_real,
             "delta": self.delta,
             "aplicado": self.aplicado,
+            "rejeitado_motivo": self.rejeitado_motivo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== SPRINT 7 — MERCADO / ANALYTICS / APRENDIZADO ====================
+
+class SugestaoIA(Base):
+    __tablename__ = 'sugestoes_ia'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    tipo = Column(String(50), nullable=False)
+    titulo = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=False)
+    confianca = Column(DECIMAL(5, 2), nullable=True)
+    base_dados_count = Column(Integer, default=0)
+    acao_sugerida = Column(Text, nullable=True)
+    status = Column(Enum('pendente', 'aceita', 'rejeitada'), default='pendente')
+    rejeitado_motivo = Column(Text, nullable=True)
+    feedback_id = Column(String(36), ForeignKey('aprendizado_feedback.id', ondelete='SET NULL'), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "titulo": self.titulo,
+            "descricao": self.descricao,
+            "confianca": float(self.confianca) if self.confianca else None,
+            "base_dados_count": self.base_dados_count,
+            "acao_sugerida": self.acao_sugerida,
+            "status": self.status,
+            "rejeitado_motivo": self.rejeitado_motivo,
+            "feedback_id": self.feedback_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PadraoDetectado(Base):
+    __tablename__ = 'padroes_detectados'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    tipo = Column(Enum('sazonalidade', 'correlacao', 'tendencia_preco', 'comportamento_orgao', 'gargalo_pipeline'), nullable=False)
+    titulo = Column(String(255), nullable=False)
+    descricao = Column(Text, nullable=False)
+    confianca = Column(DECIMAL(5, 2), nullable=True)
+    base_dados_count = Column(Integer, default=0)
+    dados_json = Column(JSON, nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "tipo": self.tipo,
+            "titulo": self.titulo,
+            "descricao": self.descricao,
+            "confianca": float(self.confianca) if self.confianca else None,
+            "base_dados_count": self.base_dados_count,
+            "dados_json": self.dados_json,
+            "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ItemIntruso(Base):
+    __tablename__ = 'itens_intrusos'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    descricao_item = Column(Text, nullable=False)
+    ncm = Column(String(20), nullable=True)
+    valor = Column(DECIMAL(15, 2), nullable=True)
+    percentual_edital = Column(DECIMAL(5, 2), nullable=True)
+    criticidade = Column(Enum('critico', 'medio', 'informativo'), nullable=False)
+    acao_sugerida = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+    edital = relationship("Edital", foreign_keys=[edital_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "edital_id": self.edital_id,
+            "descricao_item": self.descricao_item,
+            "ncm": self.ncm,
+            "valor": float(self.valor) if self.valor else None,
+            "percentual_edital": float(self.percentual_edital) if self.percentual_edital else None,
+            "criticidade": self.criticidade,
+            "acao_sugerida": self.acao_sugerida,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
