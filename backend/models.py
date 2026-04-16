@@ -1092,7 +1092,7 @@ class Alerta(Base):
     tempo_antes_minutos = Column(Integer, nullable=True)  # 1440 = 24h, 60 = 1h, etc.
 
     # Status
-    status = Column(Enum('agendado', 'disparado', 'lido', 'cancelado'), default='agendado')
+    status = Column(Enum('agendado', 'disparado', 'lido', 'cancelado', 'silenciado', name='alerta_status_v2'), default='agendado')
 
     # Canais
     canal_email = Column(Boolean, default=True)
@@ -1106,6 +1106,8 @@ class Alerta(Base):
     # Metadados
     disparado_em = Column(DateTime, nullable=True)
     lido_em = Column(DateTime, nullable=True)
+    silenciado_ate = Column(DateTime, nullable=True)
+    motivo_silenciamento = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="alertas")
@@ -1123,10 +1125,13 @@ class Alerta(Base):
             "status": self.status,
             "canal_email": self.canal_email,
             "canal_push": self.canal_push,
+            "canal_sms": self.canal_sms,
             "titulo": self.titulo,
             "mensagem": self.mensagem,
             "disparado_em": self.disparado_em.isoformat() if self.disparado_em else None,
             "lido_em": self.lido_em.isoformat() if self.lido_em else None,
+            "silenciado_ate": self.silenciado_ate.isoformat() if self.silenciado_ate else None,
+            "motivo_silenciamento": self.motivo_silenciamento,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -3140,6 +3145,126 @@ class ValidacaoLegal(Base):
             "user_id": self.user_id,
             "inconsistencias_json": self.inconsistencias_json,
             "analise_ia": self.analise_ia,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# ==================== SPRINT 6 — SMTP / EMAIL ====================
+
+class ConfiguracaoSMTP(Base):
+    __tablename__ = 'configuracao_smtp'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    host = Column(String(255), nullable=False)
+    port = Column(Integer, nullable=False, default=587)
+    user = Column(String(255), nullable=True)
+    password_encrypted = Column(String(500), nullable=True)
+    from_email = Column(String(255), nullable=False)
+    from_name = Column(String(255), nullable=True)
+    tls_enabled = Column(Boolean, default=True)
+    smtp_live_mode = Column(Boolean, default=False)
+    updated_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = Column(DateTime, default=datetime.now)
+
+    empresa = relationship("Empresa", backref="configuracoes_smtp")
+    updated_by_user = relationship("User", foreign_keys=[updated_by])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "host": self.host,
+            "port": self.port,
+            "user": self.user,
+            "password_encrypted": "***" if self.password_encrypted else None,
+            "from_email": self.from_email,
+            "from_name": self.from_name,
+            "tls_enabled": self.tls_enabled,
+            "smtp_live_mode": self.smtp_live_mode,
+            "updated_by": self.updated_by,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class EmailTemplate(Base):
+    __tablename__ = 'email_template'
+    __table_args__ = (UniqueConstraint('empresa_id', 'slug', name='uq_empresa_slug'),)
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    slug = Column(String(50), nullable=False)
+    nome = Column(String(255), nullable=False)
+    assunto = Column(String(255), nullable=False)
+    corpo_html = Column(Text, nullable=False)
+    corpo_text = Column(Text, nullable=True)
+    variaveis_json = Column(JSON, nullable=True)
+    ativo = Column(Boolean, default=True)
+    versao = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    empresa = relationship("Empresa", backref="email_templates")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "slug": self.slug,
+            "nome": self.nome,
+            "assunto": self.assunto,
+            "corpo_html": self.corpo_html,
+            "corpo_text": self.corpo_text,
+            "variaveis_json": self.variaveis_json,
+            "ativo": self.ativo,
+            "versao": self.versao,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class EmailQueue(Base):
+    __tablename__ = 'email_queue'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    destinatario = Column(String(255), nullable=False)
+    template_slug = Column(String(50), nullable=True)
+    assunto = Column(String(255), nullable=False)
+    corpo_html = Column(Text, nullable=True)
+    corpo_text = Column(Text, nullable=True)
+    variaveis_json = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default='pending')
+    retry_count = Column(Integer, default=0)
+    max_retries = Column(Integer, default=3)
+    erro_mensagem = Column(Text, nullable=True)
+    agendado_para = Column(DateTime, nullable=True)
+    enviado_em = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    empresa = relationship("Empresa", backref="email_queue")
+    user = relationship("User", backref="email_queue")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "empresa_id": self.empresa_id,
+            "user_id": self.user_id,
+            "destinatario": self.destinatario,
+            "template_slug": self.template_slug,
+            "assunto": self.assunto,
+            "corpo_html": self.corpo_html,
+            "corpo_text": self.corpo_text,
+            "variaveis_json": self.variaveis_json,
+            "status": self.status,
+            "retry_count": self.retry_count,
+            "max_retries": self.max_retries,
+            "erro_mensagem": self.erro_mensagem,
+            "agendado_para": self.agendado_para.isoformat() if self.agendado_para else None,
+            "enviado_em": self.enviado_em.isoformat() if self.enviado_em else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

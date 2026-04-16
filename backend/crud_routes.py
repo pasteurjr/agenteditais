@@ -35,6 +35,8 @@ from models import (
     AlertaVencimentoRegra,
     # SPRINT 5 V3 — Empenhos, CRM Pipeline
     Empenho, EmpenhoItem, EmpenhoFatura, CRMParametrizacao, EditalDecisao, CRMAgendaItem,
+    # SPRINT 6 — SMTP / Email
+    ConfiguracaoSMTP, EmailTemplate, EmailQueue,
 )
 from config import JWT_SECRET_KEY as JWT_SECRET
 import bcrypt
@@ -813,6 +815,30 @@ CRUD_TABLES = {
         "search_fields": ["titulo", "responsavel", "descricao"],
         "label": "Agenda CRM",
         "required": ["titulo", "data_limite"],
+    },
+    # SPRINT 6 — SMTP / Email
+    "smtp-config": {
+        "model": ConfiguracaoSMTP,
+        "empresa_scoped": False,
+        "search_fields": ["host", "from_email"],
+        "label": "Configuração SMTP",
+        "required": ["host", "port", "from_email"],
+        "encrypt_fields": ["password_encrypted"],
+    },
+    "email-templates": {
+        "model": EmailTemplate,
+        "empresa_scoped": True,
+        "search_fields": ["slug", "nome", "assunto"],
+        "label": "Template de Email",
+        "required": ["slug", "nome", "assunto", "corpo_html"],
+    },
+    "email-queue": {
+        "model": EmailQueue,
+        "empresa_scoped": True,
+        "search_fields": ["destinatario", "assunto", "template_slug"],
+        "label": "Fila de Email",
+        "required": ["destinatario", "assunto"],
+        "read_only": ["status", "retry_count", "erro_mensagem", "enviado_em"],
     },
 }
 

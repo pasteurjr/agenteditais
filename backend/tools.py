@@ -11092,3 +11092,238 @@ def tool_alertas_vencimento_multi_tier(user_id, empresa_id=None, db=None):
 
 TOOLS_MAP["alertas_vencimento_multi_tier"] = tool_alertas_vencimento_multi_tier
 
+
+# =============================================================================
+# SPRINT 6 — Tools novas
+# =============================================================================
+
+def tool_analisar_documentos_empresa(user_id: str, empresa_id: str = None) -> Dict[str, Any]:
+    """UC-MO03: Analisa documentos e certidões da empresa, retorna pendências."""
+    from models import get_db, Empresa, EmpresaDocumento, EmpresaCertidao, EmpresaResponsavel
+    from rn_audit import audited_tool
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+        if not empresa:
+            return {"success": False, "error": "Empresa não encontrada"}
+
+        docs = db.query(EmpresaDocumento).filter(EmpresaDocumento.empresa_id == empresa_id).all()
+        certs = db.query(EmpresaCertidao).filter(EmpresaCertidao.empresa_id == empresa_id).all()
+        resps = db.query(EmpresaResponsavel).filter(EmpresaResponsavel.empresa_id == empresa_id).all()
+
+        pendencias = []
+        categorias_existentes = {d.categoria for d in docs if d.categoria}
+        categorias_esperadas = {"contrato_social", "procuracao", "balanco", "certidao_negativa", "alvara"}
+        for cat in categorias_esperadas - categorias_existentes:
+            pendencias.append({"tipo": "documento_ausente", "descricao": f"Documento '{cat}' não cadastrado"})
+
+        from datetime import datetime, timedelta
+        hoje = datetime.now().date()
+        for cert in certs:
+            if cert.data_vencimento:
+                venc = cert.data_vencimento if isinstance(cert.data_vencimento, type(hoje)) else cert.data_vencimento.date() if hasattr(cert.data_vencimento, 'date') else cert.data_vencimento
+                if venc < hoje:
+                    pendencias.append({"tipo": "certidao_vencida", "descricao": f"Certidão '{cert.tipo}' vencida em {venc}"})
+                elif venc <= hoje + timedelta(days=15):
+                    pendencias.append({"tipo": "certidao_vencendo", "descricao": f"Certidão '{cert.tipo}' vence em {venc} (≤15 dias)"})
+
+        for resp in resps:
+            if not resp.cpf:
+                pendencias.append({"tipo": "responsavel_sem_cpf", "descricao": f"Responsável '{resp.nome}' sem CPF cadastrado"})
+
+        return {
+            "success": True,
+            "empresa": empresa.razao_social,
+            "total_documentos": len(docs),
+            "total_certidoes": len(certs),
+            "total_responsaveis": len(resps),
+            "pendencias": pendencias,
+            "total_pendencias": len(pendencias),
+            "status": "ok" if not pendencias else "pendencias_encontradas",
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_verificar_pendencias_pncp(user_id: str, empresa_id: str = None, cnpj: str = None) -> Dict[str, Any]:
+    """UC-MO04: Consulta API PNCP para verificar pendências do fornecedor."""
+    from models import get_db, Empresa
+    import requests
+    db = get_db()
+    try:
+        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+        if not empresa:
+            return {"success": False, "error": "Empresa não encontrada"}
+        cnpj_limpo = (cnpj or empresa.cnpj or "").replace(".", "").replace("-", "").replace("/", "")
+        if not cnpj_limpo or len(cnpj_limpo) < 14:
+            return {"success": False, "error": "CNPJ inválido ou não informado"}
+
+        pendencias = []
+        pncp_ok = False
+        try:
+            url = f"https://pncp.gov.br/api/consulta/v1/fornecedores/{cnpj_limpo}"
+            resp = requests.get(url, timeout=15, headers={"Accept": "application/json"})
+            if resp.status_code == 200:
+                data = resp.json()
+                pncp_ok = True
+                pncp_nome = data.get("nomeRazaoSocial", "")
+                if pncp_nome and pncp_nome.upper() != empresa.razao_social.upper():
+                    pendencias.append({
+                        "tipo": "razao_social_divergente",
+                        "descricao": f"PNCP: '{pncp_nome}' / Local: '{empresa.razao_social}'",
+                    })
+                if data.get("situacaoCadastral") and data["situacaoCadastral"] != "ATIVA":
+                    pendencias.append({
+                        "tipo": "situacao_cadastral",
+                        "descricao": f"Situação no PNCP: {data['situacaoCadastral']}",
+                    })
+            elif resp.status_code == 404:
+                pendencias.append({"tipo": "nao_cadastrado_pncp", "descricao": "Fornecedor não encontrado no PNCP"})
+            else:
+                pendencias.append({"tipo": "erro_consulta", "descricao": f"PNCP retornou status {resp.status_code}"})
+        except requests.RequestException as e:
+            pendencias.append({"tipo": "erro_rede", "descricao": f"Falha ao consultar PNCP: {e}"})
+
+        return {
+            "success": True,
+            "cnpj": cnpj_limpo,
+            "empresa": empresa.razao_social,
+            "pncp_acessivel": pncp_ok,
+            "pendencias": pendencias,
+            "total_pendencias": len(pendencias),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_consultar_auditoria(user_id: str, empresa_id: str = None,
+                             termo_natural: str = None, entidade: str = None,
+                             periodo_dias: int = 7) -> Dict[str, Any]:
+    """UC-AU01: Consulta auditoria por termos naturais ou filtros."""
+    from models import get_db, AuditoriaLog
+    from datetime import timedelta
+    db = get_db()
+    try:
+        desde = datetime.now() - timedelta(days=periodo_dias)
+        query = db.query(AuditoriaLog).filter(AuditoriaLog.created_at >= desde)
+
+        if entidade:
+            query = query.filter(AuditoriaLog.entidade == entidade)
+        if termo_natural:
+            termo = f"%{termo_natural}%"
+            query = query.filter(
+                (AuditoriaLog.entidade.like(termo)) |
+                (AuditoriaLog.acao.like(termo)) |
+                (AuditoriaLog.user_email.like(termo))
+            )
+
+        registros = query.order_by(AuditoriaLog.created_at.desc()).limit(100).all()
+
+        items = []
+        for r in registros:
+            items.append({
+                "id": r.id,
+                "data": r.created_at.strftime("%d/%m/%Y %H:%M") if r.created_at else "—",
+                "usuario": r.user_email or "—",
+                "acao": r.acao,
+                "entidade": r.entidade,
+                "entidade_id": r.entidade_id,
+                "ip": r.ip_address,
+            })
+
+        return {
+            "success": True,
+            "total": len(items),
+            "periodo_dias": periodo_dias,
+            "filtro_entidade": entidade,
+            "filtro_termo": termo_natural,
+            "registros": items,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_exportar_auditoria_compliance(user_id: str, empresa_id: str = None,
+                                       inicio: str = None, fim: str = None,
+                                       mascarar_pii: bool = True) -> Dict[str, Any]:
+    """UC-AU03: Exporta auditoria para compliance com mascaramento PII."""
+    from models import get_db, AuditoriaLog
+    import csv
+    import io
+    db = get_db()
+    try:
+        query = db.query(AuditoriaLog)
+        if inicio:
+            query = query.filter(AuditoriaLog.created_at >= datetime.strptime(inicio, "%Y-%m-%d"))
+        if fim:
+            query = query.filter(AuditoriaLog.created_at <= datetime.strptime(fim + " 23:59:59", "%Y-%m-%d %H:%M:%S"))
+
+        registros = query.order_by(AuditoriaLog.created_at).all()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Data", "Usuário", "Ação", "Entidade", "ID Entidade", "IP"])
+
+        for r in registros:
+            email = r.user_email or "—"
+            ip = r.ip_address or "—"
+            if mascarar_pii:
+                if "@" in email:
+                    parts = email.split("@")
+                    email = f"***@{parts[1][:3]}***"
+                if ip != "—" and "." in ip:
+                    octets = ip.split(".")
+                    ip = f"{octets[0]}.{octets[1]}.*.*"
+
+            writer.writerow([
+                r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "—",
+                email,
+                r.acao,
+                r.entidade,
+                r.entidade_id or "—",
+                ip,
+            ])
+
+        csv_content = output.getvalue()
+        return {
+            "success": True,
+            "total_registros": len(registros),
+            "csv_content": csv_content,
+            "mascaramento_pii": mascarar_pii,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_testar_smtp(user_id: str, empresa_id: str = None,
+                     destinatario_teste: str = None) -> Dict[str, Any]:
+    """UC-SM01: Testa configuração SMTP enviando email de teste."""
+    if not destinatario_teste:
+        return {"success": False, "error": "destinatario_teste obrigatório"}
+    from smtp_service import SMTPService
+    svc = SMTPService()
+    ok, msg = svc.test_config(destinatario_teste, empresa_id=empresa_id)
+    return {"success": ok, "message": msg}
+
+
+# Sprint 6 — registrar tools existentes (Flags/Monitoria) + novas no TOOLS_MAP
+TOOLS_MAP["configurar_alertas"] = tool_configurar_alertas
+TOOLS_MAP["listar_alertas"] = tool_listar_alertas
+TOOLS_MAP["cancelar_alerta"] = tool_cancelar_alerta
+TOOLS_MAP["configurar_monitoramento"] = tool_configurar_monitoramento
+TOOLS_MAP["listar_monitoramentos"] = tool_listar_monitoramentos
+TOOLS_MAP["desativar_monitoramento"] = tool_desativar_monitoramento
+TOOLS_MAP["analisar_documentos_empresa"] = tool_analisar_documentos_empresa
+TOOLS_MAP["verificar_pendencias_pncp"] = tool_verificar_pendencias_pncp
+TOOLS_MAP["consultar_auditoria"] = tool_consultar_auditoria
+TOOLS_MAP["exportar_auditoria_compliance"] = tool_exportar_auditoria_compliance
+TOOLS_MAP["testar_smtp"] = tool_testar_smtp
+

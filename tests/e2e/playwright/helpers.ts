@@ -113,6 +113,10 @@ const PAGE_LABELS: Record<string, string> = {
   "Atas": "Atas de Pregao",
   "Atas de Pregao": "Atas de Pregao",
   "Dashboard": "Dashboard",
+  "Flags": "Flags",
+  "Monitoria": "Monitoria",
+  "Auditoria": "Auditoria",
+  "SMTP": "SMTP",
 };
 
 // Mapa de qual seção do sidebar cada página pertence (usar label real do botão de seção)
@@ -133,6 +137,10 @@ const PAGE_SECTION: Record<string, string> = {
   "CRM": "Fluxo Comercial",
   "Execucao Contrato": "Fluxo Comercial",
   "Atas de Pregao": "Fluxo Comercial",
+  "Flags": "Indicadores",
+  "Monitoria": "Indicadores",
+  "Auditoria": "Governanca",
+  "SMTP": "Governanca",
 };
 
 export async function navTo(page: Page, label: string) {

@@ -523,6 +523,42 @@ def job_verificar_certidoes():
 
 
 # =============================================================================
+# SPRINT 6 — JOBS
+# =============================================================================
+
+def job_processar_email_queue():
+    """Processa fila de emails pendentes (a cada 2 min)."""
+    try:
+        from smtp_service import SMTPService
+        svc = SMTPService()
+        results = svc.process_queue(limit=50)
+        if any(v > 0 for v in results.values()):
+            print(f"[SCHEDULER] Email queue: {results}")
+    except Exception as e:
+        print(f"[SCHEDULER] Erro no job email queue: {e}")
+
+
+def job_limpar_auditoria_antiga():
+    """Retenção LGPD: remove AuditoriaLog com mais de 12 meses."""
+    try:
+        from models import get_db, AuditoriaLog
+        from datetime import timedelta
+        db = get_db()
+        try:
+            limite = datetime.now() - timedelta(days=365)
+            qtd = db.query(AuditoriaLog).filter(
+                AuditoriaLog.created_at < limite
+            ).delete(synchronize_session=False)
+            db.commit()
+            if qtd > 0:
+                print(f"[SCHEDULER] Auditoria LGPD: {qtd} registros removidos (>12 meses)")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[SCHEDULER] Erro no job limpeza auditoria: {e}")
+
+
+# =============================================================================
 # INICIALIZAÇÃO DO SCHEDULER
 # =============================================================================
 
@@ -581,12 +617,32 @@ def iniciar_scheduler():
             replace_existing=True
         )
 
+        # Sprint 6 — Processar fila de email a cada 2 minutos
+        scheduler.add_job(
+            job_processar_email_queue,
+            IntervalTrigger(minutes=2),
+            id='processar_email_queue',
+            name='Processar Fila de Email',
+            replace_existing=True
+        )
+
+        # Sprint 6 — Retenção LGPD: limpar auditoria >12 meses (diário 4h)
+        scheduler.add_job(
+            job_limpar_auditoria_antiga,
+            CronTrigger(hour=4, minute=0),
+            id='limpar_auditoria',
+            name='Limpeza LGPD Auditoria (>12 meses)',
+            replace_existing=True
+        )
+
         scheduler.start()
         print(f"[SCHEDULER] Iniciado com sucesso!")
         print(f"[SCHEDULER] - Verificação de alertas: a cada {CHECK_ALERTAS_INTERVAL} minutos")
         print(f"[SCHEDULER] - Monitoramentos: a cada {CHECK_MONITORAMENTOS_INTERVAL} minutos")
         print(f"[SCHEDULER] - Limpeza de notificações: diária às 3h")
         print(f"[SCHEDULER] - Verificação de certidões: diária às 6h")
+        print(f"[SCHEDULER] - Fila de email: a cada 2 minutos")
+        print(f"[SCHEDULER] - Limpeza LGPD auditoria: diária às 4h")
 
         return True
 

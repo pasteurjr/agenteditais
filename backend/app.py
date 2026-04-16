@@ -79,6 +79,10 @@ app.register_blueprint(empenho_bp)
 from crm_routes import crm_bp
 app.register_blueprint(crm_bp)
 
+# Sprint 6 — Audit middleware
+from audit_middleware import register_audit_hooks
+register_audit_hooks(app)
+
 # JWT Config
 JWT_SECRET = "editais-ia-secret-key-change-in-production-2024"
 JWT_EXPIRY_HOURS = 24
@@ -14611,6 +14615,66 @@ def api_alertas_vencimento_consolidado():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Sprint 6 — SMTP endpoints
+# =============================================================================
+
+@app.route("/api/smtp/testar", methods=["POST"])
+@require_auth
+def smtp_testar():
+    data = request.get_json() or {}
+    destinatario = data.get("destinatario_teste")
+    if not destinatario:
+        return jsonify({"error": "destinatario_teste obrigatório"}), 400
+    from smtp_service import SMTPService
+    svc = SMTPService()
+    ok, msg = svc.test_config(destinatario, empresa_id=getattr(request, "empresa_id", None))
+    return jsonify({"success": ok, "message": msg}), 200 if ok else 500
+
+
+@app.route("/api/smtp/fila/reenviar/<queue_id>", methods=["POST"])
+@require_auth
+def smtp_reenviar(queue_id):
+    db = get_db()
+    try:
+        from models import EmailQueue
+        item = db.query(EmailQueue).filter(EmailQueue.id == queue_id).first()
+        if not item:
+            return jsonify({"error": "Item não encontrado"}), 404
+        if item.status not in ("failed", "bounce"):
+            return jsonify({"error": f"Só pode reenviar itens failed/bounce (atual: {item.status})"}), 400
+        item.status = "pending"
+        item.retry_count = 0
+        item.erro_mensagem = None
+        db.commit()
+        return jsonify({"success": True, "message": f"Item {queue_id} reenfileirado"})
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Monitoramento — Executar Agora
+# =============================================================================
+
+@app.route("/api/monitoramentos/<mon_id>/executar", methods=["POST"])
+@require_auth
+def monitoramento_executar(mon_id):
+    db = get_db()
+    try:
+        from models import Monitoramento
+        mon = db.query(Monitoramento).filter(Monitoramento.id == mon_id).first()
+        if not mon:
+            return jsonify({"error": "Monitoramento nao encontrado"}), 404
+        from datetime import datetime
+        mon.ultimo_check = None
+        mon.proximo_check = datetime.utcnow()
+        mon.ativo = True
+        db.commit()
+        return jsonify({"success": True, "message": f"Monitoramento '{mon.termo}' enfileirado para execucao"})
     finally:
         db.close()
 

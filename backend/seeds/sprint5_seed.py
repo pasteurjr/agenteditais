@@ -598,20 +598,22 @@ def seed_rp3x_empresa(db):
         ativo=True,
     ))
     # ParametroScore
-    db.add(ParametroScore(
-        id=uid(),
-        user_id=VALIDA2_USER_ID,
-        empresa_id=rp3x_id,
-        peso_tecnico=0.30,
-        peso_comercial=0.10,
-        peso_documental=0.25,
-        peso_complexidade=0.05,
-        peso_juridico=0.20,
-        peso_logistico=0.10,
-        markup_padrao=35.0,
-        custos_fixos=42000.0,
-        frete_base=180.0,
-    ))
+    existing_ps = db.query(ParametroScore).filter_by(user_id=VALIDA2_USER_ID).first()
+    if not existing_ps:
+        db.add(ParametroScore(
+            id=uid(),
+            user_id=VALIDA2_USER_ID,
+            empresa_id=rp3x_id,
+            peso_tecnico=0.30,
+            peso_comercial=0.10,
+            peso_documental=0.25,
+            peso_complexidade=0.05,
+            peso_juridico=0.20,
+            peso_logistico=0.10,
+            markup_padrao=35.0,
+            custos_fixos=42000.0,
+            frete_base=180.0,
+        ))
     return rp3x_id, True
 
 

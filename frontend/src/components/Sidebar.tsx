@@ -217,6 +217,15 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
     ]
   },
   {
+    id: "governanca",
+    icon: <Shield size={18} />,
+    label: "Governanca",
+    items: [
+      { id: "auditoria", icon: <Shield size={16} />, label: "Auditoria", page: "auditoria" },
+      { id: "smtp", icon: <Mail size={16} />, label: "SMTP", page: "smtp", superOnly: true },
+    ]
+  },
+  {
     id: "config",
     icon: <Settings size={18} />,
     label: "Configuracoes",

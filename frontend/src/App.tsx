@@ -27,6 +27,8 @@ import { ParametrizacoesPage } from "./pages/ParametrizacoesPage";
 import { CRMPage } from "./pages/CRMPage";
 import { AssociarEmpresaUsuario } from "./pages/AssociarEmpresaUsuario";
 import { SelecionarEmpresaPage } from "./pages/SelecionarEmpresaPage";
+import { AuditoriaPage } from "./pages/AuditoriaPage";
+import { SMTPPage } from "./pages/SMTPPage";
 import { CrudPage } from "./components/CrudPage";
 import { ALL_CRUD_CONFIGS } from "./config/crudTables";
 import { useSessions } from "./hooks/useSessions";
@@ -199,6 +201,10 @@ function AppContent() {
         return isSuper ? <AssociarEmpresaUsuario /> : <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
       case "selecionar-empresa":
         return <SelecionarEmpresaPage />;
+      case "auditoria":
+        return <AuditoriaPage onSendToChat={handleSendToChat} />;
+      case "smtp":
+        return isSuper ? <SMTPPage onSendToChat={handleSendToChat} /> : <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
       default:
         return <Dashboard onNavigate={setCurrentPage} onOpenChat={handleOpenChat} />;
     }
