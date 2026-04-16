@@ -1475,10 +1475,10 @@ def tool_reprocessar_produto(produto_id: str, user_id: str, empresa_id: str = No
         ).first()
 
         if not documento:
-            return {"success": False, "error": "Documento do produto não encontrado"}
-
-        # Se tem arquivo, reprocessar do arquivo
-        if documento.path_arquivo and os.path.exists(documento.path_arquivo):
+            texto_specs = produto.descricao or f"{produto.nome} {produto.modelo or ''}".strip()
+            if not texto_specs:
+                return {"success": False, "error": "Nenhum texto disponível para reprocessar (sem documento e sem descrição)"}
+        elif documento.path_arquivo and os.path.exists(documento.path_arquivo):
             print(f"[TOOLS] Reprocessando produto do arquivo: {documento.path_arquivo}")
             paginas = _extrair_texto_por_paginas(documento.path_arquivo)
             texto_specs = _encontrar_paginas_specs(paginas)
@@ -10858,6 +10858,9 @@ TOOLS_MAP["registrar_resultado_api"] = tool_registrar_resultado_api
 
 def tool_dashboard_contratado_realizado(user_id, empresa_id=None, db=None, periodo='6m', produto_id=None, orgao=None):
     """Agrega dados de contratado vs realizado para dashboard (RF-051)"""
+    from datetime import date as _date
+    hoje = _date.today()
+    hoje_dt = datetime.combine(hoje, datetime.min.time())
     close_db = False
     if db is None:
         db = get_db()
@@ -10909,8 +10912,8 @@ def tool_dashboard_contratado_realizado(user_id, empresa_id=None, db=None, perio
 
             # Identificar atrasos
             for e in entregas:
-                if e.data_prevista and e.status != 'entregue' and e.data_prevista < datetime.now():
-                    dias_atraso = (datetime.now() - e.data_prevista).days
+                if e.data_prevista and e.status != 'entregue' and e.data_prevista < hoje:
+                    dias_atraso = (hoje - e.data_prevista).days
                     if dias_atraso > 30:
                         severidade = 'HIGH'
                     elif dias_atraso > 15:
@@ -10929,12 +10932,12 @@ def tool_dashboard_contratado_realizado(user_id, empresa_id=None, db=None, perio
                     })
 
         # Próximos vencimentos (contratos com data_fim nos próximos 90 dias)
-        data_limite = datetime.now() + timedelta(days=90)
+        data_limite_dt = hoje_dt + timedelta(days=90)
         vencimentos = db.query(Contrato).filter(
             Contrato.empresa_id == empresa_id,
             Contrato.data_fim != None,
-            Contrato.data_fim <= data_limite,
-            Contrato.data_fim >= datetime.now(),
+            Contrato.data_fim <= data_limite_dt,
+            Contrato.data_fim >= hoje_dt,
             Contrato.status == 'vigente'
         ).all()
 
@@ -10943,7 +10946,7 @@ def tool_dashboard_contratado_realizado(user_id, empresa_id=None, db=None, perio
             "numero": v.numero_contrato,
             "orgao": v.orgao,
             "data_fim": v.data_fim.isoformat(),
-            "dias_restantes": (v.data_fim - datetime.now()).days,
+            "dias_restantes": ((v.data_fim.date() if hasattr(v.data_fim, 'date') else v.data_fim) - hoje).days,
             "valor": float(v.valor_total) if v.valor_total else 0,
         } for v in vencimentos]
 
@@ -10986,21 +10989,25 @@ def tool_alertas_vencimento_multi_tier(user_id, empresa_id=None, db=None):
         db = get_db()
         close_db = True
     try:
+        from datetime import date as _date
         vencimentos = []
-        agora = datetime.now()
-        limite_90d = agora + timedelta(days=90)
-        limite_30d = agora + timedelta(days=30)
+        hoje = _date.today()
+        agora = datetime.combine(hoje, datetime.min.time())
+        limite_90d_dt = agora + timedelta(days=90)
+        limite_30d = hoje + timedelta(days=30)
+        limite_90d = hoje + timedelta(days=90)
 
-        # Contratos com vencimento próximo
+        # Contratos com vencimento próximo (Contrato.data_fim = DateTime)
         contratos = db.query(Contrato).filter(
             Contrato.empresa_id == empresa_id,
             Contrato.data_fim != None,
-            Contrato.data_fim <= limite_90d,
+            Contrato.data_fim <= limite_90d_dt,
             Contrato.data_fim >= agora,
             Contrato.status == 'vigente'
         ).all()
         for c in contratos:
-            dias = (c.data_fim - agora).days
+            data_fim_d = c.data_fim.date() if hasattr(c.data_fim, 'date') else c.data_fim
+            dias = (data_fim_d - hoje).days
             vencimentos.append({
                 "tipo_entidade": "contrato",
                 "nome": f"{c.numero_contrato} — {c.orgao}",
@@ -11010,15 +11017,18 @@ def tool_alertas_vencimento_multi_tier(user_id, empresa_id=None, db=None):
                 "entity_id": c.id,
             })
 
-        # Atas com vigência próxima do fim
+        # Atas com vigência próxima do fim (AtaConsultada.data_vigencia_fim = Date)
+        # AtaConsultada não tem empresa_id direto — filtra via UsuarioEmpresa
+        from models import UsuarioEmpresa as _UE
+        user_ids_empresa = [ue.user_id for ue in db.query(_UE).filter(_UE.empresa_id == empresa_id).all()]
         atas = db.query(AtaConsultada).filter(
-            AtaConsultada.empresa_id == empresa_id,
+            AtaConsultada.user_id.in_(user_ids_empresa) if user_ids_empresa else False,
             AtaConsultada.data_vigencia_fim != None,
             AtaConsultada.data_vigencia_fim <= limite_90d,
-            AtaConsultada.data_vigencia_fim >= agora,
-        ).all()
+            AtaConsultada.data_vigencia_fim >= hoje,
+        ).all() if user_ids_empresa else []
         for a in atas:
-            dias = (a.data_vigencia_fim - agora).days
+            dias = (a.data_vigencia_fim - hoje).days
             vencimentos.append({
                 "tipo_entidade": "arp",
                 "nome": f"{a.titulo} — {a.orgao}",
@@ -11028,16 +11038,16 @@ def tool_alertas_vencimento_multi_tier(user_id, empresa_id=None, db=None):
                 "entity_id": a.id,
             })
 
-        # Entregas pendentes com prazo próximo
+        # Entregas pendentes (ContratoEntrega.data_prevista = Date)
         entregas = db.query(ContratoEntrega).join(Contrato).filter(
             Contrato.empresa_id == empresa_id,
             ContratoEntrega.status == 'pendente',
             ContratoEntrega.data_prevista != None,
             ContratoEntrega.data_prevista <= limite_30d,
-            ContratoEntrega.data_prevista >= agora,
+            ContratoEntrega.data_prevista >= hoje,
         ).all()
         for e in entregas:
-            dias = (e.data_prevista - agora).days
+            dias = (e.data_prevista - hoje).days
             vencimentos.append({
                 "tipo_entidade": "entrega",
                 "nome": f"{e.descricao}",

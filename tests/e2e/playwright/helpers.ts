@@ -1,6 +1,6 @@
 import { Page } from "@playwright/test";
 
-export const BASE = "http://localhost:5179";
+export const BASE = "http://localhost:5180";
 
 // ID fixo da empresa CH Hospitalar no banco de dados
 const CH_HOSPITALAR_ID = "7dbdc60a-b806-4614-a024-a1d4841dc8c9";

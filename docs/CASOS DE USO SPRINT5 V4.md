@@ -4,8 +4,25 @@
 **Versao:** 4.0
 **Base:** requisitos_completosv6.md (RF-017, RF-011, RF-035, RF-045, RF-045-01 a RF-045-05, RF-046, RF-046-01 a RF-046-04, RF-051, RF-052) + Lei 14.133/2021 (Arts. 82-86, 117, 124-126) + SPRINT 5 VF (descritivo funcional do cliente) + boas praticas de gestao contratual
 **Objetivo:** Definir detalhadamente a interacao do usuario com a interface, incluindo telas, campos, botoes, pre/pos condicoes e sequencia de eventos para os modulos de Follow-up, Atas de Pregao, Execucao de Contratos, Contratado x Realizado e CRM do Processo.
-**Novidade V4:** Cada UC agora inclui uma secao **Regras de Negocio aplicaveis** referenciando as RNs formalizadas na secao 13 do `requisitos_completosv8.md`. Esta sprint mapeia 53 RNs (presentes + faltantes). Todo o conteudo V2 permanece preservado.
 **Nota v3.0:** Adicionados 11 novos casos de uso: 7 na nova FASE 5 — CRM DO PROCESSO (UC-CRM01 a UC-CRM07) e 4 na FASE 3 — EXECUCAO (UC-CT07 a UC-CT10), derivados do documento SPRINT 5 VF do cliente. Todos os 15 UCs existentes da V2 mantidos sem alteracao. Total: 26 casos de uso.
+**Nota v4.0:** Adicionadas anotacoes de Regras de Negocio (RNs) implementadas no backend em modo warn-only. Conteudo dos UCs preservado da V3.
+
+---
+
+## Regras de Negócio Implementadas (V4)
+
+Esta versão V4 anota **51 Regras de Negócio únicas** distribuídas em **20 casos de uso** (UC-AT02, UC-AT03, UC-CR03, UC-CRM01–07, UC-CT01–10), das quais **14 RNs são FALTANTE→V4** (RN-204 a RN-217). RNs já enforçadas no backend operam em modo **warn-only** (`ENFORCE_RN_VALIDATORS=false`). Ativar com `ENFORCE_RN_VALIDATORS=true`.
+
+| RN | Descrição | UC afetado | Arquivo backend |
+|---|---|---|---|
+| RN-205 | Transição de estado Contrato: vigente → encerrado/rescindido/suspenso. Bloqueia alteração após terminal | UCs de execução de contrato | `backend/rn_estados.py::CONTRATO_TRANSITIONS` |
+| RN-206 | Gestor ≠ Fiscal (Art. 117 Lei 14.133/2021): designação não pode atribuir a mesma pessoa aos dois papéis | UC de designação de gestor/fiscal | `backend/rn_validators.py::validar_gestor_diferente_fiscal` |
+| RN-207 | Aditivo cumulativo ≤25% do valor original (Art. 124-126 Lei 14.133/2021) | UC de registro de aditivo | `backend/rn_validators.py::validar_aditivo_cumulativo` + query soma em `crud_routes.py::_validar_rns_db` |
+| RN-209 | Valor de entrega não pode exceder saldo do contrato | UC de registro de entrega | `backend/rn_validators.py::validar_entrega_dentro_saldo` + query soma em `crud_routes.py::_validar_rns_db` |
+| RN-214 | Email válido em designação (gestor/fiscal) | UC de designação | `backend/rn_validators.py::validar_email` |
+| RN-037 | Audit log universal em contratos, aditivos, designações, entregas | UCs CRM/Execução Contrato | `backend/rn_audit.py::log_transicao` |
+| RN-084 | Cooldown 60s DeepSeek (agentes CRM, análise de performance, followup IA) | UCs com IA no pós-venda | `backend/rn_deepseek.py::check_cooldown` |
+| RN-132 | Audit de invocações DeepSeek | UCs com pipelines IA | `backend/rn_audit.py::audited_tool` |
 
 ---
 
@@ -90,12 +107,9 @@
 
 ## [UC-FU01] Registrar Resultado (Vitoria/Derrota)
 
+**RNs aplicadas:** RN-084 (cooldown 60s DeepSeek no followup IA), RN-132 (audit de invocacoes DeepSeek), RN-037 (audit log)
+
 **RF relacionado:** RF-017, RF-046
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-200
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -206,11 +220,6 @@
 ## [UC-FU02] Configurar Alertas de Prazo
 
 **RF relacionado:** RF-017
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-186
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -308,11 +317,6 @@
 ## [UC-FU03] Score Logistico
 
 **RF relacionado:** RF-011
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-199
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -449,12 +453,9 @@
 
 ## [UC-AT02] Extrair Resultados de Ata PDF
 
+**RNs aplicadas:** RN-213 [FALTANTE→V4]
+
 **RF relacionado:** RF-035
-
-**Regras de Negocio aplicaveis:**
-- Faltantes: RN-213 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -521,12 +522,9 @@
 
 ## [UC-AT03] Dashboard de Atas Consultadas
 
+**RNs aplicadas:** RN-213 [FALTANTE→V4]
+
 **RF relacionado:** RF-035
-
-**Regras de Negocio aplicaveis:**
-- Faltantes: RN-213 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -587,12 +585,9 @@
 
 ## [UC-CT06] Saldo de ARP / Controle de Carona
 
+**RNs aplicadas:** RN-182, RN-183, RN-184, RN-185, RN-201
+
 **RF relacionado:** NOVO (Art. 82-86, Lei 14.133/2021)
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-182, RN-183, RN-184, RN-185, RN-201
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -699,13 +694,9 @@
 
 ## [UC-CT01] Cadastrar Contrato
 
+**RNs aplicadas:** RN-203, RN-216 [FALTANTE→V4]
+
 **RF relacionado:** RF-046-01
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-203
-- Faltantes: RN-216 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -803,13 +794,9 @@
 
 ## [UC-CT02] Registrar Entrega + NF
 
+**RNs aplicadas:** RN-202, RN-203, RN-208 [FALTANTE→V4]
+
 **RF relacionado:** RF-046-03
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-202, RN-203
-- Faltantes: RN-208 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -894,12 +881,9 @@
 
 ## [UC-CT03] Acompanhar Cronograma de Entregas
 
+**RNs aplicadas:** RN-202
+
 **RF relacionado:** RF-046-04, RF-046-05
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-202
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -970,13 +954,9 @@
 
 ## [UC-CT04] Gestao de Aditivos
 
+**RNs aplicadas:** RN-178, RN-179, RN-203, RN-207 [FALTANTE→V4]
+
 **RF relacionado:** NOVO (Art. 124-126, Lei 14.133/2021)
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-178, RN-179, RN-203
-- Faltantes: RN-207 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -1071,13 +1051,9 @@
 
 ## [UC-CT05] Designar Gestor/Fiscal
 
+**RNs aplicadas:** RN-180, RN-181, RN-206 [FALTANTE→V4], RN-216 [FALTANTE→V4]
+
 **RF relacionado:** NOVO (Art. 117, Lei 14.133/2021)
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-180, RN-181
-- Faltantes: RN-206 [FALTANTE], RN-216 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor Administrativo)
 
 ### Pre-condicoes
@@ -1168,13 +1144,9 @@
 
 ## [UC-CT07] Gestao de Empenhos *(NOVO V3)*
 
+**RNs aplicadas:** RN-167, RN-169, RN-170, RN-171, RN-203, RN-209 [FALTANTE→V4], RN-210 [FALTANTE→V4]
+
 **RF relacionado:** RF-046-01
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-167, RN-169, RN-170, RN-171, RN-203
-- Faltantes: RN-209 [FALTANTE], RN-210 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor de Contratos)
 
 ### Pre-condicoes
@@ -1312,13 +1284,9 @@
 
 ## [UC-CT08] Auditoria Empenhos x Faturas x Pedidos *(NOVO V3)*
 
+**RNs aplicadas:** RN-169, RN-170, RN-172, RN-173, RN-209 [FALTANTE→V4], RN-210 [FALTANTE→V4], RN-211 [FALTANTE→V4]
+
 **RF relacionado:** RF-046-02
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-169, RN-170, RN-172, RN-173
-- Faltantes: RN-209 [FALTANTE], RN-210 [FALTANTE], RN-211 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor de Contratos)
 
 ### Pre-condicoes
@@ -1415,12 +1383,9 @@
 
 ## [UC-CT09] Contratos a Vencer *(NOVO V3)*
 
+**RNs aplicadas:** RN-167, RN-174, RN-175, RN-176
+
 **RF relacionado:** RF-046-03
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-167, RN-174, RN-175, RN-176
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor de Contratos)
 
 ### Pre-condicoes
@@ -1547,12 +1512,9 @@
 
 ## [UC-CT10] KPIs de Execucao *(NOVO V3)*
 
+**RNs aplicadas:** RN-174, RN-177
+
 **RF relacionado:** RF-046-04
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-174, RN-177
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Gestor / Diretor Comercial)
 
 ### Pre-condicoes
@@ -1818,12 +1780,9 @@
 
 ## [UC-CR03] Alertas de Vencimento Multi-tier
 
+**RNs aplicadas:** RN-185, RN-186, RN-187
+
 **RF relacionado:** NOVO (boas praticas de gestao contratual)
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-185, RN-186, RN-187
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -1898,19 +1857,15 @@
 
 ---
 
-# FASE 5 — CRM DO PROCESSO *(NOVA V4)*
+# FASE 5 — CRM DO PROCESSO *(NOVA V3)*
 
 ---
 
 ## [UC-CRM01] Pipeline de Cards do CRM *(NOVO V3)*
 
+**RNs aplicadas:** RN-165, RN-166, RN-167, RN-168, RN-204 [FALTANTE→V4], RN-205 [FALTANTE→V4], RN-212 [FALTANTE→V4]
+
 **RF relacionado:** RF-045, RF-045-01
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-165, RN-166, RN-167, RN-168
-- Faltantes: RN-204 [FALTANTE], RN-205 [FALTANTE], RN-212 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor Comercial)
 
 ### Pre-condicoes
@@ -2043,12 +1998,9 @@
 
 ## [UC-CRM02] Parametrizacoes do CRM *(NOVO V3)*
 
+**RNs aplicadas:** RN-189, RN-190, RN-191, RN-192
+
 **RF relacionado:** RF-045-02
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-189, RN-190, RN-191, RN-192
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Administrador / Gestor Comercial)
 
 ### Pre-condicoes
@@ -2148,13 +2100,9 @@
 
 ## [UC-CRM03] Mapa Geografico de Processos *(NOVO V3)*
 
+**RNs aplicadas:** RN-198, RN-217 [FALTANTE→V4]
+
 **RF relacionado:** RF-045-03
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-198
-- Faltantes: RN-217 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor Comercial)
 
 ### Pre-condicoes
@@ -2257,12 +2205,9 @@
 
 ## [UC-CRM04] Agenda/Timeline de Etapas *(NOVO V3)*
 
+**RNs aplicadas:** RN-188
+
 **RF relacionado:** RF-045-04
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-188
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial / Gestor Comercial)
 
 ### Pre-condicoes
@@ -2353,13 +2298,9 @@
 
 ## [UC-CRM05] KPIs do CRM *(NOVO V3)*
 
+**RNs aplicadas:** RN-194, RN-196, RN-197, RN-214 [FALTANTE→V4], RN-215 [FALTANTE→V4]
+
 **RF relacionado:** RF-045-05
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-194, RN-196, RN-197
-- Faltantes: RN-214 [FALTANTE], RN-215 [FALTANTE]
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Gestor Comercial / Diretor)
 
 ### Pre-condicoes
@@ -2485,12 +2426,9 @@
 
 ## [UC-CRM06] Registrar Decisao de Nao-Participacao *(NOVO V3)*
 
+**RNs aplicadas:** RN-192, RN-193
+
 **RF relacionado:** RF-045-01
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-192, RN-193
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes
@@ -2572,12 +2510,9 @@
 
 ## [UC-CRM07] Registrar Motivo de Perda *(NOVO V3)*
 
+**RNs aplicadas:** RN-168, RN-192, RN-194, RN-195
+
 **RF relacionado:** RF-045-01
-
-**Regras de Negocio aplicaveis:**
-- Presentes: RN-168, RN-192, RN-194, RN-195
-- Referencia completa: secao 13 de `requisitos_completosv8.md`
-
 **Ator:** Usuario (Analista Comercial)
 
 ### Pre-condicoes

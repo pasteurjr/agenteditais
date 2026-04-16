@@ -1,5 +1,17 @@
 # Plano Sprint 6 — CRM + Perdas + Concorrência
 
+> ⚠️ **DOCUMENTO HISTÓRICO — NÃO USAR COMO REFERÊNCIA ATIVA**
+>
+> Este plano foi elaborado em 28/03/2026 antes da execução efetiva da Sprint 5. Na execução real, a Sprint 5 absorveu o escopo originalmente previsto para a Sprint 6 (CRM + Perdas + Concorrência), totalizando 26 UCs entregues (UC-FU01..03, UC-AT01..03, UC-CT01..10, UC-CR01..03, UC-CRM01..07).
+>
+> O escopo **real** da Sprint 6 v4 está documentado em:
+> - `docs/SPRINT 6-VI.md` — descritivo no estilo SPRINT 5 - VF.docx (Flags + Monitoria + Auditoria + SMTP)
+> - `docs/planejamento_editaisv4.md` — planejamento consolidado com renumeração (9 sprints)
+>
+> O arquivo abaixo é mantido apenas para rastreabilidade histórica do planejamento original.
+>
+> ---
+
 ## Contexto
 
 Sprint 6 entrega o ciclo pós-venda: CRM ativo com pipeline de leads, análise de perdas com dashboard, e inteligência competitiva via IA. É a última sprint da Onda 3.
