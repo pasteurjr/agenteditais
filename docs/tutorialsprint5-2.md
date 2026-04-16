@@ -99,7 +99,7 @@ Mesma estrutura do Conjunto 1, com entregas de reagentes (1 atrasada).
 
 ### UC-CRM02..07
 - Parametrizações (27 valores seed via endpoint)
-- Mapa: marcadores em SP, RJ, MG, RS, PR, BA
+- Mapa Leaflet/OSM: circulos azuis proporcionais em SP, RJ, MG, RS, PR, BA — clicar abre popup com total editais + stages
 - Agenda: 6 itens (visita técnica, impugnação, recurso, apresentação, renovação, treinamento)
 - KPIs: números reais
 - Decisões: 4 (2 não-participação + 2 perda, 1 com contra-razão)

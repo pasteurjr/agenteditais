@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
 import { XCircle, TrendingDown, PieChart, BarChart2 } from "lucide-react";
 import { Card, DataTable, FormField, SelectInput } from "../components/common";
@@ -12,7 +12,7 @@ interface Perda {
   valorProposto: number;
   valorVencedor: number;
   diferenca: number;
-  motivo: "preco" | "tecnico" | "documentacao" | "prazo" | "outro";
+  motivo: string;
   vencedor: string;
 }
 
@@ -22,52 +22,62 @@ interface MotivoPerda {
   percentual: number;
 }
 
-// Dados mock
-const mockPerdas: Perda[] = [
-  { id: "1", edital: "PE-050/2026", orgao: "UFMG", data: "05/02/2026", valorProposto: 45000, valorVencedor: 43500, diferenca: 1500, motivo: "preco", vencedor: "Lab Solutions" },
-  { id: "2", edital: "PE-040/2026", orgao: "USP", data: "01/02/2026", valorProposto: 38000, valorVencedor: 38000, diferenca: 0, motivo: "tecnico", vencedor: "TechMed" },
-  { id: "3", edital: "PE-035/2026", orgao: "UNICAMP", data: "28/01/2026", valorProposto: 52000, valorVencedor: 50500, diferenca: 1500, motivo: "preco", vencedor: "MedEquip" },
-  { id: "4", edital: "PE-030/2026", orgao: "UNESP", data: "25/01/2026", valorProposto: 28000, valorVencedor: 27000, diferenca: 1000, motivo: "preco", vencedor: "Diagnostica SP" },
-  { id: "5", edital: "CC-010/2026", orgao: "Pref. BH", data: "20/01/2026", valorProposto: 65000, valorVencedor: 65000, diferenca: 0, motivo: "documentacao", vencedor: "Lab Solutions" },
-];
-
-const mockMotivos: MotivoPerda[] = [
-  { motivo: "Preco", quantidade: 7, percentual: 60 },
-  { motivo: "Tecnico", quantidade: 3, percentual: 25 },
-  { motivo: "Documentacao", quantidade: 1, percentual: 8 },
-  { motivo: "Outros", quantidade: 1, percentual: 7 },
-];
-
 export function PerdasPage(_props?: PageProps) {
-  const [perdas] = useState<Perda[]>(mockPerdas);
-  const [motivos] = useState<MotivoPerda[]>(mockMotivos);
+  const [perdas, setPerdas] = useState<Perda[]>([]);
+  const [motivos, setMotivos] = useState<MotivoPerda[]>([]);
+  const [taxaPerda, setTaxaPerda] = useState(0);
+  const [valorTotalPerdido, setValorTotalPerdido] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("6m");
+
+  const periodoMap: Record<string, number> = { "3m": 90, "6m": 180, "12m": 365 };
+
+  const fetchPerdas = useCallback(async () => {
+    setLoading(true);
+    const token = localStorage.getItem("editais_ia_access_token");
+    try {
+      const res = await fetch(`/api/dashboard/perdas?periodo_dias=${periodoMap[periodo] || 180}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPerdas(data.perdas || []);
+        setMotivos(data.motivos || []);
+        setTaxaPerda(data.taxa_perda || 0);
+        setValorTotalPerdido(data.valor_total_perdido || 0);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar perdas:", e);
+    }
+    setLoading(false);
+  }, [periodo]);
+
+  useEffect(() => {
+    fetchPerdas();
+  }, [fetchPerdas]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
   };
 
-  // Calculos
   const totalPerdas = perdas.length;
-  const valorTotalPerdido = perdas.reduce((acc, p) => acc + p.valorProposto, 0);
-  const taxaPerda = 35; // Mock - seria calculado com base no total de participacoes
 
-  const getMotivoBadge = (motivo: Perda["motivo"]) => {
+  const getMotivoBadge = (motivo: string) => {
     const cores: Record<string, string> = {
       preco: "status-badge-error",
-      tecnico: "status-badge-warning",
+      tecnica: "status-badge-warning",
       documentacao: "status-badge-info",
       prazo: "status-badge-neutral",
       outro: "status-badge-neutral",
     };
     const labels: Record<string, string> = {
       preco: "Preco",
-      tecnico: "Tecnico",
+      tecnica: "Tecnica",
       documentacao: "Documentacao",
       prazo: "Prazo",
       outro: "Outro",
     };
-    return <span className={`status-badge ${cores[motivo]}`}>{labels[motivo]}</span>;
+    return <span className={`status-badge ${cores[motivo] || "status-badge-neutral"}`}>{labels[motivo] || motivo}</span>;
   };
 
   const perdasColumns: Column<Perda>[] = [
@@ -76,9 +86,19 @@ export function PerdasPage(_props?: PageProps) {
     { key: "data", header: "Data", sortable: true },
     { key: "motivo", header: "Motivo", render: (p) => getMotivoBadge(p.motivo) },
     {
+      key: "valorProposto",
+      header: "Nosso Preco",
+      render: (p) => p.valorProposto > 0 ? formatCurrency(p.valorProposto) : "—",
+    },
+    {
+      key: "valorVencedor",
+      header: "Preco Vencedor",
+      render: (p) => p.valorVencedor > 0 ? formatCurrency(p.valorVencedor) : "—",
+    },
+    {
       key: "diferenca",
       header: "Diferenca",
-      render: (p) => p.diferenca > 0 ? formatCurrency(p.diferenca) : "-",
+      render: (p) => p.diferenca > 0 ? formatCurrency(p.diferenca) : "—",
     },
     { key: "vencedor", header: "Vencedor" },
   ];
@@ -137,39 +157,45 @@ export function PerdasPage(_props?: PageProps) {
         </Card>
 
         <Card title="Motivos das Perdas" icon={<PieChart size={18} />}>
-          <div className="motivos-chart">
-            <div className="pie-chart-container">
-              <div className="pie-chart">
+          {motivos.length > 0 ? (
+            <div className="motivos-chart">
+              <div className="pie-chart-container">
+                <div className="pie-chart">
+                  {motivos.map((m, i) => {
+                    const colors = ["#ef4444", "#f59e0b", "#3b82f6", "#6b7280", "#10b981"];
+                    const offset = motivos.slice(0, i).reduce((acc, x) => acc + x.percentual, 0);
+                    return (
+                      <div
+                        key={i}
+                        className="pie-segment"
+                        style={{
+                          background: `conic-gradient(${colors[i % colors.length]} 0% ${m.percentual}%, transparent ${m.percentual}% 100%)`,
+                          transform: `rotate(${offset * 3.6}deg)`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="motivos-legend">
                 {motivos.map((m, i) => {
-                  const colors = ["#ef4444", "#f59e0b", "#3b82f6", "#6b7280"];
-                  const offset = motivos.slice(0, i).reduce((acc, m) => acc + m.percentual, 0);
+                  const colors = ["#ef4444", "#f59e0b", "#3b82f6", "#6b7280", "#10b981"];
                   return (
-                    <div
-                      key={i}
-                      className="pie-segment"
-                      style={{
-                        background: `conic-gradient(${colors[i]} 0% ${m.percentual}%, transparent ${m.percentual}% 100%)`,
-                        transform: `rotate(${offset * 3.6}deg)`,
-                      }}
-                    />
+                    <div key={i} className="legend-item">
+                      <span className="legend-color" style={{ backgroundColor: colors[i % colors.length] }} />
+                      <span className="legend-label">{m.motivo}</span>
+                      <span className="legend-value">{m.percentual}%</span>
+                      <span className="legend-count">({m.quantidade})</span>
+                    </div>
                   );
                 })}
               </div>
             </div>
-            <div className="motivos-legend">
-              {motivos.map((m, i) => {
-                const colors = ["#ef4444", "#f59e0b", "#3b82f6", "#6b7280"];
-                return (
-                  <div key={i} className="legend-item">
-                    <span className="legend-color" style={{ backgroundColor: colors[i] }} />
-                    <span className="legend-label">{m.motivo}</span>
-                    <span className="legend-value">{m.percentual}%</span>
-                    <span className="legend-count">({m.quantidade})</span>
-                  </div>
-                );
-              })}
+          ) : (
+            <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+              Nenhuma perda registrada no periodo
             </div>
-          </div>
+          )}
         </Card>
 
         <Card title="Historico de Perdas" icon={<XCircle size={18} />}>
@@ -177,7 +203,8 @@ export function PerdasPage(_props?: PageProps) {
             data={perdas}
             columns={perdasColumns}
             idKey="id"
-            emptyMessage="Nenhuma perda registrada"
+            loading={loading}
+            emptyMessage="Nenhuma perda registrada no periodo"
           />
         </Card>
       </div>

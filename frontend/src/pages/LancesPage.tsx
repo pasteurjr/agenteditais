@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
 import { Gavel, Clock, Trophy, XCircle, ExternalLink } from "lucide-react";
 import { Card, DataTable, ActionButton } from "../components/common";
@@ -10,7 +10,8 @@ interface PregaoHoje {
   orgao: string;
   hora: string;
   status: "aguardando" | "em_andamento" | "encerrado";
-  tempoRestante?: string;
+  tempoRestante?: string | null;
+  url_portal?: string | null;
 }
 
 interface HistoricoLance {
@@ -21,26 +22,40 @@ interface HistoricoLance {
   nossoLance: number;
   lanceVencedor: number;
   vencedor: string;
-  resultado: "vitoria" | "derrota";
+  resultado: string;
 }
 
-// Dados mock
-const mockPregoesHoje: PregaoHoje[] = [
-  { id: "1", edital: "PE-001/2026", orgao: "UFMG", hora: "14:00", status: "aguardando", tempoRestante: "2 horas" },
-  { id: "2", edital: "PE-088/2026", orgao: "USP", hora: "10:00", status: "em_andamento" },
-  { id: "3", edital: "PE-050/2026", orgao: "CEMIG", hora: "09:00", status: "encerrado" },
-];
-
-const mockHistorico: HistoricoLance[] = [
-  { id: "1", edital: "PE-050/2026", orgao: "UFMG", data: "05/02/2026", nossoLance: 45000, lanceVencedor: 43500, vencedor: "Lab Solutions", resultado: "derrota" },
-  { id: "2", edital: "PE-032/2026", orgao: "USP", data: "01/02/2026", nossoLance: 28000, lanceVencedor: 28000, vencedor: "Aquila", resultado: "vitoria" },
-  { id: "3", edital: "PE-028/2026", orgao: "UNICAMP", data: "28/01/2026", nossoLance: 52000, lanceVencedor: 50500, vencedor: "TechMed", resultado: "derrota" },
-  { id: "4", edital: "PE-020/2026", orgao: "UNESP", data: "25/01/2026", nossoLance: 35000, lanceVencedor: 35000, vencedor: "Aquila", resultado: "vitoria" },
-];
-
 export function LancesPage(_props?: PageProps) {
-  const [pregoesHoje] = useState<PregaoHoje[]>(mockPregoesHoje);
-  const [historico] = useState<HistoricoLance[]>(mockHistorico);
+  const [pregoesHoje, setPregoesHoje] = useState<PregaoHoje[]>([]);
+  const [historico, setHistorico] = useState<HistoricoLance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLances = useCallback(async () => {
+    setLoading(true);
+    const token = localStorage.getItem("editais_ia_access_token");
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const [resHoje, resHist] = await Promise.all([
+        fetch("/api/lances/hoje", { headers }),
+        fetch("/api/lances/historico", { headers }),
+      ]);
+      if (resHoje.ok) {
+        const d = await resHoje.json();
+        setPregoesHoje(d.pregoes || []);
+      }
+      if (resHist.ok) {
+        const d = await resHist.json();
+        setHistorico(d.historico || []);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar lances:", e);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchLances();
+  }, [fetchLances]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -58,9 +73,8 @@ export function LancesPage(_props?: PageProps) {
   };
 
   const handleAbrirSalaLances = (pregao: PregaoHoje) => {
-    // TODO: Abrir sala de lances do portal
-    console.log("Abrindo sala de lances:", pregao.edital);
-    window.open("https://comprasnet.gov.br", "_blank");
+    const url = pregao.url_portal || "https://comprasnet.gov.br";
+    window.open(url, "_blank");
   };
 
   const pregoesColumns: Column<PregaoHoje>[] = [
@@ -102,8 +116,8 @@ export function LancesPage(_props?: PageProps) {
     { key: "edital", header: "Edital", sortable: true },
     { key: "orgao", header: "Orgao" },
     { key: "data", header: "Data", sortable: true },
-    { key: "nossoLance", header: "Nosso Lance", render: (h) => formatCurrency(h.nossoLance) },
-    { key: "lanceVencedor", header: "Lance Vencedor", render: (h) => formatCurrency(h.lanceVencedor) },
+    { key: "nossoLance", header: "Nosso Lance", render: (h) => h.nossoLance > 0 ? formatCurrency(h.nossoLance) : "—" },
+    { key: "lanceVencedor", header: "Lance Vencedor", render: (h) => h.lanceVencedor > 0 ? formatCurrency(h.lanceVencedor) : "—" },
     { key: "vencedor", header: "Vencedor" },
     {
       key: "resultado",
@@ -116,11 +130,9 @@ export function LancesPage(_props?: PageProps) {
     },
   ];
 
-  const estatisticas = {
-    vitorias: historico.filter(h => h.resultado === "vitoria").length,
-    derrotas: historico.filter(h => h.resultado === "derrota").length,
-    taxaSucesso: Math.round((historico.filter(h => h.resultado === "vitoria").length / historico.length) * 100),
-  };
+  const vitorias = historico.filter(h => h.resultado === "vitoria").length;
+  const derrotas = historico.filter(h => h.resultado === "derrota").length;
+  const taxaSucesso = historico.length > 0 ? Math.round((vitorias / historico.length) * 100) : 0;
 
   return (
     <div className="page-container">
@@ -140,6 +152,7 @@ export function LancesPage(_props?: PageProps) {
             data={pregoesHoje}
             columns={pregoesColumns}
             idKey="id"
+            loading={loading}
             emptyMessage="Nenhum pregao agendado para hoje"
           />
         </Card>
@@ -148,21 +161,21 @@ export function LancesPage(_props?: PageProps) {
           <div className="stat-card">
             <div className="stat-icon success"><Trophy size={24} /></div>
             <div className="stat-content">
-              <span className="stat-value">{estatisticas.vitorias}</span>
+              <span className="stat-value">{vitorias}</span>
               <span className="stat-label">Vitorias</span>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon error"><XCircle size={24} /></div>
             <div className="stat-content">
-              <span className="stat-value">{estatisticas.derrotas}</span>
+              <span className="stat-value">{derrotas}</span>
               <span className="stat-label">Derrotas</span>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon info"><Gavel size={24} /></div>
             <div className="stat-content">
-              <span className="stat-value">{estatisticas.taxaSucesso}%</span>
+              <span className="stat-value">{taxaSucesso}%</span>
               <span className="stat-label">Taxa de Sucesso</span>
             </div>
           </div>
@@ -173,6 +186,7 @@ export function LancesPage(_props?: PageProps) {
             data={historico}
             columns={historicoColumns}
             idKey="id"
+            loading={loading}
             emptyMessage="Nenhum historico de lances"
           />
         </Card>

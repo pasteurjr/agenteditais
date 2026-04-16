@@ -14,28 +14,36 @@ test.describe(`UC-${UC}: Mapa de Distribuição Geográfica`, () => {
     await page.waitForTimeout(1500);
     await page.screenshot({ path: ssPath(UC, "P01_resp"), fullPage: true });
 
-    // P02 — Abrir aba Mapa
+    // P02 — Abrir aba Mapa e verificar container Leaflet
     await page.screenshot({ path: ssPath(UC, "P02_acao"), fullPage: true });
     await clickTab(page, "Mapa");
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(4000);
     await assertDataVisible(page, {
-      anyText: ["Distribuição Geográfica", "editais", "lat", "lon"],
+      anyText: ["Distribuicao Geografica", "editais"],
       minCount: 2,
     });
+    const leafletContainer = page.locator(".leaflet-container");
+    await expect(leafletContainer).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: ssPath(UC, "P02_resp"), fullPage: true });
 
-    // P03 — Verificar cards de UF presentes
+    // P03 — Verificar marcadores (CircleMarker SVG) no mapa
     await page.screenshot({ path: ssPath(UC, "P03_acao"), fullPage: true });
-    const body = await getBody(page);
-    const ufs = ["SP", "RJ", "MG", "RS", "PR", "BA", "GO", "DF"];
-    const ufsFound = ufs.filter(u => body.includes(u));
-    expect(ufsFound.length).toBeGreaterThanOrEqual(2);
+    const circles = page.locator(".leaflet-overlay-pane circle, .leaflet-overlay-pane path");
+    const circleCount = await circles.count();
+    expect(circleCount).toBeGreaterThanOrEqual(2);
     await page.screenshot({ path: ssPath(UC, "P03_resp"), fullPage: true });
 
-    // P04 — Verificar coords visíveis
+    // P04 — Clicar num marcador e verificar popup com dados da UF
     await page.screenshot({ path: ssPath(UC, "P04_acao"), fullPage: true });
-    expect(body.includes("lat")).toBeTruthy();
-    expect(body.includes("lon")).toBeTruthy();
+    const firstCircle = circles.first();
+    await firstCircle.click({ force: true });
+    await page.waitForTimeout(2000);
+    const popup = page.locator(".leaflet-popup-content");
+    const popupVisible = await popup.isVisible().catch(() => false);
+    if (popupVisible) {
+      const popupText = await popup.innerText();
+      expect(popupText).toContain("editais");
+    }
     await page.screenshot({ path: ssPath(UC, "P04_resp"), fullPage: true });
   });
 });

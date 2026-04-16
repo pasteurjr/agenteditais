@@ -3,6 +3,8 @@ import type { PageProps } from "../types";
 import { Plus, Loader2, RefreshCw, TrendingUp, Target, Award, AlertTriangle } from "lucide-react";
 import { Card, ActionButton, FormField, TextInput, TextArea, SelectInput, Modal, TabPanel } from "../components/common";
 import { crudList, crudCreate, crudDelete } from "../api/crud";
+import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -357,28 +359,44 @@ export function CRMPage(_props?: PageProps) {
     </div>
   );
 
-  // ─── TAB: Mapa (simples lista por UF com coords) ─────────────────────────────
+  // ─── TAB: Mapa (Leaflet/OSM real) ─────────────────────────────────────────────
   const tabMapa = (
     <div>
-      <h3 style={{ marginBottom: 16 }}>Distribuição Geográfica ({mapaUFs.reduce((s, u) => s + u.editais.length, 0)} editais)</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-        {mapaUFs.map(uf => (
-          <Card key={uf.uf}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{uf.uf}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>lat {uf.lat.toFixed(2)}, lon {uf.lon.toFixed(2)}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "#3b82f6", marginTop: 8 }}>{uf.editais.length}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>editais</div>
-            <div style={{ marginTop: 8, fontSize: 11 }}>
-              {Object.entries(uf.stages).map(([stage, count]) => (
-                <div key={stage} style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#6b7280" }}>{stage.replace(/_/g, " ")}</span>
-                  <span style={{ fontWeight: 600 }}>{count}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        ))}
-        {mapaUFs.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Nenhum edital com UF cadastrada</div>}
+      <h3 style={{ marginBottom: 16 }}>Distribuicao Geografica ({mapaUFs.reduce((s, u) => s + u.editais.length, 0)} editais)</h3>
+      <div style={{ height: 500, borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb" }}>
+        {mapaUFs.length > 0 ? (
+          <MapContainer center={[-15.78, -47.93]} zoom={4} style={{ height: "100%", width: "100%" }} scrollWheelZoom={true}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {mapaUFs.map(uf => (
+              <CircleMarker
+                key={uf.uf}
+                center={[uf.lat, uf.lon]}
+                radius={Math.max(8, Math.min(35, uf.editais.length * 3))}
+                pathOptions={{ color: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 0.6, weight: 2 }}
+              >
+                <Popup>
+                  <div style={{ minWidth: 160 }}>
+                    <strong style={{ fontSize: 16 }}>{uf.uf}</strong>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: "#3b82f6", margin: "4px 0" }}>{uf.editais.length} editais</div>
+                    {Object.entries(uf.stages).map(([stage, count]) => (
+                      <div key={stage} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                        <span style={{ color: "#6b7280" }}>{String(stage).replace(/_/g, " ")}</span>
+                        <span style={{ fontWeight: 600 }}>{String(count)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </MapContainer>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#9ca3af" }}>
+            Nenhum edital com UF cadastrada
+          </div>
+        )}
       </div>
     </div>
   );

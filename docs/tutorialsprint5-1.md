@@ -166,11 +166,11 @@
    - Motivos de Derrota (7)
 2. Criar novo Motivo → salvar → verificar lista atualizada
 
-### UC-CRM03 — Mapa ⭐ NOVO V3
-1. Aba **Mapa**
-2. Verificar marcadores em ≥4 UFs
-3. Filtrar por Região → marcadores reduzem
-4. Clicar marcador → popup com número+órgão+valor
+### UC-CRM03 — Mapa Leaflet/OSM ⭐ NOVO V3 (atualizado V2)
+1. Aba **Mapa** → mapa interativo OpenStreetMap carrega com titulo "Distribuicao Geografica (N editais)"
+2. Verificar circulos azuis (CircleMarker) em ≥4 UFs — tamanho proporcional ao numero de editais
+3. Clicar num circulo → popup abre com: nome da UF, total de editais, breakdown por stage do pipeline
+4. Zoom e pan funcionais (scroll wheel + arrastar)
 
 ### UC-CRM04 — Agenda ⭐ NOVO V3
 1. Aba **Agenda** → 6 itens com datas

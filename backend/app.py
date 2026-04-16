@@ -13952,6 +13952,230 @@ def api_dashboard_contratado_realizado():
         db.close()
 
 
+# =============================================================================
+# Dashboard de Perdas — PerdasPage.tsx
+# =============================================================================
+
+@app.route("/api/dashboard/perdas", methods=["GET"])
+@require_auth
+def api_dashboard_perdas():
+    from models import PrecoHistorico, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 180))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        perdas = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.resultado == 'derrota',
+            PrecoHistorico.data_registro >= desde,
+        ).all()
+
+        motivos = {}
+        for p in perdas:
+            m = p.motivo_perda or 'outro'
+            motivos[m] = motivos.get(m, 0) + 1
+        total = len(perdas)
+        motivos_list = [
+            {"motivo": k, "quantidade": v, "percentual": round(v / max(total, 1) * 100, 1)}
+            for k, v in motivos.items()
+        ]
+
+        perdas_list = []
+        for p in perdas:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            perdas_list.append({
+                "id": p.id,
+                "edital": ed.numero if ed else "—",
+                "orgao": ed.orgao if ed else "—",
+                "data": p.data_registro.strftime("%d/%m/%Y") if p.data_registro else "—",
+                "valorProposto": float(p.nosso_preco) if p.nosso_preco else 0,
+                "valorVencedor": float(p.preco_vencedor) if p.preco_vencedor else 0,
+                "diferenca": abs(float((p.nosso_preco or 0) - (p.preco_vencedor or 0))),
+                "motivo": p.motivo_perda or "outro",
+                "vencedor": p.empresa_vencedora or "—",
+            })
+
+        total_participacoes = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.resultado.in_(['vitoria', 'derrota']),
+            PrecoHistorico.data_registro >= desde,
+        ).count()
+        taxa = round(total / max(total_participacoes, 1) * 100, 1)
+
+        return jsonify({
+            "perdas": perdas_list,
+            "motivos": motivos_list,
+            "total": total,
+            "taxa_perda": taxa,
+            "valor_total_perdido": sum(float(p.nosso_preco or 0) for p in perdas),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Lances — LancesPage.tsx
+# =============================================================================
+
+@app.route("/api/lances/hoje", methods=["GET"])
+@require_auth
+def api_lances_hoje():
+    from models import Edital
+    from sqlalchemy import func
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        hoje = datetime.now().date()
+        editais = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            func.date(Edital.data_abertura) == hoje,
+        ).order_by(Edital.data_abertura).all()
+
+        agora = datetime.now()
+        pregoes = []
+        for e in editais:
+            if not e.data_abertura:
+                continue
+            if e.data_abertura > agora:
+                status = "aguardando"
+                delta = e.data_abertura - agora
+                horas = int(delta.total_seconds() // 3600)
+                minutos = int((delta.total_seconds() % 3600) // 60)
+                tempo_restante = f"{horas}h{minutos:02d}min" if horas else f"{minutos}min"
+            elif e.status in ('encerrado', 'homologado', 'adjudicado', 'perdido', 'vencido'):
+                status = "encerrado"
+                tempo_restante = None
+            else:
+                status = "em_andamento"
+                tempo_restante = None
+
+            pregoes.append({
+                "id": e.id,
+                "edital": e.numero,
+                "orgao": e.orgao,
+                "hora": e.data_abertura.strftime("%H:%M"),
+                "status": status,
+                "tempoRestante": tempo_restante,
+                "url_portal": getattr(e, 'url_pncp', None) or getattr(e, 'url_comprasnet', None),
+            })
+
+        return jsonify({"pregoes": pregoes, "total": len(pregoes)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/lances/historico", methods=["GET"])
+@require_auth
+def api_lances_historico():
+    from models import PrecoHistorico, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        limite = int(request.args.get("limit", 20))
+        participacoes = db.query(PrecoHistorico).join(
+            Edital, PrecoHistorico.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.resultado.in_(['vitoria', 'derrota']),
+        ).order_by(PrecoHistorico.data_registro.desc()).limit(limite).all()
+
+        items = []
+        for p in participacoes:
+            ed = db.query(Edital).filter(Edital.id == p.edital_id).first()
+            items.append({
+                "id": p.id,
+                "edital": ed.numero if ed else "—",
+                "orgao": ed.orgao if ed else "—",
+                "data": p.data_registro.strftime("%d/%m/%Y") if p.data_registro else "—",
+                "nossoLance": float(p.nosso_preco) if p.nosso_preco else 0,
+                "lanceVencedor": float(p.preco_vencedor) if p.preco_vencedor else 0,
+                "vencedor": p.empresa_vencedora or "—",
+                "resultado": p.resultado or "—",
+            })
+
+        return jsonify({"historico": items, "total": len(items)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Dashboard de Mercado — MercadoPage.tsx
+# =============================================================================
+
+@app.route("/api/dashboard/mercado", methods=["GET"])
+@require_auth
+def api_dashboard_mercado():
+    from models import Edital, EditalItem
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        periodo_dias = int(request.args.get("periodo_dias", 180))
+        desde = datetime.now() - timedelta(days=periodo_dias)
+
+        editais = db.query(Edital).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= desde,
+        ).all()
+
+        meses = {}
+        for e in editais:
+            if not e.created_at:
+                continue
+            chave = e.created_at.strftime("%b/%y")
+            if chave not in meses:
+                meses[chave] = {"mes": chave, "quantidade": 0, "valorTotal": 0}
+            meses[chave]["quantidade"] += 1
+            meses[chave]["valorTotal"] += float(e.valor_referencia or 0)
+
+        categorias = {}
+        itens = db.query(EditalItem).join(
+            Edital, EditalItem.edital_id == Edital.id
+        ).filter(
+            Edital.empresa_id == empresa_id,
+            Edital.created_at >= desde,
+        ).all()
+        for item in itens:
+            cat = (item.descricao_completa or "Sem categoria")[:50]
+            if cat not in categorias:
+                categorias[cat] = {"categoria": cat, "quantidade": 0, "valores": []}
+            categorias[cat]["quantidade"] += 1
+            if item.valor_unitario:
+                categorias[cat]["valores"].append(float(item.valor_unitario))
+
+        for c in categorias.values():
+            c["valorMedio"] = sum(c["valores"]) / max(len(c["valores"]), 1) if c["valores"] else 0
+            del c["valores"]
+
+        total_qtd = sum(c["quantidade"] for c in categorias.values()) or 1
+        for c in categorias.values():
+            c["percentual"] = round(c["quantidade"] / total_qtd * 100, 1)
+
+        top_categorias = sorted(categorias.values(), key=lambda x: x["quantidade"], reverse=True)[:10]
+
+        return jsonify({
+            "tendencias": sorted(meses.values(), key=lambda x: x["mes"]),
+            "categorias": top_categorias,
+            "total_editais": len(editais),
+            "valor_total": sum(float(e.valor_referencia or 0) for e in editais),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 # ---- Cronograma de Entregas (UC-CT03) ----
 
 @app.route('/api/contratos/<contrato_id>/cronograma', methods=['GET'])

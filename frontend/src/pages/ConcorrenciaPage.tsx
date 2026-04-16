@@ -1,17 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
 import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2 } from "lucide-react";
-import { Card, DataTable, ActionButton, FilterBar } from "../components/common";
+import { Card, DataTable, FilterBar } from "../components/common";
 import type { Column } from "../components/common";
 
 interface Concorrente {
   id: string;
   nome: string;
   cnpj: string;
-  vitorias: number;
-  derrotas: number;
-  taxaSucesso: number;
-  ultimaAtuacao: string;
+  editais_participados: number;
+  editais_ganhos: number;
+  taxa_vitoria: number;
+  preco_medio: number | null;
 }
 
 interface HistoricoConcorrente {
@@ -20,34 +20,65 @@ interface HistoricoConcorrente {
   edital: string;
   orgao: string;
   valor: number;
-  resultado: "venceu" | "perdeu";
-  nosParticipamos: boolean;
+  resultado: string;
 }
 
-// Dados mock
-const mockConcorrentes: Concorrente[] = [
-  { id: "1", nome: "Lab Solutions Ltda", cnpj: "12.345.678/0001-00", vitorias: 15, derrotas: 8, taxaSucesso: 65, ultimaAtuacao: "05/02/2026" },
-  { id: "2", nome: "TechMed Brasil", cnpj: "23.456.789/0001-11", vitorias: 12, derrotas: 10, taxaSucesso: 55, ultimaAtuacao: "03/02/2026" },
-  { id: "3", nome: "MedEquip Comercio", cnpj: "34.567.890/0001-22", vitorias: 8, derrotas: 12, taxaSucesso: 40, ultimaAtuacao: "01/02/2026" },
-  { id: "4", nome: "Diagnostica SP", cnpj: "45.678.901/0001-33", vitorias: 20, derrotas: 5, taxaSucesso: 80, ultimaAtuacao: "08/02/2026" },
-];
-
-const mockHistorico: HistoricoConcorrente[] = [
-  { id: "1", data: "05/02/2026", edital: "PE-050/2026", orgao: "UFMG", valor: 43500, resultado: "venceu", nosParticipamos: true },
-  { id: "2", data: "01/02/2026", edital: "PE-032/2026", orgao: "USP", valor: 30000, resultado: "perdeu", nosParticipamos: true },
-  { id: "3", data: "28/01/2026", edital: "PE-028/2026", orgao: "UNICAMP", valor: 50500, resultado: "venceu", nosParticipamos: true },
-  { id: "4", data: "25/01/2026", edital: "PE-020/2026", orgao: "UNESP", valor: 38000, resultado: "perdeu", nosParticipamos: false },
-];
-
-export function ConcorrenciaPage(_props?: PageProps) {
-  const [concorrentes] = useState<Concorrente[]>(mockConcorrentes);
+export function ConcorrenciaPage({ onSendToChat }: PageProps) {
+  const [concorrentes, setConcorrentes] = useState<Concorrente[]>([]);
   const [selectedConcorrente, setSelectedConcorrente] = useState<Concorrente | null>(null);
-  const [historico] = useState<HistoricoConcorrente[]>(mockHistorico);
+  const [historico, setHistorico] = useState<HistoricoConcorrente[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const fetchConcorrentes = useCallback(async () => {
+    setLoading(true);
+    const token = localStorage.getItem("editais_ia_access_token");
+    try {
+      const res = await fetch("/api/concorrentes/listar", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConcorrentes(data.concorrentes || []);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar concorrentes:", e);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchConcorrentes();
+  }, [fetchConcorrentes]);
+
+  const handleSelectConcorrente = useCallback(async (c: Concorrente) => {
+    setSelectedConcorrente(c);
+    const token = localStorage.getItem("editais_ia_access_token");
+    try {
+      const res = await fetch(`/api/crud/precos-historicos?limit=20&search=${encodeURIComponent(c.nome)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data.items || []).map((p: any) => ({
+          id: p.id,
+          data: p.data_registro ? new Date(p.data_registro).toLocaleDateString("pt-BR") : "—",
+          edital: p.edital_numero || "—",
+          orgao: p.orgao || "—",
+          valor: p.preco_vencedor ? parseFloat(p.preco_vencedor) : 0,
+          resultado: p.resultado || "—",
+        }));
+        setHistorico(items);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar historico:", e);
+      setHistorico([]);
+    }
+  }, []);
 
   const filteredConcorrentes = concorrentes.filter(c =>
     c.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.cnpj.includes(searchTerm)
+    (c.cnpj || "").includes(searchTerm)
   );
 
   const formatCurrency = (value: number) => {
@@ -58,36 +89,40 @@ export function ConcorrenciaPage(_props?: PageProps) {
     { key: "nome", header: "Empresa", sortable: true },
     { key: "cnpj", header: "CNPJ" },
     {
-      key: "vitorias",
+      key: "editais_ganhos",
       header: "Vitorias",
-      render: (c) => <span className="text-success">{c.vitorias}</span>,
+      render: (c) => <span className="text-success">{c.editais_ganhos}</span>,
       sortable: true,
     },
     {
       key: "derrotas",
       header: "Derrotas",
-      render: (c) => <span className="text-danger">{c.derrotas}</span>,
+      render: (c) => <span className="text-danger">{c.editais_participados - c.editais_ganhos}</span>,
       sortable: true,
     },
     {
-      key: "taxaSucesso",
+      key: "taxa_vitoria",
       header: "Taxa Sucesso",
       render: (c) => (
-        <span className={c.taxaSucesso >= 60 ? "text-success" : c.taxaSucesso >= 40 ? "text-warning" : "text-danger"}>
-          {c.taxaSucesso}%
+        <span className={c.taxa_vitoria >= 60 ? "text-success" : c.taxa_vitoria >= 40 ? "text-warning" : "text-danger"}>
+          {c.taxa_vitoria}%
         </span>
       ),
       sortable: true,
     },
-    { key: "ultimaAtuacao", header: "Ultima Atuacao", sortable: true },
+    {
+      key: "preco_medio",
+      header: "Preco Medio",
+      render: (c) => c.preco_medio ? formatCurrency(c.preco_medio) : "—",
+    },
     {
       key: "acoes",
       header: "",
       width: "80px",
       render: (c) => (
         <div className="table-actions">
-          <button title="Ver detalhes" onClick={() => setSelectedConcorrente(c)}><Search size={16} /></button>
-          <button title="Analise" onClick={() => {}}><BarChart2 size={16} /></button>
+          <button title="Ver detalhes" onClick={() => handleSelectConcorrente(c)}><Search size={16} /></button>
+          <button title="Analisar via IA" onClick={() => onSendToChat?.(`analise o concorrente ${c.nome}`)}><BarChart2 size={16} /></button>
         </div>
       ),
     },
@@ -97,20 +132,15 @@ export function ConcorrenciaPage(_props?: PageProps) {
     { key: "data", header: "Data", sortable: true },
     { key: "edital", header: "Edital" },
     { key: "orgao", header: "Orgao" },
-    { key: "valor", header: "Valor", render: (h) => formatCurrency(h.valor) },
+    { key: "valor", header: "Valor", render: (h) => h.valor > 0 ? formatCurrency(h.valor) : "—" },
     {
       key: "resultado",
       header: "Resultado",
       render: (h) => (
-        <span className={`status-badge ${h.resultado === "venceu" ? "status-badge-success" : "status-badge-error"}`}>
-          {h.resultado === "venceu" ? <><Trophy size={12} /> Venceu</> : <><XCircle size={12} /> Perdeu</>}
+        <span className={`status-badge ${h.resultado === "vitoria" ? "status-badge-success" : "status-badge-error"}`}>
+          {h.resultado === "vitoria" ? <><Trophy size={12} /> Vitoria</> : <><XCircle size={12} /> Derrota</>}
         </span>
       ),
-    },
-    {
-      key: "nosParticipamos",
-      header: "Nos",
-      render: (h) => h.nosParticipamos ? <span className="tag">Participamos</span> : "-",
     },
   ];
 
@@ -137,17 +167,15 @@ export function ConcorrenciaPage(_props?: PageProps) {
             data={filteredConcorrentes}
             columns={concorrentesColumns}
             idKey="id"
-            onRowClick={setSelectedConcorrente}
+            loading={loading}
+            onRowClick={handleSelectConcorrente}
             selectedId={selectedConcorrente?.id}
             emptyMessage="Nenhum concorrente encontrado"
           />
         </Card>
 
         {selectedConcorrente && (
-          <Card
-            title={`Detalhes: ${selectedConcorrente.nome}`}
-            icon={<TrendingUp size={18} />}
-          >
+          <Card title={`Detalhes: ${selectedConcorrente.nome}`} icon={<TrendingUp size={18} />}>
             <div className="concorrente-detalhes">
               <div className="info-grid">
                 <div className="info-item">
@@ -159,13 +187,13 @@ export function ConcorrenciaPage(_props?: PageProps) {
                   <span>{selectedConcorrente.cnpj}</span>
                 </div>
                 <div className="info-item">
-                  <label>Atuacao</label>
-                  <span>Equipamentos laboratoriais</span>
+                  <label>Preco Medio</label>
+                  <span>{selectedConcorrente.preco_medio ? formatCurrency(selectedConcorrente.preco_medio) : "—"}</span>
                 </div>
                 <div className="info-item">
                   <label>Taxa de Sucesso</label>
-                  <span className={selectedConcorrente.taxaSucesso >= 60 ? "text-success" : "text-warning"}>
-                    {selectedConcorrente.taxaSucesso}%
+                  <span className={selectedConcorrente.taxa_vitoria >= 60 ? "text-success" : "text-warning"}>
+                    {selectedConcorrente.taxa_vitoria}%
                   </span>
                 </div>
               </div>
@@ -174,14 +202,14 @@ export function ConcorrenciaPage(_props?: PageProps) {
                 <div className="stat-card small">
                   <div className="stat-icon success"><Trophy size={20} /></div>
                   <div className="stat-content">
-                    <span className="stat-value">{selectedConcorrente.vitorias}</span>
+                    <span className="stat-value">{selectedConcorrente.editais_ganhos}</span>
                     <span className="stat-label">Vitorias</span>
                   </div>
                 </div>
                 <div className="stat-card small">
                   <div className="stat-icon error"><XCircle size={20} /></div>
                   <div className="stat-content">
-                    <span className="stat-value">{selectedConcorrente.derrotas}</span>
+                    <span className="stat-value">{selectedConcorrente.editais_participados - selectedConcorrente.editais_ganhos}</span>
                     <span className="stat-label">Derrotas</span>
                   </div>
                 </div>
