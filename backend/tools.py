@@ -11959,3 +11959,111 @@ TOOLS_MAP["detectar_itens_intrusos"] = tool_detectar_itens_intrusos
 TOOLS_MAP["gerar_sugestao_aprendizado"] = tool_gerar_sugestao_aprendizado
 TOOLS_MAP["analisar_padroes"] = tool_analisar_padroes
 
+
+# =============================================================================
+# Sprint 8 — Máscara de descrição de produto
+# =============================================================================
+
+def tool_aplicar_mascara_descricao(
+    descricao: str,
+    ncm: str = None,
+    campos_mascara: list = None,
+    nome_produto: str = None,
+    user_id: str = None,
+    empresa_id: str = None,
+) -> Dict[str, Any]:
+    """
+    Normaliza a descrição de um produto usando a máscara da subclasse via DeepSeek.
+    Retorna descrição padronizada, variantes, sinônimos e score estimado antes/depois.
+    """
+    try:
+        campos_str = ""
+        if campos_mascara and isinstance(campos_mascara, list) and len(campos_mascara) > 0:
+            linhas = []
+            for c in campos_mascara:
+                nome = c.get("campo") or c.get("nome") or ""
+                tipo = c.get("tipo", "texto")
+                unidade = c.get("unidade", "")
+                obrig = " (OBRIGATÓRIO)" if c.get("obrigatorio") else ""
+                desc = f'- "{nome}" [{tipo}]'
+                if unidade:
+                    desc += f" (unidade: {unidade})"
+                desc += obrig
+                linhas.append(desc)
+            campos_str = "\nCampos da máscara que DEVEM aparecer na descrição normalizada:\n" + "\n".join(linhas)
+
+        prompt = f"""Você é um especialista em padronização de descrições de produtos para licitações públicas brasileiras.
+
+Produto: {nome_produto or 'N/A'}
+Descrição original: {descricao}
+NCM: {ncm or 'N/A'}
+{campos_str}
+
+Gere uma descrição normalizada que:
+1. Seja clara, técnica e padronizada para uso em licitações
+2. Inclua todas as especificações relevantes de forma estruturada
+3. Use terminologia padrão de editais públicos
+4. Incorpore os campos da máscara (se fornecidos) de forma natural
+
+Retorne APENAS um JSON válido com esta estrutura:
+{{
+  "descricao_normalizada": "Descrição completa normalizada...",
+  "variantes": ["variante1", "variante2", "variante3"],
+  "sinonimos": ["sinonimo1", "sinonimo2"],
+  "score_antes": 45,
+  "score_depois": 82,
+  "justificativa": "Breve explicação das melhorias"
+}}
+
+Onde score_antes é uma estimativa de 0-100 de quão aderente a descrição original seria em editais,
+e score_depois é a estimativa após normalização."""
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=2000,
+            model_override="deepseek-chat"
+        )
+
+        texto = resposta if isinstance(resposta, str) else str(resposta)
+
+        import json as json_mod
+        import re as re_mod
+        json_match = re_mod.search(r'\{[\s\S]*\}', texto)
+        if not json_match:
+            return {
+                "success": True,
+                "descricao_normalizada": texto.strip()[:500],
+                "variantes": [],
+                "sinonimos": [],
+                "score_antes": None,
+                "score_depois": None,
+            }
+
+        try:
+            dados = json_mod.loads(json_match.group(0))
+        except json_mod.JSONDecodeError:
+            return {
+                "success": True,
+                "descricao_normalizada": texto.strip()[:500],
+                "variantes": [],
+                "sinonimos": [],
+                "score_antes": None,
+                "score_depois": None,
+            }
+
+        return {
+            "success": True,
+            "descricao_normalizada": dados.get("descricao_normalizada", ""),
+            "variantes": dados.get("variantes", []),
+            "sinonimos": dados.get("sinonimos", []),
+            "score_antes": dados.get("score_antes"),
+            "score_depois": dados.get("score_depois"),
+            "justificativa": dados.get("justificativa", ""),
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+TOOLS_MAP["aplicar_mascara_descricao"] = tool_aplicar_mascara_descricao
+

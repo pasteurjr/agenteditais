@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { PageProps } from "../types";
-import { Settings, Globe, Bell, Palette, Play, Pause, MapPin, CheckCircle, AlertTriangle, XCircle, Loader2, Lock, Info, DollarSign } from "lucide-react";
+import { Settings, Globe, Bell, Palette, Play, Pause, MapPin, CheckCircle, AlertTriangle, XCircle, Loader2, Lock, Info, DollarSign, Layers, Plus, Trash2, Edit2, ChevronRight, ChevronDown, Cpu, FolderTree, Package, RefreshCw, X } from "lucide-react";
 import { Card, ActionButton, TabPanel, FormField, TextInput, Checkbox, SelectInput, StatusBadge } from "../components/common";
-import { crudList, crudCreate, crudUpdate } from "../api/crud";
+import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 
 interface Fonte {
   id: string;
@@ -41,6 +41,68 @@ interface Classe {
   ncms: string;
   subclasses: Subclasse[];
   produtos: number;
+}
+
+// === Classes Tab Interfaces ===
+interface AreaProduto {
+  id: string;
+  nome: string;
+  classes: ClasseV2[];
+}
+
+interface ClasseV2 {
+  id: string;
+  nome: string;
+  descricao?: string;
+  area_id: string;
+  subclasses: SubclasseV2[];
+}
+
+interface SubclasseV2 {
+  id: string;
+  nome: string;
+  ncms: string[];
+  campos_mascara: CampoMascaraV2[] | null;
+  classe_id: string;
+  qtd_produtos: number;
+}
+
+interface CampoMascaraV2 {
+  nome: string;
+  tipo: string;
+}
+
+interface ProdutoSemClasse {
+  id: string;
+  nome: string;
+  categoria?: string;
+  ncm?: string;
+}
+
+interface GerarClassesResult {
+  success: boolean;
+  areas: GerarClasseArea[];
+  total_produtos?: number;
+  criados?: { areas: number; classes: number; subclasses: number; produtos_vinculados: number } | null;
+  message?: string;
+}
+
+interface GerarClasseArea {
+  nome: string;
+  classes: GerarClasseClasse[];
+}
+
+interface GerarClasseClasse {
+  nome: string;
+  descricao?: string;
+  subclasses: GerarClasseSubclasse[];
+}
+
+interface GerarClasseSubclasse {
+  nome: string;
+  ncm?: string;
+  campos_mascara?: CampoMascaraV2[];
+  produtos_sugeridos?: string[];
 }
 
 interface ParametroScoreAPI {
@@ -84,6 +146,42 @@ export function ParametrizacoesPage(_props: PageProps) {
   const [parametros, setParametros] = useState<ParametroScore[]>([]);
   const [loadingParametros, setLoadingParametros] = useState(true);
   const [classes, setClasses] = useState<Classe[]>([]);
+
+  // === Classes Tab State ===
+  const [areasTree, setAreasTree] = useState<AreaProduto[]>([]);
+  const [produtosSemClasse, setProdutosSemClasse] = useState<ProdutoSemClasse[]>([]);
+  const [loadingClassesTab, setLoadingClassesTab] = useState(false);
+  const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+  const [selectedSubclasse, setSelectedSubclasse] = useState<SubclasseV2 | null>(null);
+  const [selectedSubclasseAreaNome, setSelectedSubclasseAreaNome] = useState("");
+  const [selectedSubclasseClasseNome, setSelectedSubclasseClasseNome] = useState("");
+  // CRUD modals
+  const [showNewAreaModal, setShowNewAreaModal] = useState(false);
+  const [showNewClasseModal, setShowNewClasseModal] = useState(false);
+  const [showNewSubclasseModal, setShowNewSubclasseModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<{ type: "area" | "classe" | "subclasse"; id: string; nome: string; extra?: Record<string, unknown> } | null>(null);
+  const [newItemNome, setNewItemNome] = useState("");
+  const [newItemParentId, setNewItemParentId] = useState("");
+  const [newItemNcms, setNewItemNcms] = useState("");
+  const [savingClassesItem, setSavingClassesItem] = useState(false);
+  // AI generation
+  const [showGerarIAModal, setShowGerarIAModal] = useState(false);
+  const [gerarIALoading, setGerarIALoading] = useState(false);
+  const [gerarIAResult, setGerarIAResult] = useState<GerarClassesResult | null>(null);
+  const [gerarIAError, setGerarIAError] = useState<string | null>(null);
+  // Aplicar ao portfolio
+  const [showAplicarModal, setShowAplicarModal] = useState(false);
+  const [aplicarAreaId, setAplicarAreaId] = useState("");
+  const [aplicarClasseId, setAplicarClasseId] = useState("");
+  const [aplicarSubclasseId, setAplicarSubclasseId] = useState("");
+  const [aplicarProdutoIds, setAplicarProdutoIds] = useState<Set<string>>(new Set());
+  const [savingAplicar, setSavingAplicar] = useState(false);
+  // Edit subclasse detail
+  const [editSubclasseNome, setEditSubclasseNome] = useState("");
+  const [editSubclasseNcms, setEditSubclasseNcms] = useState("");
+  const [editSubclasseCampos, setEditSubclasseCampos] = useState("");
+  const [savingSubclasseDetail, setSavingSubclasseDetail] = useState(false);
 
   // Parametros-score state (persisted)
   const [paramScoreId, setParamScoreId] = useState<string | null>(null);
@@ -236,6 +334,232 @@ export function ParametrizacoesPage(_props: PageProps) {
     }
   }, []);
 
+  // === Classes Tab Data Loaders ===
+  const loadClassesTab = useCallback(async () => {
+    setLoadingClassesTab(true);
+    try {
+      const [areasRes, classesRes, subclassesRes, prodRes] = await Promise.all([
+        crudList("areas-produto", { limit: 200 }),
+        crudList("classes-produto-v2", { limit: 500 }),
+        crudList("subclasses-produto", { limit: 1000 }),
+        crudList("produtos", { limit: 2000 }),
+      ]);
+
+      const areasRaw = areasRes.items;
+      const classesRaw = classesRes.items;
+      const subclassesRaw = subclassesRes.items;
+
+      // Count products per subclasse
+      const prodCountBySubclasse: Record<string, number> = {};
+      const prodsWithoutClass: ProdutoSemClasse[] = [];
+      for (const p of prodRes.items) {
+        const sid = p.subclasse_id ? String(p.subclasse_id) : null;
+        if (sid) {
+          prodCountBySubclasse[sid] = (prodCountBySubclasse[sid] || 0) + 1;
+        } else {
+          prodsWithoutClass.push({
+            id: String(p.id),
+            nome: String(p.nome || ""),
+            categoria: p.categoria ? String(p.categoria) : undefined,
+            ncm: p.ncm ? String(p.ncm) : undefined,
+          });
+        }
+      }
+      setProdutosSemClasse(prodsWithoutClass);
+
+      // Build tree: Area -> Classe -> Subclasse
+      const tree: AreaProduto[] = areasRaw.map((a) => {
+        const areaId = String(a.id);
+        const areaClasses: ClasseV2[] = classesRaw
+          .filter((c) => String(c.area_id) === areaId)
+          .map((c) => {
+            const classeId = String(c.id);
+            const classeSubclasses: SubclasseV2[] = subclassesRaw
+              .filter((s) => String(s.classe_id) === classeId)
+              .map((s) => ({
+                id: String(s.id),
+                nome: String(s.nome || ""),
+                ncms: Array.isArray(s.ncms) ? (s.ncms as string[]) : [],
+                campos_mascara: Array.isArray(s.campos_mascara) ? (s.campos_mascara as unknown as CampoMascaraV2[]) : null,
+                classe_id: classeId,
+                qtd_produtos: prodCountBySubclasse[String(s.id)] || 0,
+              }));
+            return {
+              id: classeId,
+              nome: String(c.nome || ""),
+              descricao: c.descricao ? String(c.descricao) : undefined,
+              area_id: areaId,
+              subclasses: classeSubclasses,
+            };
+          });
+        return {
+          id: areaId,
+          nome: String(a.nome || ""),
+          classes: areaClasses,
+        };
+      });
+
+      setAreasTree(tree);
+    } catch (err) {
+      console.error("Erro ao carregar classes tab:", err);
+    } finally {
+      setLoadingClassesTab(false);
+    }
+  }, []);
+
+  const handleGerarClassesIA = async (aplicar: boolean) => {
+    const token = localStorage.getItem("token");
+    if (aplicar) {
+      setGerarIALoading(true);
+    } else {
+      setGerarIALoading(true);
+      setGerarIAResult(null);
+      setGerarIAError(null);
+      setShowGerarIAModal(true);
+    }
+    try {
+      const res = await fetch("/api/parametrizacoes/gerar-classes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ aplicar }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGerarIAError(data.error || "Erro ao gerar classes");
+      } else {
+        setGerarIAResult(data as GerarClassesResult);
+        if (aplicar) {
+          setShowGerarIAModal(false);
+          await loadClassesTab();
+        }
+      }
+    } catch (err) {
+      setGerarIAError(err instanceof Error ? err.message : "Erro de rede");
+    } finally {
+      setGerarIALoading(false);
+    }
+  };
+
+  const handleDeleteClassesItem = async (type: "area" | "classe" | "subclasse", id: string) => {
+    if (!confirm(`Deseja realmente excluir este(a) ${type}?`)) return;
+    const table = type === "area" ? "areas-produto" : type === "classe" ? "classes-produto-v2" : "subclasses-produto";
+    try {
+      await crudDelete(table, id);
+      await loadClassesTab();
+      if (selectedSubclasse?.id === id) setSelectedSubclasse(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir");
+    }
+  };
+
+  const handleCreateClassesItem = async (type: "area" | "classe" | "subclasse") => {
+    if (!newItemNome.trim()) return;
+    setSavingClassesItem(true);
+    const table = type === "area" ? "areas-produto" : type === "classe" ? "classes-produto-v2" : "subclasses-produto";
+    const payload: Record<string, unknown> = { nome: newItemNome.trim() };
+    if (type === "classe") payload.area_id = newItemParentId;
+    if (type === "subclasse") {
+      payload.classe_id = newItemParentId;
+      if (newItemNcms.trim()) payload.ncms = newItemNcms.split(",").map((n) => n.trim()).filter(Boolean);
+    }
+    try {
+      await crudCreate(table, payload);
+      setNewItemNome("");
+      setNewItemParentId("");
+      setNewItemNcms("");
+      if (type === "area") setShowNewAreaModal(false);
+      if (type === "classe") setShowNewClasseModal(false);
+      if (type === "subclasse") setShowNewSubclasseModal(false);
+      await loadClassesTab();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao criar");
+    } finally {
+      setSavingClassesItem(false);
+    }
+  };
+
+  const handleEditClassesItem = async () => {
+    if (!editingItem || !newItemNome.trim()) return;
+    setSavingClassesItem(true);
+    const table = editingItem.type === "area" ? "areas-produto" : editingItem.type === "classe" ? "classes-produto-v2" : "subclasses-produto";
+    try {
+      await crudUpdate(table, editingItem.id, { nome: newItemNome.trim() });
+      setEditingItem(null);
+      setNewItemNome("");
+      await loadClassesTab();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao editar");
+    } finally {
+      setSavingClassesItem(false);
+    }
+  };
+
+  const handleSaveSubclasseDetail = async () => {
+    if (!selectedSubclasse) return;
+    setSavingSubclasseDetail(true);
+    try {
+      const ncmsArr = editSubclasseNcms.split(",").map((n) => n.trim()).filter(Boolean);
+      let camposParsed: CampoMascaraV2[] | null = null;
+      if (editSubclasseCampos.trim()) {
+        try {
+          camposParsed = JSON.parse(editSubclasseCampos);
+        } catch {
+          alert("campos_mascara deve ser JSON valido. Ex: [{\"nome\":\"Campo1\",\"tipo\":\"texto\"}]");
+          setSavingSubclasseDetail(false);
+          return;
+        }
+      }
+      await crudUpdate("subclasses-produto", selectedSubclasse.id, {
+        nome: editSubclasseNome,
+        ncms: ncmsArr,
+        campos_mascara: camposParsed,
+      });
+      setSelectedSubclasse(null);
+      await loadClassesTab();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao salvar subclasse");
+    } finally {
+      setSavingSubclasseDetail(false);
+    }
+  };
+
+  const handleAplicarPortfolio = async () => {
+    if (!aplicarSubclasseId || aplicarProdutoIds.size === 0) return;
+    setSavingAplicar(true);
+    try {
+      const promises = Array.from(aplicarProdutoIds).map((pid) =>
+        crudUpdate("produtos", pid, { subclasse_id: aplicarSubclasseId })
+      );
+      await Promise.all(promises);
+      setShowAplicarModal(false);
+      setAplicarProdutoIds(new Set());
+      setAplicarAreaId("");
+      setAplicarClasseId("");
+      setAplicarSubclasseId("");
+      await loadClassesTab();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao aplicar");
+    } finally {
+      setSavingAplicar(false);
+    }
+  };
+
+  const toggleArea = (id: string) => {
+    setExpandedAreas((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const toggleClasseExpand = (id: string) => {
+    setExpandedClasses((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
   const loadParamScore = useCallback(async () => {
     try {
       setLoadingParamScore(true);
@@ -290,7 +614,8 @@ export function ParametrizacoesPage(_props: PageProps) {
     loadClasses();
     loadParamScore();
     loadModalidades();
-  }, [loadFontes, loadParametros, loadClasses, loadParamScore, loadModalidades]);
+    loadClassesTab();
+  }, [loadFontes, loadParametros, loadClasses, loadParamScore, loadModalidades, loadClassesTab]);
 
   const handleToggleFonte = async (id: string) => {
     const fonte = fontes.find(f => f.id === id);
@@ -506,12 +831,22 @@ export function ParametrizacoesPage(_props: PageProps) {
     parseFloat(pesoDocumental || "0") + parseFloat(pesoComplexidade || "0") +
     parseFloat(pesoJuridico || "0") + parseFloat(pesoLogistico || "0");
 
+  // Computed values for Classes tab stats
+  const totalAreas = areasTree.length;
+  const totalClasses = areasTree.reduce((s, a) => s + a.classes.length, 0);
+  const totalProdutosSemClasse = produtosSemClasse.length;
+
+  // Cascading selects for Aplicar modal
+  const aplicarClasses = aplicarAreaId ? areasTree.find((a) => a.id === aplicarAreaId)?.classes || [] : [];
+  const aplicarSubclasses = aplicarClasseId ? aplicarClasses.find((c) => c.id === aplicarClasseId)?.subclasses || [] : [];
+
   const tabs = [
     { id: "score", label: "Score", icon: <Settings size={16} /> },
     { id: "comercial", label: "Comercial", icon: <Globe size={16} /> },
     { id: "fontes", label: "Fontes de Busca", icon: <Globe size={16} /> },
     { id: "notificacoes", label: "Notificacoes", icon: <Bell size={16} /> },
     { id: "preferencias", label: "Preferencias", icon: <Palette size={16} /> },
+    { id: "classes", label: "Classes", icon: <Layers size={16} /> },
   ];
 
   return (
@@ -966,6 +1301,324 @@ export function ParametrizacoesPage(_props: PageProps) {
                       )}
                     </div>
                   </Card>
+                );
+
+              case "classes":
+                return (
+                  <>
+                    {loadingClassesTab ? (
+                      <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando hierarquia de classes...</span></div>
+                    ) : (
+                    <>
+                    {/* Stat Cards */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
+                      <div style={{ padding: "20px", background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Areas</div>
+                        <div style={{ fontSize: "28px", fontWeight: 700, color: "var(--text-primary)" }}>{totalAreas}</div>
+                      </div>
+                      <div style={{ padding: "20px", background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Classes</div>
+                        <div style={{ fontSize: "28px", fontWeight: 700, color: "var(--text-primary)" }}>{totalClasses}</div>
+                      </div>
+                      <div style={{ padding: "20px", background: "var(--bg-secondary)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Produtos sem Classe</div>
+                        <div style={{ fontSize: "28px", fontWeight: 700, color: totalProdutosSemClasse > 0 ? "#ef4444" : "#22c55e" }}>{totalProdutosSemClasse}</div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                      <ActionButton icon={<Plus size={14} />} label="Nova Area" variant="primary" onClick={() => { setNewItemNome(""); setShowNewAreaModal(true); }} />
+                      <ActionButton icon={<Plus size={14} />} label="Nova Classe" onClick={() => { setNewItemNome(""); setNewItemParentId(""); setShowNewClasseModal(true); }} />
+                      <ActionButton icon={<Plus size={14} />} label="Nova Subclasse" onClick={() => { setNewItemNome(""); setNewItemParentId(""); setNewItemNcms(""); setShowNewSubclasseModal(true); }} />
+                      <ActionButton icon={<Cpu size={14} />} label="Gerar Classes via IA" onClick={() => handleGerarClassesIA(false)} />
+                      <ActionButton icon={<Package size={14} />} label="Aplicar ao Portfolio" onClick={() => { setAplicarAreaId(""); setAplicarClasseId(""); setAplicarSubclasseId(""); setAplicarProdutoIds(new Set()); setShowAplicarModal(true); }} disabled={totalProdutosSemClasse === 0} />
+                      <ActionButton icon={<RefreshCw size={14} />} label="Atualizar" onClick={loadClassesTab} />
+                    </div>
+
+                    {/* Tree + Detail layout */}
+                    <div style={{ display: "grid", gridTemplateColumns: selectedSubclasse ? "1fr 380px" : "1fr", gap: "16px" }}>
+                      {/* Tree View */}
+                      <Card title="Hierarquia de Classes" icon={<FolderTree size={18} />}>
+                        {areasTree.length === 0 ? (
+                          <p className="text-muted" style={{ padding: 16, textAlign: "center", fontSize: 13 }}>
+                            Nenhuma area cadastrada. Crie areas, classes e subclasses para organizar seu portfolio.
+                          </p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            {areasTree.map((area) => (
+                              <div key={area.id}>
+                                {/* Area row */}
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 8px", borderRadius: "6px", cursor: "pointer", background: expandedAreas.has(area.id) ? "var(--bg-secondary)" : "transparent" }} onClick={() => toggleArea(area.id)}>
+                                  {expandedAreas.has(area.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  <FolderTree size={14} style={{ color: "var(--accent)" }} />
+                                  <span style={{ fontWeight: 600, fontSize: "14px", flex: 1 }}>{area.nome}</span>
+                                  <span className="status-badge status-badge-neutral" style={{ fontSize: "11px" }}>{area.classes.length} classes</span>
+                                  <button onClick={(e) => { e.stopPropagation(); setEditingItem({ type: "area", id: area.id, nome: area.nome }); setNewItemNome(area.nome); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-tertiary)" }} title="Editar"><Edit2 size={13} /></button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteClassesItem("area", area.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-tertiary)" }} title="Excluir"><Trash2 size={13} /></button>
+                                </div>
+                                {/* Classes under area */}
+                                {expandedAreas.has(area.id) && area.classes.map((cls) => (
+                                  <div key={cls.id} style={{ marginLeft: "24px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 8px", borderRadius: "6px", cursor: "pointer", background: expandedClasses.has(cls.id) ? "var(--bg-tertiary, var(--bg-secondary))" : "transparent" }} onClick={() => toggleClasseExpand(cls.id)}>
+                                      {expandedClasses.has(cls.id) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                      <Layers size={13} style={{ color: "#6366f1" }} />
+                                      <span style={{ fontWeight: 500, fontSize: "13px", flex: 1 }}>{cls.nome}</span>
+                                      <span className="status-badge status-badge-neutral" style={{ fontSize: "10px" }}>{cls.subclasses.length} sub</span>
+                                      <button onClick={(e) => { e.stopPropagation(); setEditingItem({ type: "classe", id: cls.id, nome: cls.nome }); setNewItemNome(cls.nome); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-tertiary)" }} title="Editar"><Edit2 size={12} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); handleDeleteClassesItem("classe", cls.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-tertiary)" }} title="Excluir"><Trash2 size={12} /></button>
+                                    </div>
+                                    {/* Subclasses under classe */}
+                                    {expandedClasses.has(cls.id) && cls.subclasses.map((sub) => (
+                                      <div key={sub.id} style={{ marginLeft: "24px", display: "flex", alignItems: "center", gap: "6px", padding: "5px 8px", borderRadius: "6px", cursor: "pointer", background: selectedSubclasse?.id === sub.id ? "var(--accent-bg, rgba(99,102,241,0.1))" : "transparent" }} onClick={() => {
+                                        setSelectedSubclasse(sub);
+                                        setSelectedSubclasseAreaNome(area.nome);
+                                        setSelectedSubclasseClasseNome(cls.nome);
+                                        setEditSubclasseNome(sub.nome);
+                                        setEditSubclasseNcms(sub.ncms.join(", "));
+                                        setEditSubclasseCampos(sub.campos_mascara ? JSON.stringify(sub.campos_mascara, null, 2) : "");
+                                      }}>
+                                        <Package size={12} style={{ color: "#22c55e" }} />
+                                        <span style={{ fontSize: "13px", flex: 1 }}>{sub.nome}</span>
+                                        <span className="status-badge status-badge-success" style={{ fontSize: "10px" }}>{sub.qtd_produtos} prod</span>
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClassesItem("subclasse", sub.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "var(--text-tertiary)" }} title="Excluir"><Trash2 size={12} /></button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+
+                      {/* Detail Panel */}
+                      {selectedSubclasse && (
+                        <Card title="Detalhe da Subclasse" icon={<Package size={18} />} actions={
+                          <button onClick={() => setSelectedSubclasse(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)" }}><X size={16} /></button>
+                        }>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                              {selectedSubclasseAreaNome} &gt; {selectedSubclasseClasseNome}
+                            </div>
+                            <FormField label="Nome">
+                              <TextInput value={editSubclasseNome} onChange={setEditSubclasseNome} />
+                            </FormField>
+                            <FormField label="NCMs (separados por virgula)">
+                              <TextInput value={editSubclasseNcms} onChange={setEditSubclasseNcms} placeholder="9011.10.00, 9011.20.00" />
+                            </FormField>
+                            <FormField label="Classe Pai">
+                              <TextInput value={selectedSubclasseClasseNome} onChange={() => {}} disabled />
+                            </FormField>
+                            <FormField label="campos_mascara (JSON)" hint="Array de objetos com nome e tipo">
+                              <textarea
+                                value={editSubclasseCampos}
+                                onChange={(e) => setEditSubclasseCampos(e.target.value)}
+                                style={{ width: "100%", minHeight: "100px", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-color)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "12px", fontFamily: "monospace", resize: "vertical" }}
+                                placeholder='[{"nome": "Campo1", "tipo": "texto"}]'
+                              />
+                            </FormField>
+                            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                              Produtos vinculados: {selectedSubclasse.qtd_produtos}
+                            </div>
+                            <div className="form-actions">
+                              <ActionButton label={savingSubclasseDetail ? "Salvando..." : "Salvar"} variant="primary" onClick={handleSaveSubclasseDetail} disabled={savingSubclasseDetail} />
+                            </div>
+                          </div>
+                        </Card>
+                      )}
+                    </div>
+
+                    {/* === MODALS === */}
+
+                    {/* New Area Modal */}
+                    {showNewAreaModal && (
+                      <div className="modal-overlay" onClick={() => setShowNewAreaModal(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+                          <div className="modal-header"><h3>Nova Area</h3><button onClick={() => setShowNewAreaModal(false)} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            <FormField label="Nome da Area">
+                              <TextInput value={newItemNome} onChange={setNewItemNome} placeholder="Ex: Equipamentos Laboratoriais" />
+                            </FormField>
+                          </div>
+                          <div className="modal-footer">
+                            <ActionButton label="Cancelar" onClick={() => setShowNewAreaModal(false)} />
+                            <ActionButton label={savingClassesItem ? "Criando..." : "Criar"} variant="primary" onClick={() => handleCreateClassesItem("area")} disabled={savingClassesItem || !newItemNome.trim()} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Classe Modal */}
+                    {showNewClasseModal && (
+                      <div className="modal-overlay" onClick={() => setShowNewClasseModal(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+                          <div className="modal-header"><h3>Nova Classe</h3><button onClick={() => setShowNewClasseModal(false)} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            <FormField label="Area">
+                              <SelectInput value={newItemParentId} onChange={setNewItemParentId} options={[{ value: "", label: "Selecione a area..." }, ...areasTree.map((a) => ({ value: a.id, label: a.nome }))]} />
+                            </FormField>
+                            <FormField label="Nome da Classe">
+                              <TextInput value={newItemNome} onChange={setNewItemNome} placeholder="Ex: Microscopios" />
+                            </FormField>
+                          </div>
+                          <div className="modal-footer">
+                            <ActionButton label="Cancelar" onClick={() => setShowNewClasseModal(false)} />
+                            <ActionButton label={savingClassesItem ? "Criando..." : "Criar"} variant="primary" onClick={() => handleCreateClassesItem("classe")} disabled={savingClassesItem || !newItemNome.trim() || !newItemParentId} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Subclasse Modal */}
+                    {showNewSubclasseModal && (
+                      <div className="modal-overlay" onClick={() => setShowNewSubclasseModal(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
+                          <div className="modal-header"><h3>Nova Subclasse</h3><button onClick={() => setShowNewSubclasseModal(false)} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            <FormField label="Classe pai">
+                              <SelectInput value={newItemParentId} onChange={setNewItemParentId} options={[{ value: "", label: "Selecione a classe..." }, ...areasTree.flatMap((a) => a.classes.map((c) => ({ value: c.id, label: `${a.nome} > ${c.nome}` })))]} />
+                            </FormField>
+                            <FormField label="Nome da Subclasse">
+                              <TextInput value={newItemNome} onChange={setNewItemNome} placeholder="Ex: Microscopios Opticos" />
+                            </FormField>
+                            <FormField label="NCMs (separados por virgula)">
+                              <TextInput value={newItemNcms} onChange={setNewItemNcms} placeholder="9011.10.00, 9011.20.00" />
+                            </FormField>
+                          </div>
+                          <div className="modal-footer">
+                            <ActionButton label="Cancelar" onClick={() => setShowNewSubclasseModal(false)} />
+                            <ActionButton label={savingClassesItem ? "Criando..." : "Criar"} variant="primary" onClick={() => handleCreateClassesItem("subclasse")} disabled={savingClassesItem || !newItemNome.trim() || !newItemParentId} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Edit Item Modal */}
+                    {editingItem && (
+                      <div className="modal-overlay" onClick={() => setEditingItem(null)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+                          <div className="modal-header"><h3>Editar {editingItem.type === "area" ? "Area" : editingItem.type === "classe" ? "Classe" : "Subclasse"}</h3><button onClick={() => setEditingItem(null)} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            <FormField label="Nome">
+                              <TextInput value={newItemNome} onChange={setNewItemNome} />
+                            </FormField>
+                          </div>
+                          <div className="modal-footer">
+                            <ActionButton label="Cancelar" onClick={() => setEditingItem(null)} />
+                            <ActionButton label={savingClassesItem ? "Salvando..." : "Salvar"} variant="primary" onClick={handleEditClassesItem} disabled={savingClassesItem || !newItemNome.trim()} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Gerar Classes IA Modal */}
+                    {showGerarIAModal && (
+                      <div className="modal-overlay" onClick={() => { if (!gerarIALoading) setShowGerarIAModal(false); }}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "700px", maxHeight: "80vh", overflow: "auto" }}>
+                          <div className="modal-header"><h3><Cpu size={18} style={{ marginRight: "8px" }} />Gerar Classes via IA</h3><button onClick={() => { if (!gerarIALoading) setShowGerarIAModal(false); }} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            {gerarIALoading && (
+                              <div className="loading-center" style={{ padding: "40px" }}><Loader2 size={24} className="spin" /><span>Analisando produtos com DeepSeek...</span></div>
+                            )}
+                            {gerarIAError && (
+                              <div style={{ padding: "16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#dc2626", fontSize: "13px" }}>
+                                <AlertTriangle size={16} style={{ marginRight: "6px", verticalAlign: "middle" }} />{gerarIAError}
+                              </div>
+                            )}
+                            {gerarIAResult && !gerarIALoading && (
+                              <div>
+                                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                                  IA sugeriu {gerarIAResult.areas?.length || 0} areas a partir de {gerarIAResult.total_produtos || 0} produtos.
+                                </p>
+                                {/* Preview tree */}
+                                <div style={{ background: "var(--bg-secondary)", borderRadius: "8px", padding: "12px", maxHeight: "400px", overflow: "auto" }}>
+                                  {(gerarIAResult.areas || []).map((area, ai) => (
+                                    <div key={ai} style={{ marginBottom: "12px" }}>
+                                      <div style={{ fontWeight: 600, fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}><FolderTree size={14} style={{ color: "var(--accent)" }} />{area.nome}</div>
+                                      {(area.classes || []).map((cls, ci) => (
+                                        <div key={ci} style={{ marginLeft: "20px", marginTop: "6px" }}>
+                                          <div style={{ fontWeight: 500, fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}><Layers size={13} style={{ color: "#6366f1" }} />{cls.nome}</div>
+                                          {cls.descricao && <div style={{ marginLeft: "19px", fontSize: "11px", color: "var(--text-tertiary)" }}>{cls.descricao}</div>}
+                                          {(cls.subclasses || []).map((sub, si) => (
+                                            <div key={si} style={{ marginLeft: "20px", marginTop: "4px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                              <Package size={11} style={{ color: "#22c55e" }} />
+                                              <span>{sub.nome}</span>
+                                              {sub.ncm && <span className="status-badge status-badge-neutral" style={{ fontSize: "10px" }}>NCM: {sub.ncm}</span>}
+                                              {sub.produtos_sugeridos && sub.produtos_sugeridos.length > 0 && <span className="status-badge status-badge-success" style={{ fontSize: "10px" }}>{sub.produtos_sugeridos.length} prod</span>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {gerarIAResult && !gerarIALoading && (
+                            <div className="modal-footer">
+                              <ActionButton label="Cancelar" onClick={() => setShowGerarIAModal(false)} />
+                              <ActionButton label={gerarIALoading ? "Aplicando..." : "Aceitar Tudo"} variant="primary" onClick={() => handleGerarClassesIA(true)} disabled={gerarIALoading || !gerarIAResult?.areas?.length} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Aplicar ao Portfolio Modal */}
+                    {showAplicarModal && (
+                      <div className="modal-overlay" onClick={() => setShowAplicarModal(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px", maxHeight: "80vh", overflow: "auto" }}>
+                          <div className="modal-header"><h3><Package size={18} style={{ marginRight: "8px" }} />Aplicar ao Portfolio</h3><button onClick={() => setShowAplicarModal(false)} className="modal-close"><X size={18} /></button></div>
+                          <div className="modal-body">
+                            <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                              {produtosSemClasse.length} produto(s) sem classe. Selecione a classificacao e os produtos a vincular.
+                            </p>
+                            {/* Cascading selects */}
+                            <div className="form-grid form-grid-3" style={{ marginBottom: "12px" }}>
+                              <FormField label="Area">
+                                <SelectInput value={aplicarAreaId} onChange={(v) => { setAplicarAreaId(v); setAplicarClasseId(""); setAplicarSubclasseId(""); }} options={[{ value: "", label: "Selecione..." }, ...areasTree.map((a) => ({ value: a.id, label: a.nome }))]} />
+                              </FormField>
+                              <FormField label="Classe">
+                                <SelectInput value={aplicarClasseId} onChange={(v) => { setAplicarClasseId(v); setAplicarSubclasseId(""); }} options={[{ value: "", label: "Selecione..." }, ...aplicarClasses.map((c) => ({ value: c.id, label: c.nome }))]} />
+                              </FormField>
+                              <FormField label="Subclasse">
+                                <SelectInput value={aplicarSubclasseId} onChange={setAplicarSubclasseId} options={[{ value: "", label: "Selecione..." }, ...aplicarSubclasses.map((s) => ({ value: s.id, label: s.nome }))]} />
+                              </FormField>
+                            </div>
+                            {/* Product list with checkboxes */}
+                            <div style={{ border: "1px solid var(--border-color)", borderRadius: "8px", maxHeight: "300px", overflow: "auto" }}>
+                              <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-color)", background: "var(--bg-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <Checkbox checked={aplicarProdutoIds.size === produtosSemClasse.length && produtosSemClasse.length > 0} onChange={(checked) => { if (checked) { setAplicarProdutoIds(new Set(produtosSemClasse.map((p) => p.id))); } else { setAplicarProdutoIds(new Set()); } }} label={`Selecionar todos (${produtosSemClasse.length})`} />
+                              </div>
+                              {produtosSemClasse.map((p) => (
+                                <div key={p.id} style={{ padding: "6px 12px", borderBottom: "1px solid var(--border-color)", display: "flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
+                                  <Checkbox checked={aplicarProdutoIds.has(p.id)} onChange={(checked) => {
+                                    setAplicarProdutoIds((prev) => {
+                                      const n = new Set(prev);
+                                      checked ? n.add(p.id) : n.delete(p.id);
+                                      return n;
+                                    });
+                                  }} label="" />
+                                  <span style={{ flex: 1 }}>{p.nome}</span>
+                                  {p.categoria && <span className="status-badge status-badge-neutral" style={{ fontSize: "10px" }}>{p.categoria}</span>}
+                                  {p.ncm && <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>NCM: {p.ncm}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="modal-footer">
+                            <ActionButton label="Cancelar" onClick={() => setShowAplicarModal(false)} />
+                            <ActionButton label={savingAplicar ? "Salvando..." : `Vincular ${aplicarProdutoIds.size} produto(s)`} variant="primary" onClick={handleAplicarPortfolio} disabled={savingAplicar || !aplicarSubclasseId || aplicarProdutoIds.size === 0} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    </>
+                    )}
+                  </>
                 );
 
               default:

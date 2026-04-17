@@ -265,6 +265,9 @@ export interface Produto {
   termos_busca?: string[];
   termos_busca_updated_at?: string;
   catmat_updated_at?: string;
+  descricao_normalizada?: string;
+  mascara_ativa?: boolean;
+  mascara_metadata?: Record<string, unknown>;
   created_at: string;
   especificacoes?: ProdutoEspecificacao[];
 }

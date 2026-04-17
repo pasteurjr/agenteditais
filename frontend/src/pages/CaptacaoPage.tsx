@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import type { PageProps } from "../types";
-import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle, Plus, Pause, Trash2, Brain, DollarSign, History } from "lucide-react";
+import { Search, Save, Download, Eye, FileText, ExternalLink, Calendar, AlertTriangle, Sparkles, X, CheckCircle, Plus, Pause, Trash2, Brain, DollarSign, History, RefreshCw, ShoppingCart, Send } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Card, StatCard, DataTable, ActionButton, FormField, TextInput, Checkbox,
   SelectInput, ScoreCircle, StarRating, RadioGroup, StatusBadge,
+  TabPanel, Modal,
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
@@ -88,6 +89,64 @@ interface MonitoramentoInfo {
   ultimo_check?: string;
   editais_encontrados?: number;
 }
+
+// --- Interfaces Dispensas ---
+
+interface DispensaItem {
+  id: string;
+  numero: string;
+  orgao: string;
+  uf: string;
+  artigo: string;
+  objeto: string;
+  valor: number;
+  valor_limite?: number;
+  prazo_dias: number;
+  status: "aberta" | "cotacao_enviada" | "adjudicada" | "encerrada";
+  data_publicacao?: string;
+  data_encerramento?: string;
+}
+
+interface DispensaStats {
+  abertas: number;
+  cotacao_enviada: number;
+  adjudicadas: number;
+  encerradas: number;
+}
+
+interface DispensaCotacaoResult {
+  success: boolean;
+  cotacao_id?: string;
+  valor_proposto?: number;
+  itens?: { descricao: string; quantidade: number; valor_unitario: number; valor_total: number }[];
+  observacoes?: string;
+  error?: string;
+}
+
+// Transicoes de status validas para dispensas
+const DISPENSA_STATUS_TRANSITIONS: Record<string, { value: string; label: string }[]> = {
+  aberta: [
+    { value: "cotacao_enviada", label: "Cotacao Enviada" },
+    { value: "encerrada", label: "Encerrada" },
+  ],
+  cotacao_enviada: [
+    { value: "adjudicada", label: "Adjudicada" },
+    { value: "encerrada", label: "Encerrada" },
+  ],
+  adjudicada: [
+    { value: "encerrada", label: "Encerrada" },
+  ],
+  encerrada: [],
+};
+
+const ARTIGOS_DISPENSA = [
+  { value: "", label: "Todos" },
+  { value: "75-I", label: "Art. 75, I" },
+  { value: "75-II", label: "Art. 75, II" },
+  { value: "75-III", label: "Art. 75, III" },
+  { value: "75-IV", label: "Art. 75, IV" },
+  { value: "75-V", label: "Art. 75, V" },
+];
 
 // --- UFs brasileiras ---
 const UFS = [
@@ -379,6 +438,30 @@ export function CaptacaoPage(props?: PageProps) {
   const [scoresValidacao, setScoresValidacao] = useState<Record<string, unknown> | null>(null);
   const [loadingScores, setLoadingScores] = useState(false);
 
+  // --- Dispensas state ---
+  const [dispensas, setDispensas] = useState<DispensaItem[]>([]);
+  const [dispensaStats, setDispensaStats] = useState<DispensaStats>({ abertas: 0, cotacao_enviada: 0, adjudicadas: 0, encerradas: 0 });
+  const [dispensasLoading, setDispensasLoading] = useState(false);
+  const [dispensasErro, setDispensasErro] = useState<string | null>(null);
+  // Dispensas filters
+  const [dispFiltroArtigo, setDispFiltroArtigo] = useState("");
+  const [dispFiltroValorMin, setDispFiltroValorMin] = useState("");
+  const [dispFiltroValorMax, setDispFiltroValorMax] = useState("");
+  const [dispFiltroUf, setDispFiltroUf] = useState("");
+  const [dispFiltroOrgao, setDispFiltroOrgao] = useState("");
+  // Dispensas busca PNCP
+  const [dispBuscaTermo, setDispBuscaTermo] = useState("");
+  const [dispBuscaUf, setDispBuscaUf] = useState("");
+  const [dispBuscaDias, setDispBuscaDias] = useState("90");
+  const [dispBuscaLoading, setDispBuscaLoading] = useState(false);
+  // Dispensas cotacao modal
+  const [cotacaoModalOpen, setCotacaoModalOpen] = useState(false);
+  const [cotacaoResult, setCotacaoResult] = useState<DispensaCotacaoResult | null>(null);
+  const [cotacaoLoading, setCotacaoLoading] = useState(false);
+  const [cotacaoDispensaId, setCotacaoDispensaId] = useState<string | null>(null);
+  // Dispensas status update
+  const [statusUpdateId, setStatusUpdateId] = useState<string | null>(null);
+
   // Fontes de editais carregadas do banco
   const [fontesDisponiveis, setFontesDisponiveis] = useState<{ value: string; label: string }[]>([]);
   // Modalidades, origens e tipos de produto carregados do banco
@@ -427,9 +510,11 @@ export function CaptacaoPage(props?: PageProps) {
     }));
   }, [areasData]);
 
-  // Carrega monitoramentos, fontes e parametros ao montar
+  // Carrega monitoramentos, fontes, dispensas e parametros ao montar
   useEffect(() => {
     carregarMonitoramentos();
+    carregarDispensas();
+    carregarDispensaStats();
     // Carregar fontes de editais do banco
     (async () => {
       try {
@@ -555,6 +640,321 @@ export function CaptacaoPage(props?: PageProps) {
       }
     })();
   }, []);
+
+  // --- Dispensas handlers ---
+  const carregarDispensaStats = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch("/api/dashboard/dispensas", {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success || data.cards || data.stats) {
+          const s = data.cards || data.stats || data;
+          setDispensaStats({
+            abertas: Number(s.abertas ?? 0),
+            cotacao_enviada: Number(s.cotacao_enviada ?? 0),
+            adjudicadas: Number(s.adjudicadas ?? 0),
+            encerradas: Number(s.encerradas ?? 0),
+          });
+        }
+      }
+    } catch {
+      // Silencioso
+    }
+  }, []);
+
+  const carregarDispensas = useCallback(async () => {
+    setDispensasLoading(true);
+    setDispensasErro(null);
+    try {
+      const res = await crudList("dispensas", { limit: 200 });
+      const items = (res.items || []) as Record<string, unknown>[];
+      setDispensas(items.map(d => ({
+        id: String(d.id ?? ""),
+        numero: String(d.numero ?? ""),
+        orgao: String(d.orgao ?? ""),
+        uf: String(d.uf ?? ""),
+        artigo: String(d.artigo ?? ""),
+        objeto: String(d.objeto ?? ""),
+        valor: Number(d.valor ?? d.valor_estimado ?? 0),
+        valor_limite: d.valor_limite != null ? Number(d.valor_limite) : undefined,
+        prazo_dias: (() => {
+          const enc = String(d.data_encerramento ?? d.data_abertura ?? "");
+          return calcularDiasRestantes(enc);
+        })(),
+        status: (String(d.status ?? "aberta")) as DispensaItem["status"],
+        data_publicacao: d.data_publicacao ? String(d.data_publicacao) : undefined,
+        data_encerramento: d.data_encerramento ? String(d.data_encerramento) : undefined,
+      })));
+    } catch (e) {
+      setDispensasErro(e instanceof Error ? e.message : "Erro ao carregar dispensas");
+    } finally {
+      setDispensasLoading(false);
+    }
+  }, []);
+
+  const handleBuscarDispensasPNCP = async () => {
+    if (!dispBuscaTermo.trim()) {
+      setDispensasErro("Informe um termo de busca");
+      return;
+    }
+    setDispBuscaLoading(true);
+    setDispensasErro(null);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch("/api/dispensas/buscar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({
+          termo: dispBuscaTermo.trim(),
+          uf: dispBuscaUf.trim() || undefined,
+          dias_busca: Number(dispBuscaDias) || 90,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          // Reload the list after search populates the DB
+          await carregarDispensas();
+          await carregarDispensaStats();
+        } else {
+          setDispensasErro(data.error || "Busca sem resultados");
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setDispensasErro((err as Record<string, string>).error || "Erro ao buscar dispensas");
+      }
+    } catch (e) {
+      setDispensasErro(e instanceof Error ? e.message : "Erro ao buscar dispensas");
+    } finally {
+      setDispBuscaLoading(false);
+    }
+  };
+
+  const handleGerarCotacao = async (dispensaId: string) => {
+    setCotacaoDispensaId(dispensaId);
+    setCotacaoLoading(true);
+    setCotacaoResult(null);
+    setCotacaoModalOpen(true);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/dispensas/${dispensaId}/cotacao`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+      const data = await res.json();
+      setCotacaoResult(data as DispensaCotacaoResult);
+      if (data.success) {
+        await carregarDispensas();
+        await carregarDispensaStats();
+      }
+    } catch (e) {
+      setCotacaoResult({
+        success: false,
+        error: e instanceof Error ? e.message : "Erro ao gerar cotacao",
+      });
+    } finally {
+      setCotacaoLoading(false);
+    }
+  };
+
+  const handleAtualizarStatusDispensa = async (dispensaId: string, novoStatus: string) => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const res = await fetch(`/api/dispensas/${dispensaId}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+        body: JSON.stringify({ status: novoStatus }),
+      });
+      if (res.ok) {
+        setStatusUpdateId(null);
+        await carregarDispensas();
+        await carregarDispensaStats();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert((err as Record<string, string>).error || "Erro ao atualizar status");
+      }
+    } catch {
+      alert("Erro ao atualizar status da dispensa");
+    }
+  };
+
+  // Dispensas filtered list
+  const dispensasFiltradas = useMemo(() => {
+    let lista = dispensas;
+    if (dispFiltroArtigo) {
+      lista = lista.filter(d => d.artigo === dispFiltroArtigo);
+    }
+    if (dispFiltroValorMin) {
+      const min = Number(dispFiltroValorMin);
+      if (!isNaN(min)) lista = lista.filter(d => d.valor >= min);
+    }
+    if (dispFiltroValorMax) {
+      const max = Number(dispFiltroValorMax);
+      if (!isNaN(max)) lista = lista.filter(d => d.valor <= max);
+    }
+    if (dispFiltroUf.trim()) {
+      const ufF = dispFiltroUf.trim().toUpperCase();
+      lista = lista.filter(d => d.uf.toUpperCase().includes(ufF));
+    }
+    if (dispFiltroOrgao.trim()) {
+      const orgF = dispFiltroOrgao.trim().toLowerCase();
+      lista = lista.filter(d => d.orgao.toLowerCase().includes(orgF));
+    }
+    return lista;
+  }, [dispensas, dispFiltroArtigo, dispFiltroValorMin, dispFiltroValorMax, dispFiltroUf, dispFiltroOrgao]);
+
+  // Dispensas table columns
+  const dispensasColumns: Column<DispensaItem>[] = useMemo(() => [
+    { key: "numero", header: "Numero", sortable: true, width: "120px" },
+    {
+      key: "orgao",
+      header: "Orgao",
+      sortable: true,
+      render: (d) => (
+        <span title={d.orgao}>
+          {d.orgao.length > 35 ? d.orgao.substring(0, 35) + "..." : d.orgao}
+        </span>
+      ),
+    },
+    { key: "uf", header: "UF", width: "50px" },
+    { key: "artigo", header: "Artigo", width: "80px", sortable: true },
+    {
+      key: "objeto",
+      header: "Objeto",
+      render: (d) => (
+        <span title={d.objeto}>
+          {d.objeto.length > 45 ? d.objeto.substring(0, 45) + "..." : d.objeto}
+        </span>
+      ),
+    },
+    {
+      key: "valor",
+      header: "Valor",
+      width: "120px",
+      sortable: true,
+      render: (d) => (
+        <span>
+          {formatCurrency(d.valor)}
+          {d.valor_limite && d.valor > d.valor_limite && (
+            <span style={{
+              display: "inline-block",
+              marginLeft: "6px",
+              padding: "1px 5px",
+              fontSize: "10px",
+              fontWeight: 700,
+              color: "#fbbf24",
+              backgroundColor: "#78350f",
+              border: "1px solid #92400e",
+              borderRadius: "3px",
+              whiteSpace: "nowrap",
+            }}>
+              RN-NEW-07
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "prazo_dias",
+      header: "Prazo",
+      width: "80px",
+      sortable: true,
+      render: (d) => {
+        if (d.status === "encerrada") return <StatusBadge status="neutral" label="Encerrada" size="small" />;
+        if (d.prazo_dias < 5) return <StatusBadge status="error" label={`${d.prazo_dias}d`} size="small" />;
+        if (d.prazo_dias <= 15) return <StatusBadge status="warning" label={`${d.prazo_dias}d`} size="small" />;
+        return <StatusBadge status="success" label={`${d.prazo_dias}d`} size="small" />;
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "120px",
+      sortable: true,
+      render: (d) => {
+        const statusMap: Record<string, { status: "success" | "warning" | "error" | "neutral"; label: string }> = {
+          aberta: { status: "success", label: "Aberta" },
+          cotacao_enviada: { status: "warning", label: "Cotacao Env." },
+          adjudicada: { status: "success", label: "Adjudicada" },
+          encerrada: { status: "neutral", label: "Encerrada" },
+        };
+        const s = statusMap[d.status] || { status: "neutral" as const, label: d.status };
+        return <StatusBadge status={s.status} label={s.label} size="small" />;
+      },
+    },
+    {
+      key: "acoes" as keyof DispensaItem,
+      header: "Acoes",
+      width: "160px",
+      render: (d) => (
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+          {d.status !== "encerrada" && (
+            <button
+              title="Gerar Cotacao"
+              onClick={(ev) => { ev.stopPropagation(); handleGerarCotacao(d.id); }}
+              style={{
+                padding: "3px 8px", fontSize: "11px", border: "1px solid #334155",
+                borderRadius: "4px", backgroundColor: "transparent", color: "#60a5fa",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: "3px",
+              }}
+            >
+              <Send size={12} /> Cotacao
+            </button>
+          )}
+          {DISPENSA_STATUS_TRANSITIONS[d.status]?.length > 0 && (
+            <div style={{ position: "relative" }}>
+              <button
+                title="Atualizar Status"
+                onClick={(ev) => { ev.stopPropagation(); setStatusUpdateId(statusUpdateId === d.id ? null : d.id); }}
+                style={{
+                  padding: "3px 8px", fontSize: "11px", border: "1px solid #334155",
+                  borderRadius: "4px", backgroundColor: "transparent", color: "#94a3b8",
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: "3px",
+                }}
+              >
+                <RefreshCw size={12} /> Status
+              </button>
+              {statusUpdateId === d.id && (
+                <div style={{
+                  position: "absolute", top: "100%", right: 0, zIndex: 50,
+                  background: "#1e293b", border: "1px solid #334155", borderRadius: "6px",
+                  minWidth: "150px", marginTop: "2px", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                }}>
+                  {DISPENSA_STATUS_TRANSITIONS[d.status].map(t => (
+                    <div
+                      key={t.value}
+                      onClick={(ev) => { ev.stopPropagation(); handleAtualizarStatusDispensa(d.id, t.value); }}
+                      style={{
+                        padding: "6px 10px", cursor: "pointer", fontSize: "12px",
+                        color: "#e2e8f0", borderBottom: "1px solid #1e293b",
+                      }}
+                      onMouseEnter={(ev) => (ev.currentTarget.style.background = "#334155")}
+                      onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                    >
+                      {t.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [statusUpdateId]);
 
   const carregarMonitoramentos = async () => {
     setLoadingMonitoramentos(true);
@@ -1623,6 +2023,15 @@ function baixarMD() {
       </div>
 
       <div className="page-content">
+        <TabPanel
+          tabs={[
+            { id: "editais", label: "Editais", icon: <FileText size={16} /> },
+            { id: "dispensas", label: "Dispensas", icon: <ShoppingCart size={16} /> },
+          ]}
+          defaultTab="editais"
+        >
+          {(activeTab) => activeTab === "editais" ? (
+          <>
         {/* Prazos de submissao */}
         <div className="stat-cards-grid">
           <StatCard
@@ -2635,6 +3044,226 @@ function baixarMD() {
             </div>
           </div>
         </Card>
+          </>
+          ) : (
+          <>
+        {/* ======== ABA DISPENSAS ======== */}
+
+        {/* Stats dispensas */}
+        <div className="stat-cards-grid">
+          <StatCard
+            icon={<ShoppingCart size={20} />}
+            value={dispensaStats.abertas}
+            label="Abertas"
+            color="green"
+          />
+          <StatCard
+            icon={<Send size={20} />}
+            value={dispensaStats.cotacao_enviada}
+            label="Cotacao Enviada"
+            color="blue"
+          />
+          <StatCard
+            icon={<CheckCircle size={20} />}
+            value={dispensaStats.adjudicadas}
+            label="Adjudicadas"
+            color="purple"
+          />
+          <StatCard
+            icon={<Calendar size={20} />}
+            value={dispensaStats.encerradas}
+            label="Encerradas"
+            color="gray"
+          />
+        </div>
+
+        {/* Buscar Dispensas PNCP */}
+        <Card title="Buscar Dispensas PNCP" icon={<Search size={18} />}>
+          <div className="form-grid form-grid-4">
+            <FormField label="Termo de busca">
+              <TextInput
+                value={dispBuscaTermo}
+                onChange={setDispBuscaTermo}
+                placeholder="Ex: material de escritorio"
+              />
+            </FormField>
+            <FormField label="UF">
+              <TextInput
+                value={dispBuscaUf}
+                onChange={setDispBuscaUf}
+                placeholder="Ex: SP"
+              />
+            </FormField>
+            <FormField label="Periodo de publicacao">
+              <SelectInput
+                value={dispBuscaDias}
+                onChange={setDispBuscaDias}
+                options={[
+                  { value: "30", label: "Ultimos 30 dias" },
+                  { value: "60", label: "Ultimos 60 dias" },
+                  { value: "90", label: "Ultimos 90 dias" },
+                  { value: "180", label: "Ultimos 180 dias" },
+                ]}
+              />
+            </FormField>
+            <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: "4px" }}>
+              <ActionButton
+                icon={<Search size={16} />}
+                label="Buscar Dispensas PNCP"
+                variant="primary"
+                onClick={handleBuscarDispensasPNCP}
+                loading={dispBuscaLoading}
+              />
+            </div>
+          </div>
+          {dispensasErro && (
+            <div className="alert alert-error" style={{ marginTop: "12px" }}>
+              {dispensasErro}
+            </div>
+          )}
+        </Card>
+
+        {/* Filtros locais */}
+        <Card title="Filtros" icon={<Search size={18} />}>
+          <div className="form-grid form-grid-4">
+            <FormField label="Artigo">
+              <SelectInput
+                value={dispFiltroArtigo}
+                onChange={setDispFiltroArtigo}
+                options={ARTIGOS_DISPENSA}
+              />
+            </FormField>
+            <FormField label="Valor minimo">
+              <TextInput
+                value={dispFiltroValorMin}
+                onChange={setDispFiltroValorMin}
+                placeholder="0"
+              />
+            </FormField>
+            <FormField label="Valor maximo">
+              <TextInput
+                value={dispFiltroValorMax}
+                onChange={setDispFiltroValorMax}
+                placeholder="1000000"
+              />
+            </FormField>
+            <FormField label="UF">
+              <TextInput
+                value={dispFiltroUf}
+                onChange={setDispFiltroUf}
+                placeholder="Ex: SP"
+              />
+            </FormField>
+          </div>
+          <div className="form-grid form-grid-4" style={{ marginTop: "8px" }}>
+            <FormField label="Orgao">
+              <TextInput
+                value={dispFiltroOrgao}
+                onChange={setDispFiltroOrgao}
+                placeholder="Buscar por orgao..."
+              />
+            </FormField>
+          </div>
+        </Card>
+
+        {/* Tabela de dispensas */}
+        <Card
+          title={`Dispensas (${dispensasFiltradas.length})`}
+          icon={<ShoppingCart size={18} />}
+          actions={
+            <ActionButton
+              icon={<RefreshCw size={14} />}
+              label="Atualizar"
+              onClick={async () => { await carregarDispensas(); await carregarDispensaStats(); }}
+            />
+          }
+        >
+          <DataTable
+            data={dispensasFiltradas}
+            columns={dispensasColumns}
+            idKey="id"
+            emptyMessage="Nenhuma dispensa encontrada. Use a busca acima para importar dispensas do PNCP."
+            loading={dispensasLoading}
+            defaultSortKey="prazo_dias"
+            defaultSortDirection="asc"
+          />
+        </Card>
+
+        {/* Modal de cotacao */}
+        <Modal
+          isOpen={cotacaoModalOpen}
+          onClose={() => { setCotacaoModalOpen(false); setCotacaoResult(null); setCotacaoDispensaId(null); }}
+          title={`Cotacao — Dispensa ${cotacaoDispensaId ? cotacaoDispensaId.substring(0, 8) + "..." : ""}`}
+          size="large"
+          footer={
+            <button
+              className="btn btn-secondary"
+              onClick={() => { setCotacaoModalOpen(false); setCotacaoResult(null); setCotacaoDispensaId(null); }}
+            >
+              Fechar
+            </button>
+          }
+        >
+          {cotacaoLoading ? (
+            <div style={{ textAlign: "center", padding: "32px" }}>
+              <p className="text-muted">Gerando cotacao...</p>
+            </div>
+          ) : cotacaoResult ? (
+            cotacaoResult.success ? (
+              <div>
+                {cotacaoResult.cotacao_id && (
+                  <div style={{ marginBottom: "12px" }}>
+                    <strong style={{ color: "#22c55e" }}>Cotacao gerada com sucesso!</strong>
+                    <span className="text-muted" style={{ marginLeft: "8px" }}>ID: {cotacaoResult.cotacao_id}</span>
+                  </div>
+                )}
+                {cotacaoResult.valor_proposto != null && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <span style={{ color: "#64748b" }}>Valor Proposto: </span>
+                    <strong>{formatCurrency(cotacaoResult.valor_proposto)}</strong>
+                  </div>
+                )}
+                {cotacaoResult.itens && cotacaoResult.itens.length > 0 && (
+                  <div style={{ marginTop: "12px" }}>
+                    <h4 style={{ fontSize: "14px", marginBottom: "8px" }}>Itens da Cotacao</h4>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid #334155", color: "#64748b" }}>
+                          <th style={{ padding: "6px", textAlign: "left" }}>Descricao</th>
+                          <th style={{ padding: "6px", textAlign: "right" }}>Qtd</th>
+                          <th style={{ padding: "6px", textAlign: "right" }}>Vlr Unit.</th>
+                          <th style={{ padding: "6px", textAlign: "right" }}>Vlr Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cotacaoResult.itens.map((item, idx) => (
+                          <tr key={idx} style={{ borderBottom: "1px solid #1e293b" }}>
+                            <td style={{ padding: "6px", color: "#cbd5e1" }}>{item.descricao}</td>
+                            <td style={{ padding: "6px", textAlign: "right", color: "#94a3b8" }}>{item.quantidade}</td>
+                            <td style={{ padding: "6px", textAlign: "right", color: "#e2e8f0" }}>{formatCurrency(item.valor_unitario)}</td>
+                            <td style={{ padding: "6px", textAlign: "right", color: "#e2e8f0" }}>{formatCurrency(item.valor_total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {cotacaoResult.observacoes && (
+                  <div style={{ marginTop: "12px", padding: "8px", backgroundColor: "#0f172a", borderRadius: "6px", fontSize: "12px", color: "#94a3b8" }}>
+                    <strong>Observacoes:</strong> {cotacaoResult.observacoes}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="alert alert-error">
+                {cotacaoResult.error || "Erro ao gerar cotacao"}
+              </div>
+            )
+          ) : null}
+        </Modal>
+          </>
+          )}
+        </TabPanel>
       </div>
     </div>
   );

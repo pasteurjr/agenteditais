@@ -162,6 +162,10 @@ class Produto(Base):
     termos_busca = Column(JSON, nullable=True)            # ["hemograma", "hematologia", "CBC", ...]
     termos_busca_updated_at = Column(DateTime, nullable=True)
     catmat_updated_at = Column(DateTime, nullable=True)
+    # Sprint 8 — Máscaras de descrição
+    descricao_normalizada = Column(Text, nullable=True)
+    mascara_ativa = Column(Boolean, default=False)
+    mascara_metadata = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -194,6 +198,9 @@ class Produto(Base):
             "termos_busca": self.termos_busca,
             "termos_busca_updated_at": self.termos_busca_updated_at.isoformat() if self.termos_busca_updated_at else None,
             "catmat_updated_at": self.catmat_updated_at.isoformat() if self.catmat_updated_at else None,
+            "descricao_normalizada": self.descricao_normalizada,
+            "mascara_ativa": self.mascara_ativa or False,
+            "mascara_metadata": self.mascara_metadata,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_specs:
@@ -2700,18 +2707,27 @@ class Dispensa(Base):
     edital = relationship("Edital", back_populates="dispensas")
 
     def to_dict(self):
-        return {
+        d = {
             "id": self.id,
             "user_id": self.user_id,
             "edital_id": self.edital_id,
             "artigo": self.artigo,
             "valor_limite": float(self.valor_limite) if self.valor_limite else None,
             "justificativa": self.justificativa,
+            "cotacao_texto": self.cotacao_texto,
             "fornecedores_cotados": self.fornecedores_cotados,
             "status": self.status,
             "data_limite": self.data_limite.isoformat() if self.data_limite else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+        if self.edital:
+            d["numero"] = getattr(self.edital, "numero", None) or self.edital_id[:8]
+            d["orgao"] = getattr(self.edital, "orgao", None) or ""
+            d["uf"] = getattr(self.edital, "uf", None) or ""
+            d["objeto"] = getattr(self.edital, "objeto", None) or ""
+            d["valor_estimado"] = float(self.edital.valor_estimado) if getattr(self.edital, "valor_estimado", None) else None
+            d["data_encerramento"] = self.edital.data_encerramento.isoformat() if getattr(self.edital, "data_encerramento", None) else None
+        return d
 
 
 class EstrategiaEdital(Base):

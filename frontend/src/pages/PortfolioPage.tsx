@@ -4,7 +4,7 @@ import {
   Sparkles, Radio, AlertCircle, Loader2, FileText,
   ClipboardList, FolderOpen, ChevronDown, ChevronRight,
   Filter, Zap, ArrowDown, CheckCircle, DollarSign, AlertTriangle,
-  Edit2, Save, X
+  Edit2, Save, X, Layers, Check, SquareCheck as SquareCheckIcon
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
 import type { Column } from "../components/common";
@@ -35,6 +35,16 @@ interface SpecCampoTop {
   placeholder?: string;
   opcoes?: string[];
   obrigatorio?: boolean;
+}
+
+interface MascaraResultado {
+  produto_id: string;
+  descricao_original: string;
+  descricao_normalizada: string;
+  score_original?: number;
+  score_normalizado?: number;
+  variantes?: string[];
+  sinonimos?: string[];
 }
 
 function parseMascaraTop(raw: unknown): SpecCampoTop[] {
@@ -122,6 +132,21 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [buscaNomeProduto, setBuscaNomeProduto] = useState("");
   const [buscaFabricante, setBuscaFabricante] = useState("");
 
+  // === SELECAO MULTIPLA & CLASSIFICACAO EM LOTE ===
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showClassificarModal, setShowClassificarModal] = useState(false);
+  const [classifArea, setClassifArea] = useState("");
+  const [classifClasse, setClassifClasse] = useState("");
+  const [classifSubclasse, setClassifSubclasse] = useState("");
+  const [classifSaving, setClassifSaving] = useState(false);
+
+  // === MASCARA MODAL (resultado por produto) ===
+  const [showMascaraModal, setShowMascaraModal] = useState(false);
+  const [mascaraResultado, setMascaraResultado] = useState<MascaraResultado | null>(null);
+  const [mascaraLoading, setMascaraLoading] = useState(false);
+  const [mascaraLoteLoading, setMascaraLoteLoading] = useState(false);
+  const [filtroSemClasse, setFiltroSemClasse] = useState(false);
+
   // Carregar produtos reais do backend
   const fetchProdutos = useCallback(async () => {
     try {
@@ -199,6 +224,8 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         (p.modelo || "").toLowerCase().includes(term);
       if (!match) return false;
     }
+    // Filtro "Sem Classe"
+    if (filtroSemClasse && p.subclasse_id) return false;
     // Filtro por subclasse
     if (filtroSubclasse && p.subclasse_id !== filtroSubclasse) return false;
     // Filtro por classe (via subclasse do produto)
@@ -515,14 +542,193 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     return p.categoria || "-";
   };
 
+  // Mapa classe_id → nome para coluna Classe
+  const classeMap = Object.fromEntries(classesV2Backend.map(c => [String(c.id), String(c.nome || "")]));
+
+  const getClasseNome = (p: Produto): string => {
+    if (!p.subclasse_id) return "-";
+    const classeId = subclasseToClasseMap[p.subclasse_id];
+    if (classeId && classeMap[classeId]) return classeMap[classeId];
+    return "-";
+  };
+
+  // === SELECAO MULTIPLA handlers ===
+  const toggleSelectProduto = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredProdutos.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredProdutos.map(p => p.id)));
+    }
+  };
+
+  // === CLASSIFICAR SELECIONADOS handler ===
+  const handleClassificarSelecionados = async () => {
+    if (!classifSubclasse || selectedIds.size === 0) return;
+    setClassifSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      for (const prodId of selectedIds) {
+        await fetch(`/api/crud/produtos/${prodId}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ subclasse_id: classifSubclasse }),
+        });
+      }
+      setShowClassificarModal(false);
+      setSelectedIds(new Set());
+      setClassifArea("");
+      setClassifClasse("");
+      setClassifSubclasse("");
+      fetchProdutos();
+    } catch (err) {
+      setError(`Erro ao classificar: ${err instanceof Error ? err.message : "Falha"}`);
+    } finally {
+      setClassifSaving(false);
+    }
+  };
+
+  // === APLICAR MASCARA handler (por produto) ===
+  const handleAplicarMascara = async (produtoId: string) => {
+    setMascaraLoading(true);
+    setShowMascaraModal(true);
+    setMascaraResultado(null);
+    try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      const res = await fetch("/api/portfolio/aplicar-mascara", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ produto_id: produtoId }),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      const data = await res.json();
+      setMascaraResultado(data);
+    } catch (err) {
+      setError(`Erro ao aplicar mascara: ${err instanceof Error ? err.message : "Falha"}`);
+      setShowMascaraModal(false);
+    } finally {
+      setMascaraLoading(false);
+    }
+  };
+
+  // === ACEITAR MASCARA handler ===
+  const handleAceitarMascara = async () => {
+    if (!mascaraResultado) return;
+    try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      await fetch(`/api/crud/produtos/${mascaraResultado.produto_id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          descricao_normalizada: mascaraResultado.descricao_normalizada,
+          mascara_ativa: true,
+        }),
+      });
+      setShowMascaraModal(false);
+      setMascaraResultado(null);
+      fetchProdutos();
+    } catch (err) {
+      setError(`Erro ao aceitar mascara: ${err instanceof Error ? err.message : "Falha"}`);
+    }
+  };
+
+  // === APLICAR MASCARA EM LOTE handler ===
+  const handleAplicarMascaraLote = async () => {
+    if (selectedIds.size === 0) return;
+    setMascaraLoteLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      const res = await fetch("/api/portfolio/aplicar-mascara-lote", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ produto_ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) throw new Error(`Erro ${res.status}`);
+      setSelectedIds(new Set());
+      fetchProdutos();
+    } catch (err) {
+      setError(`Erro ao aplicar mascara em lote: ${err instanceof Error ? err.message : "Falha"}`);
+    } finally {
+      setMascaraLoteLoading(false);
+    }
+  };
+
   // Colunas da tabela
   const columns: Column<Produto>[] = [
-    { key: "nome", header: "Produto", sortable: true },
+    {
+      key: "select", header: "", width: "40px",
+      render: (p) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(p.id)}
+          onChange={(e) => { e.stopPropagation(); toggleSelectProduto(p.id); }}
+          onClick={(e) => e.stopPropagation()}
+          style={{ cursor: "pointer", width: 16, height: 16 }}
+        />
+      ),
+    },
+    {
+      key: "nome", header: "Produto", sortable: true,
+      render: (p) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span>{p.nome}</span>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {!p.subclasse_id && (
+              <span style={{
+                display: "inline-block", padding: "1px 8px", borderRadius: 10,
+                fontSize: "0.72rem", fontWeight: 600,
+                color: "#b45309", background: "rgba(245,158,11,0.15)",
+                border: "1px solid rgba(245,158,11,0.3)",
+              }}>Sem Classe</span>
+            )}
+            {p.mascara_ativa && (
+              <span style={{
+                display: "inline-block", padding: "1px 8px", borderRadius: 10,
+                fontSize: "0.72rem", fontWeight: 600,
+                color: "#15803d", background: "rgba(34,197,94,0.12)",
+                border: "1px solid rgba(34,197,94,0.3)",
+              }}>Mascara Ativa</span>
+            )}
+          </div>
+        </div>
+      ),
+    },
     { key: "fabricante", header: "Fabricante", sortable: true, render: (p) => p.fabricante || "-" },
     { key: "codigo_interno", header: "SKU", render: (p) => p.codigo_interno || "-" },
     {
+      key: "classe", header: "Classe", sortable: true,
+      render: (p) => getClasseNome(p),
+    },
+    {
       key: "categoria", header: "Subclasse", sortable: true,
       render: (p) => getSubclasseNome(p),
+    },
+    {
+      key: "descricao_normalizada", header: "Desc. Normalizada",
+      render: (p) => {
+        const desc = p.descricao_normalizada || "";
+        if (!desc) return <span style={{ color: "var(--text-tertiary)", fontSize: "0.82rem" }}>-</span>;
+        const truncated = desc.length > 80 ? desc.substring(0, 80) + "..." : desc;
+        return (
+          <span title={desc} style={{ fontSize: "0.82rem" }}>{truncated}</span>
+        );
+      },
     },
     {
       key: "status_pipeline", header: "Status", sortable: true,
@@ -541,11 +747,12 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       },
     },
     {
-      key: "acoes", header: "Acoes", width: "200px",
+      key: "acoes", header: "Acoes", width: "240px",
       render: (p) => (
         <div className="table-actions">
           <button title="Visualizar" onClick={(e) => { e.stopPropagation(); handleSelectProduto(p); }}><Eye size={16} /></button>
           <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarAbrir(p); }}><Edit2 size={16} /></button>
+          <button title="Aplicar Mascara" onClick={(e) => { e.stopPropagation(); handleAplicarMascara(p.id); }} style={{ color: "#8b5cf6" }}><Layers size={16} /></button>
           <button title="Reprocessar IA" onClick={(e) => { e.stopPropagation(); handleReprocessar(p); }}><RefreshCw size={16} /></button>
           <button title="Verificar Completude" onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }}><Search size={16} /></button>
           <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluir(p); }}><Trash2 size={16} /></button>
@@ -703,6 +910,55 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                     ))}
                 </select>
               </div>
+              {/* Filtro "Sem Classe" */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  id="filtroSemClasse"
+                  checked={filtroSemClasse}
+                  onChange={(e) => setFiltroSemClasse(e.target.checked)}
+                  style={{ cursor: "pointer", width: 16, height: 16 }}
+                />
+                <label htmlFor="filtroSemClasse" style={{
+                  fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
+                  color: filtroSemClasse ? "#b45309" : "var(--text-secondary)", whiteSpace: "nowrap",
+                }}>Sem Classe</label>
+              </div>
+            </div>
+
+            {/* Batch actions bar */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={filteredProdutos.length > 0 && selectedIds.size === filteredProdutos.length}
+                  onChange={toggleSelectAll}
+                  style={{ cursor: "pointer", width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                  {selectedIds.size > 0 ? `${selectedIds.size} selecionado(s)` : "Selecionar todos"}
+                </span>
+              </div>
+              {selectedIds.size > 0 && (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "4px 14px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={() => { setShowClassificarModal(true); setClassifArea(""); setClassifClasse(""); setClassifSubclasse(""); }}
+                  >
+                    <SquareCheckIcon size={14} /> Classificar Selecionados ({selectedIds.size})
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: "4px 14px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={handleAplicarMascaraLote}
+                    disabled={mascaraLoteLoading}
+                  >
+                    {mascaraLoteLoading ? <Loader2 size={14} className="spin" /> : <Layers size={14} />}
+                    Aplicar Mascara em Lote ({selectedIds.size})
+                  </button>
+                </>
+              )}
             </div>
 
             <Card>
@@ -1472,6 +1728,173 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         <FormField label="Fabricante (opcional)">
           <TextInput value={buscaFabricante} onChange={setBuscaFabricante} placeholder="Ex: Olympus" />
         </FormField>
+      </Modal>
+
+      {/* === MODAL CLASSIFICAR SELECIONADOS === */}
+      <Modal
+        isOpen={showClassificarModal}
+        onClose={() => setShowClassificarModal(false)}
+        title={`Classificar ${selectedIds.size} Produto(s)`}
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setShowClassificarModal(false)}>
+              <X size={14} /> Cancelar
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleClassificarSelecionados}
+              disabled={classifSaving || !classifSubclasse}
+            >
+              {classifSaving ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
+              Salvar Classificacao
+            </button>
+          </>
+        }
+      >
+        <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: 16 }}>
+          Selecione a classificacao (Area &rarr; Classe &rarr; Subclasse) para aplicar aos {selectedIds.size} produto(s) selecionado(s).
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+          <FormField label="Area">
+            <select
+              className="form-input"
+              value={classifArea}
+              onChange={(e) => { setClassifArea(e.target.value); setClassifClasse(""); setClassifSubclasse(""); }}
+            >
+              <option value="">Selecione a area...</option>
+              {areasBackend.map(a => (
+                <option key={String(a.id)} value={String(a.id)}>{String(a.nome)}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Classe">
+            <select
+              className="form-input"
+              value={classifClasse}
+              disabled={!classifArea}
+              onChange={(e) => { setClassifClasse(e.target.value); setClassifSubclasse(""); }}
+            >
+              <option value="">Selecione a classe...</option>
+              {classesV2Backend
+                .filter(c => String(c.area_id) === classifArea)
+                .map(c => (
+                  <option key={String(c.id)} value={String(c.id)}>{String(c.nome)}</option>
+                ))}
+            </select>
+          </FormField>
+          <FormField label="Subclasse">
+            <select
+              className="form-input"
+              value={classifSubclasse}
+              disabled={!classifClasse}
+              onChange={(e) => setClassifSubclasse(e.target.value)}
+            >
+              <option value="">Selecione a subclasse...</option>
+              {subclassesBackend
+                .filter(s => String(s.classe_id) === classifClasse)
+                .map(s => (
+                  <option key={String(s.id)} value={String(s.id)}>{String(s.nome)}</option>
+                ))}
+            </select>
+          </FormField>
+        </div>
+      </Modal>
+
+      {/* === MODAL RESULTADO MASCARA === */}
+      <Modal
+        isOpen={showMascaraModal}
+        onClose={() => { setShowMascaraModal(false); setMascaraResultado(null); }}
+        title="Resultado da Mascara"
+        footer={
+          mascaraResultado ? (
+            <>
+              <button className="btn btn-secondary" onClick={() => { setShowMascaraModal(false); setMascaraResultado(null); }}>
+                <X size={14} /> Cancelar
+              </button>
+              <button className="btn btn-primary" onClick={handleAceitarMascara}>
+                <Check size={14} /> Aceitar
+              </button>
+            </>
+          ) : undefined
+        }
+      >
+        {mascaraLoading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2rem 0", justifyContent: "center" }}>
+            <Loader2 size={20} className="spin" /> Aplicando mascara...
+          </div>
+        ) : mascaraResultado ? (
+          <div>
+            {/* Side by side: before / after */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.85rem", color: "#ef4444" }}>Antes (Original)</h4>
+                <p style={{ fontSize: "0.9rem", margin: 0, wordBreak: "break-word" }}>
+                  {mascaraResultado.descricao_original || "-"}
+                </p>
+              </div>
+              <div style={{ padding: 12, borderRadius: 8, background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.85rem", color: "#22c55e" }}>Depois (Normalizada)</h4>
+                <p style={{ fontSize: "0.9rem", margin: 0, wordBreak: "break-word" }}>
+                  {mascaraResultado.descricao_normalizada || "-"}
+                </p>
+              </div>
+            </div>
+
+            {/* Score impact */}
+            {(mascaraResultado.score_original !== undefined || mascaraResultado.score_normalizado !== undefined) && (
+              <div style={{
+                display: "flex", gap: 16, marginBottom: 16, padding: "10px 16px",
+                borderRadius: 8, background: "var(--bg-secondary)",
+              }}>
+                <div>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Score Original</span>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#f59e0b" }}>
+                    {mascaraResultado.score_original != null ? mascaraResultado.score_original.toFixed(2) : "-"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", fontSize: "1.2rem", color: "var(--text-tertiary)" }}>&rarr;</div>
+                <div>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Score Normalizado</span>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#22c55e" }}>
+                    {mascaraResultado.score_normalizado != null ? mascaraResultado.score_normalizado.toFixed(2) : "-"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Variantes */}
+            {mascaraResultado.variantes && mascaraResultado.variantes.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <h4 style={{ margin: "0 0 6px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Variantes</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {mascaraResultado.variantes.map((v, i) => (
+                    <span key={i} style={{
+                      padding: "2px 8px", borderRadius: 10, fontSize: "0.78rem",
+                      background: "rgba(139,92,246,0.1)", color: "#8b5cf6",
+                      border: "1px solid rgba(139,92,246,0.25)",
+                    }}>{v}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sinonimos */}
+            {mascaraResultado.sinonimos && mascaraResultado.sinonimos.length > 0 && (
+              <div>
+                <h4 style={{ margin: "0 0 6px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Sinonimos</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {mascaraResultado.sinonimos.map((s, i) => (
+                    <span key={i} style={{
+                      padding: "2px 8px", borderRadius: 10, fontSize: "0.78rem",
+                      background: "rgba(59,130,246,0.1)", color: "#3b82f6",
+                      border: "1px solid rgba(59,130,246,0.25)",
+                    }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

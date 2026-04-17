@@ -1062,6 +1062,11 @@ def crud_list(table_slug):
             if conditions:
                 query = query.filter(or_(*conditions))
 
+        # Eager load relationships for dispensas
+        if table_slug == "dispensas":
+            from sqlalchemy.orm import joinedload as _jl
+            query = query.options(_jl(model.edital))
+
         # Order
         if hasattr(model, "created_at"):
             query = query.order_by(model.created_at.desc())

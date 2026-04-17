@@ -10657,13 +10657,15 @@ def upload_empresa_certidao(certidao_id):
 @require_auth
 def gerar_classes_ia():
     """
-    Gera classes e subclasses de produtos automaticamente via IA.
-    Lista todos os produtos do usuário, envia para DeepSeek e retorna
-    uma estrutura de classes/subclasses sugeridas.
+    Sprint 8 (UC-CL01): Gera classes e subclasses via IA.
+    RN-NEW-09: mínimo 20 produtos. RN-084: cooldown 60s. RN-132: audit.
+    Param JSON opcional: {"aplicar": true} para criar registros após geração.
     """
-    from models import Produto
+    from models import Produto, AreaProduto, ClasseProdutoV2, SubclasseProduto, AuditoriaLog
     user_id = get_current_user_id()
     empresa_id = get_current_empresa_id()
+    body = request.get_json(silent=True) or {}
+    aplicar = body.get("aplicar", False)
 
     db = get_db()
     try:
@@ -10672,37 +10674,56 @@ def gerar_classes_ia():
         if not produtos:
             return jsonify({"error": "Nenhum produto cadastrado. Cadastre produtos primeiro."}), 400
 
-        # Montar lista de produtos para o prompt
+        # RN-NEW-09: mínimo 20 produtos
+        if len(produtos) < 20:
+            return jsonify({
+                "error": f"Mínimo de 20 produtos exigido (atual: {len(produtos)}). Cadastre mais produtos.",
+                "total_produtos": len(produtos)
+            }), 400
+
+        # RN-084: cooldown 60s
+        ultima = db.query(AuditoriaLog).filter(
+            AuditoriaLog.user_id == user_id,
+            AuditoriaLog.entidade == 'gerar_classes_ia',
+        ).order_by(AuditoriaLog.created_at.desc()).first()
+        if ultima and ultima.created_at:
+            diff = (datetime.now() - ultima.created_at).total_seconds()
+            if diff < 60:
+                return jsonify({"error": f"Aguarde {int(60 - diff)}s antes de nova geração."}), 429
+
         lista_produtos = []
         for p in produtos:
             lista_produtos.append(
                 f"- {p.nome} (categoria: {p.categoria}, NCM: {p.ncm or 'N/A'}, "
-                f"fabricante: {p.fabricante or 'N/A'})"
+                f"fabricante: {p.fabricante or 'N/A'}, descricao: {(p.descricao or '')[:80]})"
             )
 
         prompt = f"""Você é um especialista em classificação de produtos para licitações públicas.
 
-Dado os seguintes produtos cadastrados:
+Dado os seguintes {len(produtos)} produtos cadastrados:
 
 {chr(10).join(lista_produtos)}
 
-Agrupe esses produtos em CLASSES e SUBCLASSES lógicas para facilitar a gestão em processos licitatórios.
-
-Para cada classe e subclasse, sugira o NCM (Nomenclatura Comum do Mercosul) mais adequado.
+Agrupe esses produtos em ÁREAS, CLASSES e SUBCLASSES lógicas para facilitar a gestão em processos licitatórios.
+Para cada subclasse, sugira campos_mascara (campos técnicos que a IA deve extrair de documentos do produto).
 
 RESPONDA APENAS EM JSON com a seguinte estrutura:
 {{
-  "classes": [
+  "areas": [
     {{
-      "nome": "Nome da Classe",
-      "descricao": "Descrição breve",
-      "ncm_principal": "XXXX.XX.XX",
-      "subclasses": [
+      "nome": "Nome da Área",
+      "classes": [
         {{
-          "nome": "Nome da Subclasse",
+          "nome": "Nome da Classe",
           "descricao": "Descrição breve",
-          "ncm": "XXXX.XX.XX",
-          "produtos_sugeridos": ["Nome Produto 1", "Nome Produto 2"]
+          "subclasses": [
+            {{
+              "nome": "Nome da Subclasse",
+              "ncm": "XXXX.XX.XX",
+              "campos_mascara": [{{"nome": "Campo1", "tipo": "texto"}}, {{"nome": "Campo2", "tipo": "numero"}}],
+              "produtos_sugeridos": ["Nome Produto 1", "Nome Produto 2"]
+            }}
+          ]
         }}
       ]
     }}
@@ -10712,33 +10733,79 @@ RESPONDA APENAS EM JSON com a seguinte estrutura:
 
         resposta = call_deepseek(
             [{"role": "user", "content": prompt}],
-            max_tokens=3000,
+            max_tokens=4000,
             model_override="deepseek-chat"
         )
 
-        # Extrair JSON da resposta
-        import json, re
+        # RN-132: audit log
+        try:
+            db.add(AuditoriaLog(
+                user_id=user_id, empresa_id=empresa_id,
+                entidade='gerar_classes_ia', operacao='invocacao_deepseek',
+                dados_novos={"total_produtos": len(produtos)},
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        import json as json_mod, re as re_mod
         texto = resposta if isinstance(resposta, str) else str(resposta)
-        json_match = re.search(r'\{[\s\S]*\}', texto)
-        if json_match:
-            try:
-                resultado = json.loads(json_match.group(0))
-                return jsonify({
-                    "success": True,
-                    "classes": resultado.get("classes", []),
-                    "total_produtos": len(produtos)
-                })
-            except json.JSONDecodeError:
-                pass
+        json_match = re_mod.search(r'\{[\s\S]*\}', texto)
+        if not json_match:
+            return jsonify({
+                "success": True, "areas": [], "raw_response": texto[:2000],
+                "message": "IA retornou resposta mas não no formato JSON esperado"
+            })
+
+        try:
+            resultado = json_mod.loads(json_match.group(0))
+        except json_mod.JSONDecodeError:
+            return jsonify({
+                "success": True, "areas": [], "raw_response": texto[:2000],
+                "message": "JSON inválido na resposta da IA"
+            })
+
+        areas_data = resultado.get("areas", resultado.get("classes", []))
+
+        # Se aplicar=true, criar registros no banco
+        criados = {"areas": 0, "classes": 0, "subclasses": 0, "produtos_vinculados": 0}
+        if aplicar and areas_data:
+            prod_map = {p.nome.lower().strip(): p for p in produtos}
+            for area_d in areas_data:
+                area = AreaProduto(empresa_id=empresa_id, nome=area_d["nome"])
+                db.add(area)
+                db.flush()
+                criados["areas"] += 1
+                for cls_d in area_d.get("classes", []):
+                    classe = ClasseProdutoV2(empresa_id=empresa_id, nome=cls_d["nome"], area_id=area.id, descricao=cls_d.get("descricao"))
+                    db.add(classe)
+                    db.flush()
+                    criados["classes"] += 1
+                    for sub_d in cls_d.get("subclasses", []):
+                        sub = SubclasseProduto(
+                            empresa_id=empresa_id, nome=sub_d["nome"], classe_id=classe.id,
+                            ncms=[sub_d["ncm"]] if sub_d.get("ncm") else None,
+                            campos_mascara=sub_d.get("campos_mascara"),
+                        )
+                        db.add(sub)
+                        db.flush()
+                        criados["subclasses"] += 1
+                        for pname in sub_d.get("produtos_sugeridos", []):
+                            prod = prod_map.get(pname.lower().strip())
+                            if prod:
+                                prod.subclasse_id = sub.id
+                                criados["produtos_vinculados"] += 1
+            db.commit()
 
         return jsonify({
             "success": True,
-            "classes": [],
-            "raw_response": texto[:2000],
-            "message": "IA retornou resposta mas não no formato JSON esperado"
+            "areas": areas_data,
+            "total_produtos": len(produtos),
+            "criados": criados if aplicar else None,
         })
 
     except Exception as e:
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -15650,6 +15717,443 @@ def api_aprendizado_analisar():
         return jsonify({"success": True, "novos": 0, "atualizados": 0,
                         "message": "Analise de padroes executada. Padroes sao gerados pelo job semanal ou via seed."})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+# =============================================================================
+# Sprint 8 — Dispensas + Máscaras
+# =============================================================================
+
+@app.route("/api/dashboard/dispensas", methods=["GET"])
+@require_auth
+def api_dashboard_dispensas():
+    """UC-DI01: Dashboard de dispensas — stat cards por status, filtros artigo/faixa/uf."""
+    from models import Dispensa, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        base = db.query(Dispensa).filter(Dispensa.empresa_id == empresa_id)
+
+        artigo = request.args.get("artigo", "").strip()
+        if artigo:
+            base = base.filter(Dispensa.artigo == artigo)
+
+        uf = request.args.get("uf", "").strip().upper()
+        if uf:
+            base = base.join(Edital, Dispensa.edital_id == Edital.id).filter(Edital.uf == uf)
+
+        valor_min = request.args.get("valor_min", type=float)
+        valor_max = request.args.get("valor_max", type=float)
+        if valor_min is not None:
+            base = base.filter(Dispensa.valor_limite >= valor_min)
+        if valor_max is not None:
+            base = base.filter(Dispensa.valor_limite <= valor_max)
+
+        from sqlalchemy import func
+        status_rows = (
+            base.with_entities(Dispensa.status, func.count(Dispensa.id))
+            .group_by(Dispensa.status)
+            .all()
+        )
+        por_status = {row[0]: row[1] for row in status_rows}
+        total = sum(por_status.values())
+
+        artigos_rows = (
+            db.query(Dispensa.artigo, func.count(Dispensa.id))
+            .filter(Dispensa.empresa_id == empresa_id)
+            .group_by(Dispensa.artigo)
+            .all()
+        )
+        por_artigo = {(row[0] or "N/A"): row[1] for row in artigos_rows}
+
+        return jsonify({
+            "success": True,
+            "total": total,
+            "por_status": por_status,
+            "por_artigo": por_artigo,
+            "cards": {
+                "abertas": por_status.get("aberta", 0),
+                "cotacao_enviada": por_status.get("cotacao_enviada", 0),
+                "adjudicadas": por_status.get("adjudicada", 0),
+                "encerradas": por_status.get("encerrada", 0),
+            },
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dispensas/buscar", methods=["POST"])
+@require_auth
+def api_dispensas_buscar():
+    """UC-DI01: Busca dispensas no PNCP — reusa motor multifonte com modalidade=dispensa."""
+    user_id = get_current_user_id()
+    body = request.get_json(silent=True) or {}
+    termo = body.get("termo", "").strip()
+    uf = body.get("uf", "").strip().upper() or None
+
+    if not termo:
+        return jsonify({"error": "Informe o termo de busca."}), 400
+
+    resultado = _buscar_editais_multifonte(
+        termo=termo,
+        user_id=user_id,
+        uf=uf,
+        incluir_encerrados=body.get("incluir_encerrados", False),
+        buscar_detalhes=True,
+        dias_busca=body.get("dias_busca", 90),
+        modalidade="Dispensa",
+    )
+
+    editais = resultado.get("editais", [])
+
+    from models import Dispensa, Edital
+    from decimal import Decimal
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        dispensas_criadas = 0
+        LIMITES_ARTIGO = {
+            "75-I": 50000, "75-II": 100000, "75-III": None,
+            "75-IV": None, "75-V": None,
+        }
+
+        for ed in editais:
+            edital_id = ed.get("id")
+            if not edital_id:
+                continue
+            existente = db.query(Dispensa).filter(
+                Dispensa.empresa_id == empresa_id,
+                Dispensa.edital_id == edital_id,
+            ).first()
+            if existente:
+                continue
+
+            artigo_detectado = "75-II"
+            valor_est = ed.get("valor_estimado")
+            if valor_est and isinstance(valor_est, (int, float)):
+                if valor_est <= 50000:
+                    artigo_detectado = "75-I"
+
+            limite = LIMITES_ARTIGO.get(artigo_detectado)
+
+            disp = Dispensa(
+                user_id=user_id,
+                empresa_id=empresa_id,
+                edital_id=edital_id,
+                artigo=artigo_detectado,
+                valor_limite=Decimal(str(limite)) if limite else None,
+                status="aberta",
+            )
+            db.add(disp)
+            dispensas_criadas += 1
+
+        if dispensas_criadas:
+            db.commit()
+
+        return jsonify({
+            "success": True,
+            "editais_encontrados": len(editais),
+            "dispensas_criadas": dispensas_criadas,
+            "editais": editais[:50],
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dispensas/<dispensa_id>/cotacao", methods=["POST"])
+@require_auth
+def api_dispensas_cotacao(dispensa_id):
+    """UC-DI01: Gera cotação via DeepSeek para uma dispensa, usando produtos do portfolio."""
+    from models import Dispensa, Edital, Produto
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        dispensa = db.query(Dispensa).filter(
+            Dispensa.id == dispensa_id,
+            Dispensa.empresa_id == empresa_id,
+        ).first()
+        if not dispensa:
+            return jsonify({"error": "Dispensa não encontrada."}), 404
+
+        edital = db.query(Edital).filter(Edital.id == dispensa.edital_id).first()
+        objeto = edital.objeto if edital else "Sem objeto"
+
+        produtos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
+        lista_prods = "\n".join([
+            f"- {p.nome} | Cat: {p.categoria} | Preço ref: {float(p.preco_referencia) if p.preco_referencia else 'N/A'}"
+            for p in produtos[:50]
+        ])
+
+        prompt = f"""Você é um especialista em dispensas de licitação (Lei 14.133/2021).
+
+Dispensa: {dispensa.artigo}
+Objeto: {objeto}
+Valor limite: {float(dispensa.valor_limite) if dispensa.valor_limite else 'Não definido'}
+
+Produtos disponíveis no portfolio da empresa:
+{lista_prods}
+
+Gere uma cotação formal em texto para esta dispensa contendo:
+1. Identificação da empresa fornecedora
+2. Objeto da cotação
+3. Itens ofertados (com preço unitário e total)
+4. Condições de fornecimento (prazo entrega, validade proposta, pagamento)
+5. Observações relevantes
+
+Retorne a cotação em texto formatado, pronta para envio."""
+
+        resposta = call_deepseek(
+            [{"role": "user", "content": prompt}],
+            max_tokens=4000,
+            model_override="deepseek-chat"
+        )
+
+        dispensa.cotacao_texto = resposta if isinstance(resposta, str) else str(resposta)
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "cotacao": dispensa.cotacao_texto,
+            "dispensa_id": dispensa_id,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/dispensas/<dispensa_id>/status", methods=["PUT"])
+@require_auth
+def api_dispensas_status(dispensa_id):
+    """UC-DI01: Transição de status com RN-NEW-08 (sem pular) + RN-NEW-11 (adjudicada → lead CRM)."""
+    from models import Dispensa, Edital, LeadCRM
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    body = request.get_json(silent=True) or {}
+    novo_status = body.get("status", "").strip()
+
+    TRANSICOES_VALIDAS = {
+        "aberta": ["cotacao_enviada"],
+        "cotacao_enviada": ["aberta", "adjudicada"],
+        "adjudicada": ["encerrada"],
+        "encerrada": [],
+    }
+
+    db = get_db()
+    try:
+        dispensa = db.query(Dispensa).filter(
+            Dispensa.id == dispensa_id,
+            Dispensa.empresa_id == empresa_id,
+        ).first()
+        if not dispensa:
+            return jsonify({"error": "Dispensa não encontrada."}), 404
+
+        if novo_status not in ["aberta", "cotacao_enviada", "adjudicada", "encerrada"]:
+            return jsonify({"error": f"Status inválido. Válidos: aberta, cotacao_enviada, adjudicada, encerrada"}), 400
+
+        status_anterior = dispensa.status
+        transicoes = TRANSICOES_VALIDAS.get(status_anterior, [])
+        if novo_status not in transicoes:
+            return jsonify({
+                "error": f"Transição inválida: '{status_anterior}' → '{novo_status}'. Permitidas: {transicoes}"
+            }), 400
+
+        dispensa.status = novo_status
+        dispensa.updated_at = datetime.now()
+
+        # RN-NEW-11: adjudicada → criar lead CRM
+        lead_criado = None
+        if novo_status == "adjudicada":
+            edital = db.query(Edital).filter(Edital.id == dispensa.edital_id).first()
+            if edital:
+                lead_existente = db.query(LeadCRM).filter(
+                    LeadCRM.empresa_id == empresa_id,
+                    LeadCRM.edital_id == edital.id,
+                ).first()
+                if not lead_existente:
+                    lead = LeadCRM(
+                        user_id=user_id,
+                        empresa_id=empresa_id,
+                        edital_id=edital.id,
+                        orgao=edital.orgao or "Órgão da dispensa",
+                        origem="dispensa_adjudicada",
+                        valor_potencial=dispensa.valor_limite,
+                        status_pipeline="proposta",
+                    )
+                    db.add(lead)
+                    lead_criado = True
+
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "status_anterior": status_anterior,
+            "status_novo": novo_status,
+            "lead_crm_criado": lead_criado or False,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/portfolio/aplicar-mascara", methods=["POST"])
+@require_auth
+def api_portfolio_aplicar_mascara():
+    """UC-MA01: Aplica máscara de descrição a 1 produto via DeepSeek."""
+    from models import Produto, SubclasseProduto, AuditoriaLog
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    body = request.get_json(silent=True) or {}
+    produto_id = body.get("produto_id", "").strip()
+
+    if not produto_id:
+        return jsonify({"error": "produto_id obrigatório."}), 400
+
+    db = get_db()
+    try:
+        produto = db.query(Produto).filter(
+            Produto.id == produto_id,
+            Produto.empresa_id == empresa_id,
+        ).first()
+        if not produto:
+            return jsonify({"error": "Produto não encontrado."}), 404
+
+        campos_mascara = []
+        if produto.subclasse_id:
+            sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == produto.subclasse_id).first()
+            if sub and sub.campos_mascara:
+                campos_mascara = sub.campos_mascara
+
+        from tools import tool_aplicar_mascara_descricao
+        resultado = tool_aplicar_mascara_descricao(
+            descricao=produto.descricao or produto.nome,
+            ncm=produto.ncm,
+            campos_mascara=campos_mascara,
+            nome_produto=produto.nome,
+            user_id=user_id,
+            empresa_id=empresa_id,
+        )
+
+        if resultado.get("success"):
+            produto.descricao_normalizada = resultado.get("descricao_normalizada")
+            produto.mascara_ativa = True
+            produto.mascara_metadata = {
+                "variantes": resultado.get("variantes", []),
+                "sinonimos": resultado.get("sinonimos", []),
+                "score_antes": resultado.get("score_antes"),
+                "score_depois": resultado.get("score_depois"),
+                "campos_mascara_usados": len(campos_mascara),
+            }
+            db.commit()
+
+        return jsonify({
+            "success": resultado.get("success", False),
+            "produto_id": produto_id,
+            "descricao_original": produto.descricao or produto.nome,
+            "descricao_normalizada": resultado.get("descricao_normalizada"),
+            "variantes": resultado.get("variantes", []),
+            "sinonimos": resultado.get("sinonimos", []),
+            "score_antes": resultado.get("score_antes"),
+            "score_depois": resultado.get("score_depois"),
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/portfolio/aplicar-mascara-lote", methods=["POST"])
+@require_auth
+def api_portfolio_aplicar_mascara_lote():
+    """UC-MA01: Aplica máscara em lote — N produtos sequencialmente."""
+    from models import Produto, SubclasseProduto
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    body = request.get_json(silent=True) or {}
+    produto_ids = body.get("produto_ids", [])
+
+    if not produto_ids or not isinstance(produto_ids, list):
+        return jsonify({"error": "produto_ids (lista) obrigatório."}), 400
+
+    if len(produto_ids) > 50:
+        return jsonify({"error": "Máximo 50 produtos por lote."}), 400
+
+    db = get_db()
+    try:
+        resultados = []
+        sucesso = 0
+        falha = 0
+
+        for pid in produto_ids:
+            produto = db.query(Produto).filter(
+                Produto.id == pid,
+                Produto.empresa_id == empresa_id,
+            ).first()
+            if not produto:
+                resultados.append({"produto_id": pid, "success": False, "error": "Não encontrado"})
+                falha += 1
+                continue
+
+            campos_mascara = []
+            if produto.subclasse_id:
+                sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == produto.subclasse_id).first()
+                if sub and sub.campos_mascara:
+                    campos_mascara = sub.campos_mascara
+
+            from tools import tool_aplicar_mascara_descricao
+            res = tool_aplicar_mascara_descricao(
+                descricao=produto.descricao or produto.nome,
+                ncm=produto.ncm,
+                campos_mascara=campos_mascara,
+                nome_produto=produto.nome,
+                user_id=user_id,
+                empresa_id=empresa_id,
+            )
+
+            if res.get("success"):
+                produto.descricao_normalizada = res.get("descricao_normalizada")
+                produto.mascara_ativa = True
+                produto.mascara_metadata = {
+                    "variantes": res.get("variantes", []),
+                    "sinonimos": res.get("sinonimos", []),
+                    "score_antes": res.get("score_antes"),
+                    "score_depois": res.get("score_depois"),
+                }
+                sucesso += 1
+            else:
+                falha += 1
+
+            resultados.append({
+                "produto_id": pid,
+                "nome": produto.nome,
+                "success": res.get("success", False),
+                "descricao_normalizada": res.get("descricao_normalizada"),
+            })
+
+        if sucesso > 0:
+            db.commit()
+
+        return jsonify({
+            "success": True,
+            "total": len(produto_ids),
+            "sucesso": sucesso,
+            "falha": falha,
+            "resultados": resultados,
+        })
+    except Exception as e:
+        db.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
