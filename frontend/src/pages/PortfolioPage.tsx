@@ -221,7 +221,8 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       const term = searchTerm.toLowerCase();
       const match = p.nome.toLowerCase().includes(term) ||
         (p.fabricante || "").toLowerCase().includes(term) ||
-        (p.modelo || "").toLowerCase().includes(term);
+        (p.modelo || "").toLowerCase().includes(term) ||
+        (p.descricao || "").toLowerCase().includes(term);
       if (!match) return false;
     }
     // Filtro "Sem Classe"

@@ -54,6 +54,11 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 > Esses menus não aparecem para usuários normais (super=False). O tutorial a seguir assume que a empresa RP3X já está associada a valida2.
 
+### Dicas de navegação
+
+- Para cadastro completo da empresa (incluindo redes sociais e endereço), acesse **Configurações > Empresa**
+- Para selecionar a empresa, acesse **Configurações > Selecionar Empresa** e escolha 'RP3X Comércio e Representações Ltda.'
+
 ---
 
 ## Índice
@@ -498,6 +503,17 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 ---
 
+### Passo 0 (Pré-requisito) — Inicializar as fontes de certidões
+
+**O que fazer:** Antes de buscar certidões, é necessário inicializar as fontes padrão. Vá em **Cadastros > Empresa > Fontes de Certidões** e clique em **Inicializar Fontes Padrão**. Isso cria as 5 fontes automáticas (Receita Federal, PGFN, FGTS, Trabalhista, Estadual).
+
+📌 **Atenção:** Sem este passo, a busca retornará erro "Nenhuma fonte de certidão cadastrada". Este passo precisa ser feito apenas uma vez.
+
+✅ **Correto se:** As 5 fontes padrão aparecem listadas após a inicialização.
+❌ **Problema se:** O botão "Inicializar Fontes Padrão" não existe ou retorna erro.
+
+---
+
 ### Passo 3 — Iniciar a busca automática de certidões
 
 **O que fazer:** Clique no botão "Buscar Certidões", "Consultar" ou similar. O sistema vai acessar os sites governamentais usando o CNPJ da RP3X e tentar baixar as certidões automaticamente.
@@ -616,6 +632,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 | Cargo | `Sócia-Administradora` |
 | Email | `fernanda.costa@rp3x.com.br` |
 | Telefone | `(16) 99888-7766` |
+| CPF | `123.456.789-09` |
 
 **O que acontece depois:** Após salvar, a Fernanda Lima Costa aparece na lista de responsáveis com o tipo "Representante Legal".
 
@@ -637,6 +654,9 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 | Cargo | `Farmacêutico-Bioquímico Responsável` |
 | Email | `ricardo.nunes@rp3x.com.br` |
 | Telefone | `(16) 99777-5544` |
+| CPF | `987.654.321-00` |
+
+📌 **Nota:** O campo CPF é opcional, mas recomendamos preencher para completude do cadastro.
 
 **O que acontece depois:** O Dr. Ricardo aparece na lista de responsáveis com o tipo "Responsável Técnico". A lista agora tem dois itens.
 
@@ -723,18 +743,20 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 **O que acontece depois:** A lista é filtrada para mostrar apenas produtos que contêm a palavra "reagente" no nome ou descrição.
 
+📌 **Nota:** O termo "reagente" busca no nome, fabricante e modelo do produto. Se não houver produto com esse termo nesses campos, a busca não retornará resultados. O filtro por Área/Classe é mais apropriado para buscar por categoria.
+
 ✅ **Correto se:** A lista reage à palavra digitada (seja mostrando produtos, seja mostrando "nenhum resultado").
 ❌ **Problema se:** A busca não funciona ou exibe erro.
 
 ---
 
-### Passo 4 — Testar a busca por palavra-chave "hematologia"
+### Passo 4 — Testar a busca por palavra-chave "hemograma"
 
-**O que fazer:** Limpe o campo de busca anterior e digite `hematologia`. Observe se a lista é filtrada.
+**O que fazer:** Limpe o campo de busca anterior e digite `hemograma`. Observe se a lista é filtrada.
 
 **O que você vai ver na tela:** O campo de busca com a nova palavra.
 
-**O que acontece depois:** A lista filtra para produtos relacionados à hematologia.
+**O que acontece depois:** A lista filtra para produtos relacionados ao hemograma (o produto se chama "Kit Hemograma Sysmex XN").
 
 ✅ **Correto se:** O campo de busca aceita a nova palavra e a lista responde.
 ❌ **Problema se:** O campo de busca trava ou não aceita nova entrada.
@@ -747,7 +769,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 - A tela de portfólio carrega sem erros
 - O filtro por Área funciona (lista muda ou exibe "sem resultados")
 - A busca por "reagente" funciona
-- A busca por "hematologia" funciona
+- A busca por "hemograma" funciona
 
 **🔴 Sinais de problema:**
 - Tela não carrega
@@ -1901,7 +1923,7 @@ medio lote reagente
 | UC-F03 | Documentos com badges de validade | Alvará: amarelo; AFE: verde; ISO: verde; Certidão Estadual: vermelho/amarelo |
 | UC-F04 | Certidões automáticas e upload PGFN | Frequência quinzenal configurada; certidão PGFN com número `PGFN-2025-98765` e validade `30/09/2026` |
 | UC-F05 | Dois responsáveis sem Preposto | Fernanda (Rep. Legal) e Dr. Ricardo (Resp. Técnico) — sistema não exige Preposto |
-| UC-F06 | Filtros do portfólio funcionando | Filtro por área e busca por "reagente" e "hematologia" respondem corretamente |
+| UC-F06 | Filtros do portfólio funcionando | Filtro por área e busca por "reagente" e "hemograma" respondem corretamente |
 | UC-F07 | Cadastro por IA e Plano de Contas sem nome | IA processa em até 90s; item sem nome aceito pelo sistema |
 | UC-F08 | Edição completa do produto | Nome atualizado, 11 specs técnicas salvas, NCM e SKU aceitos |
 | UC-F09 | Reprocessamento de IA | Botão disponível, processo conclui, dados manuais não são apagados |
