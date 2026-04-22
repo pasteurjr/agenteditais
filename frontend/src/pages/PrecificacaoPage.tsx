@@ -16,6 +16,7 @@ import { crudList, crudCreate, crudUpdate, crudGet } from "../api/crud";
 import { createSession, sendMessage } from "../api/client";
 import { getEditais, getProdutos } from "../api/client";
 import type { Edital, Produto } from "../api/client";
+import { simularLanceDeterministico, getScoreCompetitividade, simularDRE } from "../api/sprint9";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,23 @@ export function PrecificacaoPage(props?: PageProps) {
   const [disputaSimulacaoMD, setDisputaSimulacaoMD] = useState<string | null>(null);
   const [disputaLoading, setDisputaLoading] = useState(false);
 
+  // ── Tab: Estratégia — Sprint 9 ──
+  // UC-LA01: Simulador Determinístico
+  const [simDetOpen, setSimDetOpen] = useState(false);
+  const [simDetNumRodadas, setSimDetNumRodadas] = useState("10");
+  const [simDetTipoDecremento, setSimDetTipoDecremento] = useState("fixo_reais");
+  const [simDetValorDecremento, setSimDetValorDecremento] = useState("");
+  const [simDetNumConcorrentes, setSimDetNumConcorrentes] = useState("3");
+  const [simDetPerfil, setSimDetPerfil] = useState("quero_ganhar");
+  const [simDetLoading, setSimDetLoading] = useState(false);
+  const [simDetResult, setSimDetResult] = useState<Record<string, unknown> | null>(null);
+  // UC-SC01: Score Competitividade
+  const [scoreComp, setScoreComp] = useState<Record<string, unknown> | null>(null);
+  const [scoreCompLoading, setScoreCompLoading] = useState(false);
+  // UC-SC05: Simular DRE
+  const [dreResult, setDreResult] = useState<Record<string, unknown> | null>(null);
+  const [dreLoading, setDreLoading] = useState(false);
+
   // ── Tab: Histórico (UC-P09) + Comodato (UC-P10) ──
   const [termoBusca, setTermoBusca] = useState("");
   const [historico, setHistorico] = useState<HistoricoPreco[]>([]);
@@ -272,6 +290,19 @@ export function PrecificacaoPage(props?: PageProps) {
   }, []);
 
   useEffect(() => { if (editalId) loadLotes(editalId); }, [editalId, loadLotes]);
+
+  // ── Load Score Competitividade (UC-SC01) when edital changes ──
+  useEffect(() => {
+    if (!editalId) { setScoreComp(null); return; }
+    (async () => {
+      setScoreCompLoading(true);
+      try {
+        const res = await getScoreCompetitividade(editalId);
+        setScoreComp(res.success !== false ? res : null);
+      } catch { setScoreComp(null); }
+      finally { setScoreCompLoading(false); }
+    })();
+  }, [editalId]);
 
   // ── Load camada when vinculo changes → preencher campos do banco ──
   useEffect(() => {
@@ -1190,6 +1221,7 @@ ${html}
     { id: "lotes", label: `Lotes ${lotes.length > 0 ? (lotes.some(l => (l as Record<string,unknown>).status === "configurado") ? "✅" : "⚠️") : "❌"}`, icon: <Layers size={16} /> },
     { id: "camadas", label: `Custos e Preços ${Object.values(todasCamadas).some(c => c.preco_base) ? "✅" : Object.values(todasCamadas).some(c => c.custo_unitario) ? "⚠️" : vinculos.length > 0 ? "⚠️" : "❌"}`, icon: <DollarSign size={16} /> },
     { id: "lances", label: `Lances ${Object.values(todasCamadas).some(c => c.lance_inicial) ? "✅" : "❌"}`, icon: <Target size={16} /> },
+    { id: "estrategia", label: "Estratégia", icon: <BarChart3 size={16} /> },
     { id: "historico", label: "Histórico", icon: <History size={16} /> },
   ];
 
@@ -2437,6 +2469,240 @@ Qual cenário é mais adequado e por quê.`;
                         </Card>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* ═══════════════════ TAB: ESTRATÉGIA (Sprint 9) ═══════════════════ */}
+                {activeTab === "estrategia" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                    {/* ── UC-SC01: Score de Competitividade ── */}
+                    <Card title="Score de Competitividade (UC-SC01)" icon={<BarChart3 size={18} />}>
+                      {scoreCompLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 0", color: "var(--text-secondary)" }}>
+                          <Loader2 size={16} className="spin" /> Carregando score...
+                        </div>
+                      ) : scoreComp ? (
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+                            <div style={{
+                              width: 72, height: 72, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 24, fontWeight: 700, color: "#fff",
+                              background: Number(scoreComp.score ?? 0) > 70 ? "#22c55e" : Number(scoreComp.score ?? 0) >= 40 ? "#eab308" : "#ef4444",
+                            }}>
+                              {Number(scoreComp.score ?? 0)}
+                            </div>
+                            <div>
+                              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
+                                Competitividade: {Number(scoreComp.score ?? 0) > 70 ? "Alta" : Number(scoreComp.score ?? 0) >= 40 ? "Média" : "Baixa"}
+                              </p>
+                              {scoreComp.bootstrap_pncp && (
+                                <span style={{
+                                  display: "inline-block", marginTop: 4, fontSize: 11, padding: "2px 8px",
+                                  borderRadius: 4, background: "#3b82f620", color: "#3b82f6", border: "1px solid #3b82f640",
+                                }}>
+                                  estimativa PNCP
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {Array.isArray(scoreComp.fatores) && (scoreComp.fatores as Array<Record<string, unknown>>).map((f, i) => (
+                            <div key={i} style={{ marginBottom: 8 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                                <span>{String(f.nome ?? f.label ?? `Fator ${i + 1}`)}</span>
+                                <span style={{ fontWeight: 600 }}>{Number(f.valor ?? f.score ?? 0).toFixed(0)}%</span>
+                              </div>
+                              <div style={{ height: 6, borderRadius: 3, background: "#e5e7eb", overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%", borderRadius: 3, transition: "width 0.3s",
+                                  width: `${Math.min(Number(f.valor ?? f.score ?? 0), 100)}%`,
+                                  background: Number(f.valor ?? f.score ?? 0) > 70 ? "#22c55e" : Number(f.valor ?? f.score ?? 0) >= 40 ? "#eab308" : "#ef4444",
+                                }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ color: "var(--text-secondary)", padding: "12px 0", fontSize: 13 }}>
+                          {editalId ? "Score não disponível para este edital." : "Selecione um edital para ver o score."}
+                        </p>
+                      )}
+                    </Card>
+
+                    {/* ── UC-LA01: Simulador Determinístico ── */}
+                    <Card title="Simulador Determinístico (UC-LA01)" icon={<Target size={18} />}
+                      actions={
+                        <button onClick={() => setSimDetOpen(!simDetOpen)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}>
+                          {simDetOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
+                      }
+                    >
+                      {simDetOpen && (
+                        <div>
+                          <div className="form-grid form-grid-3" style={{ marginBottom: 12 }}>
+                            <FormField label="Nº Rodadas">
+                              <TextInput value={simDetNumRodadas} onChange={setSimDetNumRodadas} placeholder="10" />
+                            </FormField>
+                            <FormField label="Tipo Decremento">
+                              <SelectInput value={simDetTipoDecremento} onChange={setSimDetTipoDecremento} options={[
+                                { value: "fixo_reais", label: "Fixo (R$)" },
+                                { value: "percentual_ultimo", label: "Percentual do último" },
+                              ]} />
+                            </FormField>
+                            <FormField label="Valor Decremento">
+                              <TextInput value={simDetValorDecremento} onChange={setSimDetValorDecremento} placeholder="0.50" />
+                            </FormField>
+                            <FormField label="Nº Concorrentes">
+                              <TextInput value={simDetNumConcorrentes} onChange={setSimDetNumConcorrentes} placeholder="3" />
+                            </FormField>
+                            <FormField label="Perfil">
+                              <SelectInput value={simDetPerfil} onChange={setSimDetPerfil} options={[
+                                { value: "quero_ganhar", label: "Quero Ganhar" },
+                                { value: "nao_ganhei_minimo", label: "Não Ganhei no Mínimo" },
+                              ]} />
+                            </FormField>
+                          </div>
+                          <ActionButton
+                            icon={<TrendingUp size={16} />}
+                            label="Simular"
+                            variant="primary"
+                            loading={simDetLoading}
+                            disabled={!vinculoId}
+                            onClick={async () => {
+                              if (!vinculoId) { alert("Selecione um vínculo na aba Lances."); return; }
+                              setSimDetLoading(true);
+                              setSimDetResult(null);
+                              try {
+                                const res = await simularLanceDeterministico({
+                                  edital_item_produto_id: vinculoId,
+                                  num_rodadas: parseInt(simDetNumRodadas) || 10,
+                                  tipo_decremento: simDetTipoDecremento,
+                                  valor_decremento: parseFloat(simDetValorDecremento) || undefined,
+                                  num_concorrentes: parseInt(simDetNumConcorrentes) || 3,
+                                  perfil: simDetPerfil,
+                                });
+                                setSimDetResult(res);
+                              } catch (e) { alert(e instanceof Error ? e.message : "Erro na simulação"); }
+                              finally { setSimDetLoading(false); }
+                            }}
+                          />
+                          {!vinculoId && (
+                            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>
+                              Selecione um vínculo Item ↔ Produto na aba "Lances" antes de simular.
+                            </p>
+                          )}
+
+                          {/* Resultados */}
+                          {simDetResult && (
+                            <div style={{ marginTop: 16 }}>
+                              <div className="stat-cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+                                <div className="stat-card stat-card-blue">
+                                  <div className="stat-card-icon"><Target size={20} /></div>
+                                  <div className="stat-card-content">
+                                    <span className="stat-card-value">{String(simDetResult.posicao_final ?? "—")}</span>
+                                    <span className="stat-card-label">Posição Final</span>
+                                  </div>
+                                </div>
+                                <div className="stat-card stat-card-green">
+                                  <div className="stat-card-icon"><DollarSign size={20} /></div>
+                                  <div className="stat-card-content">
+                                    <span className="stat-card-value">{fmt(Number(simDetResult.lance_final ?? 0))}</span>
+                                    <span className="stat-card-label">Lance Final</span>
+                                  </div>
+                                </div>
+                                <div className="stat-card stat-card-yellow">
+                                  <div className="stat-card-icon"><TrendingUp size={20} /></div>
+                                  <div className="stat-card-content">
+                                    <span className="stat-card-value">{pct(Number(simDetResult.margem_final ?? 0))}</span>
+                                    <span className="stat-card-label">Margem Final</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {Array.isArray(simDetResult.rodadas) && (simDetResult.rodadas as Array<Record<string, unknown>>).length > 0 && (
+                                <DataTable
+                                  data={simDetResult.rodadas as Array<Record<string, unknown>>}
+                                  columns={[
+                                    { key: "rodada", header: "Rodada", width: "70px", render: (r) => String(r.rodada ?? "") },
+                                    { key: "lance_empresa", header: "Nosso Lance", render: (r) => fmt(Number(r.lance_empresa ?? 0)) },
+                                    { key: "lance_lider", header: "Líder", render: (r) => fmt(Number(r.lance_lider ?? 0)) },
+                                    { key: "posicao", header: "Posição", width: "80px", render: (r) => String(r.posicao ?? "") },
+                                    { key: "margem", header: "Margem", width: "80px", render: (r) => pct(Number(r.margem ?? 0)) },
+                                  ] as Column<Record<string, unknown>>[]}
+                                  pageSize={10}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Card>
+
+                    {/* ── UC-SC05: Simular DRE ── */}
+                    <Card title="DRE Projetada (UC-SC05)" icon={<FileText size={18} />}>
+                      <ActionButton
+                        icon={<BarChart3 size={16} />}
+                        label="Simular DRE"
+                        variant="primary"
+                        loading={dreLoading}
+                        disabled={!editalId}
+                        onClick={async () => {
+                          if (!editalId) return;
+                          setDreLoading(true);
+                          setDreResult(null);
+                          try {
+                            const res = await simularDRE(editalId);
+                            setDreResult(res);
+                          } catch (e) { alert(e instanceof Error ? e.message : "Erro ao simular DRE"); }
+                          finally { setDreLoading(false); }
+                        }}
+                      />
+                      {dreResult && (
+                        <div style={{ marginTop: 16 }}>
+                          {/* Badge de atratividade */}
+                          {dreResult.atratividade && (() => {
+                            const atrat = String(dreResult.atratividade);
+                            const color = atrat === "verde" || atrat === "alta" ? "#22c55e"
+                              : atrat === "amarelo" || atrat === "media" ? "#eab308" : "#ef4444";
+                            const label = atrat === "verde" || atrat === "alta" ? "Atrativo"
+                              : atrat === "amarelo" || atrat === "media" ? "Moderado" : "Não Atrativo";
+                            return (
+                              <span style={{
+                                display: "inline-block", marginBottom: 12, fontSize: 12, padding: "4px 12px",
+                                borderRadius: 6, fontWeight: 600, color: "#fff", background: color,
+                              }}>
+                                Atratividade: {label}
+                              </span>
+                            );
+                          })()}
+
+                          {/* Tabela DRE */}
+                          {Array.isArray(dreResult.linhas) && (
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                              <thead>
+                                <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                                  <th style={{ textAlign: "left", padding: "8px 12px" }}>Linha</th>
+                                  <th style={{ textAlign: "right", padding: "8px 12px" }}>Valor (R$)</th>
+                                  <th style={{ textAlign: "right", padding: "8px 12px" }}>% Receita</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(dreResult.linhas as Array<Record<string, unknown>>).map((l, i) => {
+                                  const isTotal = String(l.linha ?? "").toLowerCase().includes("resultado") || String(l.linha ?? "").toLowerCase().includes("lucro");
+                                  return (
+                                    <tr key={i} style={{ borderBottom: "1px solid var(--border)", fontWeight: isTotal ? 700 : 400 }}>
+                                      <td style={{ padding: "6px 12px" }}>{String(l.linha ?? l.descricao ?? "")}</td>
+                                      <td style={{ textAlign: "right", padding: "6px 12px" }}>{fmt(Number(l.valor ?? 0))}</td>
+                                      <td style={{ textAlign: "right", padding: "6px 12px" }}>{l.pct_receita != null ? pct(Number(l.pct_receita)) : "—"}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </Card>
                   </div>
                 )}
 

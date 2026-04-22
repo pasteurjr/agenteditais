@@ -30,6 +30,8 @@ from models import (
     Contrato, ContratoEntrega, AtaConsultada, Alerta,
     ContratoAditivo, ContratoDesignacao, AtividadeFiscal,
     ARPSaldo, SolicitacaoCarona, AlertaVencimentoRegra,
+    # SPRINT 9
+    Recurso, SessaoPregao,
 )
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
@@ -9236,6 +9238,437 @@ def tool_estrategia_competitiva(edital_id: str, user_id: str,
         db.close()
 
 
+def tool_simular_lance(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
+                       num_rodadas: int = 10, tipo_decremento: str = 'fixo_reais',
+                       valor_decremento: float = 10.0, num_concorrentes: int = 3,
+                       perfil: str = 'quero_ganhar') -> Dict[str, Any]:
+    """UC-LA01: Simulação determinística de lances rodada-a-rodada."""
+    db = get_db()
+    try:
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.id == edital_item_produto_id,
+            EditalItemProduto.empresa_id == empresa_id
+        ).first()
+        if not vinculo:
+            return {"success": False, "error": "Vínculo item-produto não encontrado"}
+
+        camada = db.query(PrecoCamada).filter(
+            PrecoCamada.edital_item_produto_id == edital_item_produto_id
+        ).first()
+        if not camada:
+            return {"success": False, "error": "Camadas A-E não configuradas (RN-098)"}
+
+        custo = float(camada.custo_base_final or 0)
+        lance_inicial = float(camada.lance_inicial or 0)
+        lance_minimo = float(camada.lance_minimo or custo)
+
+        if not lance_inicial or not custo:
+            return {"success": False, "error": "lance_inicial e custo_base são obrigatórios (RN-098)"}
+        if lance_minimo >= lance_inicial:
+            return {"success": False, "error": "lance_minimo deve ser < lance_inicial (RN-099)"}
+
+        import random
+        random.seed(42)
+        num_rodadas = max(3, min(num_rodadas, 30))
+
+        concorrentes_iniciais = [lance_inicial * random.uniform(0.92, 1.02) for _ in range(num_concorrentes)]
+        nosso_valor = lance_inicial
+        rodadas = []
+
+        for r in range(1, num_rodadas + 1):
+            for i in range(num_concorrentes):
+                if tipo_decremento == 'fixo_reais':
+                    dec = valor_decremento * random.uniform(0.7, 1.3)
+                else:
+                    dec = concorrentes_iniciais[i] * (valor_decremento / 100) * random.uniform(0.7, 1.3)
+                concorrentes_iniciais[i] = max(concorrentes_iniciais[i] - dec, custo * 0.95)
+
+            lider = min(concorrentes_iniciais)
+            if perfil == 'quero_ganhar':
+                nosso_dec = valor_decremento if tipo_decremento == 'fixo_reais' else nosso_valor * (valor_decremento / 100)
+                nosso_valor = max(lider - nosso_dec * 0.5, lance_minimo)
+            else:
+                nosso_valor = max(lider + valor_decremento * 0.3, lance_minimo)
+
+            todos = sorted(concorrentes_iniciais + [nosso_valor])
+            posicao = todos.index(nosso_valor) + 1
+            margem = ((nosso_valor - custo) / custo * 100) if custo > 0 else 0
+
+            rodadas.append({
+                "rodada": r,
+                "valor_nosso": round(nosso_valor, 4),
+                "valores_concorrentes": [round(v, 4) for v in concorrentes_iniciais],
+                "lider": round(min(concorrentes_iniciais), 4),
+                "posicao": posicao,
+                "margem": round(margem, 2),
+                "abaixo_minimo": nosso_valor <= lance_minimo,
+                "abaixo_custo": nosso_valor < custo,
+            })
+
+            if nosso_valor <= lance_minimo:
+                break
+
+        return {
+            "success": True,
+            "tipo": "simulacao_deterministica",
+            "parametros": {
+                "num_rodadas": len(rodadas),
+                "tipo_decremento": tipo_decremento,
+                "valor_decremento": valor_decremento,
+                "num_concorrentes": num_concorrentes,
+                "perfil": perfil,
+            },
+            "camadas": {
+                "custo_base": custo,
+                "lance_inicial": lance_inicial,
+                "lance_minimo": lance_minimo,
+            },
+            "rodadas": rodadas,
+            "resultado": {
+                "posicao_final": rodadas[-1]["posicao"],
+                "lance_final": rodadas[-1]["valor_nosso"],
+                "margem_final": rodadas[-1]["margem"],
+            },
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_sugerir_lance(sessao_pregao_id: str, user_id: str, empresa_id: str = None,
+                       lance_lider: float = 0, nosso_ultimo: float = 0,
+                       custo_base: float = 0, lance_minimo: float = 0,
+                       lance_inicial: float = 0, target: float = 0,
+                       perfil: str = 'quero_ganhar', decremento_medio: float = 10.0) -> Dict[str, Any]:
+    """UC-LA02: Sugestão inteligente de lance em tempo real."""
+    if custo_base <= 0:
+        return {"success": False, "error": "custo_base deve ser > 0 (RN-102)"}
+    if lance_minimo >= lance_inicial:
+        return {"success": False, "error": "lance_minimo deve ser < lance_inicial (RN-099)"}
+
+    if perfil == 'quero_ganhar':
+        lance_sugerido = lance_lider - decremento_medio
+    else:
+        lance_sugerido = lance_lider - (decremento_medio * 0.3)
+
+    lance_sugerido = max(lance_sugerido, lance_minimo)
+
+    if nosso_ultimo > 0 and lance_sugerido >= nosso_ultimo:
+        lance_sugerido = nosso_ultimo - 1.0
+
+    lance_sugerido = max(lance_sugerido, lance_minimo)
+
+    margem = ((lance_sugerido - custo_base) / custo_base * 100)
+    abaixo_custo = lance_sugerido < custo_base
+    no_minimo = abs(lance_sugerido - lance_minimo) < 0.01
+
+    if lance_lider <= 0:
+        confianca = "baixa"
+        justificativa = "Sem dados do líder — sugestão baseada em custo * 1.10 (RN-101)"
+        lance_sugerido = custo_base * 1.10
+        margem = 10.0
+    elif abaixo_custo:
+        confianca = "baixa"
+        justificativa = "Lance abaixo do custo! Prejuízo potencial (RN-100)"
+    elif no_minimo:
+        confianca = "media"
+        justificativa = "Lance no mínimo (Camada E). Último lance seguro"
+    elif margem > 20:
+        confianca = "alta"
+        justificativa = f"Margem confortável de {margem:.1f}%"
+    else:
+        confianca = "media"
+        justificativa = f"Margem de {margem:.1f}% — zona de atenção"
+
+    posicao_estimada = 1 if lance_sugerido < lance_lider else 2
+
+    return {
+        "success": True,
+        "lance_sugerido": round(lance_sugerido, 4),
+        "margem_sobre_custo": round(margem, 2),
+        "posicao_estimada": posicao_estimada,
+        "confianca": confianca,
+        "justificativa": justificativa,
+        "abaixo_custo": abaixo_custo,
+        "no_minimo": no_minimo,
+        "perfil": perfil,
+    }
+
+
+def tool_score_competitividade(edital_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
+    """UC-SC01: Score de Competitividade 360° (0-100, 4 fatores ponderados)."""
+    db = get_db()
+    try:
+        from sqlalchemy import func
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Fator 1 — Histórico similar (30%): editais ganhos/perdidos nos últimos 24m
+        limite_24m = datetime.now() - timedelta(days=730)
+        historicos = db.query(PrecoHistorico).join(Edital, PrecoHistorico.edital_id == Edital.id).filter(
+            Edital.empresa_id == empresa_id,
+            PrecoHistorico.data_registro >= limite_24m,
+            PrecoHistorico.resultado.in_(['vitoria', 'derrota']),
+        ).all()
+
+        vitorias = sum(1 for h in historicos if h.resultado == 'vitoria')
+        total_hist = len(historicos)
+        bootstrap_pncp = total_hist < 5
+
+        if total_hist > 0:
+            fator_historico = (vitorias / total_hist) * 100
+        else:
+            fator_historico = 50.0
+
+        # Fator 2 — Posição de preço (30%): percentil do nosso preço vs homologados
+        vinculos = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+
+        if vinculos:
+            camada = db.query(PrecoCamada).filter(
+                PrecoCamada.edital_item_produto_id == vinculos[0].id
+            ).first()
+            if camada and camada.lance_inicial and camada.target_referencia:
+                ratio = float(camada.lance_inicial) / float(camada.target_referencia)
+                fator_preco = max(0, min(100, (1.2 - ratio) * 200))
+            else:
+                fator_preco = 50.0
+        else:
+            fator_preco = 50.0
+
+        # Fator 3 — Concorrência (20%): taxa média de vitória dos concorrentes conhecidos (RN-074)
+        concorrentes = db.query(Concorrente).all()
+        if concorrentes:
+            taxa_media = sum(float(c.taxa_vitoria or 0) for c in concorrentes) / len(concorrentes)
+            fator_concorrencia = max(0, 100 - taxa_media)
+        else:
+            fator_concorrencia = 50.0
+
+        # Fator 4 — Perfil órgão (20%): histórico com este órgão
+        orgao = edital.orgao or ""
+        hist_orgao = [h for h in historicos if db.query(Edital).filter(
+            Edital.id == h.edital_id, Edital.orgao == orgao
+        ).first()]
+        if hist_orgao:
+            vit_orgao = sum(1 for h in hist_orgao if h.resultado == 'vitoria')
+            fator_orgao = (vit_orgao / len(hist_orgao)) * 100
+        else:
+            fator_orgao = 50.0
+
+        score = round(
+            fator_historico * 0.30 +
+            fator_preco * 0.30 +
+            fator_concorrencia * 0.20 +
+            fator_orgao * 0.20,
+            1
+        )
+
+        return {
+            "success": True,
+            "score": score,
+            "fatores": [
+                {"nome": "Histórico Similar", "peso": 30, "valor": round(fator_historico, 1)},
+                {"nome": "Posição de Preço", "peso": 30, "valor": round(fator_preco, 1)},
+                {"nome": "Concorrência", "peso": 20, "valor": round(fator_concorrencia, 1)},
+                {"nome": "Perfil Órgão", "peso": 20, "valor": round(fator_orgao, 1)},
+            ],
+            "confianca": "alta" if total_hist >= 10 else ("media" if total_hist >= 5 else "baixa"),
+            "bootstrap_pncp": bootstrap_pncp,
+            "historicos_analisados": total_hist,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_score_qualidade_concorrente(concorrente_id: str = None, empresa_id: str = None) -> Dict[str, Any]:
+    """UC-SC02: Score de Qualidade do Concorrente (RN-NEW-16)."""
+    db = get_db()
+    try:
+        if concorrente_id:
+            conc = db.query(Concorrente).filter(Concorrente.id == concorrente_id).first()
+            if not conc:
+                return {"success": False, "error": "Concorrente não encontrado"}
+
+            participados = int(conc.editais_participados or 0)
+            desclassificacoes = db.query(ParticipacaoEdital).filter(
+                ParticipacaoEdital.concorrente_id == concorrente_id,
+                ParticipacaoEdital.desclassificado == True,
+            ).count()
+            impugnacoes = 0
+
+            score = 100 - ((desclassificacoes + impugnacoes) / max(participados, 1)) * 100
+            score = max(0, min(100, round(score, 1)))
+
+            if score >= 70:
+                badge = "Alta"
+            elif score >= 40:
+                badge = "Media"
+            else:
+                badge = "Baixa"
+
+            return {
+                "success": True,
+                "concorrente_id": concorrente_id,
+                "nome": conc.nome,
+                "score": score,
+                "badge": badge,
+                "editais_participados": participados,
+                "desclassificacoes": desclassificacoes,
+                "impugnacoes": impugnacoes,
+            }
+        else:
+            return {"success": False, "error": "concorrente_id obrigatório"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_score_recurso(edital_id: str, user_id: str, empresa_id: str = None) -> Dict[str, Any]:
+    """UC-SC03: Score Numérico de Recurso (0-100, 4 fatores, RN-NEW-17)."""
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
+        if not edital:
+            return {"success": False, "error": "Edital não encontrado"}
+
+        # Fator 1 — Desvios técnicos (40%): conta recursos com desvios
+        recursos = db.query(Recurso).filter(
+            Recurso.edital_id == edital_id,
+            Recurso.empresa_id == empresa_id,
+        ).all()
+        desvios = sum(1 for r in recursos if r.tipo in ('analise_proposta', 'impugnacao'))
+        fator_desvios = min(100, desvios * 25)
+
+        # Fator 2 — Histórico empresa (20%): taxa de provimento
+        todos_recursos = db.query(Recurso).filter(Recurso.empresa_id == empresa_id).all()
+        providos = sum(1 for r in todos_recursos if r.status == 'provido')
+        total_rec = len(todos_recursos)
+        fator_hist_empresa = (providos / max(total_rec, 1)) * 100
+
+        # Fator 3 — Histórico órgão (25%): taxa de provimento no órgão
+        orgao = edital.orgao or ""
+        rec_orgao = db.query(Recurso).join(Edital, Recurso.edital_id == Edital.id).filter(
+            Edital.orgao == orgao,
+            Recurso.empresa_id == empresa_id,
+        ).all()
+        providos_orgao = sum(1 for r in rec_orgao if r.status == 'provido')
+        fator_hist_orgao = (providos_orgao / max(len(rec_orgao), 1)) * 100
+
+        # Fator 4 — Fundamento legal (15%): gravidade (simplificado)
+        fator_legal = min(100, len(recursos) * 20)
+
+        score = round(
+            fator_desvios * 0.40 +
+            fator_hist_empresa * 0.20 +
+            fator_hist_orgao * 0.25 +
+            fator_legal * 0.15,
+            1
+        )
+
+        if score >= 70:
+            recomendacao = "Recurso recomendado"
+        elif score >= 30:
+            recomendacao = "Inconclusivo"
+        else:
+            recomendacao = "Não recomendado"
+
+        return {
+            "success": True,
+            "score": score,
+            "recomendacao": recomendacao,
+            "fatores": [
+                {"nome": "Desvios Técnicos", "peso": 40, "valor": round(fator_desvios, 1)},
+                {"nome": "Histórico Empresa", "peso": 20, "valor": round(fator_hist_empresa, 1)},
+                {"nome": "Histórico Órgão", "peso": 25, "valor": round(fator_hist_orgao, 1)},
+                {"nome": "Fundamento Legal", "peso": 15, "valor": round(fator_legal, 1)},
+            ],
+            "recursos_encontrados": len(recursos),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def tool_dre_contrato(contrato_id: str = None, edital_id: str = None,
+                      user_id: str = None, empresa_id: str = None) -> Dict[str, Any]:
+    """UC-SC05: DRE simplificado por contrato ou simulação (RN-NEW-18)."""
+    db = get_db()
+    try:
+        if contrato_id:
+            contrato = db.query(Contrato).filter(
+                Contrato.id == contrato_id, Contrato.empresa_id == empresa_id
+            ).first()
+            if not contrato:
+                return {"success": False, "error": "Contrato não encontrado"}
+
+            valor_total = float(contrato.valor_total or 0)
+            eid = contrato.edital_id
+        elif edital_id:
+            eid = edital_id
+            vinculos = db.query(EditalItemProduto).filter(
+                EditalItemProduto.empresa_id == empresa_id
+            ).join(EditalItem).filter(EditalItem.edital_id == edital_id).all()
+            valor_total = 0
+            for v in vinculos:
+                c = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == v.id).first()
+                if c and c.lance_inicial:
+                    valor_total += float(c.lance_inicial)
+        else:
+            return {"success": False, "error": "contrato_id ou edital_id obrigatório"}
+
+        vinculos = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == eid).all()
+
+        custo_total = 0
+        impostos_total = 0
+        for v in vinculos:
+            camada = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == v.id).first()
+            if camada:
+                custo_total += float(camada.custo_base_final or 0)
+                icms = float(camada.icms or 0) / 100.0
+                ipi = float(camada.ipi or 0) / 100.0
+                pis_cofins = float(getattr(camada, 'pis_cofins', 0) or 0) / 100.0
+                impostos_total += valor_total * (icms + ipi + pis_cofins) / max(len(vinculos), 1)
+
+        receita_bruta = valor_total
+        receita_liquida = receita_bruta - impostos_total
+        resultado_operacional = receita_liquida - custo_total
+        margem = (resultado_operacional / receita_bruta * 100) if receita_bruta > 0 else 0
+
+        if margem > 20:
+            badge = "verde"
+        elif margem >= 10:
+            badge = "amarelo"
+        else:
+            badge = "vermelho"
+
+        return {
+            "success": True,
+            "tipo": "realizado" if contrato_id else "simulado",
+            "linhas": [
+                {"descricao": "Receita Bruta", "valor": round(receita_bruta, 2)},
+                {"descricao": "(-) Impostos", "valor": round(-impostos_total, 2)},
+                {"descricao": "= Receita Líquida", "valor": round(receita_liquida, 2)},
+                {"descricao": "(-) Custos (Camada A)", "valor": round(-custo_total, 2)},
+                {"descricao": "= Resultado Operacional", "valor": round(resultado_operacional, 2)},
+            ],
+            "margem_percentual": round(margem, 2),
+            "badge": badge,
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
 def tool_historico_precos_camada_f(edital_item_produto_id: str, user_id: str, empresa_id: str = None,
                                     termo: str = None) -> Dict[str, Any]:
     """UC-P09: Consulta histórico de preços e preenche Camada F."""
@@ -9387,6 +9820,14 @@ TOOLS_MAP["estruturar_lances"] = tool_estruturar_lances
 TOOLS_MAP["estrategia_competitiva"] = tool_estrategia_competitiva
 TOOLS_MAP["historico_precos_camada_f"] = tool_historico_precos_camada_f
 TOOLS_MAP["gestao_comodato"] = tool_gestao_comodato
+
+# Sprint 9 tools
+TOOLS_MAP["simular_lance"] = tool_simular_lance
+TOOLS_MAP["sugerir_lance"] = tool_sugerir_lance
+TOOLS_MAP["score_competitividade"] = tool_score_competitividade
+TOOLS_MAP["score_qualidade_concorrente"] = tool_score_qualidade_concorrente
+TOOLS_MAP["score_recurso"] = tool_score_recurso
+TOOLS_MAP["dre_contrato"] = tool_dre_contrato
 
 
 def tool_extrair_vencedores_atas(atas: list, user_id: str, empresa_id: str = None, edital_id: str = None) -> Dict[str, Any]:

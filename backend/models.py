@@ -57,6 +57,7 @@ class User(Base):
     vinculos_item_produto = relationship("EditalItemProduto", back_populates="user")
     preco_camadas = relationship("PrecoCamada", back_populates="user")
     lances = relationship("Lance", back_populates="user")
+    sessoes_pregao = relationship("SessaoPregao", back_populates="user")
     comodatos = relationship("Comodato", back_populates="user")
 
     def to_dict(self):
@@ -1175,6 +1176,11 @@ class Monitoramento(Base):
     editais_encontrados = Column(Integer, default=0)
     ultima_execucao = Column(DateTime, nullable=True)
 
+    # Sprint 9 — UC-LA05: monitoramento de sessão de pregão
+    tipo = Column(Enum('pncp', 'sessao_pregao'), default='pncp')
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='SET NULL'), nullable=True)
+    sessao_pregao_id = Column(String(36), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1200,6 +1206,9 @@ class Monitoramento(Base):
             "score_minimo_alerta": self.score_minimo_alerta,
             "ativo": self.ativo,
             "editais_encontrados": self.editais_encontrados,
+            "tipo": self.tipo,
+            "edital_id": self.edital_id,
+            "sessao_pregao_id": self.sessao_pregao_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -3005,9 +3014,11 @@ class Lance(Base):
     edital_item_produto_id = Column(String(36), ForeignKey('edital_item_produto.id', ondelete='CASCADE'), nullable=False)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+    sessao_pregao_id = Column(String(36), ForeignKey('sessoes_pregao.id', ondelete='SET NULL'), nullable=True)
     rodada = Column(Integer, default=1)
     valor_lance = Column(DECIMAL(15, 4), nullable=False)
     tipo = Column(Enum('inicial', 'decremento', 'minimo', 'simulacao'), default='simulacao')
+    fase = Column(Enum('aberta', 'fechada'), default='aberta')
     margem_sobre_custo = Column(DECIMAL(5, 2), nullable=True)
     status = Column(Enum('planejado', 'enviado', 'aceito', 'recusado'), default='planejado')
     observacao = Column(Text, nullable=True)
@@ -3015,18 +3026,88 @@ class Lance(Base):
 
     edital_item_produto = relationship("EditalItemProduto", backref="lances")
     user = relationship("User", back_populates="lances")
+    sessao_pregao = relationship("SessaoPregao", back_populates="lances")
 
     def to_dict(self):
         return {
             "id": self.id,
             "edital_item_produto_id": self.edital_item_produto_id,
+            "sessao_pregao_id": self.sessao_pregao_id,
             "rodada": self.rodada,
             "valor_lance": float(self.valor_lance) if self.valor_lance else None,
             "tipo": self.tipo,
+            "fase": self.fase,
             "margem_sobre_custo": float(self.margem_sobre_custo) if self.margem_sobre_custo else None,
             "status": self.status,
             "observacao": self.observacao,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SessaoPregao(Base):
+    """Sala virtual de disputa — sessão de pregão eletrônico (UC-LA03)"""
+    __tablename__ = 'sessoes_pregao'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=False)
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+
+    modalidade = Column(Enum('aberto', 'aberto_fechado'), default='aberto')
+    fase_atual = Column(Enum('aberta', 'fechada', 'encerrada'), default='aberta')
+    status = Column(Enum('configurando', 'ativa', 'pausada', 'encerrada'), default='configurando')
+    autonomia = Column(Enum('copiloto', 'um_clique', 'robo'), default='copiloto')
+
+    timer_aberto_seg = Column(Integer, default=120)
+    timer_fechado_seg = Column(Integer, default=300)
+    alarme_custo = Column(Boolean, default=True)
+    alarme_minimo = Column(Boolean, default=True)
+
+    resultado = Column(Enum('vitoria', 'derrota'), nullable=True)
+    posicao_final = Column(Integer, nullable=True)
+    lance_final = Column(DECIMAL(15, 4), nullable=True)
+    margem_final = Column(DECIMAL(5, 2), nullable=True)
+
+    lances_automaticos_count = Column(Integer, default=0)
+    max_lances_automaticos = Column(Integer, default=20)
+    robo_ativo = Column(Boolean, default=False)
+    robo_modo_decremento = Column(Enum('fixo_reais', 'percentual_ultimo'), nullable=True)
+    robo_valor_decremento = Column(DECIMAL(15, 4), nullable=True)
+    robo_confirmar_cada = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="sessoes_pregao")
+    edital = relationship("Edital", backref="sessoes_pregao")
+    lances = relationship("Lance", back_populates="sessao_pregao")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "edital_id": self.edital_id,
+            "modalidade": self.modalidade,
+            "fase_atual": self.fase_atual,
+            "status": self.status,
+            "autonomia": self.autonomia,
+            "timer_aberto_seg": self.timer_aberto_seg,
+            "timer_fechado_seg": self.timer_fechado_seg,
+            "alarme_custo": self.alarme_custo,
+            "alarme_minimo": self.alarme_minimo,
+            "resultado": self.resultado,
+            "posicao_final": self.posicao_final,
+            "lance_final": float(self.lance_final) if self.lance_final else None,
+            "margem_final": float(self.margem_final) if self.margem_final else None,
+            "lances_automaticos_count": self.lances_automaticos_count,
+            "max_lances_automaticos": self.max_lances_automaticos,
+            "robo_ativo": self.robo_ativo,
+            "robo_modo_decremento": self.robo_modo_decremento,
+            "robo_valor_decremento": float(self.robo_valor_decremento) if self.robo_valor_decremento else None,
+            "robo_confirmar_cada": self.robo_confirmar_cada,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

@@ -16,6 +16,7 @@ import type { Column } from "../components/common";
 import { getEditais, createSession, sendMessage } from "../api/client";
 import type { Edital } from "../api/client";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import { getScoreRecurso, getHealthCheck } from "../api/sprint9";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,12 +120,56 @@ export function RecursosPage(props?: PageProps) {
   const [submissaoProtocolo, setSubmissaoProtocolo] = useState("");
   const [submissaoStatus, setSubmissaoStatus] = useState<"pendente" | "submetido">("pendente");
 
+  // ── Sprint 9 UC-SC03: Score de Recurso ──
+  const [scoreRecurso, setScoreRecurso] = useState<{
+    score: number;
+    recomendacao: string;
+    fatores: { nome: string; peso: number; valor: number }[];
+  } | null>(null);
+  const [scoreRecursoLoading, setScoreRecursoLoading] = useState(false);
+
+  // ── Sprint 9 UC-HC01: Health Check ──
+  const [healthCheck, setHealthCheck] = useState<{
+    status: string;
+    services: Record<string, { status: string; latency_ms?: number }>;
+  } | null>(null);
+
   // ── Load data ──
   useEffect(() => {
     loadEditais();
     loadTemplates();
     loadLaudos();
+    // Sprint 9 UC-HC01 — Health Check on mount
+    (async () => {
+      try {
+        const data = await getHealthCheck();
+        setHealthCheck(data);
+      } catch {
+        setHealthCheck(null);
+      }
+    })();
   }, []);
+
+  // Sprint 9 UC-SC03 — Score de Recurso when edital is selected in analise tab
+  useEffect(() => {
+    if (!analiseEditalId) { setScoreRecurso(null); return; }
+    const fetchScore = async () => {
+      setScoreRecursoLoading(true);
+      try {
+        const data = await getScoreRecurso(analiseEditalId);
+        setScoreRecurso({
+          score: data.score ?? 0,
+          recomendacao: data.recomendacao ?? "",
+          fatores: data.fatores ?? [],
+        });
+      } catch {
+        setScoreRecurso(null);
+      } finally {
+        setScoreRecursoLoading(false);
+      }
+    };
+    fetchScore();
+  }, [analiseEditalId]);
 
   const loadEditais = async () => {
     setLoadingEditais(true);
@@ -586,6 +631,38 @@ export function RecursosPage(props?: PageProps) {
       </div>
 
       <div className="page-content">
+        {/* Sprint 9 UC-HC01 — Health Check */}
+        {healthCheck && (
+          <Card title="Status dos Servicos" icon={<Activity size={18} />}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+              {Object.entries(healthCheck.services || {}).map(([name, svc]) => (
+                <div key={name} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "6px 14px", borderRadius: 8,
+                  background: "var(--card-bg, #1e293b)",
+                  border: `1px solid ${svc.status === "ok" || svc.status === "healthy" ? "#16a34a40" : "#dc262640"}`,
+                }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: "50%",
+                    background: svc.status === "ok" || svc.status === "healthy" ? "#16a34a" : "#dc2626",
+                    display: "inline-block",
+                  }} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{name}</span>
+                  {svc.latency_ms !== undefined && (
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{svc.latency_ms}ms</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8" }}>
+              Status geral: <span style={{
+                fontWeight: 700,
+                color: healthCheck.status === "ok" || healthCheck.status === "healthy" ? "#16a34a" : "#dc2626",
+              }}>{healthCheck.status?.toUpperCase()}</span>
+            </div>
+          </Card>
+        )}
+
         <TabPanel tabs={tabs} defaultTab="monitoramento">
           {(activeTab) => {
             // ─── Tab: Monitoramento ──────────────────────────────────────
@@ -716,6 +793,81 @@ export function RecursosPage(props?: PageProps) {
                       />
                     </div>
                   </Card>
+
+                  {/* Sprint 9 UC-SC03 — Score de Recurso */}
+                  {analiseEditalId && (
+                    <Card title="Score de Recurso" icon={<Shield size={18} />}>
+                      {scoreRecursoLoading ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, color: "#94a3b8" }}>
+                          <Loader2 size={16} className="spin" />
+                          <span>Calculando score de recurso...</span>
+                        </div>
+                      ) : scoreRecurso ? (
+                        <div>
+                          {/* Gauge display */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 24, marginBottom: 20 }}>
+                            <div style={{
+                              width: 100, height: 100, borderRadius: "50%",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              border: `6px solid ${scoreRecurso.score >= 70 ? "#16a34a" : scoreRecurso.score >= 30 ? "#ca8a04" : "#dc2626"}`,
+                              background: "var(--card-bg, #1e293b)",
+                            }}>
+                              <span style={{
+                                fontSize: 28, fontWeight: 800,
+                                color: scoreRecurso.score >= 70 ? "#16a34a" : scoreRecurso.score >= 30 ? "#ca8a04" : "#dc2626",
+                              }}>
+                                {scoreRecurso.score}
+                              </span>
+                            </div>
+                            <div>
+                              <span className={`status-badge ${
+                                scoreRecurso.score >= 70 ? "status-badge-success"
+                                  : scoreRecurso.score >= 30 ? "status-badge-warning"
+                                  : "status-badge-error"
+                              }`}>
+                                {scoreRecurso.score >= 70 ? "Recomendado" : scoreRecurso.score >= 30 ? "Inconclusivo" : "Nao recomendado"}
+                              </span>
+                              {scoreRecurso.recomendacao && (
+                                <p style={{ marginTop: 8, fontSize: 13, color: "#d1d5db", maxWidth: 400 }}>
+                                  {scoreRecurso.recomendacao}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Fatores breakdown */}
+                          {scoreRecurso.fatores.length > 0 && (
+                            <div>
+                              <h4 style={{ fontSize: 13, color: "#94a3b8", marginBottom: 10 }}>Fatores de Avaliacao</h4>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {scoreRecurso.fatores.map((f, i) => (
+                                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                    <span style={{ width: 140, fontSize: 13, color: "#d1d5db" }}>{f.nome}</span>
+                                    <div style={{ flex: 1, height: 20, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
+                                      <div style={{
+                                        width: `${f.valor}%`, height: "100%", borderRadius: 4,
+                                        background: f.valor >= 70 ? "#16a34a" : f.valor >= 40 ? "#ca8a04" : "#dc2626",
+                                        display: "flex", alignItems: "center", paddingLeft: 6,
+                                      }}>
+                                        <span style={{ color: "#fff", fontSize: 11, fontWeight: 600 }}>{f.valor}%</span>
+                                      </div>
+                                    </div>
+                                    <span style={{ fontSize: 11, color: "#94a3b8", width: 50, textAlign: "right" }}>
+                                      peso {f.peso}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ padding: 16, textAlign: "center", color: "#94a3b8" }}>
+                          Sem dados de score para este edital
+                        </div>
+                      )}
+                    </Card>
+                  )}
 
                   {analiseLoading && (
                     <Card>

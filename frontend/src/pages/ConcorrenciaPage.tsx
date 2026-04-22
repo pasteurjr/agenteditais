@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
-import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2, AlertTriangle, Target, Shield } from "lucide-react";
+import { Users, Search, TrendingUp, Trophy, XCircle, BarChart2, AlertTriangle, Target, Shield, Star } from "lucide-react";
 import { Card, DataTable, FilterBar, FormField, SelectInput } from "../components/common";
 import type { Column } from "../components/common";
 import { fetchMercadoShare } from "../api/sprint7";
+import { getQualidadeConcorrente, getQualidadeOrgao } from "../api/sprint9";
 
 interface Concorrente {
   id: string;
@@ -45,6 +46,10 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
   const [shareUF, setShareUF] = useState("");
   const [sharePeriodo, setSharePeriodo] = useState("180");
 
+  // Sprint 9 UC-SC02 — Qualidade Concorrente
+  const [qualidades, setQualidades] = useState<Record<string, { score: number; badge: string; desclassificacoes: number }>>({});
+  const [qualidadeOrgao, setQualidadeOrgao] = useState<{ media: number; total: number } | null>(null);
+
   const fetchConcorrentes = useCallback(async () => {
     setLoading(true);
     const token = localStorage.getItem("editais_ia_access_token");
@@ -81,6 +86,49 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
     fetchConcorrentes();
     fetchShare();
   }, [fetchConcorrentes, fetchShare]);
+
+  // Sprint 9 — fetch qualidade for each concorrente
+  useEffect(() => {
+    if (concorrentes.length === 0) return;
+    const fetchAllQualidades = async () => {
+      const results: Record<string, { score: number; badge: string; desclassificacoes: number }> = {};
+      await Promise.all(
+        concorrentes.map(async (c) => {
+          try {
+            const data = await getQualidadeConcorrente(c.id);
+            results[c.id] = {
+              score: data.score ?? 0,
+              badge: data.badge ?? "",
+              desclassificacoes: data.desclassificacoes ?? 0,
+            };
+          } catch {
+            results[c.id] = { score: 0, badge: "Sem dados", desclassificacoes: 0 };
+          }
+        })
+      );
+      setQualidades(results);
+    };
+    fetchAllQualidades();
+  }, [concorrentes]);
+
+  // Sprint 9 — fetch qualidade media do orgao
+  useEffect(() => {
+    const orgaoNome = shareStats.orgao || "Orgao Geral";
+    const fetchOrgao = async () => {
+      try {
+        const data = await getQualidadeOrgao(orgaoNome);
+        setQualidadeOrgao({ media: data.media ?? 0, total: data.total_avaliados ?? 0 });
+      } catch {
+        // fallback: compute from loaded qualidades
+        const vals = Object.values(qualidades).map(q => q.score);
+        if (vals.length > 0) {
+          const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+          setQualidadeOrgao({ media: avg, total: vals.length });
+        }
+      }
+    };
+    fetchOrgao();
+  }, [concorrentes, qualidades, shareStats.orgao]);
 
   const handleSelectConcorrente = useCallback(async (c: Concorrente) => {
     setSelectedConcorrente(c);
@@ -155,6 +203,18 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
       render: (c) => c.preco_medio ? formatCurrency(c.preco_medio) : "—",
     },
     {
+      key: "qualidade", header: "Qualidade", width: "110px",
+      render: (c) => {
+        const q = qualidades[c.id];
+        if (!q) return <span style={{ color: "#94a3b8", fontSize: 12 }}>...</span>;
+        const cls = q.score >= 70 ? "status-badge-success"
+          : q.score >= 40 ? "status-badge-warning"
+          : "status-badge-error";
+        const label = q.score >= 70 ? "Alta" : q.score >= 40 ? "Media" : "Baixa";
+        return <span className={`status-badge ${cls}`}>{label} ({q.score})</span>;
+      },
+    },
+    {
       key: "acoes", header: "", width: "80px",
       render: (c) => (
         <div className="table-actions">
@@ -223,6 +283,20 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
             <div className="stat-content">
               <span className="stat-value">{shareStats.editais_disputados ?? 0}</span>
               <span className="stat-label">Editais Disputados</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon" style={{
+              background: qualidadeOrgao && qualidadeOrgao.media >= 70 ? "#f0fdf4"
+                : qualidadeOrgao && qualidadeOrgao.media >= 40 ? "#fefce8" : "#fef2f2",
+              color: qualidadeOrgao && qualidadeOrgao.media >= 70 ? "#16a34a"
+                : qualidadeOrgao && qualidadeOrgao.media >= 40 ? "#ca8a04" : "#dc2626",
+            }}>
+              <Star size={24} />
+            </div>
+            <div className="stat-content">
+              <span className="stat-value">{qualidadeOrgao ? `${qualidadeOrgao.media}%` : "—"}</span>
+              <span className="stat-label">Qualidade Media do Orgao</span>
             </div>
           </div>
         </div>
@@ -332,6 +406,20 @@ export function ConcorrenciaPage({ onSendToChat }: PageProps) {
                     <span className="stat-label">Derrotas</span>
                   </div>
                 </div>
+                {qualidades[selectedConcorrente.id] && (
+                  <div className="stat-card small">
+                    <div className="stat-icon" style={{
+                      background: qualidades[selectedConcorrente.id].desclassificacoes > 0 ? "#fef2f2" : "#f0fdf4",
+                      color: qualidades[selectedConcorrente.id].desclassificacoes > 0 ? "#dc2626" : "#16a34a",
+                    }}>
+                      <AlertTriangle size={20} />
+                    </div>
+                    <div className="stat-content">
+                      <span className="stat-value">{qualidades[selectedConcorrente.id].desclassificacoes}</span>
+                      <span className="stat-label">Desclassificacoes</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <h4>Historico de Licitacoes</h4>

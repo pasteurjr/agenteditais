@@ -43,7 +43,7 @@ Este documento é a versão autoritativa de planejamento a partir de 2026-04-15.
 | **9** | 10 (renumerado, AMPLIADA) | 04/05–17/05/2026 | Lances em Tempo Real (sala virtual, envio automático) + Health Check + QA End-to-End + **7 gaps do roadmap** | 📋 PLANEJADA | **14–20h** | **2.0M–2.8M** |
 | — | — | — | **TOTAL Sprints 6–9** | — | **35–52h** | **4.85M–7.05M** |
 
-**Totais:** 9 sprints (antes 10), ~11 semanas corridas (Sprint 5 tomou 2 semanas por absorver Sprint 6 v3, Sprint 9 v4 toma 2 semanas por ampliação).
+**Totais:** 9 sprints , ~11 semanas corridas (Sprint 5 tomou 2 semanas por absorver Sprint 6 v3, Sprint 9 v4 toma 2 semanas por ampliação).
 **Data-base desta tabela:** 2026-04-15 (quarta-feira da Sprint 6).
 **Encerramento previsto do ciclo:** 2026-05-17 (domingo, fim da Sprint 9).
 

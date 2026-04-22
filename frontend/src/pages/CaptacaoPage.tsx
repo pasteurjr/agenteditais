@@ -9,6 +9,7 @@ import {
 } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
+import { getScoreCompetitividade } from "../api/sprint9";
 
 // --- Interfaces ---
 
@@ -72,6 +73,8 @@ interface EditalBusca {
   // IDs de registros salvos (para update)
   editalSalvoId?: string;
   estrategiaId?: string;
+  // UC-SC01: Score de competitividade
+  score_competitividade?: number | null;
 }
 
 interface MonitoramentoInfo {
@@ -1989,6 +1992,28 @@ function baixarMD() {
           </div>
         </div>
       ) : <span>-</span>,
+      sortable: true,
+    },
+    {
+      key: "score_competitividade",
+      header: "Competitividade",
+      width: "110px",
+      render: (e) => {
+        const sc = e.score_competitividade;
+        if (sc == null) return <span style={{ color: "var(--text-secondary)", fontSize: "0.8em" }}>—</span>;
+        const color = sc > 70 ? "#22c55e" : sc >= 40 ? "#eab308" : "#ef4444";
+        const bg = sc > 70 ? "#052e16" : sc >= 40 ? "#422006" : "#450a0a";
+        const label = sc > 70 ? "Alta" : sc >= 40 ? "Média" : "Baixa";
+        return (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: "0.8em", fontWeight: 600, padding: "2px 8px",
+            borderRadius: 4, color, backgroundColor: bg, border: `1px solid ${color}40`,
+          }}>
+            {sc} — {label}
+          </span>
+        );
+      },
       sortable: true,
     },
     {

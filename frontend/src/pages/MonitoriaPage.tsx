@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { PageProps } from "../types";
-import { Radio, Plus, Play, Pause, Trash2, Eye, RefreshCw, FileSearch, Globe, AlertCircle, X, Zap, Edit2 } from "lucide-react";
+import { Radio, Plus, Play, Pause, Trash2, Eye, RefreshCw, FileSearch, Globe, AlertCircle, X, Zap, Edit2, Monitor, Loader2 } from "lucide-react";
 import { Card, DataTable, ActionButton, Modal, FormField, TextInput, SelectInput, Checkbox } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudUpdate, crudDelete } from "../api/crud";
 import { executarMonitoramento } from "../api/sprint6";
+import { criarMonitoramentoSessao } from "../api/sprint9";
 
 interface Monitoramento {
   id: string;
@@ -20,6 +21,9 @@ interface Monitoramento {
   editais_encontrados: number;
   created_at: string | null;
   updated_at: string | null;
+  tipo?: string;
+  edital_id?: string;
+  sessao_pregao_id?: string;
 }
 
 interface EditalEvento {
@@ -55,6 +59,13 @@ export function MonitoriaPage({ onSendToChat }: PageProps) {
   const [novasUfs, setNovasUfs] = useState("");
   const [frequencia, setFrequencia] = useState("6");
   const [notificarEmail, setNotificarEmail] = useState(true);
+
+  // Sessao Pregao form (UC-LA05)
+  const [showSessaoForm, setShowSessaoForm] = useState(false);
+  const [sessaoEditalId, setSessaoEditalId] = useState("");
+  const [sessaoTermo, setSessaoTermo] = useState("Sessao de Pregao");
+  const [sessaoNotificar, setSessaoNotificar] = useState(true);
+  const [sessaoSubmitting, setSessaoSubmitting] = useState(false);
 
   const fetchMonitoramentos = useCallback(async () => {
     setLoading(true);
@@ -145,6 +156,27 @@ export function MonitoriaPage({ onSendToChat }: PageProps) {
     setTimeout(fetchMonitoramentos, 3000);
   };
 
+  const handleCriarSessaoPregao = async () => {
+    if (!sessaoEditalId.trim()) return;
+    setSessaoSubmitting(true);
+    try {
+      await criarMonitoramentoSessao({
+        edital_id: sessaoEditalId.trim(),
+        termo: sessaoTermo || "Sessao de Pregao",
+        notificar_email: sessaoNotificar,
+      });
+      setShowSessaoForm(false);
+      setSessaoEditalId("");
+      setSessaoTermo("Sessao de Pregao");
+      setSessaoNotificar(true);
+      fetchMonitoramentos();
+    } catch (e) {
+      console.error("Erro ao criar monitoramento de sessao:", e);
+    } finally {
+      setSessaoSubmitting(false);
+    }
+  };
+
   const formatData = (iso: string | null) => {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; }
@@ -158,7 +190,14 @@ export function MonitoriaPage({ onSendToChat }: PageProps) {
     { key: "ultimo_check", header: "Ultimo Check", render: m => formatData(m.ultimo_check) },
     { key: "proximo_check", header: "Proximo", render: m => formatData(m.proximo_check) },
     { key: "editais_encontrados", header: "Encontrados", render: m => <span className={m.editais_encontrados > 0 ? "badge-new" : ""}>{m.editais_encontrados || 0}</span>, sortable: true },
-    { key: "ativo", header: "Status", render: m => <span className={`status-badge ${m.ativo ? "status-badge-success" : "status-badge-neutral"}`}>{m.ativo ? "Ativo" : "Pausado"}</span> },
+    { key: "ativo", header: "Status", render: m => (
+      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`status-badge ${m.ativo ? "status-badge-success" : "status-badge-neutral"}`}>{m.ativo ? "Ativo" : "Pausado"}</span>
+        {m.tipo === "sessao_pregao" && (
+          <span style={{ backgroundColor: "#dbeafe", color: "#2563eb", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600 }}>Sessao</span>
+        )}
+      </div>
+    ) },
     {
       key: "acoes", header: "Acoes", width: "100px",
       render: m => (
@@ -248,7 +287,68 @@ export function MonitoriaPage({ onSendToChat }: PageProps) {
             </Card>
 
             <Card title="Monitoramentos" icon={<Radio size={18} />}
-              actions={<ActionButton icon={<Plus size={14} />} label="Novo Monitoramento" onClick={() => setShowCriarModal(true)} />}>
+              actions={
+                <div style={{ display: "flex", gap: 6 }}>
+                  <ActionButton icon={<Plus size={14} />} label="Novo Monitoramento" onClick={() => setShowCriarModal(true)} />
+                  <ActionButton icon={<Monitor size={14} />} label="Monitorar Sessao de Pregao" variant="secondary" onClick={() => setShowSessaoForm(!showSessaoForm)} />
+                </div>
+              }>
+
+              {/* Sessao de Pregao form (UC-LA05) */}
+              {showSessaoForm && (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: 16,
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 8,
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px 0", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                    <Monitor size={16} />
+                    Monitorar Sessao de Pregao
+                  </h4>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <FormField label="Edital ID" required>
+                      <TextInput
+                        value={sessaoEditalId}
+                        onChange={setSessaoEditalId}
+                        placeholder="ID do edital..."
+                      />
+                    </FormField>
+                    <FormField label="Termo">
+                      <TextInput
+                        value={sessaoTermo}
+                        onChange={setSessaoTermo}
+                        placeholder="Sessao de Pregao"
+                      />
+                    </FormField>
+                    <FormField label="Notificar">
+                      <Checkbox checked={sessaoNotificar} onChange={setSessaoNotificar} label="Email" />
+                    </FormField>
+                    <div style={{ display: "flex", gap: 6, paddingBottom: 2 }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleCriarSessaoPregao}
+                        disabled={!sessaoEditalId.trim() || sessaoSubmitting}
+                        style={{ fontSize: 13 }}
+                      >
+                        {sessaoSubmitting ? <Loader2 size={14} className="spin" /> : <Monitor size={14} />}
+                        {" "}Criar
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setShowSessaoForm(false)}
+                        style={{ fontSize: 13 }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <DataTable data={monitoramentos} columns={monColumns} idKey="id" loading={loading}
                 onRowClick={m => setDetailMon(m)} selectedId={detailMon?.id} emptyMessage="Nenhum monitoramento configurado" />
             </Card>

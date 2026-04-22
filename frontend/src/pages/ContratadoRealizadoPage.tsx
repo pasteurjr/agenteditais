@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import type { PageProps } from "../types";
 import {
   BarChart2, TrendingUp, TrendingDown, Clock, AlertTriangle,
-  Loader2, RefreshCw, Shield, Calendar,
+  Loader2, RefreshCw, Shield, Calendar, DollarSign, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Card, DataTable, FormField, SelectInput, TextInput } from "../components/common";
 import type { Column } from "../components/common";
+import { getTempoEmpenho, getDREContrato } from "../api/sprint9";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,35 @@ interface AlertasResponse {
   erro?: string;
 }
 
+// ─── Sprint 9: UC-SC04 Tempo Empenho ─────────────────────────────────────────
+
+interface TempoEmpenhoOrgao {
+  orgao: string;
+  media_dias: number;
+  contratos: number;
+}
+
+interface TempoEmpenhoResponse {
+  media_global: number;
+  por_orgao: TempoEmpenhoOrgao[];
+  erro?: string;
+}
+
+// ─── Sprint 9: UC-SC05 DRE ──────────────────────────────────────────────────
+
+interface DRELinha {
+  descricao: string;
+  valor: number;
+  tipo: string;
+}
+
+interface DREContrato {
+  contrato_id: string;
+  margem_liquida_pct: number;
+  linhas: DRELinha[];
+  erro?: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number): string =>
@@ -110,6 +140,15 @@ export function ContratadoRealizadoPage(props?: PageProps) {
   const [alertas, setAlertas] = useState<AlertasResponse | null>(null);
   const [alertasLoading, setAlertasLoading] = useState(false);
   const [alertasError, setAlertasError] = useState("");
+
+  // ── Sprint 9: Tempo Empenho (UC-SC04) ──
+  const [tempoEmpenho, setTempoEmpenho] = useState<TempoEmpenhoResponse | null>(null);
+  const [tempoEmpenhoLoading, setTempoEmpenhoLoading] = useState(false);
+
+  // ── Sprint 9: DRE (UC-SC05) ──
+  const [dreCache, setDreCache] = useState<Record<string, DREContrato>>({});
+  const [dreExpanded, setDreExpanded] = useState<string | null>(null);
+  const [dreLoading, setDreLoading] = useState<string | null>(null);
 
   // ── Fetch dashboard ──
   const loadDashboard = useCallback(async () => {
@@ -157,6 +196,38 @@ export function ContratadoRealizadoPage(props?: PageProps) {
     }
   }, []);
 
+  // ── Fetch Tempo Empenho (UC-SC04) ──
+  const loadTempoEmpenho = useCallback(async () => {
+    setTempoEmpenhoLoading(true);
+    try {
+      const data: TempoEmpenhoResponse = await getTempoEmpenho();
+      if (data.erro) throw new Error(data.erro);
+      setTempoEmpenho(data);
+    } catch (e) {
+      console.error("Erro ao carregar tempo empenho:", e);
+    } finally {
+      setTempoEmpenhoLoading(false);
+    }
+  }, []);
+
+  // ── Fetch DRE for a contrato (UC-SC05) ──
+  const loadDRE = useCallback(async (contratoId: string) => {
+    if (dreCache[contratoId]) {
+      setDreExpanded(dreExpanded === contratoId ? null : contratoId);
+      return;
+    }
+    setDreLoading(contratoId);
+    try {
+      const data: DREContrato = await getDREContrato(contratoId);
+      setDreCache((prev) => ({ ...prev, [contratoId]: data }));
+      setDreExpanded(contratoId);
+    } catch (e) {
+      console.error("Erro ao carregar DRE:", e);
+    } finally {
+      setDreLoading(null);
+    }
+  }, [dreCache, dreExpanded]);
+
   // ── Load on mount + filter change ──
   useEffect(() => {
     loadDashboard();
@@ -165,6 +236,10 @@ export function ContratadoRealizadoPage(props?: PageProps) {
   useEffect(() => {
     loadAlertas();
   }, [loadAlertas]);
+
+  useEffect(() => {
+    loadTempoEmpenho();
+  }, [loadTempoEmpenho]);
 
   // ── Derived data ──
   const totais = dashboard?.totais;
@@ -222,6 +297,56 @@ export function ContratadoRealizadoPage(props?: PageProps) {
           {c.status}
         </span>
       ),
+    },
+    {
+      key: "dias_primeiro_empenho" as keyof ContratoRow,
+      header: "1o Empenho (dias)",
+      render: (c) => {
+        const dias = (c as unknown as Record<string, unknown>).dias_primeiro_empenho as number | null | undefined;
+        if (dias == null) return <span style={{ color: "#9ca3af" }}>--</span>;
+        let color = "#16a34a";
+        if (dias > 60) color = "#dc2626";
+        else if (dias > 30) color = "#ca8a04";
+        return <span style={{ fontWeight: 600, color }}>{dias}d</span>;
+      },
+    },
+    {
+      key: "dre" as keyof ContratoRow,
+      header: "DRE",
+      render: (c) => {
+        const dre = dreCache[c.contrato_id];
+        const isLoading = dreLoading === c.contrato_id;
+        const isExpanded = dreExpanded === c.contrato_id;
+
+        let badge: React.ReactNode = null;
+        if (dre) {
+          const m = dre.margem_liquida_pct;
+          let bg = "#bbf7d0", color = "#16a34a", label = "Verde";
+          if (m < 0) { bg = "#fecaca"; color = "#dc2626"; label = "Vermelho"; }
+          else if (m < 5) { bg = "#fef08a"; color = "#ca8a04"; label = "Amarelo"; }
+          badge = (
+            <span style={{ backgroundColor: bg, color, padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600, marginRight: 6 }}>
+              {label} ({m.toFixed(1)}%)
+            </span>
+          );
+        }
+
+        return (
+          <div>
+            <button
+              className="btn btn-sm btn-secondary"
+              style={{ fontSize: 11, padding: "2px 8px", display: "inline-flex", alignItems: "center", gap: 4 }}
+              onClick={(e) => { e.stopPropagation(); loadDRE(c.contrato_id); }}
+              disabled={isLoading}
+            >
+              {isLoading ? <Loader2 size={12} className="spin" /> : <DollarSign size={12} />}
+              DRE
+              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            {badge}
+          </div>
+        );
+      },
     },
   ];
 
@@ -565,6 +690,30 @@ export function ContratadoRealizadoPage(props?: PageProps) {
                   </div>
                   <div style={{ marginTop: 4 }}>{saudeBadge()}</div>
                 </div>
+
+                {/* Tempo Medio 1o Empenho (UC-SC04) */}
+                <div
+                  style={{
+                    background: "var(--bg-card, #f8fafc)",
+                    border: "1px solid var(--border-color, #e2e8f0)",
+                    borderRadius: 8,
+                    padding: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    <Clock size={13} style={{ marginRight: 4, verticalAlign: "middle" }} />
+                    Tempo Medio 1o Empenho
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>
+                    {tempoEmpenhoLoading ? (
+                      <Loader2 size={18} className="spin" />
+                    ) : tempoEmpenho ? (
+                      <>{tempoEmpenho.media_global.toFixed(0)} dias</>
+                    ) : (
+                      "—"
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* ── Comparison table ── */}
@@ -574,6 +723,88 @@ export function ContratadoRealizadoPage(props?: PageProps) {
                 idKey="contrato_id"
                 emptyMessage="Nenhum contrato encontrado no periodo"
               />
+
+              {/* ── DRE inline expansion (UC-SC05) ── */}
+              {dreExpanded && dreCache[dreExpanded] && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 16,
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                      <DollarSign size={16} />
+                      DRE — Contrato {contratos.find((c) => c.contrato_id === dreExpanded)?.numero || dreExpanded}
+                    </h4>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setDreExpanded(null)}
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "2px solid #e2e8f0" }}>
+                        <th style={{ textAlign: "left", padding: "6px 8px", color: "#64748b" }}>Descricao</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", color: "#64748b" }}>Valor (R$)</th>
+                        <th style={{ textAlign: "center", padding: "6px 8px", color: "#64748b" }}>Tipo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(dreCache[dreExpanded].linhas || []).map((l, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "6px 8px", fontWeight: l.tipo === "resultado" ? 700 : 400 }}>{l.descricao}</td>
+                          <td
+                            style={{
+                              padding: "6px 8px",
+                              textAlign: "right",
+                              fontWeight: l.tipo === "resultado" ? 700 : 400,
+                              color: l.valor < 0 ? "#dc2626" : "#1e293b",
+                            }}
+                          >
+                            {formatCurrency(l.valor)}
+                          </td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                            <span
+                              className={`status-badge ${
+                                l.tipo === "receita"
+                                  ? "status-badge-success"
+                                  : l.tipo === "custo"
+                                  ? "status-badge-danger"
+                                  : l.tipo === "resultado"
+                                  ? "status-badge-info"
+                                  : "status-badge-neutral"
+                              }`}
+                              style={{ fontSize: 11 }}
+                            >
+                              {l.tipo}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: "6px 12px",
+                      background: dreCache[dreExpanded].margem_liquida_pct < 0 ? "#fecaca" : dreCache[dreExpanded].margem_liquida_pct < 5 ? "#fef08a" : "#bbf7d0",
+                      borderRadius: 6,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      textAlign: "right",
+                    }}
+                  >
+                    Margem Liquida: {dreCache[dreExpanded].margem_liquida_pct.toFixed(1)}%
+                  </div>
+                </div>
+              )}
 
               {/* ── Totals row ── */}
               {contratos.length > 0 && (
@@ -612,6 +843,63 @@ export function ContratadoRealizadoPage(props?: PageProps) {
             </>
           )}
         </Card>
+
+        {/* ════════════════════════════════════════════════════════════════════
+         * SECTION 1b: Tempo por Orgao (UC-SC04)
+         * ════════════════════════════════════════════════════════════════════ */}
+        {tempoEmpenho && tempoEmpenho.por_orgao && tempoEmpenho.por_orgao.length > 0 && (
+          <Card title="Tempo Medio de 1o Empenho por Orgao" icon={<Clock size={18} />}>
+            <DataTable
+              data={tempoEmpenho.por_orgao as unknown as Record<string, unknown>[]}
+              columns={
+                [
+                  { key: "orgao", header: "Orgao", sortable: true },
+                  {
+                    key: "media_dias",
+                    header: "Media (dias)",
+                    sortable: true,
+                    render: (row: Record<string, unknown>) => {
+                      const dias = row.media_dias as number;
+                      return <span style={{ fontWeight: 600 }}>{dias.toFixed(0)}d</span>;
+                    },
+                  },
+                  {
+                    key: "contratos",
+                    header: "Contratos",
+                    sortable: true,
+                    render: (row: Record<string, unknown>) => String(row.contratos),
+                  },
+                  {
+                    key: "badge" as string,
+                    header: "Classificacao",
+                    render: (row: Record<string, unknown>) => {
+                      const dias = row.media_dias as number;
+                      let bg = "#bbf7d0", color = "#16a34a", label = "Rapido";
+                      if (dias > 60) { bg = "#fecaca"; color = "#dc2626"; label = "Lento"; }
+                      else if (dias > 30) { bg = "#fef08a"; color = "#ca8a04"; label = "Normal"; }
+                      return (
+                        <span
+                          style={{
+                            backgroundColor: bg,
+                            color,
+                            padding: "2px 10px",
+                            borderRadius: 4,
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {label}
+                        </span>
+                      );
+                    },
+                  },
+                ] as Column<Record<string, unknown>>[]
+              }
+              idKey="orgao"
+              emptyMessage="Nenhum dado de tempo de empenho"
+            />
+          </Card>
+        )}
 
         {/* ════════════════════════════════════════════════════════════════════
          * SECTION 2: Pedidos em Atraso (UC-CR02)

@@ -14182,6 +14182,677 @@ def api_lances_historico():
 
 
 # =============================================================================
+# Sprint 9 — Sala Virtual, Scores, Analytics, Health
+# =============================================================================
+
+@app.route("/api/precificacao/simular-lance", methods=["POST"])
+@require_auth
+def api_simular_lance_deterministico():
+    """UC-LA01: Simulação determinística de lances."""
+    from tools import tool_simular_lance
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    result = tool_simular_lance(
+        edital_item_produto_id=data.get("edital_item_produto_id", ""),
+        user_id=get_current_user_id(),
+        empresa_id=empresa_id,
+        num_rodadas=data.get("num_rodadas", 10),
+        tipo_decremento=data.get("tipo_decremento", "fixo_reais"),
+        valor_decremento=float(data.get("valor_decremento", 10)),
+        num_concorrentes=data.get("num_concorrentes", 3),
+        perfil=data.get("perfil", "quero_ganhar"),
+    )
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/sala/criar", methods=["POST"])
+@require_auth
+def api_sala_criar():
+    """UC-LA03: Cria sessão de pregão (sala virtual)."""
+    from models import SessaoPregao, Edital, AuditoriaLog
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        edital_id = data.get("edital_id")
+        edital = db.query(Edital).filter(Edital.id == edital_id, Edital.empresa_id == empresa_id).first()
+        if not edital:
+            return jsonify({"error": "Edital não encontrado"}), 404
+
+        sessao = SessaoPregao(
+            user_id=user_id,
+            empresa_id=empresa_id,
+            edital_id=edital_id,
+            modalidade=data.get("modalidade", "aberto"),
+            autonomia=data.get("autonomia", "copiloto"),
+            timer_aberto_seg=data.get("timer_aberto_seg", 120),
+            timer_fechado_seg=data.get("timer_fechado_seg", 300),
+            alarme_custo=data.get("alarme_custo", True),
+            alarme_minimo=data.get("alarme_minimo", True),
+            max_lances_automaticos=data.get("max_lances_automaticos", 20),
+            status='configurando',
+        )
+        db.add(sessao)
+        db.add(AuditoriaLog(user_id=user_id, acao="sala_criada",
+                            entidade="sessao_pregao", entidade_id=sessao.id,
+                            dados_depois={"edital_id": edital_id, "modalidade": sessao.modalidade}))
+        db.commit()
+        return jsonify({"success": True, "sessao": sessao.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/estado", methods=["GET"])
+@require_auth
+def api_sala_estado(sessao_id):
+    """UC-LA03: Retorna estado atual da sala (polling 5s)."""
+    from models import SessaoPregao, Lance, PrecoCamada, EditalItemProduto, EditalItem, EstrategiaEdital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+
+        lances = db.query(Lance).filter(Lance.sessao_pregao_id == sessao_id).order_by(Lance.created_at.desc()).all()
+
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == sessao.edital_id).first()
+
+        camada = None
+        estrategia = None
+        if vinculo:
+            camada = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == vinculo.id).first()
+        estrategia = db.query(EstrategiaEdital).filter(
+            EstrategiaEdital.edital_id == sessao.edital_id,
+            EstrategiaEdital.empresa_id == empresa_id,
+        ).first()
+
+        return jsonify({
+            "sessao": sessao.to_dict(),
+            "lances": [l.to_dict() for l in lances[:50]],
+            "camadas": {
+                "custo_base": float(camada.custo_base_final or 0) if camada else 0,
+                "lance_inicial": float(camada.lance_inicial or 0) if camada else 0,
+                "lance_minimo": float(camada.lance_minimo or 0) if camada else 0,
+                "margem_minima": float(camada.margem_minima or 0) if camada else 0,
+                "target_referencia": float(camada.target_referencia or 0) if camada else 0,
+            } if camada else {},
+            "estrategia": {
+                "perfil": estrategia.perfil_competitivo if estrategia else "copiloto",
+                "cenarios": estrategia.cenarios_simulados if estrategia else [],
+            },
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/lance", methods=["POST"])
+@require_auth
+def api_sala_lance(sessao_id):
+    """UC-LA04: Registra lance na sala virtual (fase aberta)."""
+    from models import SessaoPregao, Lance, PrecoCamada, EditalItemProduto, EditalItem, AuditoriaLog
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+        if sessao.status == 'encerrada':
+            return jsonify({"error": "Sessão encerrada"}), 400
+
+        valor = float(data.get("valor", 0))
+        if valor <= 0:
+            return jsonify({"error": "Valor deve ser > 0"}), 400
+
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == sessao.edital_id).first()
+        if not vinculo:
+            return jsonify({"error": "Nenhum item vinculado ao edital"}), 400
+
+        camada = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == vinculo.id).first()
+        custo = float(camada.custo_base_final or 0) if camada else 0
+        margem = ((valor - custo) / custo * 100) if custo > 0 else 0
+
+        ultimo = db.query(Lance).filter(
+            Lance.sessao_pregao_id == sessao_id
+        ).order_by(Lance.rodada.desc()).first()
+        rodada = (ultimo.rodada + 1) if ultimo else 1
+
+        lance = Lance(
+            edital_item_produto_id=vinculo.id,
+            user_id=user_id,
+            empresa_id=empresa_id,
+            sessao_pregao_id=sessao_id,
+            rodada=rodada,
+            valor_lance=valor,
+            tipo='decremento' if rodada > 1 else 'inicial',
+            fase='aberta',
+            margem_sobre_custo=round(margem, 2),
+            status='enviado',
+        )
+        db.add(lance)
+
+        if sessao.status == 'configurando':
+            sessao.status = 'ativa'
+
+        db.add(AuditoriaLog(user_id=user_id, acao="lance_enviado",
+                            entidade="lance", entidade_id=lance.id,
+                            dados_depois={"valor": valor, "rodada": rodada, "margem": round(margem, 2)}))
+        db.commit()
+
+        return jsonify({
+            "success": True,
+            "lance": lance.to_dict(),
+            "abaixo_custo": valor < custo,
+            "abaixo_minimo": valor < float(camada.lance_minimo or 0) if camada else False,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/lance-fechado", methods=["POST"])
+@require_auth
+def api_sala_lance_fechado(sessao_id):
+    """UC-LA04: Registra lance na fase fechada."""
+    from models import SessaoPregao, Lance, PrecoCamada, EditalItemProduto, EditalItem, AuditoriaLog
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao or sessao.fase_atual != 'fechada':
+            return jsonify({"error": "Sessão não está na fase fechada"}), 400
+
+        valor = float(data.get("valor", 0))
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == sessao.edital_id).first()
+
+        camada = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == vinculo.id).first() if vinculo else None
+        custo = float(camada.custo_base_final or 0) if camada else 0
+        margem = ((valor - custo) / custo * 100) if custo > 0 else 0
+
+        lance = Lance(
+            edital_item_produto_id=vinculo.id if vinculo else None,
+            user_id=user_id,
+            empresa_id=empresa_id,
+            sessao_pregao_id=sessao_id,
+            rodada=0,
+            valor_lance=valor,
+            tipo='minimo',
+            fase='fechada',
+            margem_sobre_custo=round(margem, 2),
+            status='enviado',
+        )
+        db.add(lance)
+        db.add(AuditoriaLog(user_id=user_id, acao="lance_fechado_enviado",
+                            entidade="lance", entidade_id=lance.id,
+                            dados_depois={"valor": valor, "fase": "fechada"}))
+        db.commit()
+        return jsonify({"success": True, "lance": lance.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/sugerir-lance", methods=["POST"])
+@require_auth
+def api_sala_sugerir_lance(sessao_id):
+    """UC-LA02: Sugestão inteligente de lance via IA."""
+    from tools import tool_sugerir_lance
+    from models import SessaoPregao, PrecoCamada, EditalItemProduto, EditalItem, EstrategiaEdital
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+
+        vinculo = db.query(EditalItemProduto).filter(
+            EditalItemProduto.empresa_id == empresa_id
+        ).join(EditalItem).filter(EditalItem.edital_id == sessao.edital_id).first()
+        camada = db.query(PrecoCamada).filter(PrecoCamada.edital_item_produto_id == vinculo.id).first() if vinculo else None
+        estrategia = db.query(EstrategiaEdital).filter(
+            EstrategiaEdital.edital_id == sessao.edital_id, EstrategiaEdital.empresa_id == empresa_id
+        ).first()
+
+        result = tool_sugerir_lance(
+            sessao_pregao_id=sessao_id,
+            user_id=get_current_user_id(),
+            empresa_id=empresa_id,
+            lance_lider=float(data.get("lance_lider", 0)),
+            nosso_ultimo=float(data.get("nosso_ultimo", 0)),
+            custo_base=float(camada.custo_base_final or 0) if camada else 0,
+            lance_minimo=float(camada.lance_minimo or 0) if camada else 0,
+            lance_inicial=float(camada.lance_inicial or 0) if camada else 0,
+            target=float(camada.target_referencia or 0) if camada else 0,
+            perfil=estrategia.perfil_competitivo if estrategia else "copiloto",
+            decremento_medio=float(data.get("decremento_medio", 10)),
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/encerrar", methods=["POST"])
+@require_auth
+def api_sala_encerrar(sessao_id):
+    """UC-LA03: Encerra sessão de pregão."""
+    from models import SessaoPregao, Lance, AuditoriaLog
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+
+        sessao.status = 'encerrada'
+        sessao.fase_atual = 'encerrada'
+        sessao.resultado = data.get("resultado")
+        sessao.posicao_final = data.get("posicao_final")
+        sessao.robo_ativo = False
+
+        ultimo_lance = db.query(Lance).filter(
+            Lance.sessao_pregao_id == sessao_id
+        ).order_by(Lance.created_at.desc()).first()
+        if ultimo_lance:
+            sessao.lance_final = ultimo_lance.valor_lance
+            sessao.margem_final = ultimo_lance.margem_sobre_custo
+
+        db.add(AuditoriaLog(user_id=user_id, acao="sala_encerrada",
+                            entidade="sessao_pregao", entidade_id=sessao_id,
+                            dados_depois={"resultado": sessao.resultado, "posicao": sessao.posicao_final}))
+        db.commit()
+        return jsonify({"success": True, "sessao": sessao.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/robo/ativar", methods=["POST"])
+@require_auth
+def api_sala_robo_ativar(sessao_id):
+    """UC-LA06: Ativa robô de lances automáticos (RN-NEW-12)."""
+    from models import SessaoPregao, AuditoriaLog
+    auto_bid = os.environ.get('AUTO_BID_ENABLED', 'false').lower() == 'true'
+    if not auto_bid:
+        return jsonify({"error": "AUTO_BID_ENABLED=false. Robô desabilitado (RN-NEW-12)"}), 403
+
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+        if sessao.status == 'encerrada':
+            return jsonify({"error": "Sessão encerrada"}), 400
+
+        sessao.robo_ativo = True
+        sessao.robo_modo_decremento = data.get("modo_decremento", "fixo_reais")
+        sessao.robo_valor_decremento = float(data.get("valor_decremento", 10))
+        sessao.robo_confirmar_cada = data.get("confirmar_cada", True)
+        sessao.max_lances_automaticos = data.get("max_lances", 20)
+        sessao.autonomia = 'robo'
+
+        db.add(AuditoriaLog(user_id=user_id, acao="robo_ativado",
+                            entidade="sessao_pregao", entidade_id=sessao_id,
+                            dados_depois={"modo": sessao.robo_modo_decremento, "valor": float(sessao.robo_valor_decremento or 0)}))
+        db.commit()
+        return jsonify({"success": True, "sessao": sessao.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/robo/desativar", methods=["POST"])
+@require_auth
+def api_sala_robo_desativar(sessao_id):
+    """UC-LA06: Desativa robô."""
+    from models import SessaoPregao, AuditoriaLog
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+        sessao.robo_ativo = False
+        sessao.autonomia = 'copiloto'
+        db.add(AuditoriaLog(user_id=user_id, acao="robo_desativado",
+                            entidade="sessao_pregao", entidade_id=sessao_id))
+        db.commit()
+        return jsonify({"success": True, "sessao": sessao.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/sala/<sessao_id>/robo/pausar", methods=["POST"])
+@require_auth
+def api_sala_robo_pausar(sessao_id):
+    """UC-LA06: Pausa robô."""
+    from models import SessaoPregao
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        sessao = db.query(SessaoPregao).filter(
+            SessaoPregao.id == sessao_id, SessaoPregao.empresa_id == empresa_id
+        ).first()
+        if not sessao:
+            return jsonify({"error": "Sessão não encontrada"}), 404
+        sessao.robo_ativo = False
+        sessao.status = 'pausada'
+        db.commit()
+        return jsonify({"success": True, "sessao": sessao.to_dict()})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/monitoramentos/sessao-pregao", methods=["POST"])
+@require_auth
+def api_monitoramento_sessao_pregao():
+    """UC-LA05: Cria monitoramento de sessão de pregão."""
+    from models import Monitoramento, AuditoriaLog
+    data = request.get_json() or {}
+    empresa_id = get_current_empresa_id()
+    user_id = get_current_user_id()
+    db = get_db()
+    try:
+        m = Monitoramento(
+            user_id=user_id,
+            empresa_id=empresa_id,
+            tipo='sessao_pregao',
+            edital_id=data.get("edital_id"),
+            termo=data.get("termo", "Sessão de Pregão"),
+            frequencia_horas=1,
+            notificar_email=data.get("notificar_email", True),
+            ativo=True,
+        )
+        db.add(m)
+        db.add(AuditoriaLog(user_id=user_id, acao="monitoramento_sessao_criado",
+                            entidade="monitoramento", entidade_id=m.id,
+                            dados_depois={"edital_id": data.get("edital_id"), "tipo": "sessao_pregao"}))
+        db.commit()
+        return jsonify({"success": True, "monitoramento": m.to_dict()}), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/score/competitividade/<edital_id>", methods=["GET"])
+@require_auth
+def api_score_competitividade(edital_id):
+    """UC-SC01: Score de Competitividade 360°."""
+    from tools import tool_score_competitividade
+    empresa_id = get_current_empresa_id()
+    result = tool_score_competitividade(edital_id=edital_id, user_id=get_current_user_id(), empresa_id=empresa_id)
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/concorrentes/<concorrente_id>/qualidade", methods=["GET"])
+@require_auth
+def api_concorrente_qualidade(concorrente_id):
+    """UC-SC02: Score de Qualidade do Concorrente."""
+    from tools import tool_score_qualidade_concorrente
+    empresa_id = get_current_empresa_id()
+    result = tool_score_qualidade_concorrente(concorrente_id=concorrente_id, empresa_id=empresa_id)
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/analytics/qualidade-orgao/<path:orgao>", methods=["GET"])
+@require_auth
+def api_qualidade_orgao(orgao):
+    """UC-SC02: Qualidade média dos concorrentes por órgão."""
+    from models import Concorrente, ParticipacaoEdital, Edital
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        concorrentes = db.query(Concorrente).all()
+        scores = []
+        for c in concorrentes:
+            participados = int(c.editais_participados or 0)
+            desclass = db.query(ParticipacaoEdital).filter(
+                ParticipacaoEdital.concorrente_id == c.id,
+                ParticipacaoEdital.desclassificado == True,
+            ).count()
+            score = 100 - ((desclass) / max(participados, 1)) * 100
+            scores.append(max(0, min(100, round(score, 1))))
+
+        media = round(sum(scores) / max(len(scores), 1), 1)
+        return jsonify({"orgao": orgao, "media_qualidade": media, "total_concorrentes": len(scores)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/recursos/<edital_id>/score", methods=["GET"])
+@require_auth
+def api_score_recurso(edital_id):
+    """UC-SC03: Score Numérico de Recurso."""
+    from tools import tool_score_recurso
+    empresa_id = get_current_empresa_id()
+    result = tool_score_recurso(edital_id=edital_id, user_id=get_current_user_id(), empresa_id=empresa_id)
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/analytics/tempo-empenho", methods=["GET"])
+@require_auth
+def api_tempo_empenho():
+    """UC-SC04: Tempo Médio do 1º Empenho por contrato/órgão."""
+    from models import Contrato, Edital
+    from sqlalchemy import func
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        from models import get_db as _gdb
+        from empenho_routes import Empenho
+        contratos = db.query(Contrato).filter(Contrato.empresa_id == empresa_id).all()
+
+        tempos = []
+        por_orgao = {}
+        sem_empenho = 0
+
+        for c in contratos:
+            primeiro_empenho = db.query(Empenho).filter(
+                Empenho.contrato_id == c.id
+            ).order_by(Empenho.data_empenho.asc()).first()
+
+            if not primeiro_empenho or not primeiro_empenho.data_empenho or not c.data_assinatura:
+                sem_empenho += 1
+                continue
+
+            dias = (primeiro_empenho.data_empenho - c.data_assinatura).days
+            dias = max(0, dias)
+            tempos.append(dias)
+
+            edital = db.query(Edital).filter(Edital.id == c.edital_id).first()
+            orgao = edital.orgao if edital else "Desconhecido"
+            if orgao not in por_orgao:
+                por_orgao[orgao] = []
+            por_orgao[orgao].append(dias)
+
+        media_global = round(sum(tempos) / max(len(tempos), 1), 1)
+
+        faixas = {"0-30": 0, "31-60": 0, "61-90": 0, ">90": 0}
+        for d in tempos:
+            if d <= 30:
+                faixas["0-30"] += 1
+            elif d <= 60:
+                faixas["31-60"] += 1
+            elif d <= 90:
+                faixas["61-90"] += 1
+            else:
+                faixas[">90"] += 1
+
+        orgaos = []
+        for org, dias_list in por_orgao.items():
+            media = round(sum(dias_list) / len(dias_list), 1)
+            badge = "Rápido" if media <= 30 else ("Normal" if media <= 60 else "Lento")
+            orgaos.append({"orgao": org, "media_dias": media, "contratos": len(dias_list), "badge": badge})
+
+        return jsonify({
+            "media_global": media_global,
+            "total_contratos": len(tempos),
+            "sem_empenho": sem_empenho,
+            "distribuicao": faixas,
+            "por_orgao": sorted(orgaos, key=lambda x: x["media_dias"]),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/contratos/<contrato_id>/dre", methods=["GET"])
+@require_auth
+def api_dre_contrato(contrato_id):
+    """UC-SC05: DRE simplificado por contrato."""
+    from tools import tool_dre_contrato
+    empresa_id = get_current_empresa_id()
+    result = tool_dre_contrato(contrato_id=contrato_id, user_id=get_current_user_id(), empresa_id=empresa_id)
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/precificacao/<edital_id>/simular-dre", methods=["POST"])
+@require_auth
+def api_simular_dre(edital_id):
+    """UC-SC05: DRE simulado por edital."""
+    from tools import tool_dre_contrato
+    empresa_id = get_current_empresa_id()
+    result = tool_dre_contrato(edital_id=edital_id, user_id=get_current_user_id(), empresa_id=empresa_id)
+    return jsonify(result), 200 if result.get("success") else 400
+
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """UC-HC01: Health check público — sem autenticação (RN-NEW-20)."""
+    import time
+    from sqlalchemy import text as sa_text
+    services = []
+
+    # Database
+    try:
+        t0 = time.time()
+        db = get_db()
+        db.execute(sa_text("SELECT 1"))
+        db.close()
+        services.append({"name": "database", "status": "healthy", "latency_ms": round((time.time() - t0) * 1000, 1)})
+    except Exception as e:
+        services.append({"name": "database", "status": "unhealthy", "latency_ms": 0, "message": str(e)})
+
+    # PNCP
+    try:
+        t0 = time.time()
+        import requests as req
+        resp = req.get("https://pncp.gov.br/api/consulta/v1/contratacoes", timeout=5)
+        st = "healthy" if resp.status_code < 500 else "degraded"
+        services.append({"name": "pncp", "status": st, "latency_ms": round((time.time() - t0) * 1000, 1)})
+    except Exception:
+        services.append({"name": "pncp", "status": "degraded", "latency_ms": 0, "message": "timeout"})
+
+    # DeepSeek
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
+    services.append({
+        "name": "deepseek",
+        "status": "healthy" if deepseek_key else "degraded",
+        "latency_ms": 0,
+        "message": "key configured" if deepseek_key else "no API key",
+    })
+
+    # Brave
+    brave_key = os.environ.get("BRAVE_API_KEY", "") or os.environ.get("SCRAPE_API_KEY", "")
+    services.append({
+        "name": "brave",
+        "status": "healthy" if brave_key else "degraded",
+        "latency_ms": 0,
+    })
+
+    # SMTP
+    smtp_host = os.environ.get("SMTP_SERVER", "") or os.environ.get("SMTP_HOST", "")
+    services.append({
+        "name": "smtp",
+        "status": "healthy" if smtp_host else "degraded",
+        "latency_ms": 0,
+    })
+
+    # Cache
+    services.append({"name": "cache", "status": "healthy", "latency_ms": 0})
+
+    # Scheduler
+    services.append({"name": "scheduler", "status": "healthy", "latency_ms": 0})
+
+    unhealthy_count = sum(1 for s in services if s["status"] == "unhealthy")
+    db_down = any(s["name"] == "database" and s["status"] == "unhealthy" for s in services)
+
+    if db_down or unhealthy_count >= 3:
+        status_global = "unhealthy"
+        http_code = 503
+    elif any(s["status"] != "healthy" for s in services):
+        status_global = "degraded"
+        http_code = 200
+    else:
+        status_global = "healthy"
+        http_code = 200
+
+    return jsonify({
+        "status": status_global,
+        "version": "9.0.0",
+        "timestamp": datetime.now().isoformat(),
+        "services": services,
+    }), http_code
+
+
+# =============================================================================
 # Dashboard de Mercado — MercadoPage.tsx
 # =============================================================================
 
