@@ -1016,7 +1016,22 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
               ]} />
             </FormField>
             <FormField label="CEP">
-              <TextInput value={cep} onChange={setCep} />
+              <TextInput value={cep} onChange={(v) => {
+                setCep(v);
+                const digits = v.replace(/\D/g, '');
+                if (digits.length === 8) {
+                  fetch(`https://viacep.com.br/ws/${digits}/json/`)
+                    .then(r => r.json())
+                    .then(data => {
+                      if (!data.erro) {
+                        setEndereco(data.logradouro || '');
+                        setCidade(data.localidade || '');
+                        setUf(data.uf || '');
+                      }
+                    })
+                    .catch(() => {});
+                }
+              }} />
             </FormField>
           </div>
 

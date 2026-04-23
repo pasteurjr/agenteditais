@@ -124,14 +124,16 @@ async function fetchDashboardStats(): Promise<DashboardStats> {
   const pps = raw.propostas_por_status || {};
   const ganhos = (eps.ganho || 0) + (eps.vencedor || 0);
 
+  const formatCurrency = (v: number) => v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
+
   // Transformar resposta do backend para formato do Dashboard
   const stats: DashboardStats = {
-    urgentes: (raw.proximos_prazos || []).map((p: { edital: string; prazo: string; dias_restantes: number }) => ({
+    urgentes: (raw.proximos_prazos || []).map((p: { edital: string; prazo: string; dias_restantes: number; orgao?: string; valor?: number }) => ({
       id: p.edital,
       numero: p.edital || "—",
-      orgao: "",
+      orgao: p.orgao || "",
       prazo: p.dias_restantes != null ? `${p.dias_restantes} dias` : (p.prazo || "—"),
-      valor: "",
+      valor: p.valor ? formatCurrency(p.valor) : "",
     })),
     funil: {
       captacao: eps.novo || 0,
@@ -153,7 +155,7 @@ async function fetchDashboardStats(): Promise<DashboardStats> {
       emAnalise: eps.analisando || 0,
       validados: eps.participando || 0,
       propostasEnviadas: pps.enviada || 0,
-      lanceHoje: 0,
+      lanceHoje: raw.lances_hoje || 0,
     },
     insights: [],
     eventos: (raw.proximos_prazos || []).slice(0, 5).map((p: { edital: string; prazo: string }) => {
@@ -520,18 +522,9 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
             <h2>Insights da IA</h2>
           </div>
           <div className="dashboard-card-content">
-            {loading ? (
-              <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando...</span></div>
-            ) : stats.insights.length === 0 ? (
-              <div className="empty-state-small">Nenhum insight disponivel ainda</div>
-            ) : (
-              stats.insights.map((insight, i) => (
-                <div key={i} className="insight-item">
-                  <span className="insight-bullet">💡</span>
-                  <span className="insight-text">{insight}</span>
-                </div>
-              ))
-            )}
+            <div className="empty-state-small" style={{ color: "#94a3b8", fontStyle: "italic" }}>
+              Em breve: insights gerados automaticamente pela IA a partir da analise dos seus editais e propostas.
+            </div>
           </div>
           <button className="dashboard-card-action" onClick={onOpenChat}>
             Explorar insights <ArrowRight size={16} />
@@ -640,18 +633,9 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
             <h2>O que o sistema aprendeu</h2>
           </div>
           <div className="dashboard-card-content">
-            {loading ? (
-              <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando...</span></div>
-            ) : stats.aprendizados.length === 0 ? (
-              <div className="empty-state-small">O sistema ainda esta aprendendo...</div>
-            ) : (
-              stats.aprendizados.map((ap, i) => (
-                <div key={i} className="aprendizado-item">
-                  <Sparkles size={14} style={{ color: "#8b5cf6", flexShrink: 0 }} />
-                  <span>{ap}</span>
-                </div>
-              ))
-            )}
+            <div className="empty-state-small" style={{ color: "#94a3b8", fontStyle: "italic" }}>
+              Em breve: padroes e aprendizados identificados pelo sistema com base no historico de licitacoes.
+            </div>
           </div>
         </div>
       </div>

@@ -77,7 +77,6 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
         label: "Empresa",
         superOnly: true,
         items: [
-          { id: "crud-empresas", icon: <Building size={14} />, label: "Dados Cadastrais", page: "crud:empresas" },
           { id: "crud-empresa-documentos", icon: <FileText size={14} />, label: "Documentos", page: "crud:empresa-documentos" },
           { id: "crud-empresa-certidoes", icon: <Shield size={14} />, label: "Certidoes", page: "crud:empresa-certidoes" },
           { id: "crud-fontes-certidoes", icon: <Globe size={14} />, label: "Fontes de Certidoes", page: "crud:fontes-certidoes" },
@@ -247,6 +246,7 @@ interface SidebarProps {
   user?: User | null;
   onLogout?: () => void;
   isSuper?: boolean;
+  isAdmin?: boolean;
 }
 
 export function Sidebar({
@@ -255,6 +255,7 @@ export function Sidebar({
   user,
   onLogout,
   isSuper = false,
+  isAdmin = false,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["fluxo"]));
   const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(new Set());
@@ -388,6 +389,13 @@ export function Sidebar({
             <div className="user-info">
               <span className="user-name">{user.name}</span>
               <span className="user-email">{user.email}</span>
+              <span style={{
+                fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                background: isSuper ? '#7c3aed' : isAdmin ? '#2563eb' : '#6b7280',
+                color: '#fff', marginTop: '2px', display: 'inline-block'
+              }}>
+                {isSuper ? 'Super' : isAdmin ? 'Admin' : 'Operador'}
+              </span>
             </div>
             {onLogout && (
               <button className="logout-btn" onClick={onLogout} title="Sair">

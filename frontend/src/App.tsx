@@ -289,6 +289,7 @@ function AppContent() {
           user={user}
           onLogout={handleLogout}
           isSuper={isSuper}
+          isAdmin={isAdmin}
         />
       </div>
 

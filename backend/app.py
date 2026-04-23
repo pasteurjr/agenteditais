@@ -19,6 +19,7 @@ from models import (
     ContratoAditivo, ContratoDesignacao, AtividadeFiscal,
     ARPSaldo, SolicitacaoCarona, AlertaVencimentoRegra,
     ContratoEntrega, AtaConsultada,
+    SessaoPregao,
 )
 from llm import call_deepseek
 from tools import (
@@ -9152,7 +9153,7 @@ def get_dashboard_stats():
         hoje = date.today()
         em_30_dias = hoje + timedelta(days=30)
         prazo_rows = (
-            db.query(Edital.numero, Edital.data_abertura)
+            db.query(Edital.numero, Edital.data_abertura, Edital.orgao, Edital.valor_referencia)
             .filter(
                 Edital.empresa_id == empresa_id,
                 Edital.data_abertura >= hoje,
@@ -9167,10 +9168,18 @@ def get_dashboard_stats():
             {
                 "edital": row[0],
                 "prazo": row[1].date().isoformat() if row[1] else None,
-                "dias_restantes": (row[1].date() - hoje).days if row[1] else None
+                "dias_restantes": (row[1].date() - hoje).days if row[1] else None,
+                "orgao": row[2] or "",
+                "valor": float(row[3]) if row[3] else 0
             }
             for row in prazo_rows
         ]
+
+        # Lances/sessoes de pregao criados hoje
+        lances_hoje = db.query(SessaoPregao).filter(
+            SessaoPregao.empresa_id == empresa_id,
+            func.date(SessaoPregao.created_at) == hoje
+        ).count()
 
         return jsonify({
             "total_editais": total_editais,
@@ -9180,7 +9189,8 @@ def get_dashboard_stats():
             "taxa_sucesso": taxa_sucesso,
             "valor_total_contratado": valor_total_contratado,
             "editais_por_mes": editais_por_mes,
-            "proximos_prazos": proximos_prazos
+            "proximos_prazos": proximos_prazos,
+            "lances_hoje": lances_hoje
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
