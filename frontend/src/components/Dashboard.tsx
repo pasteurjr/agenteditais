@@ -184,6 +184,10 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
   const [notificacoes, setNotificacoes] = useState<NotificacaoItem[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
 
+  // Insights (sugestoes IA) & Aprendizados (feedbacks)
+  const [sugestoesIA, setSugestoesIA] = useState<Array<{ titulo: string; descricao: string; confianca?: number; tipo?: string }>>([]);
+  const [feedbacksAprendizado, setFeedbacksAprendizado] = useState<Array<{ tipo_evento: string; entidade?: string; resultado_real?: Record<string, unknown>; created_at?: string }>>([]);
+
   const loadSchedulerStatus = useCallback(async () => {
     try {
       const token = localStorage.getItem("editais_ia_access_token");
@@ -241,10 +245,35 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
     }
   }, []);
 
+  const loadInsightsAprendizado = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const [sugRes, fbRes] = await Promise.all([
+        fetch("/api/dashboard/aprendizado/sugestoes", { headers }),
+        fetch("/api/dashboard/aprendizado/feedbacks", { headers }),
+      ]);
+
+      if (sugRes.ok) {
+        const data = await sugRes.json();
+        setSugestoesIA((data.ativas || []).slice(0, 4));
+      }
+      if (fbRes.ok) {
+        const data = await fbRes.json();
+        setFeedbacksAprendizado((data.feedbacks || []).slice(0, 4));
+      }
+    } catch {
+      // Silencioso — cards ficam com placeholder
+    }
+  }, []);
+
   useEffect(() => {
     loadStats();
     loadSchedulerStatus();
-  }, [loadStats, loadSchedulerStatus]);
+    loadInsightsAprendizado();
+  }, [loadStats, loadSchedulerStatus, loadInsightsAprendizado]);
 
   const maxFunil = Math.max(stats.funil?.captacao ?? 0, 1);
 
@@ -515,19 +544,33 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
           </div>
         </div>
 
-        {/* Insights da IA */}
+        {/* Insights da IA (Sugestoes ativas) */}
         <div className="dashboard-card insights">
           <div className="dashboard-card-header">
             <Lightbulb size={20} className="icon-insight" />
             <h2>Insights da IA</h2>
           </div>
           <div className="dashboard-card-content">
-            <div className="empty-state-small" style={{ color: "#94a3b8", fontStyle: "italic" }}>
-              Em breve: insights gerados automaticamente pela IA a partir da analise dos seus editais e propostas.
-            </div>
+            {loading ? (
+              <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando...</span></div>
+            ) : sugestoesIA.length === 0 ? (
+              <div className="empty-state-small">Nenhum insight disponivel ainda</div>
+            ) : (
+              sugestoesIA.map((sug, i) => (
+                <div key={i} className="insight-item">
+                  <span className="insight-bullet" style={{ flexShrink: 0 }}>💡</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span className="insight-text" style={{ fontWeight: 500 }}>{sug.titulo}</span>
+                    {sug.confianca != null && (
+                      <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "6px" }}>({Number(sug.confianca).toFixed(0)}%)</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-          <button className="dashboard-card-action" onClick={onOpenChat}>
-            Explorar insights <ArrowRight size={16} />
+          <button className="dashboard-card-action" onClick={() => onNavigate('aprendizado')}>
+            Ver todos insights <ArrowRight size={16} />
           </button>
         </div>
 
@@ -626,17 +669,29 @@ export function Dashboard({ onNavigate, onOpenChat }: DashboardProps) {
           </button>
         </div>
 
-        {/* O que o sistema aprendeu */}
+        {/* O que o sistema aprendeu (Feedbacks recentes) */}
         <div className="dashboard-card aprendizado">
           <div className="dashboard-card-header">
             <Brain size={20} className="icon-brain" />
             <h2>O que o sistema aprendeu</h2>
           </div>
           <div className="dashboard-card-content">
-            <div className="empty-state-small" style={{ color: "#94a3b8", fontStyle: "italic" }}>
-              Em breve: padroes e aprendizados identificados pelo sistema com base no historico de licitacoes.
-            </div>
+            {loading ? (
+              <div className="loading-center"><Loader2 size={20} className="spin" /><span>Carregando...</span></div>
+            ) : feedbacksAprendizado.length === 0 ? (
+              <div className="empty-state-small">O sistema ainda esta aprendendo...</div>
+            ) : (
+              feedbacksAprendizado.map((fb, i) => (
+                <div key={i} className="aprendizado-item">
+                  <Sparkles size={14} style={{ color: "#8b5cf6", flexShrink: 0 }} />
+                  <span>{fb.tipo_evento?.replace(/_/g, " ")}{fb.entidade ? ` — ${fb.entidade}` : ""}</span>
+                </div>
+              ))
+            )}
           </div>
+          <button className="dashboard-card-action" onClick={() => onNavigate('aprendizado')}>
+            Ver aprendizados <ArrowRight size={16} />
+          </button>
         </div>
       </div>
     </div>

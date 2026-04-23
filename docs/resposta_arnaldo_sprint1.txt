@@ -1,0 +1,51 @@
+Arnaldo, tudo bem?
+
+Analisei todas as suas observacoes do Sprint 1 e ja corrigimos tudo que precisava. Segue abaixo o que voce apontou e o que fizemos:
+
+SUAS OBSERVACOES E O QUE CORRIGIMOS:
+
+OBS-01 e OBS-04 (Navegacao confusa no menu) — Voce tinha razao, o tutorial nao explicava direito onde clicar. Corrigimos o tutorial com instrucoes explicitas: "Configuracoes > Empresa" para cadastro e "Configuracoes > Selecionar Empresa" para selecionar a empresa.
+
+OBS-02 (Mostrar nivel do usuario) — Implementado. Agora aparece um badge no rodape do menu lateral mostrando "Super" (roxo), "Admin" (azul) ou "Operador" (cinza). Voce vai ver isso assim que logar.
+
+OBS-03 (Dashboard extrapolando a tela) — Corrigido. Ajustamos a responsividade do Dashboard, os textos longos nos cards de editais urgentes agora ficam truncados em vez de estourar pra fora. Tambem corrigimos os dados do Dashboard: os editais urgentes agora mostram orgao e valor, e o contador "Lances Hoje" agora puxa dado real do banco. Os cards "Insights da IA" e "O que o sistema aprendeu" agora estao conectados ao backend e mostram dados reais quando existem.
+
+OBS-05 (Duas telas de editar empresa) — Corrigido. Removemos a opcao "Dados Cadastrais" do menu Cadastros > Empresa. Agora so existe UM lugar para editar empresa: Configuracoes > Empresa, que e a tela completa.
+
+OBS-06 (CEP nao preenche endereco) — Implementado. Agora ao digitar o CEP, o sistema consulta o viaCEP e preenche automaticamente logradouro, cidade e UF.
+
+OBS-07 (UF sem lista suspensa) — Corrigido. Agora UF e um dropdown com os 27 estados.
+
+OBS-08 (Email/telefone nao obrigatorios) — Sao opcionais por design (so CNPJ e Razao Social sao obrigatorios), mas anotamos para avaliar se faz sentido obrigar pelo menos um email de contato.
+
+OBS-09 (Sem mensagem de salvo com sucesso) — Corrigido. Agora aparece "Salvo!" em verde apos salvar os dados da empresa.
+
+OBS-10 (Telefone sem mascara) — Corrigido. Os campos de telefone agora formatam automaticamente: (XX) XXXXX-XXXX para celular e (XX) XXXX-XXXX para fixo.
+
+OBS-11 (Alterar dados depois de salvos) — A funcionalidade ja existe. Tem um icone de lapis ao lado de cada registro que permite editar. Pode ser que nao estivesse visivel o suficiente.
+
+OBS-12 (Area de atuacao vazia) — A lista carrega do banco. Se estava vazia, e porque as areas ainda nao tinham sido cadastradas (isso e feito no UC-F13). O tutorial foi ajustado para esclarecer isso.
+
+OBS-13/14 (Dados que apareceram sem voce digitar) — Sao dados do carregamento inicial (seed) do ambiente de teste. E esperado que alguns campos ja venham preenchidos. Esclarecemos isso no tutorial.
+
+OBS-15 (Nao conseguiu excluir documento) — Estamos investigando. O endpoint de exclusao existe e voce tem permissao. Pode ter sido um erro silencioso do frontend. Se acontecer de novo, me avise com um screenshot.
+
+OBS-16 (Badges de cores funcionando) — Confirmado, esta correto.
+
+OBS-17/18 (Erro ao buscar certidoes) — O sistema exige que as fontes de certidao sejam inicializadas primeiro. Adicionamos um passo no tutorial explicando isso: "Va em Cadastros > Empresa > Fontes de Certidoes e inicialize as fontes antes de buscar."
+
+OBS-19 (CPF dos responsaveis) — Corrigido no tutorial. Adicionamos CPFs ficticios: 123.456.789-09 (Fernanda) e 987.654.321-00 (Dr. Ricardo).
+
+OBS-20 (Erro de permissao "apenas administradores") — Verificamos no banco e no codigo: o usuario valida2 tem permissao de super+admin. Provavelmente a empresa nao estava selecionada naquele momento. Se o erro aparecer de novo, confira se selecionou a empresa RP3X em Configuracoes > Selecionar Empresa, e me mande um screenshot.
+
+OBS-21/22 (Busca por "reagente" e "hematologia" no portfolio) — Corrigido. O filtro do portfolio agora busca tambem no campo descricao do produto. Ajustamos os termos de busca no tutorial para corresponder aos nomes reais dos produtos.
+
+DOCUMENTO REENVIADO:
+
+- tutorialsprint1-2.md (atualizado) — Tutorial do Conjunto 2 revisado com todas as correcoes de navegacao, pre-requisitos e dados. E esse que voce deve usar para refazer o teste.
+
+OBS: O tutorial do Conjunto 1 (tutorialsprint1-1.md) NAO foi alterado, so o Conjunto 2 (-2). Se voce estava usando o -2, use a versao atualizada que estou enviando.
+
+Qualquer coisa, me aciona.
+
+Abs
