@@ -1,0 +1,99 @@
+/* Base CSS comum aos 6 templates de documento ficticio */
+
+@page {
+  size: A4;
+  margin: 2cm 2cm 2.5cm 2cm;
+  @bottom-center {
+    content: "{{ marca_dagua }}";
+    color: #999;
+    font-size: 9pt;
+    font-family: Arial, sans-serif;
+  }
+  @bottom-right {
+    content: "Pagina " counter(page) " de " counter(pages);
+    color: #999;
+    font-size: 9pt;
+    font-family: Arial, sans-serif;
+  }
+}
+
+body {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  color: #222;
+  line-height: 1.4;
+}
+
+.cabecalho {
+  text-align: center;
+  border-bottom: 2px solid #333;
+  padding-bottom: 0.5em;
+  margin-bottom: 1.5em;
+}
+
+.cabecalho .titulo {
+  font-size: 16pt;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.cabecalho .subtitulo {
+  font-size: 11pt;
+  color: #555;
+  margin-top: 0.3em;
+}
+
+.bloco-empresa {
+  background: #f5f5f5;
+  border-left: 4px solid #555;
+  padding: 0.8em 1em;
+  margin: 1em 0;
+}
+
+.bloco-empresa .label {
+  font-weight: bold;
+  display: inline-block;
+  min-width: 120px;
+}
+
+.numero {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.05em;
+}
+
+.aviso-ficticio {
+  background: #fff3cd;
+  border: 1px dashed #856404;
+  color: #856404;
+  padding: 0.5em 1em;
+  margin: 1em 0;
+  font-size: 10pt;
+  text-align: center;
+}
+
+.assinatura {
+  margin-top: 4em;
+  text-align: center;
+  border-top: 1px solid #999;
+  padding-top: 0.5em;
+  width: 60%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+table.dados {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+table.dados th, table.dados td {
+  border: 1px solid #999;
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+
+table.dados th {
+  background: #e0e0e0;
+}

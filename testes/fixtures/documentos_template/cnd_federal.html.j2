@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CND Federal — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css">
+</head>
+<body>
+
+{{ cabecalho('Certidão Negativa de Débitos', 'Receita Federal / PGFN — Modelo Fictício') }}
+
+{{ aviso_ficticio() }}
+
+{{ bloco_empresa(empresa) }}
+
+<p>Certifica-se, conforme as informações disponíveis nos sistemas da Receita
+Federal e da Procuradoria-Geral da Fazenda Nacional, que <strong>NÃO HÁ
+PENDÊNCIAS</strong> em nome da empresa acima identificada relativas a
+créditos tributários federais e à dívida ativa da União.</p>
+
+<table class="dados">
+  <tr><th>Código de Validação</th><td class="numero">{{ ('FK' + (cnpj_only(empresa.cnpj) if cnpj_only is defined else empresa.cnpj.replace('.','').replace('/','').replace('-',''))[:8]).upper() }}{{ ano_atual }}</td></tr>
+  <tr><th>Data de Emissão</th><td>{{ hoje }}</td></tr>
+  <tr><th>Validade</th><td>{{ validade }}</td></tr>
+  <tr><th>Tipo</th><td>Certidão Negativa</td></tr>
+</table>
+
+<p style="margin-top: 2em; font-size: 10pt; color: #555;">
+Esta certidão tem validade de 180 (cento e oitenta) dias contados da data de
+sua emissão. Pode ser confirmada pelo código de validação acima no portal da
+Receita Federal — sistema de validação fictício.
+</p>
+
+</body>
+</html>

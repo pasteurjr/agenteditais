@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>CRF FGTS — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css">
+</head>
+<body>
+
+{{ cabecalho('Certificado de Regularidade do FGTS — CRF', 'Caixa Econômica Federal — Modelo Fictício') }}
+
+{{ aviso_ficticio() }}
+
+{{ bloco_empresa(empresa) }}
+
+<p>Certifica-se que a empresa acima identificada encontra-se em situação
+<strong>REGULAR</strong> perante o Fundo de Garantia do Tempo de Serviço — FGTS,
+nos termos da Lei 8.036/1990 e regulamentações.</p>
+
+<table class="dados">
+  <tr><th>Inscrição</th><td>CNPJ <span class="numero">{{ empresa.cnpj }}</span></td></tr>
+  <tr><th>Data de Validade</th><td>{{ validade }}</td></tr>
+  <tr><th>Emitido em</th><td>{{ hoje }}</td></tr>
+  <tr><th>Código</th><td class="numero">CRF-{{ (empresa.cnpj.replace('.','').replace('/','').replace('-','')[:6]) }}-{{ ano_atual }}</td></tr>
+</table>
+
+<p style="margin-top: 2em; font-size: 10pt; color: #555;">
+A aceitação deste certificado condiciona-se à verificação de sua autenticidade
+no sistema da Caixa Econômica Federal (verificação fictícia para validação).
+</p>
+
+</body>
+</html>

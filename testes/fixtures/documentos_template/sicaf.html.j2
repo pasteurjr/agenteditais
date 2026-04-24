@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>SICAF — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css">
+</head>
+<body>
+
+{{ cabecalho('SICAF — Sistema de Cadastramento Unificado de Fornecedores', 'Comprasnet / SIASG — Modelo Fictício') }}
+
+{{ aviso_ficticio() }}
+
+{{ bloco_empresa(empresa) }}
+
+<h2>Dados Cadastrais</h2>
+<table class="dados">
+  <tr><th>Razão Social</th><td>{{ empresa.razao_social }}</td></tr>
+  <tr><th>CNPJ</th><td class="numero">{{ empresa.cnpj }}</td></tr>
+  <tr><th>Situação Cadastro</th><td><strong>HABILITADO</strong></td></tr>
+  <tr><th>Nível</th><td>I — Credenciamento Básico</td></tr>
+</table>
+
+<h2>Habilitações Aprovadas</h2>
+<table class="dados">
+  <tr><th>Nivel</th><th>Descrição</th><th>Status</th></tr>
+  <tr><td>I</td><td>Credenciamento Básico</td><td>Aprovado</td></tr>
+  <tr><td>II</td><td>Habilitação Jurídica</td><td>Aprovado</td></tr>
+  <tr><td>III</td><td>Regularidade Fiscal Federal</td><td>Aprovado</td></tr>
+  <tr><td>IV</td><td>Regularidade Fiscal Estadual</td><td>Aprovado</td></tr>
+  <tr><td>V</td><td>Qualificação Econômico-Financeira</td><td>Aprovado</td></tr>
+  <tr><td>VI</td><td>Qualificação Técnica</td><td>Aprovado</td></tr>
+</table>
+
+<p style="margin-top: 2em; font-size: 10pt; color: #555;">
+Documento emitido em {{ hoje }} • Validade: {{ validade }}<br>
+Hash de validação: <span class="numero">{{ (empresa.cnpj.replace('.','').replace('/','').replace('-',''))[2:10] }}-SICAF-{{ ano_atual }}</span>
+</p>
+
+</body>
+</html>

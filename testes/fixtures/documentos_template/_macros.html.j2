@@ -1,0 +1,27 @@
+{% macro cabecalho(titulo, orgao_emissor='') %}
+<div class="cabecalho">
+  <h1 class="titulo">{{ titulo }}</h1>
+  {% if orgao_emissor %}<div class="subtitulo">{{ orgao_emissor }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro bloco_empresa(empresa) %}
+<div class="bloco-empresa">
+  <div><span class="label">Razão Social:</span> {{ empresa.razao_social }}</div>
+  <div><span class="label">CNPJ:</span> <span class="numero">{{ empresa.cnpj }}</span></div>
+  {% if empresa.endereco %}<div><span class="label">Endereço:</span> {{ empresa.endereco }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro aviso_ficticio() %}
+<div class="aviso-ficticio">
+  ⚠ DOCUMENTO FICTÍCIO — gerado automaticamente para validação do sistema Facilicita.IA. Não tem valor legal.
+</div>
+{% endmacro %}
+
+{% macro assinatura(nome) %}
+<div class="assinatura">
+  <strong>{{ nome }}</strong><br>
+  Assinado digitalmente em {{ hoje }}
+</div>
+{% endmacro %}

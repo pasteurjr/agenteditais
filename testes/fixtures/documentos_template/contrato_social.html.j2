@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Contrato Social — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css">
+</head>
+<body>
+
+{{ cabecalho('Contrato Social', 'Junta Comercial — Modelo Fictício') }}
+
+{{ aviso_ficticio() }}
+
+{{ bloco_empresa(empresa) }}
+
+<h2>1. Cláusula Primeira — Da Constituição</h2>
+<p>A sociedade <strong>{{ empresa.razao_social }}</strong>, doravante denominada
+"a Empresa", inscrita no CNPJ sob o nº <span class="numero">{{ empresa.cnpj }}</span>,
+fica constituída sob a forma de Sociedade Empresária Limitada, regida pelas disposições
+legais aplicáveis e pelas cláusulas a seguir.</p>
+
+<h2>2. Cláusula Segunda — Do Objeto Social</h2>
+<p>A Empresa tem por objeto social o comércio, a importação, exportação,
+distribuição e representação de produtos médico-hospitalares, equipamentos
+laboratoriais, materiais de diagnóstico in vitro, e prestação de serviços
+correlatos.</p>
+
+<h2>3. Cláusula Terceira — Do Capital Social</h2>
+<p>O capital social é de <strong>R$ 500.000,00</strong> (quinhentos mil reais),
+dividido em 500.000 quotas de R$ 1,00 cada, totalmente integralizadas em
+moeda corrente nacional.</p>
+
+<h2>4. Cláusula Quarta — Da Sede</h2>
+<p>A sede está situada em: {{ empresa.endereco | default('Endereço a definir', true) }}.</p>
+
+<h2>5. Cláusula Quinta — Do Prazo</h2>
+<p>O prazo de duração da sociedade é por tempo indeterminado, com início em
+{{ hoje }}.</p>
+
+<h2>6. Cláusula Sexta — Da Administração</h2>
+<p>A administração é exercida pelo(a) sócio(a)
+<strong>{{ empresa.responsavel | default('Sócio Administrador', true) }}</strong>,
+com poderes de representação ativa e passiva.</p>
+
+{{ assinatura(empresa.responsavel | default('Representante Legal', true)) }}
+
+</body>
+</html>

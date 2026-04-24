@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Alvará — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css">
+</head>
+<body>
+
+{{ cabecalho('Alvará de Funcionamento', 'Prefeitura Municipal — Modelo Fictício') }}
+
+{{ aviso_ficticio() }}
+
+{{ bloco_empresa(empresa) }}
+
+<p>Concede-se à empresa acima identificada autorização para o funcionamento de
+estabelecimento comercial, mediante o cumprimento da legislação municipal e
+das normas sanitárias e ambientais aplicáveis.</p>
+
+<table class="dados">
+  <tr><th>Atividade Principal</th><td>Comércio atacadista de produtos médicos e hospitalares</td></tr>
+  <tr><th>Inscrição Municipal</th><td class="numero">{{ (empresa.cnpj.replace('.','').replace('/','').replace('-',''))[5:13] }}</td></tr>
+  <tr><th>Data de Emissão</th><td>{{ hoje }}</td></tr>
+  <tr><th>Validade</th><td>31/12/{{ ano_atual }}</td></tr>
+  <tr><th>Endereço</th><td>{{ empresa.endereco | default('A definir', true) }}</td></tr>
+</table>
+
+<p style="margin-top: 2em; font-size: 10pt; color: #555;">
+O presente alvará deve ser fixado em local visível ao público no
+estabelecimento. Sua renovação deve ser solicitada com antecedência mínima
+de 30 (trinta) dias do vencimento.
+</p>
+
+</body>
+</html>
