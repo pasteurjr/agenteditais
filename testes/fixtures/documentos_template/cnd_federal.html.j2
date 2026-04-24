@@ -20,7 +20,7 @@ PENDÊNCIAS</strong> em nome da empresa acima identificada relativas a
 créditos tributários federais e à dívida ativa da União.</p>
 
 <table class="dados">
-  <tr><th>Código de Validação</th><td class="numero">{{ ('FK' + (cnpj_only(empresa.cnpj) if cnpj_only is defined else empresa.cnpj.replace('.','').replace('/','').replace('-',''))[:8]).upper() }}{{ ano_atual }}</td></tr>
+  <tr><th>Código de Validação</th><td class="numero">{{ ('FK' + empresa.cnpj.replace('.','').replace('/','').replace('-','')[:8]).upper() }}{{ ano_atual }}</td></tr>
   <tr><th>Data de Emissão</th><td>{{ hoje }}</td></tr>
   <tr><th>Validade</th><td>{{ validade }}</td></tr>
   <tr><th>Tipo</th><td>Certidão Negativa</td></tr>

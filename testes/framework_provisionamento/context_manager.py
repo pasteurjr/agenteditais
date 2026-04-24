@@ -191,7 +191,14 @@ def limpar_ciclo(ciclo_id: str, trilhas: tuple[str, ...] = ("e2e",)) -> None:
     Limpa dados de um ciclo no banco para as trilhas especificadas.
 
     Por padrão limpa só a E2E (visual e humano são reusáveis).
-    Remove usuários e empresas associadas (a empresa criada pelo UC-F01).
+    Para limpar tudo, passe trilhas=("e2e", "visual", "humano").
+
+    NOTA sobre trilha humana: os UCs já executados pelo Arnaldo costumam ser
+    preservados para auditoria. Limpar a trilha humano é raro — só se voce
+    explicitamente quer reciclar o usuario.
+
+    Remove usuários e empresas associadas (a empresa criada pelo UC-F01 vai
+    via cascade FK no banco).
     """
     from user_allocator import remover_usuarios  # type: ignore
 
@@ -205,7 +212,9 @@ def limpar_ciclo(ciclo_id: str, trilhas: tuple[str, ...] = ("e2e",)) -> None:
 
     if emails_para_remover:
         n = remover_usuarios(emails_para_remover)
-        print(f"[ctx] {n} usuario(s) removido(s) (cascade apaga empresas associadas)")
+        print(f"[ctx] {n} usuario(s) removido(s) [trilhas={trilhas}]")
+    else:
+        print(f"[ctx] Nada a remover.")
 
 
 if __name__ == "__main__":
@@ -219,7 +228,8 @@ if __name__ == "__main__":
     parser.add_argument("--termo", default="diagnostico", help="Termo PNCP")
     parser.add_argument("--sprints", help="Sprints no ciclo (ex: 1,2,3)")
     parser.add_argument("--carregar", help="Carregar ciclo existente")
-    parser.add_argument("--limpar", help="Limpar ciclo (so trilha E2E)")
+    parser.add_argument("--limpar", help="Limpar ciclo (so trilha E2E por default)")
+    parser.add_argument("--limpar-trilhas", default="e2e", help="Trilhas a limpar (separadas por virgula). Ex: e2e,visual")
 
     args = parser.parse_args()
 
@@ -227,7 +237,8 @@ if __name__ == "__main__":
         ctx = carregar_ciclo(args.carregar)
         print(yaml.safe_dump(ctx, allow_unicode=True, default_flow_style=False))
     elif args.limpar:
-        limpar_ciclo(args.limpar)
+        trilhas_str = [t.strip() for t in args.limpar_trilhas.split(",") if t.strip()]
+        limpar_ciclo(args.limpar, trilhas=tuple(trilhas_str))
     elif args.criar:
         sprints = [int(s) for s in args.sprints.split(",")] if args.sprints else None
         ctx = criar_ciclo(

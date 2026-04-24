@@ -54,57 +54,105 @@ def buscar_editais_candidatos(
     Busca editais no PNCP que sejam candidatos à validação.
 
     Critérios:
-      - Aberta de proposta no futuro (>= hoje + dias_minimos)
-      - Tem pelo menos 1 arquivo PDF/ZIP baixável
+      - Data de abertura de proposta no futuro (>= hoje + dias_minimos)
+      - Tem pelo menos 1 arquivo PDF/ZIP baixável (verificado via _buscar_arquivos_pncp)
+      - Texto do objeto contém o termo_busca (case-insensitive), se fornecido
 
-    Retorna lista de dicts com campos `numero`, `cnpj_orgao`, `ano_compra`,
-    `seq_compra`, `url_pncp`, `data_abertura`, `arquivos`.
+    Estratégia: query direta no endpoint /contratacoes/publicacao com
+    janela de datas. Reutiliza `_buscar_arquivos_pncp` do projeto.
     """
     try:
-        # Importa do backend só agora pra evitar carregar app inteiro se não usar
-        from tools import _buscar_edital_pncp_por_numero, _buscar_arquivos_pncp  # type: ignore
+        from tools import _buscar_arquivos_pncp  # type: ignore
+        from config import PNCP_BASE_URL  # type: ignore
     except ImportError as e:
         raise ImportError(
             f"Falha ao importar funcoes PNCP do backend: {e}. "
             "Garanta que backend/tools.py esta acessivel."
         )
 
-    # Estratégia atual: busca por número fictício para popular cache PNCP.
-    # _buscar_edital_pncp_por_numero retorna lista de candidatos quando
-    # numero é vago — confiamos nessa heurística do projeto.
-    resultado = _buscar_edital_pncp_por_numero(termo_busca)
-    if not resultado or not resultado.get("editais"):
-        return []
+    # A API PNCP filtra por dataPublicacao. Para encontrar editais com abertura
+    # futura, buscamos publicacoes recentes (ultimos 30 dias) e depois filtramos
+    # por dataAberturaProposta no codigo.
+    hoje = datetime.now()
+    data_inicial = (hoje - timedelta(days=30)).strftime("%Y%m%d")
+    data_final = hoje.strftime("%Y%m%d")
 
     candidatos: list[dict[str, Any]] = []
-    for ed in resultado["editais"]:
+    termo_lower = termo_busca.lower() if termo_busca else None
+
+    # Pesquisa em até 3 páginas (150 editais), para cada modalidade comum
+    for modalidade in (6, 8, 4):  # Pregão Eletrônico, Dispensa, Concorrência
         if len(candidatos) >= n_minimo:
             break
-        # Verifica data
-        if not _data_aberura_futura(ed.get("dataAberturaProposta"), dias_minimos):
-            continue
-        # Verifica arquivos
-        try:
-            arqs = _buscar_arquivos_pncp(
-                ed.get("cnpj_orgao", ""),
-                int(ed.get("ano_compra", 0)),
-                int(ed.get("seq_compra", 0)),
-            )
-        except Exception:
-            arqs = []
-        baixaveis = [a for a in arqs if (a.get("url") or "").lower().endswith((".pdf", ".zip"))]
-        if not baixaveis:
-            continue
+        for pagina in range(1, 4):
+            if len(candidatos) >= n_minimo:
+                break
+            try:
+                resp = requests.get(
+                    f"{PNCP_BASE_URL}/contratacoes/publicacao",
+                    params={
+                        "dataInicial": data_inicial,
+                        "dataFinal": data_final,
+                        "codigoModalidadeContratacao": modalidade,
+                        "tamanhoPagina": 50,
+                        "pagina": pagina,
+                    },
+                    headers={"Accept": "application/json"},
+                    timeout=30,
+                )
+                if resp.status_code != 200:
+                    break
+                items = resp.json().get("data", []) or []
+            except Exception as e:
+                print(f"[pncp_adapter] Erro PNCP pagina {pagina}: {e}")
+                break
 
-        candidatos.append({
-            "numero": ed.get("numero", ""),
-            "cnpj_orgao": ed.get("cnpj_orgao", ""),
-            "ano_compra": ed.get("ano_compra"),
-            "seq_compra": ed.get("seq_compra"),
-            "url_pncp": ed.get("url", ""),
-            "data_abertura": ed.get("dataAberturaProposta", ""),
-            "arquivos": baixaveis,
-        })
+            if not items:
+                break
+
+            for item in items:
+                if len(candidatos) >= n_minimo:
+                    break
+
+                # Filtro por termo de busca no objeto
+                if termo_lower:
+                    objeto = (item.get("objetoCompra") or "").lower()
+                    if termo_lower not in objeto:
+                        continue
+
+                # Filtro: data abertura futura
+                if not _data_aberura_futura(item.get("dataAberturaProposta"), dias_minimos):
+                    continue
+
+                orgao = item.get("orgaoEntidade") or {}
+                cnpj = (orgao.get("cnpj") or "").replace(".", "").replace("/", "").replace("-", "")
+                ano = item.get("anoCompra")
+                seq = item.get("sequencialCompra")
+
+                if not (cnpj and ano and seq):
+                    continue
+
+                # Verifica arquivos baixáveis
+                try:
+                    arqs = _buscar_arquivos_pncp(cnpj, int(ano), int(seq))
+                except Exception:
+                    arqs = []
+                baixaveis = [a for a in arqs if (a.get("url") or "").lower().endswith((".pdf", ".zip"))]
+                if not baixaveis:
+                    continue
+
+                candidatos.append({
+                    "numero": str(item.get("numeroCompra") or ""),
+                    "objeto": item.get("objetoCompra", "")[:200],
+                    "cnpj_orgao": cnpj,
+                    "ano_compra": ano,
+                    "seq_compra": seq,
+                    "url_pncp": f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}",
+                    "data_abertura": item.get("dataAberturaProposta", ""),
+                    "modalidade": modalidade,
+                    "arquivos": baixaveis,
+                })
+
     return candidatos
 
 

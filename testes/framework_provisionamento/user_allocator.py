@@ -59,6 +59,10 @@ def alocar_usuarios(quantidade: int = 3, db_session=None) -> list[dict[str, str]
 
     Retorna lista de dicts com `email`, `senha`, `id`. A senha é a padrão
     `SENHA_PADRAO`.
+
+    Concorrência: assume que apenas 1 processo de provisionamento roda por vez.
+    Se vários ciclos forem provisionados em paralelo, pode haver race condition
+    no `MAX(N) + 1`. Para o uso atual (um ciclo de validação por vez), é OK.
     """
     from models import get_db, User  # type: ignore
     if db_session is None:
