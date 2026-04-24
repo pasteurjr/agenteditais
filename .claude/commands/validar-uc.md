@@ -3,7 +3,7 @@ description: Gera dataset+caso de teste+tutorial (3 camadas x 3 trilhas) e execu
 argument-hint: "UC-F01 --modo=visual  |  --sprint=1 --modo=e2e  |  --ciclo=<id> --modo=visual"
 ---
 
-# VALIDAÇÃO AUTOMATIZADA DE CASOS DE USO — PROTOCOLO DE EXECUÇÃO
+# VALIDAÇÃO AUTOMATIZADA DE CASOS DE USO — PROTOCOLO V3
 
 ## ARGUMENTOS
 
@@ -23,471 +23,249 @@ Os argumentos passados ao slash command estão em `$ARGUMENTS`. Formas aceitas:
 
 Aguarde "prossiga" antes de começar.
 
+---
+
 ## CONTEXTO E OBJETIVO
 
-Você receberá um ou mais casos de uso (specs com sequência de eventos
-contendo ações do usuário e respostas do sistema, com telas
-prototipadas). Seu trabalho tem **seis fases obrigatórias**, executadas
-em ordem: **CONTEXTO (Fase 0) → DATASETS (Fase 1) → CASOS DE TESTE (Fase 2) → TUTORIAIS (Fase 3) → EXECUÇÃO (Fase 4) → RELATÓRIO (Fase 5)**.
+Você opera como `validation-coordinator` do time de validação. Sua execução tem **6 fases obrigatórias**:
 
-**Cobertura obrigatória:** para cada UC, a Fase 2 deve gerar **um caso de teste por variação** — Fluxo Principal (FP) + cada Fluxo Alternativo (FAn) + cada Fluxo de Exceção (FEn). Nunca um caso único "abrangente". Se o UC não detalhar exceções suficientes, **inferir** exceções comuns e **perguntar** ao PO.
+**FASE 0 (Provisionamento) → FASE 1 (Datasets) → FASE 2 (Casos de teste) → FASE 3 (Tutoriais) → FASE 4 (Execução) → FASE 5 (Relatório)**
 
-**Time de 9 agentes:** você opera como `validation-coordinator` do time de validação. Chama os outros 8 agentes em `.claude/agents/validation-*.md` nos momentos certos (`uc-analyzer`, `dataset-auditor`, `test-case-generator`, `tutorial-writer`, `semantic-judge`, `root-cause-classifier`, `critique`, `code-fixer`). Ver `docs/VALIDACAOFACILICITA.md` seção 9 para detalhamento.
+Cada fase tem checkpoint humano. Você delega julgamento aos agentes especializados em `.claude/agents/validation-*.md`. Nunca julga conteúdo sozinho.
 
-O objetivo é produzir validação reproduzível, auditável e com baixo
-índice de falsos positivos/negativos. Você atua simultaneamente como
-engenheiro de testes, gerador de dados e juiz semântico.
+**Cobertura obrigatória:** para cada UC, gere **um caso de teste por variação** — Fluxo Principal (FP) + cada Fluxo Alternativo (FAn) + cada Fluxo de Exceção (FEn). Nunca um caso "abrangente".
+
+**Time de 9 agentes** (em `.claude/agents/validation-*.md`):
+- `validation-coordinator` (você) — orquestra
+- `validation-uc-analyzer` — extrai estrutura do UC
+- `validation-dataset-auditor` — adversarial, audita contexto da Fase 0
+- `validation-test-case-generator` — gera caso de teste por variação+trilha
+- `validation-tutorial-writer` — escreve tutoriais
+- `validation-semantic-judge` — juiz semântico
+- `validation-root-cause-classifier` — classifica divergência (no loop de correção)
+- `validation-critique` — 2ª opinião adversarial
+- `validation-code-fixer` — propõe diff (no loop)
 
 Artefatos são salvos em:
 - **Contexto do ciclo (Fase 0):** `testes/contextos/<ciclo_id>/contexto.yaml` + `editais/` + `docs/`
 - **Datasets (Fase 1):** `testes/datasets/<uc_id>_{e2e,visual,humano}.yaml`
-- **Casos de teste (Fase 2):** `testes/casos_de_teste/<uc_id>_{e2e,visual,humano}.{yaml,md}`
-- **Tutoriais (Fase 3):** `testes/tutoriais_{playwright,visual,humano}/<uc_id>*.md`
+- **Casos de teste (Fase 2):** `testes/casos_de_teste/<uc_id>_{e2e,visual,humano}_<variacao>.{yaml,md}`
+- **Tutoriais (Fase 3):** `testes/tutoriais_{playwright,visual,humano}/<uc_id>_<variacao>.md`
 - **Relatórios (Fase 5):** `testes/relatorios/{automatico,visual,humano}/<uc_id>_<timestamp>.md`
 - **Evidências:** `testes/relatorios/<trilha>/<uc_id>/<timestamp>/`
+
+Leitura obrigatória: `docs/VALIDACAOFACILICITA.md` (processo completo).
 
 ---
 
 ## FASE 0 — PROVISIONAMENTO DE CONTEXTO DO CICLO
 
-**Quando roda:** apenas uma vez no início de um ciclo de validação. Se o comando é `/validar-uc --sprint=1,2,3`, Fase 0 roda antes do primeiro UC e o contexto provisionado é reusado pelos demais. Se o comando é `/validar-uc UC-F01` isolado, verifica se existe ciclo aberto; se sim, reutiliza, se não, executa Fase 0.
+**Quando roda:** apenas uma vez por ciclo. `/validar-uc --sprint=1,2,3` provisiona contexto antes do primeiro UC; demais UCs reusam. `/validar-uc UC-F01` isolado: se há ciclo aberto, reusa; senão, executa Fase 0.
 
-**O que provisiona** (para cada uma das 3 trilhas: E2E, Visual, Humana):
+**Provisiona para cada uma das 3 trilhas (E2E, Visual, Humana):**
 
 ### 0.1 Alocar usuário sequencial
-Consulta o banco pelo maior `valida<N>` existente em `users.email LIKE 'valida%@valida.com.br'` e reserva os próximos 3 IDs livres. Senha padrão: `123456`. Papel: `usuario_valida`.
+Consulta o banco pelo maior `valida<N>` em `users.email LIKE 'valida%@valida.com.br'` e reserva os próximos 3 IDs livres. Senha padrão: `123456`. Papel: `usuario_valida`.
 
 ### 0.2 Gerar CNPJ único
-Gera CNPJ pelo algoritmo da RF (14 dígitos, validação dos 2 DVs). Verifica `SELECT id FROM empresas WHERE cnpj = ?`. Se colidir, gera outro. Se colidir 10 vezes, declara impasse (não deveria acontecer em prática).
+Algoritmo da RF (14 dígitos, 2 DVs). Verifica `SELECT id FROM empresas WHERE cnpj = ?`. Se colidir, retry. 10 colisões consecutivas → impasse.
 
 ### 0.3 Selecionar editais do PNCP
-Invoca `backend/tools.py::_buscar_edital_pncp_por_numero` (e demais `_buscar_*_pncp`) para selecionar 3 editais que:
-- Tenham `dataAberturaProposta` futura (>= hoje + 3 dias)
-- Tenham pelo menos 1 arquivo PDF/ZIP baixável
-- Tenham categoria compatível com o escopo dos UCs do ciclo (se UCs envolvem edital)
-
-Baixa os arquivos pra `testes/contextos/<ciclo_id>/editais/`. Se o ciclo inclui só UCs sem edital (ex: só Sprint 1), pula.
+Invoca funções de `backend/tools.py` (`_buscar_edital_pncp_por_numero`, `_buscar_arquivos_pncp`) para selecionar 3 editais com `dataAberturaProposta` futura (>= hoje + 3 dias) e PDF baixável. Baixa para `testes/contextos/<ciclo_id>/editais/`. Pula se UCs do ciclo não envolvem edital.
 
 ### 0.4 Renderizar documentos fictícios
-Para cada empresa, renderiza via templates Jinja2 em `testes/fixtures/documentos_template/`:
-- Contrato Social (CNPJ, razão social, capital social, endereço)
-- CND Federal (CNPJ, data de emissão, validade)
-- FGTS (CNPJ, data, validade)
-- Certidão Trabalhista
-- SICAF
-- Alvará de Funcionamento
-
-Saída: PDFs em `testes/contextos/<ciclo_id>/docs/<trilha>/`.
+Templates Jinja2 em `testes/fixtures/documentos_template/`. Renderiza Contrato Social, CND Federal, FGTS, Trabalhista, SICAF, Alvará para cada empresa. Saída: `testes/contextos/<ciclo_id>/docs/<trilha>/`.
 
 ### 0.5 Criar usuários no banco (NÃO empresas)
-`INSERT INTO users (email, senha_hash, papel, ...)` — 3 usuários.
-
-**Importante:** empresas NÃO são criadas na Fase 0. Empresa é criada pelo próprio UC-F01 via UI (Opção Y). Isso garante que UC-F01 seja validado de verdade, não "editado".
+`INSERT INTO users (...)` — 3 usuários. **Empresa NÃO é criada na Fase 0** — fica a cargo do UC-F01 via UI (Opção Y).
 
 ### 0.6 Gravar contexto
-`testes/contextos/<ciclo_id>/contexto.yaml`:
+`testes/contextos/<ciclo_id>/contexto.yaml` com IDs de usuários, CNPJs pretendidos, paths de editais e documentos.
 
-```yaml
-ciclo_id: "<YYYYMMDD_HHMMSS>"
-criado_em: <ISO-8601>
-ambiente: agenteditais  # ou editaisvalida
-sprints_no_ciclo: [1, 2, 3]
-trilhas:
-  e2e:
-    usuario:
-      email: valida123@valida.com.br
-      senha: "123456"
-      id: <uuid gerado pelo INSERT>
-    empresa:
-      cnpj_pretendido: "11.111.111/0001-11"
-      razao_social_pretendida: "E2E_20260425_EMPRESA_001"
-      id: null  # será preenchido após UC-F01
-    editais_selecionados:
-      - numero: "123/2026"
-        cnpj_orgao: "00.000.000/0001-91"
-        url_pncp: "..."
-        arquivo_local: "testes/contextos/<ciclo_id>/editais/e2e/edital_123_2026.pdf"
-    documentos_renderizados:
-      contrato_social: "testes/contextos/<ciclo_id>/docs/e2e/contrato_social.pdf"
-      cnd_federal: "..."
-      # ...
-  visual:
-    # idêntico com valida124
-  humano:
-    # idêntico com valida125, ambiente=editaisvalida, dados realistas
-```
+### 0.7 Auditoria adversarial
+Chamar `validation-dataset-auditor` com o contexto.yaml. Se reprovar (severidade CRITICA): voltar ao 0.1 e reprovisionar.
 
-### 0.7 Checkpoint obrigatório
-Apresenta tabela comparativa das 3 trilhas provisionadas:
-- usuário alocado
+### 0.8 Checkpoint obrigatório
+Apresenta tabela comparativa das 3 trilhas:
+- Usuário alocado
 - CNPJ gerado
-- razão social pretendida
+- Razão social pretendida
 - N editais selecionados + URLs
 - N documentos renderizados
 
-Aguarda "prossiga" antes da Fase 1.
+Aguarda "prossiga" antes de Fase 1.
 
-### 0.8 Reutilização e retomada
-Se já existe `testes/contextos/<ciclo_id>/contexto.yaml` E o comando é `/validar-uc --ciclo=<ciclo_id> ...`, pula Fase 0 e usa contexto existente. Permite retomar ciclos interrompidos sem reprovisionar tudo.
+### 0.9 Reutilização e retomada
+`/validar-uc --ciclo=<id>` pula Fase 0 e usa contexto existente.
 
-### 0.9 Regra de ordem: UC-F01 primeiro
-Se o ciclo inclui UCs da Sprint 1, UC-F01 é o primeiro. Motivo: ele cria a empresa via UI, preenchendo `empresa.id` no contexto. Qualquer UC subsequente que precise de empresa (praticamente todos) consulta esse ID.
-
-Se falhar UC-F01, o ciclo inteiro é bloqueado. Relatório final diz: "sprints 2-5 não executadas — dependem de UC-F01 aprovado".
+### 0.10 Regra de ordem: UC-F01 primeiro
+Se ciclo inclui UCs da Sprint 1, UC-F01 é o primeiro. Cria a empresa via UI (Opção Y), preenchendo `empresa.id` no contexto. Falha em UC-F01 → ciclo bloqueia.
 
 ---
 
-## FASE 1 — SÍNTESE DE DADOS DE TESTE
+## FASE 1 — SÍNTESE DE DATASETS
 
-A partir de cada caso de uso, infira os dados necessários para
-exercitá-lo. Produza DOIS conjuntos independentes, cada um destinado
-a alimentar seu respectivo tutorial na Fase 2. Os dados serão
-embutidos inline nos tutoriais — não gere arquivos JSON/YAML
-separados para os dados.
+Para cada UC do ciclo, gere **3 datasets** em `testes/datasets/<uc_id>_{e2e,visual,humano}.yaml`. Datasets contêm **só valores**, sem asserções nem instrução. Referenciam o contexto do ciclo (`contexto_ref`) para usuário/empresa/editais.
 
-### 1.1 Conjunto HUMANO
+### 1.1 Antes da síntese: chamar `validation-uc-analyzer`
+Delega ao agente a leitura do UC.md. Retorno: estrutura YAML com FP + FAs + FEs + RNs + dados necessários inferidos. Sem essa estrutura, não há síntese.
 
-Dados realistas e memoráveis para um Product Owner executar
-manualmente. Destino: serão embutidos como texto natural no
-Tutorial Humano.
+### 1.2 Conjunto E2E (`<uc_id>_e2e.yaml`)
+Determinístico. Strings com prefixo `E2E_<YYYYMMDD>_`. Triplo formato para campos numéricos/datados:
+- entrada (como o usuário digita): `"45230,00"`
+- exibição (como aparece renderizado): `"R$ 45.230,00"`
+- trânsito (como vai pro backend): `45230.00`
 
-Requisitos:
-- Valores com aparência plausível no contexto de licitações
-  governamentais brasileiras (CNPJs válidos pelo algoritmo da RF,
-  valores em R$ com centavos realistas, datas coerentes com prazos
-  de editais, números de edital no formato N/ANO)
-- Nomes fictícios mas profissionais — evite "João Teste 123"
-  ou similares
-- Quantidade mínima: apenas o necessário para exercitar o caso de uso
-- Cada dado deve vir com uma nota curta explicando por que aquele
-  valor foi escolhido (facilita o PO entender a intenção do teste
-  e observar criticamente o comportamento esperado)
+### 1.3 Conjunto VISUAL (`<uc_id>_visual.yaml`)
+Memorável. Strings prefixadas `DEMO_`. Mesmo triplo formato. Prefere valores legíveis no painel (você vai estar olhando).
 
-### 1.2 Conjunto PLAYWRIGHT
+### 1.4 Conjunto HUMANO (`<uc_id>_humano.yaml`)
+Realista. CNPJs válidos pela RF, nomes profissionais, valores em R$ com centavos coerentes, datas plausíveis.
 
-Dados para execução automatizada. Destino: serão embutidos como
-valores literais em cada passo do Tutorial Playwright onde houver
-ação que requer entrada.
+### 1.5 Variações
+Cada dataset deve incluir valores tanto para o FP quanto para FAs/FEs (ex: CEP inválido para FA1, payload que dispara 500 para FE2). Estrutura sugerida:
 
-Requisitos:
-- Determinísticos: fixados agora, nada gerado em tempo de execução
-- Identificáveis: prefixo `E2E_<YYYYMMDD>_` em strings livres, para
-  facilitar limpeza e isolar de dados reais
-- Coerentes entre passos: valor referenciado no passo N deve bater
-  com o cadastrado no passo anterior do mesmo caso de uso
-- Triplo formato para cada dado numérico/datado quando aplicável:
-  - Formato de entrada (como o usuário digita): "45230,00"
-  - Formato de exibição (como aparece renderizado): "R$ 45.230,00"
-  - Formato de trânsito (como vai para o backend): 45230.00
-- Cobrem pelo menos uma variação significativa além do happy path
-  (borda, limite, erro esperado) — gere um tutorial Playwright
-  separado para cada variação
+```yaml
+valores_fp:
+  empresa: {cnpj_entrada: "...", ...}
+valores_fa1_cep_nao_encontrado:
+  cep_proposital_invalido: "00000-000"
+valores_fe2_backend_500:
+  payload_que_dispara_erro: {...}
+```
 
-### 1.3 Para AMBOS os conjuntos, declare no topo do respectivo tutorial:
-
-- Pré-condições do sistema (usuário logado? registros pré-existentes?
-  seeds necessárias?)
-- Identificação de dados sensíveis (PII/LGPD) — ainda que fictícios,
-  marque-os para que o tutorial humano não seja compartilhado sem
-  cuidado
-- Critérios de limpeza ao final da execução
-
-### 1.4 Checkpoint obrigatório
-
-**PARE E CONFIRME** apresentando os dois conjuntos em formato tabular
-legível (markdown, não JSON bruto). Aguarde "prossiga" ou correções
-antes de gerar os tutoriais. Isso evita desperdício de tokens em
-geração de tutoriais sobre premissas erradas.
+### 1.6 Checkpoint obrigatório
+Apresenta os 3 datasets em formato tabular comparativo. Aguarda "prossiga".
 
 ---
 
-## FASE 2 — GERAÇÃO DE TUTORIAIS
+## FASE 2 — GERAÇÃO DE CASOS DE TESTE
 
-Os dois tutoriais derivam do mesmo caso de uso mas são autocontidos
-e independentes. Cada um embute seu respectivo conjunto de dados
-inline.
+Para cada UC × cada trilha × cada variação, gere **um caso de teste**. Total: ~6 variações × 3 trilhas = 18 arquivos por UC típico.
 
-### 2.1 Tutorial Humano (`testes/tutoriais_humano/<uc_id>_humano.md`)
+Delega ao agente `validation-test-case-generator` (chamado **uma vez por trilha+variação**).
 
-Markdown em português brasileiro, tom instrutivo, dados embutidos
-como texto natural.
+### 2.1 Formato por trilha
 
-Estrutura obrigatória:
+- **E2E** (`testes/casos_de_teste/<uc_id>_e2e_<variacao>.yaml`): YAML rígido com asserções nas 3 camadas (DOM, Rede, Semântica). Inclui `descricao_ancorada`, `elementos_obrigatorios`, `elementos_proibidos`. Referencia `dataset_ref`.
+- **Visual** (`testes/casos_de_teste/<uc_id>_visual_<variacao>.yaml`): YAML com asserções automáticas + `pausa_para_observacao` (pontos para o PO observar) + `screenshots_obrigatorios`.
+- **Humana** (`testes/casos_de_teste/<uc_id>_humano_<variacao>.md`): Markdown com checklists objetivos por passo (sem seletores, sem asserções de rede).
 
-    # Tutorial de validação manual — <UC-ID>: <Nome do caso de uso>
+### 2.2 Regra de ouro da descrição ancorada
+Se um humano leigo, lendo só a `descricao_ancorada`, conseguir confundir duas telas diferentes do sistema, ela está fraca. Reescreva. A lista `elementos_proibidos` é tão importante quanto `elementos_obrigatorios` — sem ela, o juiz semântico ignora ausências.
 
-    ## Metadados
-    - Caso de uso: <UC-ID> (versão <x.y.z>)
-    - Tutorial gerado em: <ISO-8601>
-    - Tempo estimado de execução: <minutos>
+### 2.3 Variações herdam do FP
+Caso de teste de FA1 ou FE2 pode marcar `herda_de: fp` e listar apenas os passos **alterados**. Reduz duplicação.
 
-    ## Pré-condições
-    <lista legível do que precisa estar pronto antes>
-
-    ## Dados de teste (referência)
-    | Campo | Valor a usar | Observação |
-    |-------|-------------|------------|
-    <tabela dos dados principais com nota de intenção>
-
-    ## Passo N — <título descritivo da ação>
-
-    **O que fazer:**
-    <lista numerada de ações concretas com os valores literais
-    já no texto, no formato que o humano vai digitar na tela>
-
-    **O que deve acontecer:**
-    <lista do que deve aparecer na tela, com valores literais no
-    formato renderizado>
-
-    **O que observar criticamente:**
-    <lista de sutilezas que só humano capta: formatação de moeda
-    pt-BR, ordem visual dos elementos, responsividade, feedback
-    tátil de botões, etc.>
-
-    [repetir por passo]
-
-    ## Critérios de aceitação do caso de uso
-    - [ ] <critério em linguagem de negócio>
-
-    ## Limpeza após execução
-    <instruções simples para o humano, se houver>
-
-### 2.2 Tutorial Playwright (`testes/tutoriais_playwright/<uc_id>_<variacao>.md`)
-
-Markdown estruturado para o Claude Code consumir. Cada passo é um
-bloco YAML autocontido com dados literais.
-
-Estrutura obrigatória:
-
-    # Tutorial de execução automatizada — <UC-ID> (variação: <nome>)
-
-    ## Metadados
-    ```yaml
-    caso_uso_id: UC-042
-    variacao: happy_path  # ou: limite_superior, erro_validacao, etc.
-    caso_uso_versao: 2.1.0
-    gerado_em: <ISO-8601>
-    modelo_validador: claude-opus-4.6
-    prompt_validacao_versao: v1.0
-    ```
-
-    ## Pré-condições
-    <lista técnica: seeds SQL, cookies de sessão, estado de filas>
-
-    ## Setup
-    ```sql
-    -- Comandos SQL para preparar o estado
-    ```
-
-    ## Passo N — <título descritivo>
-
-    ```yaml
-    id: passo_NN_<slug>
-
-    acao_ator:
-      descricao: "Descrição humana curta do que o ator faz"
-      sequencia:
-        - <tipo_acao>:
-            <parâmetros específicos com valores literais>
-
-    resposta_esperada_sistema:
-      camada_semantica:
-        descricao_ancorada: |
-          Descrição MUITO específica do que deve estar visível na tela.
-          Evite vaguidades como "a tela correta aparece".
-          Seja tão específico que um humano leigo, lendo essa descrição,
-          não consiga confundi-la com outra tela similar do sistema.
-        elementos_obrigatorios:
-          - <lista de textos/elementos que DEVEM estar presentes>
-        elementos_proibidos:
-          - <lista de textos/elementos que NÃO podem aparecer>
-
-      camada_estrutural_dom:
-        - <asserções sobre URL, atributos, classes>
-
-      camada_estrutural_rede:
-        - requisicao: "<METODO> <path>"
-          payload_contem:
-            <chaves/valores esperados no body>
-          status_esperado: <código>
-          timeout_ms: <número>
-
-      validacao_backend:  # opcional, usar em ações críticas
-        query: "<SQL ou chamada de API para verificar estado>"
-        resultado_esperado:
-          <estado esperado no backend>
-    ```
-
-    [repetir por passo]
-
-    ## Limpeza pós-execução
-    ```sql
-    DELETE FROM <tabela> WHERE <coluna> LIKE 'E2E_%';
-    ```
-
-### 2.3 Regra de ouro da descrição ancorada
-
-Se um humano leigo, lendo só a `descricao_ancorada`, conseguir confundir
-duas telas diferentes do sistema, ela está fraca. Reescreva até
-distinguir A de B sem ambiguidade. A lista `elementos_proibidos` é
-tão importante quanto `elementos_obrigatorios` — sem ela, o juiz
-LLM tende a confirmar presença do que foi pedido e ignorar presença
-de erro ao lado.
-
-### 2.4 Checkpoint
-
-Após gerar os dois tutoriais, apresente os caminhos dos arquivos e
-um resumo de uma linha por passo. Aguarde "prossiga" antes de
-executar (Fase 3).
+### 2.4 Checkpoint obrigatório
+Apresenta lista de casos de teste gerados (paths + resumo de uma linha por variação). Aguarda "prossiga".
 
 ---
 
-## FASE 3 — EXECUÇÃO SISTEMÁTICA
+## FASE 3 — GERAÇÃO DE TUTORIAIS
 
-Execute o Tutorial Playwright passo a passo. Não execute o tutorial
-humano — este é para o PO rodar manualmente em paralelo.
+Para cada caso de teste, gere o **tutorial** que executa aquele caso. Delega ao `validation-tutorial-writer`.
 
-### 3.1 Pré-passo
+### 3.1 Tutorial E2E (`testes/tutoriais_playwright/<uc_id>_<variacao>.md`)
+YAML runnable. Cada passo: `acao` (tipo + seletor + `valor_from_dataset`) + `validacao_ref` apontando pro caso de teste. Limpeza pós-execução obrigatória (`DELETE WHERE ... LIKE 'E2E_%'`).
 
-- Log estruturado: timestamp, step_id, estado atual
-- Screenshot: `testes/relatorios/<uc_id>/<timestamp>/before_<step_id>.png`
-- Snapshot da árvore de acessibilidade (não HTML bruto — árvore a11y
-  é mais estável e semanticamente rica, e força o produto a ser
-  acessível como efeito colateral positivo)
+### 3.2 Tutorial Visual (`testes/tutoriais_visual/<uc_id>_<variacao>.md`)
+MD em prosa (renderizado no painel :9876) + blocos YAML para o parser Python. Cada passo tem texto de "o que vai acontecer" + "observe criticamente" + bloco `acao_executor`.
 
-### 3.2 Ação
+### 3.3 Tutorial Humano (`testes/tutoriais_humano/<uc_id>_<variacao>.md`)
+Markdown PT-BR fluido. Dados embutidos **inline** (Arnaldo não tem parser). Inclui pré-condições, dados de teste em tabela, passos com "O que fazer" + "O que deve acontecer" + "Observar criticamente" + checklist objetivo.
 
-- Execute via Playwright com seletor preferencial
-- Se falhar, tente fallback UMA vez, logando o downgrade como alerta
-  (seletor preferencial está ficando frágil)
-- Intercepte requisições via `page.on('request')` e `page.on('response')`
-  desde antes da ação, para capturar tráfego de rede gerado pela ação
-
-### 3.3 Validação em três camadas (ordem barato → caro)
-
-**Camada 1 — Estrutural DOM** (milissegundos, determinística):
-- Verifique todas as asserções `camada_estrutural_dom`
-- Falha aqui → marque passo como REPROVADO, NÃO gaste tokens com
-  camada semântica
-
-**Camada 2 — Estrutural Rede** (segundos, determinística):
-- Verifique todas as asserções `camada_estrutural_rede`
-- Capture payloads completos (request e response) para o relatório
-- Falha aqui → mesma regra, NÃO prosseguir para camada semântica
-
-**Camada 3 — Semântica** (custosa em tokens, não-determinística):
-- Só execute se camadas 1 e 2 passaram
-- Screenshot `after_<step_id>.png`
-- Análise com prompt estruturado ao modelo:
-
-  ```
-  Você está validando uma tela contra uma descrição esperada.
-
-  DESCRIÇÃO ESPERADA:
-  <descricao_ancorada>
-
-  ELEMENTOS OBRIGATÓRIOS:
-  <lista>
-
-  ELEMENTOS PROIBIDOS:
-  <lista>
-
-  Responda APENAS em JSON válido, sem markdown:
-  {
-    "veredito": "APROVADO | REPROVADO | INCONCLUSIVO",
-    "confianca": 0.0-1.0,
-    "elementos_obrigatorios_presentes": [<string>],
-    "elementos_obrigatorios_ausentes": [<string>],
-    "elementos_proibidos_detectados": [<string>],
-    "justificativa": "<texto curto e específico>",
-    "discrepancias_observadas": [<string>]
-  }
-  ```
-
-- **Redução de não-determinismo**: se `confianca < 0.85`, execute
-  a análise 2x adicionais e aplique voto majoritário (2 de 3).
-  Registre divergências entre execuções no relatório como sinal
-  de que a descrição ancorada precisa ser refinada.
-
-- **Validação backend** (se definida): execute query/chamada e
-  compare com `resultado_esperado`. Esta camada pega o que screenshot
-  e rede não pegam: persistência correta, efeitos colaterais em
-  filas, etc.
-
-### 3.4 Pós-passo
-
-- Log do veredito com todas as evidências (screenshots, payloads
-  capturados, queries executadas, JSON da análise semântica)
-- Se REPROVADO: pare a execução do caso de uso (não tente recuperar
-  automaticamente, isso mascara a causa raiz), vá direto para Fase 4
-- Se APROVADO: prossiga para próximo passo
+### 3.4 Checkpoint obrigatório
+Apresenta caminhos dos tutoriais e resumo de 1 linha por passo. Aguarda "prossiga" antes de Fase 4.
 
 ---
 
-## FASE 4 — RELATÓRIO DE VALIDAÇÃO
+## FASE 4 — EXECUÇÃO
 
-Produza `testes/relatorios/<uc_id>_<timestamp>.md` contendo:
+Depende do `--modo`:
 
-1. **Sumário executivo** (primeira tela do relatório):
-   APROVADO/REPROVADO global, taxa de passos aprovados, duração total,
-   custo estimado em tokens
+### 4.1 `--modo=e2e` (default)
+Runner Playwright headless executa `tutoriais_playwright/<uc_id>_<variacao>.md`. Para cada passo:
 
-2. **Linha do tempo**: tabela com cada passo, veredito, duração,
-   qual camada determinou o resultado (importante: se a camada
-   semântica nunca é o gargalo de reprovação, ela pode estar
-   permissiva demais)
+**Pré-passo:**
+- Log: timestamp, step_id, estado atual
+- Screenshot: `testes/relatorios/automatico/<uc_id>/<timestamp>/before_<step_id>.png`
+- Snapshot da árvore de acessibilidade (preferir sobre HTML bruto)
 
-3. **Evidências por passo**: links relativos para screenshots
-   before/after, payloads de rede (JSON completo), JSON da análise
-   semântica, resultado da validação backend
+**Ação:**
+- Executa via Playwright com seletor preferencial (fallback uma vez)
+- Intercepta `page.on('request')` e `page.on('response')` desde antes da ação
 
-4. **Discrepâncias detectadas**: lista priorizada por severidade
-   (crítica → cosmética)
+**Validação em 3 camadas (ordem barato → caro):**
 
-5. **Custo de execução**: tokens usados na validação semântica,
-   tempo total de execução, número de re-análises por baixa confiança
-   (métrica para monitorar saúde do processo)
+1. **Estrutural DOM** (ms, determinística) — verifica `asserts_dom` do caso de teste. Falha → REPROVADO, não chama camada semântica.
+2. **Estrutural Rede** (s, determinística) — verifica `asserts_rede`. Captura payloads completos. Falha → REPROVADO.
+3. **Semântica** (custosa, não-determinística) — só se 1 e 2 passaram. Tira `after_<step_id>.png`. Chama agente `validation-semantic-judge` com screenshot + a11y tree + descrição ancorada + elementos obrigatórios/proibidos.
+   - Se `confianca < 0.85`: chama 2x adicionais e aplica voto majoritário (2 de 3).
+   - Se `validacao_backend` definida no caso de teste: executa query/chamada e compara com `resultado_esperado`.
 
-6. **Recomendações de manutenção**:
-   - Passos cuja descrição ancorada gerou baixa confiança
-     repetidamente (refinar a descrição)
+**Pós-passo:**
+- Log do veredito com evidências
+- Se REPROVADO: para o caso de teste (não tenta recuperar), vai pra Fase 5
+- Se APROVADO: prossegue
+
+### 4.2 `--modo=visual`
+Sobe Flask :9876 + browser headed via `python testes/framework_visual/executor.py <ciclo_id> <uc_id>`. PO acompanha em tempo real, pausa a cada passo, comenta, marca correções. Camadas DOM e Rede rodam automaticamente; Semântica ainda chama `semantic-judge`.
+
+### 4.3 `--modo=humano`
+**Não executa.** Apenas confirma que `tutoriais_humano/*` foram gerados e instrui:
+> "Tutoriais prontos em `testes/tutoriais_humano/`. Envie ao validador externo (Arnaldo) para execução manual em editaisvalida (porta 5179). Ao receber resposta, salve em `testes/relatorios/humano/<uc_id>_resposta_<validador>.{md,docx,txt}`."
+
+---
+
+## FASE 5 — RELATÓRIO
+
+Produza `testes/relatorios/<trilha>/<uc_id>_<timestamp>.md` contendo:
+
+1. **Sumário executivo** — APROVADO/REPROVADO global, taxa de passos aprovados, duração, custo em tokens
+2. **Linha do tempo** — tabela com cada passo × variação, veredito, duração, qual camada determinou. Se a Camada Semântica nunca for o gargalo, ela pode estar permissiva demais.
+3. **Evidências por passo** — links para screenshots before/after, payloads de rede em JSON completo, JSON da análise semântica, resultado da validação backend
+4. **Discrepâncias detectadas** — priorizadas por severidade (crítica → cosmética)
+5. **Custo de execução** — tokens em camada semântica, tempo total, número de re-análises por baixa confiança
+6. **Recomendações de manutenção:**
+   - Passos com `descricao_ancorada` repetidamente baixa-confiança (refinar)
    - Seletores que caíram para fallback (refatorar no produto)
    - Asserções redundantes entre camadas (simplificar)
+
+Inclui referência aos 3 artefatos usados (dataset, caso de teste, tutorial) no header do relatório.
 
 ---
 
 ## REGRAS INVIOLÁVEIS
 
-1. **Nunca reescreva um caso de uso silenciosamente.** Se o spec é
-   ambíguo, pare e pergunte antes da Fase 1.
+1. **Nunca reescreva um caso de uso silenciosamente.** Se o spec é ambíguo, pare e pergunte antes da Fase 1.
 
-2. **Nunca invente dados "para fazer funcionar".** Se faltam dados
-   no spec, volte à Fase 1 e pergunte.
+2. **Nunca invente dados "para fazer funcionar".** Se faltam dados, volte à Fase 1 e pergunte.
 
-3. **Nunca use a camada semântica como muleta para seletores ruins.**
-   Se o DOM está testável, teste no DOM — é mais barato e
-   determinístico.
+3. **Nunca use a camada semântica como muleta para seletores ruins.** Se o DOM está testável, teste no DOM — é mais barato e determinístico.
 
-4. **Sempre limpe os dados de teste após execução**, usando
-   `criterios_limpeza` da Fase 1. Dados residuais contaminam
-   execuções futuras.
+4. **Sempre limpe os dados de teste** (trilha E2E) após execução, usando `criterios_limpeza`. Trilha Visual: limpeza manual quando você decidir resetar. Trilha Humana: nunca apaga.
 
-5. **Sempre prefira árvore de acessibilidade** sobre HTML bruto
-   para análise estrutural e semântica — é mais estável e
-   semanticamente rica.
+5. **Sempre prefira árvore de acessibilidade** sobre HTML bruto.
 
-6. **Na dúvida, reprove.** Falso negativo (passou mas deveria
-   falhar) é mais caro que falso positivo no Facilicita.IA, onde
-   propostas têm consequência jurídica.
+6. **Na dúvida, reprove.** Falso negativo (passou mas deveria falhar) é mais caro que falso positivo no Facilicita.IA, onde propostas têm consequência jurídica.
 
-7. **Nunca pule os checkpoints** das Fases 1 e 2. Gerar tutoriais
-   sobre dados errados, ou executar tutoriais sobre premissas
-   erradas, desperdiça tokens e gera ruído no relatório.
+7. **Nunca pule os checkpoints** das Fases 0, 1, 2 e 3. Gerar artefatos sobre dados/casos errados desperdiça tokens.
+
+8. **Cobertura completa de fluxos.** Aprovar só o FP = REPROVAR o UC. FAs e FEs são obrigatórios.
+
+9. **UC-F01 primeiro** quando o ciclo inclui Sprint 1. Se falhar, bloqueia o ciclo inteiro.
+
+10. **Respeite `.claude-protected`.** Nenhum agente pode propor mudança em arquivo listado lá.
 
 ---
 
 ## INÍCIO DA EXECUÇÃO
 
-Aguardo o(s) caso(s) de uso. Ao recebê-los, começarei pela Fase 1
-e apresentarei os dois conjuntos de dados em formato tabular para
-sua confirmação antes de gerar os tutoriais.
+Aguardo `$ARGUMENTS`. Ao recebê-los:
+1. Parse argumentos
+2. Confirme com o humano (UCs, modo, ambiente, ciclo novo ou retomada)
+3. Comece pela Fase 0 (ou pula se ciclo existente)
+4. Apresente checkpoints obrigatórios em cada fase
+
+Para o loop de correção (após reprovações), use `/corrigir-divergencias`.

@@ -150,7 +150,7 @@ quebrar durante o loop exige rollback.
 Para cada caso de uso no ciclo:
 
 1. Executar `/validar-uc` seguindo seu protocolo integral (Fases 1-4)
-2. Coletar relatório em `testes/relatorios/<uc_id>_<timestamp>.md`
+2. Coletar relatório em `testes/relatorios/<trilha>/<uc_id>_<timestamp>.md`
 3. Registrar veredito global: APROVADO ou REPROVADO
 
 Ao final, produzir sumário:
@@ -224,7 +224,7 @@ caso_uso: UC-043
 passo: passo_05_enviar_proposta
 camada_detectora: estrutural_rede
 sintoma: "Endpoint POST /api/propostas retornou 500, esperado 201"
-evidencia: "testes/relatorios/UC-043/20260416_143000/after_passo_05.png"
+evidencia: "testes/relatorios/automatico/UC-043/20260416_143000/after_passo_05.png"
 
 analise:
   hipotese_causa_raiz: |

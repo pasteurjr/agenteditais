@@ -41,14 +41,22 @@ backend/rn_deepseek.py
 # Mudar aqui = quebrar banco em producao ou perder dados.
 # ============================================================
 backend/seeds/**
+backend/migrate_*.sql
 backend/migrations/**
+# models.py tem definicoes de schema SQLAlchemy — qualquer mudanca em
+# Column/relationship eh effectively migration. Tratado como zona protegida:
+backend/models.py
 
 # ============================================================
 # AUTENTICACAO E AUTORIZACAO
 # Mudanca errada = expor sistema ou bloquear usuarios validos.
+# Auth do projeto fica embutido em app.py + middleware.
 # ============================================================
-backend/auth_routes.py
-backend/jwt_utils.py
+backend/audit_middleware.py
+backend/crypto_utils.py
+backend/database.py
+# app.py: nao listado inteiro pois tem outras coisas, mas funcoes de auth/login dentro dele
+# tambem sao protegidas por convencao — qualquer mudanca em rotas /api/auth/* = revisao humana
 
 # ============================================================
 # CONFIGURACAO DE PRODUCAO

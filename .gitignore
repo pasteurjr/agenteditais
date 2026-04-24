@@ -34,8 +34,13 @@ cache/
 *.faiss
 
 # Processo de validacao V3 — evidencias grandes, nao commitar
-testes/relatorios/*/*/evidencias/
-testes/relatorios/*/*/before_*.png
-testes/relatorios/*/*/after_*.png
-testes/contextos/*/editais/
-testes/contextos/*/docs/
+testes/relatorios/**/before_*.png
+testes/relatorios/**/after_*.png
+testes/relatorios/**/*.zip
+testes/relatorios/**/evidencias/
+testes/contextos/*/editais/**/*.pdf
+testes/contextos/*/editais/**/*.zip
+testes/contextos/*/docs/**/*.pdf
+# Mas mantém o contexto.yaml e estado.yaml (pequenos, auditáveis)
+!testes/contextos/*/contexto.yaml
+!testes/contextos/*/estado.yaml

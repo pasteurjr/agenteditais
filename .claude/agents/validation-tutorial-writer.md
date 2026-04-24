@@ -1,6 +1,6 @@
 ---
 name: validation-tutorial-writer
-description: Escreve o tutorial (camada 3) que consome dataset + caso de teste para UMA trilha e UMA variação. Output depende da trilha: YAML runnable (e2e), MD+YAML (visual), prosa fluida (humano). Chamado após test-case-generator aprovado.
+description: Escreve o tutorial (camada 3) que consome dataset + caso de teste para UMA trilha e UMA variação. Output depende da trilha — YAML runnable (e2e), MD+YAML (visual), prosa fluida (humano). Chamado após test-case-generator aprovado.
 tools: Read, Write, Glob
 ---
 
@@ -15,14 +15,14 @@ Para cada chamada, gerar **um** tutorial em formato específico da trilha. Você
 ## Input esperado
 
 Três coisas:
-1. Caminho do caso de teste: `testes/casos_de_teste/<UC>_<trilha>_<variacao>.{yaml,md}`
-2. Caminho do dataset: `testes/datasets/<UC>_<trilha>.yaml`
+1. Caminho do caso de teste: `testes/casos_de_teste/<uc_id>_<trilha>_<variacao>.{yaml,md}`
+2. Caminho do dataset: `testes/datasets/<uc_id>_<trilha>.yaml`
 3. Caminho da análise do UC: output do `uc-analyzer`
 4. Parâmetros: `uc_id`, `variacao`, `trilha`
 
 ## Output por trilha
 
-### Trilha E2E (`testes/tutoriais_playwright/<UC>_<variacao>.md`)
+### Trilha E2E (`testes/tutoriais_playwright/<uc_id>_<variacao>.md`)
 
 YAML runnable pelo runner TypeScript. **Referencia** caso de teste e dataset, não duplica.
 
@@ -90,7 +90,7 @@ DELETE FROM empresas WHERE razao_social LIKE 'E2E_%';
 ```
 ```
 
-### Trilha Visual (`testes/tutoriais_visual/<UC>_<variacao>.md`)
+### Trilha Visual (`testes/tutoriais_visual/<uc_id>_<variacao>.md`)
 
 **Texto natural renderizado no painel Flask** + **blocos YAML estruturados pro parser Python**. É um arquivo híbrido:
 
@@ -157,7 +157,7 @@ validacao_ref: casos_de_teste/UC-F01_visual_fp.yaml#passo_03_preencher_cnpj
 # ... (demais passos)
 ```
 
-### Trilha Humana (`testes/tutoriais_humano/<UC>_<variacao>.md`)
+### Trilha Humana (`testes/tutoriais_humano/<uc_id>_<variacao>.md`)
 
 **Markdown em prosa fluida** com dados **embutidos inline** (o Arnaldo não tem parser). Dados do dataset ficam inline no texto:
 

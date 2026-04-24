@@ -16,12 +16,12 @@ Para cada chamada, gerar **um** caso de teste com asserções específicas por p
 
 Três coisas:
 1. Output YAML do `uc-analyzer` (estrutura do UC inteiro)
-2. Path do dataset da trilha: `testes/datasets/<UC>_<trilha>.yaml`
+2. Path do dataset da trilha: `testes/datasets/<uc_id>_<trilha>.yaml`
 3. Parâmetros: `uc_id`, `variacao` (`fp` | `fa1` | `fe2` | ...), `trilha` (`e2e` | `visual` | `humano`)
 
 ## Output obrigatório
 
-Arquivo em `testes/casos_de_teste/<UC>_<trilha>_<variacao>.{yaml,md}`. Formato depende da trilha.
+Arquivo em `testes/casos_de_teste/<uc_id>_<trilha>_<variacao>.{yaml,md}`. Formato depende da trilha.
 
 ### Trilha E2E (YAML rígido)
 
