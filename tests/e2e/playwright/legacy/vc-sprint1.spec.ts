@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 import * as fs from "fs";
-import { login, navTo, clickTab } from "./helpers";
+import { login, navTo, clickTab } from "../helpers";
 
 // VC Fase C — Regerar screenshots Sprint 1 (F06, F07, F12)
 // Saída em runtime/screenshots/VC/

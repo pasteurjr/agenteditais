@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 import * as fs from "fs";
-import { login, navTo, clickTab } from "./helpers";
+import { login, navTo, clickTab } from "../helpers";
 
 // VC Fase C — Sprint 2
 // CV02, CV03, CV05 em Captação (após buscar com termo)

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody, ssPath } from "./helpers";
+import { login, navTo, clickTab, getBody, ssPath } from "../helpers";
 
 const UC = "F01";
 

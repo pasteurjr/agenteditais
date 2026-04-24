@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody } from "./helpers";
+import { login, navTo, clickTab, getBody } from "../helpers";
 
 const SS = (name: string) => `runtime/screenshots/zoom/${name}.png`;
 

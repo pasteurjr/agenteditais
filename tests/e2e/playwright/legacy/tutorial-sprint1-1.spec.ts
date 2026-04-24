@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import * as fs from "fs";
-import { login, navTo, clickTab, getBody, waitForIA } from "./helpers";
+import { login, navTo, clickTab, getBody, waitForIA } from "../helpers";
 
 // ──────────────────────────────────────────────────────────
 // Tutorial Sprint 1 — Conjunto 1 — CH Hospitalar

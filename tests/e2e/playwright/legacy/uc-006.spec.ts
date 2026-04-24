@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import * as fs from "fs";
-import { login, navTo, clickTab, getBody, ssPath } from "./helpers";
+import { login, navTo, clickTab, getBody, ssPath } from "../helpers";
 
 const UC = "006";
 const SS = (step: string) => {

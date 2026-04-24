@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody, ssPath } from "./helpers";
+import { login, navTo, clickTab, getBody, ssPath } from "../helpers";
 
 test.describe("UC-CL01/CL02: Gerenciar Classes e Subclasses", () => {
   test.beforeEach(async ({ page }) => {

@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { login, navTo } from "./helpers";
+import { login, navTo } from "../helpers";
 
 test("debug CV11 selecionar edital", async ({ page }) => {
   await login(page);

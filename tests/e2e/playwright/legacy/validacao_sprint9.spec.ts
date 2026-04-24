@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody, assertDataVisible } from "./helpers";
+import { login, navTo, clickTab, getBody, assertDataVisible } from "../helpers";
 
 const SS = (name: string) => `runtime/screenshots/sprint9/${name}.png`;
 

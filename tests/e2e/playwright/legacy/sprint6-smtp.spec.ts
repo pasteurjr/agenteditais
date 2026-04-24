@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, getBody, assertDataVisible } from "./helpers";
+import { login, navTo, getBody, assertDataVisible } from "../helpers";
 
 const SS = (step: string) => `runtime/screenshots/sprint6-smtp/${step}.png`;
 

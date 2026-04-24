@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody, ssPath } from "./helpers";
+import { login, navTo, clickTab, getBody, ssPath } from "../helpers";
 
 // Screenshots de alta resolução para análise detalhada
 // Viewport 1920x1080 para melhor legibilidade

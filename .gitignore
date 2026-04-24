@@ -44,3 +44,9 @@ testes/contextos/*/docs/**/*.pdf
 # Mas mantém o contexto.yaml e estado.yaml (pequenos, auditáveis)
 !testes/contextos/*/contexto.yaml
 !testes/contextos/*/estado.yaml
+
+# Saidas do Playwright (ciclo legacy + V3) — nao commitar
+tests/results/
+test-results/
+playwright-report/
+playwright/.cache/

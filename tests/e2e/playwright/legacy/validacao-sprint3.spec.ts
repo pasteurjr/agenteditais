@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, clickTab, getBody, waitForIA } from "./helpers";
+import { login, navTo, clickTab, getBody, waitForIA } from "../helpers";
 import path from "path";
 
 const SS = (step: string) => `runtime/screenshots/validacao-sprint3/${step}.png`;

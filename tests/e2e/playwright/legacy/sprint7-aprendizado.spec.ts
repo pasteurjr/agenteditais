@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, navTo, getBody, ssPath } from "./helpers";
+import { login, navTo, getBody, ssPath } from "../helpers";
 const SS = (uc: string, step: string) => ssPath(`S7-${uc}`, step);
 
 test.describe("Sprint 7 — Pipeline de Aprendizado + Perdas Expandido (UC-AN05, UC-AP01 a UC-AP03)", () => {

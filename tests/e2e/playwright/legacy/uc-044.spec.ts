@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import * as fs from "fs";
-import { login, navTo, getBody, ssPath } from "./helpers";
+import { login, navTo, getBody, ssPath } from "../helpers";
 
 const UC = "044";
 
