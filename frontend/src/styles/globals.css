@@ -4021,16 +4021,16 @@ body {
 
 .table-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .table-actions button {
-  background: none;
-  border: none;
-  color: var(--text-muted);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4038,13 +4038,21 @@ body {
 }
 
 .table-actions button:hover {
-  background: var(--border-color);
-  color: var(--text-primary);
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.table-actions button.danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
 }
 
 .table-actions button.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--danger);
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #b91c1c;
 }
 
 /* Filter Bar */

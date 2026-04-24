@@ -250,6 +250,10 @@ export function ParametrizacoesPage(_props: PageProps) {
   // R2: Feedback salvar preferencias
   const [prefSalvas, setPrefSalvas] = useState(false);
 
+  // Feedback generico para saves (C1/C2)
+  const [salvoFeedback, setSalvoFeedback] = useState<string | null>(null);
+  const [erroSave, setErroSave] = useState<string | null>(null);
+
 
   // R5: Norteadores - tooltip state
   const [showPortfolioHint, setShowPortfolioHint] = useState(false);
@@ -663,12 +667,17 @@ export function ParametrizacoesPage(_props: PageProps) {
   // Save a partial update to parametros-score
   const saveParamScore = async (data: Record<string, unknown>) => {
     setSavingParamScore(true);
+    setErroSave(null);
     try {
       const id = await ensureParamScore();
       await crudUpdate("parametros-score", id, data);
       setParamScore(prev => prev ? { ...prev, ...data } as ParametroScoreAPI : prev);
+      setSalvoFeedback("Salvo!");
+      setTimeout(() => setSalvoFeedback(null), 3000);
     } catch (err) {
       console.error("Erro ao salvar parametros-score:", err);
+      setErroSave("Erro ao salvar. Verifique suas permissões.");
+      setTimeout(() => setErroSave(null), 5000);
     } finally {
       setSavingParamScore(false);
     }
@@ -860,6 +869,17 @@ export function ParametrizacoesPage(_props: PageProps) {
           </div>
         </div>
       </div>
+
+      {salvoFeedback && (
+        <div style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 6, marginBottom: 8, fontSize: "0.9rem", textAlign: "center" }}>
+          {salvoFeedback}
+        </div>
+      )}
+      {erroSave && (
+        <div style={{ background: "#dc2626", color: "#fff", padding: "8px 16px", borderRadius: 6, marginBottom: 8, fontSize: "0.9rem", textAlign: "center" }}>
+          {erroSave}
+        </div>
+      )}
 
       <div className="page-content" ref={tabContainerRef}>
         <TabPanel tabs={tabs}>

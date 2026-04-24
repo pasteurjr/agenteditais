@@ -214,15 +214,27 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // Mapas para filtro hierárquico
   const subclasseToClasseMap = Object.fromEntries(subclassesBackend.map(s => [String(s.id), String(s.classe_id || "")]));
   const classeToAreaMap = Object.fromEntries(classesV2Backend.map(c => [String(c.id), String(c.area_id || "")]));
+  // Mapas id → nome para busca textual em subclasse/classe/área
+  const subclasseNomeMap = Object.fromEntries(subclassesBackend.map(s => [String(s.id), String(s.nome || "").toLowerCase()]));
+  const classeNomeMap = Object.fromEntries(classesV2Backend.map(c => [String(c.id), String(c.nome || "").toLowerCase()]));
+  const areaNomeMap = Object.fromEntries(areasBackend.map(a => [String(a.id), String(a.nome || "").toLowerCase()]));
 
   const filteredProdutos = produtos.filter((p) => {
     // Filtro por texto
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
+      const classeIdDoProduto = p.subclasse_id ? subclasseToClasseMap[p.subclasse_id] : "";
+      const areaIdDoProduto = classeIdDoProduto ? classeToAreaMap[classeIdDoProduto] : "";
+      const subclasseNome = p.subclasse_id ? (subclasseNomeMap[p.subclasse_id] || "") : "";
+      const classeNome = classeIdDoProduto ? (classeNomeMap[classeIdDoProduto] || "") : "";
+      const areaNome = areaIdDoProduto ? (areaNomeMap[areaIdDoProduto] || "") : "";
       const match = p.nome.toLowerCase().includes(term) ||
         (p.fabricante || "").toLowerCase().includes(term) ||
         (p.modelo || "").toLowerCase().includes(term) ||
-        (p.descricao || "").toLowerCase().includes(term);
+        (p.descricao || "").toLowerCase().includes(term) ||
+        subclasseNome.includes(term) ||
+        classeNome.includes(term) ||
+        areaNome.includes(term);
       if (!match) return false;
     }
     // Filtro "Sem Classe"
@@ -751,12 +763,12 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       key: "acoes", header: "Acoes", width: "240px",
       render: (p) => (
         <div className="table-actions">
-          <button title="Visualizar" onClick={(e) => { e.stopPropagation(); handleSelectProduto(p); }}><Eye size={16} /></button>
-          <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarAbrir(p); }}><Edit2 size={16} /></button>
-          <button title="Aplicar Mascara" onClick={(e) => { e.stopPropagation(); handleAplicarMascara(p.id); }} style={{ color: "#8b5cf6" }}><Layers size={16} /></button>
-          <button title="Reprocessar IA" onClick={(e) => { e.stopPropagation(); handleReprocessar(p); }}><RefreshCw size={16} /></button>
-          <button title="Verificar Completude" onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }}><Search size={16} /></button>
-          <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluir(p); }}><Trash2 size={16} /></button>
+          <button title="Visualizar" onClick={(e) => { e.stopPropagation(); handleSelectProduto(p); }}><Eye size={18} /></button>
+          <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarAbrir(p); }}><Edit2 size={18} /></button>
+          <button title="Aplicar Mascara" onClick={(e) => { e.stopPropagation(); handleAplicarMascara(p.id); }} style={{ color: "#8b5cf6" }}><Layers size={18} /></button>
+          <button title="Reprocessar IA" onClick={(e) => { e.stopPropagation(); handleReprocessar(p); }}><RefreshCw size={18} /></button>
+          <button title="Verificar Completude" onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }}><Search size={18} /></button>
+          <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluir(p); }}><Trash2 size={18} /></button>
         </div>
       ),
     },
@@ -1492,19 +1504,19 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
             {/* Barras de percentual */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_geral >= 80 ? "#22c55e" : completudeResult.completude.percentual_geral >= 50 ? "#f59e0b" : "#ef4444" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_geral >= 90 ? "#22c55e" : completudeResult.completude.percentual_geral >= 70 ? "#f59e0b" : completudeResult.completude.percentual_geral >= 40 ? "#fb923c" : "#ef4444" }}>
                   {completudeResult.completude.percentual_geral}%
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Geral</div>
               </div>
               <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_basicos >= 80 ? "#22c55e" : "#f59e0b" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_basicos >= 90 ? "#22c55e" : completudeResult.completude.percentual_basicos >= 70 ? "#f59e0b" : "#ef4444" }}>
                   {completudeResult.completude.percentual_basicos}%
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Dados Basicos</div>
               </div>
               <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_mascara >= 80 ? "#22c55e" : completudeResult.completude.percentual_mascara >= 50 ? "#f59e0b" : "#ef4444" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_mascara >= 90 ? "#22c55e" : completudeResult.completude.percentual_mascara >= 70 ? "#f59e0b" : completudeResult.completude.percentual_mascara >= 40 ? "#fb923c" : "#ef4444" }}>
                   {completudeResult.completude.percentual_mascara}%
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Especificacoes</div>

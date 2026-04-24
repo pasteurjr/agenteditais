@@ -840,6 +840,8 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 **O que acontece depois:** A IA completa o processamento e os campos do produto são preenchidos automaticamente com as informações encontradas. Uma mensagem de sucesso deve aparecer.
 
+📌 **Atenção:** O processamento da IA salva os dados automaticamente no produto. Não há etapa de revisão antes do salvamento — após o processamento, os campos já estarão preenchidos e salvos. Caso algum dado esteja incorreto, você poderá editar manualmente no UC-F08.
+
 ✅ **Correto se:** Após o processamento, campos como fabricante, especificações e descrição estão preenchidos automaticamente pela IA.
 ❌ **Problema se:** A tela fica carregando por mais de 90 segundos, ou aparece mensagem de erro de IA.
 
@@ -866,18 +868,41 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 ---
 
+### Passo 5 — Importação em lote via Plano de Contas (ERP)
+
+**O que fazer:** O sistema permite importar **múltiplos produtos de uma só vez** a partir de um arquivo de Plano de Contas (ERP) ou Nota Fiscal (NFS). Para testar:
+
+1. Na tela de Portfólio, clique no botão para adicionar um novo produto ("Novo Produto", "+ Adicionar" ou similar)
+2. No dropdown **Tipo de Documento**, selecione **Plano de Contas (ERP)**
+3. Faça upload de um arquivo `.xlsx`, `.csv` ou `.pdf` que contenha uma lista de produtos/itens
+4. Opcionalmente, preencha o nome do produto para direcionar a IA
+5. Clique em confirmar/enviar
+
+**O que você vai ver na tela:** O sistema processa o arquivo via IA e extrai cada item individualmente, cadastrando múltiplos produtos de uma só vez.
+
+📌 **Atenção:** O processamento em lote pode levar até 2 minutos dependendo do tamanho do arquivo. Aguarde pacientemente. O mesmo fluxo funciona com o tipo **Nota Fiscal (NFS)** para importar itens de notas fiscais. Os tipos de arquivo aceitos são: `.pdf`, `.xlsx`, `.xls`, `.csv`.
+
+**O que acontece depois:** Vários produtos novos aparecem no portfólio, cada um extraído automaticamente do arquivo enviado.
+
+✅ **Correto se:** O sistema processa o arquivo e cadastra múltiplos produtos automaticamente.
+❌ **Problema se:** O upload falha, nenhum produto é criado, ou o sistema só cadastra um item do arquivo.
+
+---
+
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
 - O produto `Kit para Glicose Enzimática BioGlic-100` foi cadastrado e aparece no portfólio
 - A IA preencheu automaticamente informações do produto (fabricante, especificações ou descrição)
 - O item "Plano de Contas ERP" foi salvo sem nome, sem erro
+- A importação em lote via Plano de Contas processou e cadastrou múltiplos produtos
 - A classificação Área / Classe / Subclasse está correta
 
 **🔴 Sinais de problema:**
 - A IA não processa e retorna erro após mais de 90 segundos
 - Nenhum campo é preenchido automaticamente pela IA
 - O sistema exige nome obrigatório para o Plano de Contas ERP
+- A importação em lote não cadastra nenhum produto
 - A subclasse "Reagente para Glicose" não está disponível
 
 ---
@@ -895,6 +920,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 - O produto `Kit para Glicose Enzimática BioGlic-100` deve estar cadastrado (UC-F07 concluído).
 - Você vai atualizar o nome do produto e preencher informações técnicas detalhadas.
+- Os dropdowns de **Área**, **Classe** e **Subclasse** dependem de dados cadastrados previamente (UC-F13). Se estiverem vazios, prossiga com os demais campos e retorne após executar o UC-F13.
 
 ---
 
@@ -1032,6 +1058,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 ### Antes de começar
 
 - O produto `Kit para Glicose Enzimática BioGlic-100 Automação` deve estar editado e salvo (UC-F08 concluído).
+- O produto deve ter um **documento anexado** (manual técnico, IFU ou plano de contas). Se nenhum documento foi enviado durante o UC-F07, o reprocessamento usará apenas a descrição do produto como base, o que pode gerar resultados limitados.
 
 ---
 
@@ -1104,6 +1131,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 - O produto `Kit para Glicose Enzimática BioGlic-100 Automação` deve estar cadastrado com o registro ANVISA `10386890001`.
 - A busca requer conexão com a internet.
+- A busca ANVISA e a busca Web dependem de **serviços externos** (site da ANVISA e API Brave Search). Se retornarem 0 resultados, pode ser por indisponibilidade temporária do serviço, ou porque o nome do produto não corresponde exatamente ao registro. Tente simplificar o nome de busca se necessário. **Isso não é um erro do sistema.**
 
 ---
 
@@ -1200,12 +1228,16 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 **O que você vai ver na tela:** Um número percentual ou uma classificação (pode ser um texto como "Bom", "Regular", etc.).
 
-**Resultado esperado:** O indicador geral deve estar entre **65% e 80%**, e a cor do badge deve ser **AMARELA** (intermediário).
+**Resultado esperado:** O indicador geral deve estar entre **70% e 89%**, e a cor do badge deve ser **AMARELA** (intermediário). O sistema usa os seguintes limiares de cor:
+- **Verde** (≥ 90%): produto completo
+- **Amarelo** (70–89%): produto quase completo
+- **Laranja** (40–69%): produto incompleto
+- **Vermelho** (< 40%): produto muito incompleto
 
-📌 **Atenção:** Um indicador AMARELO entre 65–80% é o resultado **correto e esperado** para este produto. NÃO é um problema. O produto da RP3X tem muitas informações preenchidas, mas faltam alguns campos que fariam o score chegar ao verde. Isso é intencional neste conjunto de dados — estamos validando que o sistema diferencia produtos completos (verde) de produtos com boa mas não total completude (amarelo).
+📌 **Atenção:** Um indicador AMARELO entre 70–89% é o resultado **correto e esperado** para este produto. NÃO é um problema. O produto da RP3X tem muitas informações preenchidas, mas faltam alguns campos que fariam o score chegar ao verde (≥ 90%). Isso é intencional neste conjunto de dados — estamos validando que o sistema diferencia produtos completos (verde) de produtos com boa mas não total completude (amarelo).
 
-✅ **Correto se:** Indicador entre 65–80% com badge AMARELO.
-❌ **Problema se:** Indicador verde (acima de 80%) quando o produto não deveria estar 100% completo, ou indicador vermelho (abaixo de 65%) para um produto com tantos campos preenchidos.
+✅ **Correto se:** Indicador entre 70–89% com badge AMARELO.
+❌ **Problema se:** Indicador verde (acima de 90%) quando o produto não deveria estar 100% completo, ou indicador vermelho (abaixo de 40%) para um produto com tantos campos preenchidos.
 
 ---
 
@@ -1213,7 +1245,7 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 **O que o validador deve conferir:**
 - O indicador de completude está visível no card do produto
-- O valor está entre 65% e 80%
+- O valor está entre 70% e 89%
 - A cor do badge é AMARELA (não verde, não vermelha)
 
 **🔴 Sinais de problema:**
@@ -1682,6 +1714,8 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 - Você vai desativar o ComprasNet durante este teste (para validar que a desativação funciona) e depois pode reativá-lo.
 - Os termos de busca são as palavras que o sistema vai procurar nos títulos e objetos dos editais.
 
+⚠️ **IMPORTANTE:** As fontes de busca (ComprasNet, PNCP, etc.) são configurações **globais** — ativar ou desativar uma fonte afeta **todos os usuários e empresas** do sistema. Em ambiente de validação compartilhado, **NÃO desative fontes permanentemente**. Se o teste pedir para desativar, **reative imediatamente após o teste.**
+
 ---
 
 ### Passo 1 — Navegar até Fontes de Busca
@@ -1889,10 +1923,21 @@ medio lote reagente
 
 **O que fazer:** Clique no botão "Salvar" ou "Confirmar".
 
-**O que acontece depois:** Uma mensagem de sucesso aparece. Todas as configurações de notificação e preferências ficam salvas.
+**O que acontece depois:** Uma mensagem de sucesso aparece (barra verde "Salvo!" no topo da página). Todas as configurações de notificação e preferências ficam salvas.
 
 ✅ **Correto se:** Mensagem de sucesso e configurações persistem.
 ❌ **Problema se:** Erro ao salvar, ou preferências são perdidas ao recarregar a tela.
+
+---
+
+### Passo 7 — Verificar persistência
+
+**O que fazer:** Após salvar as notificações e preferências, **recarregue a página** (F5 ou Ctrl+R). Verifique se todos os valores salvos permanecem como configurados.
+
+**O que você vai ver na tela:** A página recarrega e exibe as configurações salvas anteriormente.
+
+✅ **Correto se:** Todos os toggles, seleções e campos mantêm os valores salvos após recarregar. Especificamente: email `licitacoes@rp3x.com.br`, canais Email/Sistema/SMS ativos, frequência Semanal, tema Claro, idioma pt-BR, fuso America/Sao_Paulo.
+❌ **Problema se:** Algum campo volta ao valor padrão após recarregar — isso indica que o salvamento não persistiu no banco de dados.
 
 ---
 

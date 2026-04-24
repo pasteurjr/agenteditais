@@ -60,6 +60,47 @@ def _rn_warn_or_raise(rn_code: str, condition: bool, message: str):
         else:
             print(f"[RN-WARN {rn_code}] {message}")
 
+
+def _friendly_error(exc: Exception, table_slug: str | None = None) -> str:
+    """Traduz erros de banco (IntegrityError, DataError, etc) em mensagens legiveis.
+
+    Cobre casos comuns que o usuario final precisa entender:
+      - Duplicate entry (violacao de UNIQUE)
+      - Data truncated (valor fora do ENUM ou excede tamanho)
+      - Cannot be null (coluna NOT NULL sem valor)
+      - Foreign key constraint (registro pai inexistente)
+    """
+    msg = str(exc)
+    low = msg.lower()
+
+    if "duplicate entry" in low:
+        # Traducoes especificas por tabela
+        if table_slug == "empresa-responsaveis" and "uq_empresa_responsavel_cpf" in low:
+            return "Ja existe um responsavel com este CPF nesta empresa."
+        if table_slug == "empresas" and "cnpj" in low:
+            return "Ja existe uma empresa cadastrada com este CNPJ."
+        return "Ja existe um registro com estes dados (violacao de unicidade)."
+
+    if "data truncated for column" in low or "incorrect enum value" in low:
+        import re
+        m = re.search(r"[Cc]olumn ['\"]?(\w+)['\"]?", msg)
+        col = m.group(1) if m else "campo"
+        return f"Valor invalido para '{col}'. Verifique se selecionou uma opcao valida."
+
+    if "cannot be null" in low:
+        import re
+        m = re.search(r"[Cc]olumn ['\"]?(\w+)['\"]?", msg)
+        col = m.group(1) if m else "campo obrigatorio"
+        return f"O campo '{col}' e obrigatorio."
+
+    if "foreign key constraint" in low:
+        return "Referencia invalida: o registro relacionado nao existe ou foi removido."
+
+    # Fallback: retorna o erro original (limitado para nao vazar detalhes tecnicos)
+    if len(msg) > 300:
+        return msg[:300] + "..."
+    return msg
+
 def _validar_rns_payload(table_slug: str, data: dict):
     """Dispatcher de RN validators por table_slug. Aplicado em create e update."""
     if table_slug == "empresas":
@@ -1272,7 +1313,7 @@ def crud_create(table_slug):
         return jsonify(result), 201
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _friendly_error(e, table_slug)}), 400
     finally:
         db.close()
 
@@ -1421,7 +1462,7 @@ def crud_update(table_slug, record_id):
         return jsonify(result)
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _friendly_error(e, table_slug)}), 400
     finally:
         db.close()
 
@@ -1468,6 +1509,6 @@ def crud_delete(table_slug, record_id):
         return jsonify({"message": f"{config['label']} excluído(a) com sucesso"})
     except Exception as e:
         db.rollback()
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": _friendly_error(e, table_slug)}), 400
     finally:
         db.close()

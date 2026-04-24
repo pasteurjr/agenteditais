@@ -2617,6 +2617,15 @@ class ParametroScore(Base):
     custo_logistica_percentual = Column(DECIMAL(5, 2), default=5.0)  # Logística sobre custo (%)
     margem_contribuicao_min = Column(DECIMAL(5, 2), default=15.0)    # Margem contribuição mínima (%)
     ncm_isencao_icms = Column(JSON, nullable=True)       # NCMs com isenção ICMS ["3822"]
+    # Notificações e Preferências (UC-F17)
+    email_notificacao = Column(String(255), nullable=True)
+    notif_email = Column(Boolean, default=True)
+    notif_sistema = Column(Boolean, default=True)
+    notif_sms = Column(Boolean, default=False)
+    frequencia_resumo = Column(String(20), default='diario')
+    tema = Column(String(20), default='claro')
+    idioma = Column(String(10), default='pt-BR')
+    fuso_horario = Column(String(50), default='America/Sao_Paulo')
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -2657,6 +2666,14 @@ class ParametroScore(Base):
             "custo_logistica_percentual": float(self.custo_logistica_percentual) if self.custo_logistica_percentual else None,
             "margem_contribuicao_min": float(self.margem_contribuicao_min) if self.margem_contribuicao_min else None,
             "ncm_isencao_icms": self.ncm_isencao_icms,
+            "email_notificacao": self.email_notificacao,
+            "notif_email": self.notif_email if self.notif_email is not None else True,
+            "notif_sistema": self.notif_sistema if self.notif_sistema is not None else True,
+            "notif_sms": self.notif_sms if self.notif_sms is not None else False,
+            "frequencia_resumo": self.frequencia_resumo or "diario",
+            "tema": self.tema or "claro",
+            "idioma": self.idioma or "pt-BR",
+            "fuso_horario": self.fuso_horario or "America/Sao_Paulo",
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

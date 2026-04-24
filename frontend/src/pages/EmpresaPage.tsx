@@ -42,6 +42,7 @@ interface Responsavel {
   nome: string;
   tipo?: string;
   cargo?: string;
+  cpf?: string;
   email?: string;
   telefone?: string;
 }
@@ -92,6 +93,14 @@ function formatPhone(value: string): string {
   if (digits.length <= 6) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
   if (digits.length <= 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`;
   return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+}
+
+function formatCpf(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+  return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
 }
 
 function calcDocStatus(hasArquivo: boolean, dataVencimento: string | null): "ok" | "vence" | "falta" {
@@ -166,6 +175,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [novoRespTipo, setNovoRespTipo] = useState("");
   const [novoRespNome, setNovoRespNome] = useState("");
   const [novoRespCargo, setNovoRespCargo] = useState("");
+  const [novoRespCpf, setNovoRespCpf] = useState("");
   const [novoRespEmail, setNovoRespEmail] = useState("");
   const [novoRespTel, setNovoRespTel] = useState("");
 
@@ -420,13 +430,16 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const handleSalvarResponsavel = async () => {
     if (!novoRespNome.trim() || !empresaId) return;
     try {
+      // Normaliza campos opcionais: string vazia → null
+      // tipo (ENUM no banco) NAO aceita "" — precisa ser null se nao selecionado
       const payload = {
         empresa_id: empresaId,
-        tipo: novoRespTipo,
-        nome: novoRespNome,
-        cargo: novoRespCargo,
-        email: novoRespEmail,
-        telefone: novoRespTel,
+        tipo: novoRespTipo || null,
+        nome: novoRespNome.trim(),
+        cargo: novoRespCargo.trim() || null,
+        cpf: novoRespCpf.trim() || null,
+        email: novoRespEmail.trim() || null,
+        telefone: novoRespTel.trim() || null,
       };
       if (editingRespId) {
         await crudUpdate("empresa-responsaveis", editingRespId, payload);
@@ -437,6 +450,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       setNovoRespTipo("");
       setNovoRespNome("");
       setNovoRespCargo("");
+      setNovoRespCpf("");
       setNovoRespEmail("");
       setNovoRespTel("");
       setShowRespModal(false);
@@ -451,6 +465,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     setNovoRespTipo(r.tipo || "");
     setNovoRespNome(r.nome);
     setNovoRespCargo(r.cargo || "");
+    setNovoRespCpf(r.cpf || "");
     setNovoRespEmail(r.email || "");
     setNovoRespTel(r.telefone || "");
     setShowRespModal(true);
@@ -852,7 +867,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             setCertSaved(false);
             setShowCertDetailModal(true);
           }} style={{ color: "var(--color-primary, #3b82f6)" }}>
-            <Pencil size={15} />
+            <Pencil size={18} />
           </button>
           <button title="Upload PDF" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
             <Upload size={15} />
@@ -895,8 +910,8 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       width: "120px",
       render: (r) => (
         <div className="table-actions">
-          <button title="Editar" onClick={() => handleEditarResponsavel(r)}><Pencil size={16} /></button>
-          <button title="Excluir" className="danger" onClick={() => handleExcluirResponsavel(r.id)}><Trash2 size={16} /></button>
+          <button title="Editar" onClick={() => handleEditarResponsavel(r)}><Pencil size={18} /></button>
+          <button title="Excluir" className="danger" onClick={() => handleExcluirResponsavel(r.id)}><Trash2 size={18} /></button>
         </div>
       ),
     },
@@ -1312,7 +1327,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             <ActionButton
               icon={<Plus size={16} />}
               label="Adicionar"
-              onClick={() => setShowRespModal(true)}
+              onClick={() => { setError(null); setShowRespModal(true); }}
             />
           }
         >
@@ -1374,8 +1389,10 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           setNovoRespTipo("");
           setNovoRespNome("");
           setNovoRespCargo("");
+          setNovoRespCpf("");
           setNovoRespEmail("");
           setNovoRespTel("");
+          setError(null);
         }}
         title={editingRespId ? "Editar Responsavel" : "Adicionar Responsavel"}
         footer={
@@ -1386,13 +1403,20 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
               setNovoRespTipo("");
               setNovoRespNome("");
               setNovoRespCargo("");
+              setNovoRespCpf("");
               setNovoRespEmail("");
               setNovoRespTel("");
+              setError(null);
             }}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSalvarResponsavel} disabled={!novoRespNome}>Salvar</button>
           </>
         }
       >
+        {error && (
+          <div style={{ background: "#fef2f2", color: "#dc2626", padding: "10px 14px", borderRadius: 6, marginBottom: 12, border: "1px solid #fecaca", fontSize: "0.9rem" }}>
+            {error}
+          </div>
+        )}
         <FormField label="Tipo">
           <SelectInput
             value={novoRespTipo}
@@ -1406,6 +1430,9 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         </FormField>
         <FormField label="Cargo">
           <TextInput value={novoRespCargo} onChange={setNovoRespCargo} />
+        </FormField>
+        <FormField label="CPF">
+          <TextInput value={novoRespCpf} onChange={(v) => setNovoRespCpf(formatCpf(v))} placeholder="000.000.000-00" />
         </FormField>
         <FormField label="Email" required>
           <TextInput value={novoRespEmail} onChange={setNovoRespEmail} type="email" />
