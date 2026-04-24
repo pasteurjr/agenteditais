@@ -332,3 +332,90 @@ export async function selectFirstContrato(page: Page, preferNumero?: string) {
   await page.waitForTimeout(2500);
   return clicked;
 }
+
+// ===========================================================================
+// V3 — Auxiliares para o runner de validação (camadas DOM e Rede)
+// ===========================================================================
+
+/**
+ * Captura snapshot da árvore de acessibilidade da página.
+ * Mais estável que HTML bruto, semanticamente rico.
+ *
+ * Implementação via CDP (Chrome DevTools Protocol) — funciona em qualquer versão
+ * recente do Playwright. Fallback gracioso retorna `{ error }` se algo falhar.
+ */
+export async function captureA11yTree(page: Page): Promise<any> {
+  try {
+    const ctx = page.context();
+    const client = await ctx.newCDPSession(page);
+    await client.send("Accessibility.enable");
+    const result = await client.send("Accessibility.getFullAXTree");
+    await client.detach().catch(() => {});
+    return result;
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+export interface NetworkLog {
+  url: string;
+  method: string;
+  status?: number;
+  request_body?: string;
+  response_body?: string;
+  timestamp: number;
+}
+
+/**
+ * Configura interceptação de network. Retorna controlador com:
+ *  - `getLogs()`: lista de requests/responses capturados
+ *  - `findByUrl(substr)`: filtra logs cuja URL contém substr
+ *  - `clear()`: zera os logs
+ *
+ * Usar ANTES da ação que dispara as requests.
+ */
+export function setupNetworkInterceptor(page: Page) {
+  const logs: NetworkLog[] = [];
+  const pending: Map<string, NetworkLog> = new Map();
+
+  page.on("request", (req) => {
+    const log: NetworkLog = {
+      url: req.url(),
+      method: req.method(),
+      request_body: req.postData() ?? undefined,
+      timestamp: Date.now(),
+    };
+    pending.set(req.url() + "|" + req.method() + "|" + log.timestamp, log);
+    logs.push(log);
+  });
+
+  page.on("response", async (resp) => {
+    const url = resp.url();
+    const method = resp.request().method();
+    // Encontrar log pendente correspondente (mais recente)
+    const matching = [...pending.entries()]
+      .filter(([k]) => k.startsWith(url + "|" + method))
+      .sort((a, b) => b[1].timestamp - a[1].timestamp);
+    if (matching.length > 0) {
+      const [key, log] = matching[0];
+      log.status = resp.status();
+      try {
+        log.response_body = await resp.text();
+      } catch {
+        log.response_body = "<unable to read body>";
+      }
+      pending.delete(key);
+    }
+  });
+
+  return {
+    getLogs: () => [...logs],
+    findByUrl: (substr: string) => logs.filter((l) => l.url.includes(substr)),
+    findByUrlAndMethod: (substr: string, method: string) =>
+      logs.filter((l) => l.url.includes(substr) && l.method.toUpperCase() === method.toUpperCase()),
+    clear: () => {
+      logs.length = 0;
+      pending.clear();
+    },
+  };
+}
