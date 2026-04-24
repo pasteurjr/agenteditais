@@ -1,0 +1,72 @@
+# Zonas protegidas do Facilicita.IA
+# Arquivos/diretorios onde /corrigir-divergencias NUNCA propoe correcao automatica.
+# Qualquer divergencia que exija alteracao nestas areas = IMPASSE_ZONA_PROTEGIDA obrigatorio.
+# Formato: um caminho por linha. Prefixos ou globs (**) permitidos.
+# Comentarios com #. Linhas em branco ignoradas.
+
+# ============================================================
+# LOGICA FINANCEIRA CRITICA
+# Mudancas aqui afetam calculo de propostas, lances, margens.
+# Consequencia juridica direta em licitacao.
+# ============================================================
+backend/tools.py:calcular_score
+backend/tools.py:aplicar_mascara_lote
+backend/tools.py:tool_gerar_proposta
+backend/tools.py:tool_calcular_aderencia
+
+# ============================================================
+# INTEGRACOES COM SISTEMAS GOVERNAMENTAIS
+# Chamadas a APIs do governo. Mudanca errada = falha em producao
+# que so aparece quando voce esta submetendo proposta real.
+# ============================================================
+backend/tools.py:_buscar_edital_pncp_por_numero
+backend/tools.py:_buscar_itens_pncp
+backend/tools.py:_buscar_arquivos_pncp
+backend/tools.py:_enriquecer_edital_pncp
+backend/tools.py:tool_buscar_atas_pncp
+backend/tools.py:tool_baixar_ata_pncp
+
+# ============================================================
+# REGRAS DE NEGOCIO (RNs)
+# Auditoria, validacoes, transicoes de estado.
+# Sao a espinha dorsal regulatoria do sistema.
+# ============================================================
+backend/rn_validators.py
+backend/rn_audit.py
+backend/rn_estados.py
+backend/rn_deepseek.py
+
+# ============================================================
+# MIGRATIONS E SEEDS
+# Mudar aqui = quebrar banco em producao ou perder dados.
+# ============================================================
+backend/seeds/**
+backend/migrations/**
+
+# ============================================================
+# AUTENTICACAO E AUTORIZACAO
+# Mudanca errada = expor sistema ou bloquear usuarios validos.
+# ============================================================
+backend/auth_routes.py
+backend/jwt_utils.py
+
+# ============================================================
+# CONFIGURACAO DE PRODUCAO
+# Secrets, credenciais, URLs de integracao.
+# ============================================================
+.env
+.env.*
+backend/config.py
+
+# ============================================================
+# PROTOCOLO DE VALIDACAO
+# Os proprios arquivos que definem o processo.
+# Alteracao exige revisao humana deliberada.
+# ============================================================
+.claude/commands/validar-uc.md
+.claude/commands/corrigir-divergencias.md
+.claude/agents/validation-*.md
+.claude-protected
+docs/VALIDACAOFACILICITA.md
+docs/validar-uc.md
+docs/corrigir-divergencias.md

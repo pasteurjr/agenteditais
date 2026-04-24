@@ -32,3 +32,10 @@ uploads/
 .cache/
 cache/
 *.faiss
+
+# Processo de validacao V3 — evidencias grandes, nao commitar
+testes/relatorios/*/*/evidencias/
+testes/relatorios/*/*/before_*.png
+testes/relatorios/*/*/after_*.png
+testes/contextos/*/editais/
+testes/contextos/*/docs/
