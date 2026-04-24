@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Painel — Validação Visual Acompanhada</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    padding: 1em 2em;
+    border-bottom: 2px solid #e94560;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18pt; color: #fff; }
+  header .meta {
+    font-size: 10pt;
+    color: #aaa;
+    text-align: right;
+  }
+  .progresso {
+    height: 6px;
+    background: #0f3460;
+  }
+  .progresso .bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+    transition: width 0.5s;
+  }
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5em;
+    padding: 1.5em 2em;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #16213e;
+    border: 1px solid #2a3f5f;
+    border-radius: 8px;
+    padding: 1.5em;
+  }
+  .card h2 {
+    font-size: 14pt;
+    color: #e94560;
+    margin-bottom: 1em;
+    border-bottom: 1px solid #2a3f5f;
+    padding-bottom: 0.5em;
+  }
+  .passo-titulo {
+    font-size: 16pt;
+    color: #fff;
+    margin-bottom: 0.5em;
+  }
+  .passo-descricao {
+    background: #0f3460;
+    padding: 1em;
+    border-left: 4px solid #4caf50;
+    border-radius: 4px;
+    font-size: 11pt;
+    margin-bottom: 1em;
+    white-space: pre-wrap;
+  }
+  .passo-descricao h3, .passo-descricao h4 { color: #8bc34a; margin: 0.5em 0; }
+  .passo-descricao code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+  .obs-list {
+    background: #0f3460;
+    padding: 1em 1em 1em 2em;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+    list-style-type: '👀 ';
+    font-size: 10pt;
+  }
+  .obs-list li { margin-bottom: 0.4em; }
+  .botoes {
+    margin-top: 1em;
+    display: flex;
+    gap: 0.5em;
+    flex-wrap: wrap;
+  }
+  button {
+    background: #e94560;
+    color: white;
+    border: none;
+    padding: 0.7em 1.5em;
+    font-size: 11pt;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  button:hover { background: #c2334b; transform: translateY(-1px); }
+  button.continuar { background: #4caf50; }
+  button.continuar:hover { background: #3d8b40; }
+  button.parar { background: #607d8b; }
+  button.reiniciar { background: #9c27b0; }
+  button.correcao { background: #ff9800; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  textarea {
+    width: 100%;
+    min-height: 80px;
+    background: #0f3460;
+    color: #fff;
+    border: 1px solid #2a3f5f;
+    padding: 0.6em;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11pt;
+    resize: vertical;
+  }
+  .screenshots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1em;
+  }
+  .screenshots img {
+    width: 100%;
+    border: 2px solid #2a3f5f;
+    border-radius: 4px;
+  }
+  .screenshots .label {
+    font-size: 9pt;
+    color: #aaa;
+    text-align: center;
+    margin-bottom: 0.3em;
+  }
+  .veredito {
+    display: inline-block;
+    padding: 0.3em 0.8em;
+    border-radius: 3px;
+    font-size: 10pt;
+    font-weight: 600;
+  }
+  .veredito.PENDENTE { background: #607d8b; color: white; }
+  .veredito.APROVADO { background: #4caf50; color: white; }
+  .veredito.REPROVADO { background: #f44336; color: white; }
+  .veredito.INCONCLUSIVO { background: #ff9800; color: white; }
+  .estado-pill {
+    padding: 0.3em 0.8em;
+    border-radius: 12px;
+    background: #2a3f5f;
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .estado-pill.executando { background: #4caf50; animation: pulse 1.5s infinite; }
+  .estado-pill.pausado { background: #ffc107; color: #000; }
+  .estado-pill.terminado { background: #607d8b; }
+  .estado-pill.parado { background: #f44336; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .historico {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 1em;
+  }
+  .historico-item {
+    border-bottom: 1px solid #2a3f5f;
+    padding: 0.6em 0;
+    font-size: 10pt;
+  }
+  .historico-item .id { color: #8bc34a; font-family: monospace; }
+  .historico-item .comentarios { color: #ffc107; margin-left: 1em; font-style: italic; }
+  .vazio { color: #777; font-style: italic; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎬 Validação Visual Acompanhada</h1>
+    <div style="font-size: 10pt; color: #aaa;">Facilicita.IA — processo V3</div>
+  </div>
+  <div class="meta">
+    <div><strong id="uc-info">—</strong></div>
+    <div id="ciclo-info">—</div>
+    <div><span class="estado-pill" id="estado-pill">aguardando</span></div>
+  </div>
+</header>
+<div class="progresso"><div class="bar" id="progresso-bar" style="width: 0%"></div></div>
+
+<main>
+  <section class="card">
+    <h2>Passo Atual</h2>
+    <div class="passo-titulo" id="passo-titulo">Aguardando início…</div>
+
+    <div class="passo-descricao" id="passo-descricao"></div>
+
+    <h3 style="color: #ffc107; margin: 1em 0 0.5em 0; font-size: 11pt;">👀 Observe criticamente:</h3>
+    <ul class="obs-list" id="obs-list"></ul>
+
+    <div class="botoes">
+      <button class="continuar" id="btn-continuar">▶️ Continuar</button>
+      <button class="correcao" id="btn-correcao">⚠️ Marcar Correção</button>
+      <button class="parar" id="btn-parar">⏹️ Parar</button>
+      <button class="reiniciar" id="btn-reiniciar">🔄 Reiniciar</button>
+    </div>
+
+    <div style="margin-top: 1em;">
+      <strong>Comentário:</strong>
+      <textarea id="comentario-input" placeholder="Sua observação para este passo..."></textarea>
+      <button id="btn-salvar-comentario" style="margin-top: 0.5em;">💾 Salvar comentário</button>
+    </div>
+
+    <div style="margin-top: 1em;">
+      <strong>Veredito automático:</strong>
+      <span class="veredito PENDENTE" id="veredito-badge">PENDENTE</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Screenshots</h2>
+    <div class="screenshots">
+      <div>
+        <div class="label">ANTES</div>
+        <img id="img-antes" src="" alt="antes">
+      </div>
+      <div>
+        <div class="label">DEPOIS</div>
+        <img id="img-depois" src="" alt="depois">
+      </div>
+    </div>
+
+    <h2 style="margin-top: 1.5em;">Histórico</h2>
+    <div class="historico" id="historico"><div class="vazio">Nenhum passo concluído ainda.</div></div>
+  </section>
+</main>
+
+<script src="/controle.js"></script>
+</body>
+</html>
