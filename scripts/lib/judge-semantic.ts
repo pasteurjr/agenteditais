@@ -167,12 +167,34 @@ async function chamarJuizUmaVez(input: InputJuizSemantico): Promise<VeredictoJui
   }
   let raw = textBlock.text.trim();
 
-  // Resiliência: se vier com ```json ... ```, extrair
-  const jsonBlockMatch = raw.match(/```json\s*\n([\s\S]*?)\n```/);
-  if (jsonBlockMatch) raw = jsonBlockMatch[1];
+  // Resiliência (3 estratégias em cascata):
+  // 1. ```json ... ``` (markdown code block)
+  // 2. Primeiro bloco { ... } via balanceamento de chaves
+  // 3. Bruto
+  const jsonBlockMatch = raw.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+  if (jsonBlockMatch) raw = jsonBlockMatch[1].trim();
+
+  // Se ainda começa com prosa antes de '{', extrair primeiro objeto
+  if (!raw.startsWith("{")) {
+    const firstBrace = raw.indexOf("{");
+    if (firstBrace >= 0) {
+      const lastBrace = raw.lastIndexOf("}");
+      if (lastBrace > firstBrace) {
+        raw = raw.slice(firstBrace, lastBrace + 1);
+      }
+    }
+  }
 
   try {
-    return JSON.parse(raw) as VeredictoJuiz;
+    const parsed = JSON.parse(raw) as VeredictoJuiz;
+    // Sanity check — campos obrigatórios
+    if (!parsed.veredito || typeof parsed.confianca !== "number") {
+      throw new Error("JSON parseado mas faltam campos obrigatorios (veredito ou confianca)");
+    }
+    if (!["APROVADO", "REPROVADO", "INCONCLUSIVO"].includes(parsed.veredito)) {
+      throw new Error(`veredito invalido: ${parsed.veredito}`);
+    }
+    return parsed;
   } catch (e) {
     throw new Error(`Resposta nao e JSON valido: ${raw.slice(0, 300)}\n\nErro: ${e}`);
   }
@@ -212,10 +234,29 @@ export async function julgarSemantico(input: InputJuizSemantico): Promise<{
       vencedor = v as VeredictoJuiz["veredito"];
     }
   }
-  if (max < 2) vencedor = "INCONCLUSIVO";
+  // Empate 1-1-1 (3 vereditos diferentes) ou max<2 → INCONCLUSIVO
+  if (max < 2) {
+    vencedor = "INCONCLUSIVO";
+  }
 
-  // Final: pega a primeira rodada que bateu com vencedor (mais info estruturada)
-  const final = rodadas.find((r) => r.veredito === vencedor) ?? primeiro;
+  // Final: pega a primeira rodada que bateu com vencedor.
+  // Se for INCONCLUSIVO mas nenhuma rodada veio INCONCLUSIVO, sintetiza um veredicto
+  // explicito sinalizando o desacordo, em vez de retornar uma rodada que contradiz.
+  let final = rodadas.find((r) => r.veredito === vencedor);
+  if (!final) {
+    final = {
+      ...primeiro,
+      veredito: "INCONCLUSIVO",
+      confianca: Math.min(...rodadas.map((r) => r.confianca)),
+      justificativa:
+        `Voto majoritario nao convergiu: ${rodadas.map((r) => r.veredito).join(" / ")}. ` +
+        `Refinar descricao_ancorada do caso de teste — esta ambigua.`,
+      discrepancias_observadas: [
+        ...primeiro.discrepancias_observadas,
+        `juiz_flutuante: 3 rodadas com vereditos diferentes`,
+      ],
+    };
+  }
 
   return { final, rodadas, voto_majoritario_aplicado: true };
 }

@@ -93,7 +93,8 @@ export function gerarRelatorio(r: ResultadoExecucao): string {
   lines.push("|---|---|---|---|---|");
   for (const [i, p] of r.passos.entries()) {
     const dur = (p.duracao_ms / 1000).toFixed(1) + "s";
-    lines.push(`| ${i + 1} | \`${p.passo_id}\` | ${badge(p.veredito)} | ${dur} | ${p.camada_decisiva} |`);
+    const safeId = p.passo_id.replace(/\|/g, "\\|").replace(/\n/g, " ");
+    lines.push(`| ${i + 1} | \`${safeId}\` | ${badge(p.veredito)} | ${dur} | ${p.camada_decisiva} |`);
   }
   lines.push("");
 

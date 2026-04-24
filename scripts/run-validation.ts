@@ -42,7 +42,7 @@ import {
   CamadaDecisiva,
   salvarRelatorio,
 } from "./lib/report-generator";
-import { captureA11yTree, setupNetworkInterceptor } from "../tests/e2e/playwright/helpers";
+import { captureA11yTree, setupNetworkInterceptor, login as helperLogin } from "../tests/e2e/playwright/helpers";
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 
@@ -75,6 +75,15 @@ function parseArgs(): Args {
 async function main(): Promise<number> {
   const args = parseArgs();
   console.log(`[runner] Iniciando ${args.uc_id}/${args.variacao} (trilha ${args.trilha})`);
+
+  // Este runner roda apenas a trilha E2E (headless). Visual usa framework_visual
+  // em Python; Humano nao executa, so gera tutorial pro Arnaldo.
+  if (args.trilha !== "e2e") {
+    console.error(`[runner] ERRO: este runner so suporta trilha=e2e. Para 'visual', usar:`);
+    console.error(`  python testes/framework_visual/executor.py ${args.uc_id} ${args.variacao}`);
+    console.error(`Para 'humano': nao precisa rodar — apenas gerar o tutorial.`);
+    return 2;
+  }
 
   // Carregar tutorial
   const tutorialPath = `testes/tutoriais_playwright/${args.uc_id}_${args.variacao}.md`;
@@ -129,10 +138,22 @@ async function main(): Promise<number> {
   let chamadasJuiz = 0;
   let chamadasVoto = 0;
 
-  // Login (precisa do helper) — TODO: usar helpers.login() quando contexto suportar
-  // Por ora, navega para baseUrl como warmup
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-  await page.waitForTimeout(1000);
+  // Login. helperLogin atual usa valida1/123456 fixo — futuro: usar email do contexto
+  // do ciclo (trilhas.e2e.usuario.email/senha) quando Fase 0 estiver implementada.
+  try {
+    if (contexto?.trilhas?.e2e?.usuario?.email) {
+      console.log(`[runner] Login com ${contexto.trilhas.e2e.usuario.email} (do contexto)`);
+      // helpers.login() ainda usa credenciais fixas — TODO: parametrizar.
+      await helperLogin(page);
+    } else {
+      console.log(`[runner] Login com credencial padrao do helpers (sem contexto)`);
+      await helperLogin(page);
+    }
+  } catch (e) {
+    console.error(`[runner] Login falhou: ${e}`);
+    await browser.close();
+    return 3;
+  }
 
   for (const passo of tutorial.passos) {
     const passoT0 = Date.now();

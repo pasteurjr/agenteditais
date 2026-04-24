@@ -138,12 +138,15 @@ export function loadTutorial(relPath: string): TutorialPlaywright {
   const abs = path.resolve(PROJECT_ROOT, relPath);
   const text = fs.readFileSync(abs, "utf-8");
 
-  // Frontmatter
-  const fmMatch = text.match(/^---\n([\s\S]*?)\n---/);
+  // Frontmatter (suporta \n e \r\n)
+  const fmMatch = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fmMatch) {
     throw new Error(`Tutorial sem frontmatter: ${relPath}`);
   }
   const metadados = yaml.load(fmMatch[1]) as TutorialPlaywright["metadados"];
+  if (!metadados || typeof metadados !== "object") {
+    throw new Error(`Frontmatter de ${relPath} nao parseou como objeto`);
+  }
 
   // Blocos YAML após o frontmatter
   const corpo = text.slice(fmMatch[0].length);
@@ -171,9 +174,12 @@ export function loadTutorial(relPath: string): TutorialPlaywright {
   return { metadados, passos, limpeza_sql };
 }
 
-/** Acessa chave aninhada em objeto: get(obj, "a.b.c") */
+/** Acessa chave aninhada em objeto: get(obj, "a.b.c"). Retorna undefined em qualquer falha. */
 export function getNested(obj: any, key: string): any {
-  return key.split(".").reduce((acc, part) => (acc != null ? acc[part] : undefined), obj);
+  return key.split(".").reduce((acc, part) => {
+    if (acc == null || typeof acc !== "object") return undefined;
+    return acc[part];
+  }, obj);
 }
 
 /** Resolve `valor_from_dataset: chave.aninhada` consultando o dataset. */
