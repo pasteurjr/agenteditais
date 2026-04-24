@@ -278,20 +278,41 @@ def main() -> int:
         # Reconstruir lista mantendo: canônicos + legacies
         todos_ucs = list(canonicos.values()) + legacies
 
-    # Escrever arquivos
+    # Escrever arquivos (idempotente: só regrava se conteúdo "real" mudou)
     escritos = 0
+    inalterados = 0
     legacy_paths: list[str] = []
     for u in todos_ucs:
         out_path = OUTPUT_DIR / f"{u.uc_id}.md"
-        out_path.write_text(render_uc_file(u, gerado_em), encoding="utf-8")
+        novo = render_uc_file(u, gerado_em)
+        regravar = True
+        if out_path.exists():
+            atual = out_path.read_text(encoding="utf-8")
+            # Comparar excluindo a linha do timestamp
+            atual_norm = re.sub(r'^split_gerado_em:.*\n', '', atual, flags=re.MULTILINE)
+            novo_norm = re.sub(r'^split_gerado_em:.*\n', '', novo, flags=re.MULTILINE)
+            if atual_norm == novo_norm:
+                regravar = False
+                inalterados += 1
+        if regravar:
+            out_path.write_text(novo, encoding="utf-8")
+            escritos += 1
         if "_legacy" in u.uc_id:
             legacy_paths.append(u.uc_id)
-        escritos += 1
 
-    # README index
+    # README index (mesma lógica de idempotência)
     readme_path = OUTPUT_DIR / "README.md"
-    readme_path.write_text(render_readme(todos_ucs, gerado_em), encoding="utf-8")
-    print(f"\n✅ {escritos} arquivos UC-*.md escritos em {OUTPUT_DIR}")
+    novo_readme = render_readme(todos_ucs, gerado_em)
+    if readme_path.exists():
+        atual = readme_path.read_text(encoding="utf-8")
+        atual_norm = re.sub(r'^\*\*Gerado em:\*\*.*\n', '', atual, flags=re.MULTILINE)
+        novo_norm = re.sub(r'^\*\*Gerado em:\*\*.*\n', '', novo_readme, flags=re.MULTILINE)
+        if atual_norm != novo_norm:
+            readme_path.write_text(novo_readme, encoding="utf-8")
+    else:
+        readme_path.write_text(novo_readme, encoding="utf-8")
+
+    print(f"\n✅ {escritos} arquivos UC-*.md (re)escritos, {inalterados} inalterados")
     print(f"✅ Índice: {readme_path}")
     return 0
 
