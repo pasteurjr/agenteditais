@@ -35,11 +35,11 @@ import {
   AcaoTutorial,
   Contexto,
 } from "./lib/artifact-loader";
-import { julgarSemantico, VeredictoJuiz } from "./lib/judge-semantic";
 import {
   ResultadoExecucao,
   ResultadoPasso,
   CamadaDecisiva,
+  VeredictoJuiz,
   salvarRelatorio,
 } from "./lib/report-generator";
 import { captureA11yTree, setupNetworkInterceptor, login as helperLogin } from "../tests/e2e/playwright/helpers";
@@ -254,36 +254,13 @@ async function main(): Promise<number> {
       break;
     }
 
-    // Camada 3: Semântica (só se tem asserts)
-    if (validacao.asserts_semantica && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const judgeRes = await julgarSemantico({
-          passo_id: passo.id,
-          screenshot_path: afterPath,
-          a11y_tree: a11y,
-          url_atual: page.url(),
-          status_ultima_request: netLogs[netLogs.length - 1]?.status,
-          asserts: validacao.asserts_semantica,
-          acao_descricao: passo.descricao ?? acaoString(passo.acao),
-        });
-        chamadasJuiz += judgeRes.rodadas.length;
-        custoTokens += judgeRes.rodadas.length * 1500; // estimativa grossa
-        if (judgeRes.voto_majoritario_aplicado) chamadasVoto++;
-        result.detalhe_semantica = judgeRes.final;
-        result.voto_majoritario_aplicado = judgeRes.voto_majoritario_aplicado;
-        result.rodadas_juiz = judgeRes.rodadas;
-        result.veredito = judgeRes.final.veredito;
-        result.camada_decisiva = "Semantica";
-      } catch (e: any) {
-        console.error(`[runner] Erro juiz semantico: ${e?.message ?? e}`);
-        result.detalhe_semantica = null;
-        result.veredito = "INCONCLUSIVO";
-        result.camada_decisiva = "skipped";
-      }
-    } else {
-      // Sem asserts semânticas: APROVADO baseado em DOM+Rede
-      result.veredito = "APROVADO";
-      result.camada_decisiva = "Rede";
+    // Camada 3: Semântica é feita por Claude lendo screenshots ao final via Read tool.
+    // Aqui marcamos APROVADO baseado em DOM+Rede; o relatório lista os screenshots
+    // pra análise visual posterior.
+    result.veredito = "APROVADO";
+    result.camada_decisiva = "Rede";
+    if (validacao.asserts_semantica) {
+      result.detalhe_semantica = null; // pendente análise manual de Claude
     }
 
     result.duracao_ms = Date.now() - passoT0;

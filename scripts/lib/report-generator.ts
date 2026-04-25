@@ -11,7 +11,17 @@
  */
 import * as fs from "fs";
 import * as path from "path";
-import { VeredictoJuiz } from "./judge-semantic";
+
+// Camada semantica é feita por Claude lendo screenshots ao final via Read tool,
+// não por chamada de API. Tipo mantido pra compatibilidade do JSON do relatório.
+export interface VeredictoJuiz {
+  veredito: "APROVADO" | "REPROVADO" | "INCONCLUSIVO";
+  confianca: number;
+  justificativa?: string;
+  elementos_obrigatorios_ausentes?: string[];
+  elementos_proibidos_presentes?: string[];
+  discrepancias_observadas?: string[];
+}
 
 export type CamadaDecisiva = "DOM" | "Rede" | "Semantica" | "Backend" | "skipped";
 

@@ -9,8 +9,9 @@ Scripts utilitários do processo de validação V3 (ver `docs/VALIDACAOFACILICIT
 | `split-uc-v5.py` | Quebra os 5 docs V5 monolíticos em arquivos individuais por UC | `docs/CASOS DE USO * V5.md` | `testes/casos_de_uso/UC-*.md` + `README.md` |
 | `run-validation.ts` | Runner Playwright headless do processo V3 (Fases 4+5) | UC-id + variação + trilha | `testes/relatorios/automatico/<uc>_<variacao>_<ts>.md` |
 | `lib/artifact-loader.ts` | Resolve `valor_from_dataset` e `validacao_ref` em runtime | Tutorial + dataset + caso de teste | Estruturas TS prontas para o runner |
-| `lib/judge-semantic.ts` | Juiz semântico (camada 3) via Anthropic SDK, com voto majoritário se confiança<0.85 | screenshot + descrição ancorada + obrigatórios/proibidos | JSON do veredito |
 | `lib/report-generator.ts` | Monta MD do relatório final | Resultado de execução | Markdown salvo em `testes/relatorios/<trilha>/` |
+
+> **Camada semântica:** NÃO usa Anthropic API. Quem analisa screenshots é Claude diretamente nesta sessão Claude Code, lendo cada `before_*.png`/`after_*.png` via Read tool ao final da execução, igual aos relatórios `RELATORIO_VALIDACAO_SPRINT*.md`. O runner deixa os screenshots em disco e marca veredito automático como APROVADO baseado em DOM+Rede; análise visual profunda vem depois.
 
 ## Como rodar `split-uc-v5.py`
 
@@ -44,8 +45,8 @@ npx ts-node scripts/run-validation.ts UC-F01 fp e2e --ciclo=2026-04-25_103000
   - `testes/datasets/UC-F01_e2e.yaml`
   - `testes/casos_de_teste/UC-F01_e2e_fp.yaml`
   - `testes/tutoriais_playwright/UC-F01_fp.md`
-- `ANTHROPIC_API_KEY` no `.env` (camada semântica). Sem isso, runner pula a camada 3 e marca como APROVADO baseado em DOM+Rede.
 - Frontend rodando em `http://localhost:5180` (ou `--base-url` customizado).
+- Análise visual dos screenshots ao final é feita por Claude lendo PNGs via Read tool — não precisa configurar nenhuma API key.
 
 **Saída:**
 - Relatório markdown em `testes/relatorios/automatico/UC-F01_fp_<ts>.md`

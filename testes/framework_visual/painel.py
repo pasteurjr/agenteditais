@@ -46,6 +46,7 @@ class ResultadoPasso:
     detalhes_validacao: dict[str, Any] = field(default_factory=dict)
     iniciado_em: str = ""
     duracao_ms: int = 0
+    veredicto_po: str | None = None  # "APROVADO" | "REPROVADO" | None (nao decidido)
 
 
 @dataclass
@@ -105,6 +106,7 @@ def _passo_to_dict(p: ResultadoPasso) -> dict[str, Any]:
         "correcao_necessaria": p.correcao_necessaria,
         "correcao_descricao": p.correcao_descricao,
         "veredito_automatico": p.veredito_automatico,
+        "veredicto_po": p.veredicto_po,
         "detalhes_validacao": p.detalhes_validacao,
         "iniciado_em": p.iniciado_em,
         "duracao_ms": p.duracao_ms,
@@ -136,10 +138,34 @@ def criar_app(estado: EstadoSessao) -> Flask:
 
     @app.route("/continuar", methods=["POST"])
     def continuar():
-        if estado.estado == "pausado":
-            estado.evento_continuar.set()
-            return jsonify({"ok": True, "msg": "destrancado"})
-        return jsonify({"ok": False, "msg": f"estado nao eh pausado: {estado.estado}"}), 409
+        if estado.estado != "pausado":
+            return jsonify({"ok": False, "msg": f"estado nao eh pausado: {estado.estado}"}), 409
+        passo = estado.passo_atual
+        if passo and not passo.veredicto_po:
+            return jsonify({
+                "ok": False,
+                "msg": "marque APROVADO ou REPROVADO antes de continuar"
+            }), 409
+        estado.evento_continuar.set()
+        return jsonify({"ok": True, "msg": "destrancado"})
+
+    @app.route("/aprovar", methods=["POST"])
+    def aprovar():
+        passo = estado.passo_atual
+        if not passo:
+            return jsonify({"ok": False, "msg": "sem passo atual"}), 409
+        passo.veredicto_po = "APROVADO"
+        return jsonify({"ok": True, "veredicto_po": "APROVADO"})
+
+    @app.route("/reprovar", methods=["POST"])
+    def reprovar():
+        passo = estado.passo_atual
+        if not passo:
+            return jsonify({"ok": False, "msg": "sem passo atual"}), 409
+        passo.veredicto_po = "REPROVADO"
+        # Compatibilidade: reprovar implica correcao_necessaria=true
+        passo.correcao_necessaria = True
+        return jsonify({"ok": True, "veredicto_po": "REPROVADO"})
 
     @app.route("/parar", methods=["POST"])
     def parar():

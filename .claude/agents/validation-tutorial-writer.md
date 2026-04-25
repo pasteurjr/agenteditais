@@ -107,7 +107,18 @@ base_url: http://localhost:5180
 
 # Tutorial Visual — UC-F01 FP
 
-Este tutorial é executado em modo **headed** com pausas entre passos. Você (PO) acompanha a execução no browser, observa cada passo, e clica [Continuar] no painel quando tiver verificado.
+Este tutorial é executado em modo **headed** com pausas entre **passos lógicos**. Você (PO) acompanha a execução no browser como se estivesse vendo um usuário usar o sistema. A cada parada (1 marco lógico), você decide ✅ Aprovar / ❌ Reprovar + observação opcional, e clica [Continuar] pra avançar.
+
+> **REGRA OBRIGATÓRIA — agrupamento lógico (só pra trilha visual):**
+> Passos NÃO são atômicos (1 fill = 1 passo). Cada passo é um **marco de UX** que agrupa várias ações que fazem sentido juntas pro humano observar. Critério: **por seção visual da tela** ou **por marco que o usuário-final percebe como "uma coisa"**.
+>
+> Exemplo pra UC-F01 (formulário de empresa):
+> - ❌ ERRADO: 16 passos (1 por campo)
+> - ✅ CERTO: 5 passos (Navegar / Dados Básicos / Presença Digital / Endereço / Salvar)
+>
+> Cada `acao_executor.sequencia` agrega TODAS as ações atômicas do passo lógico (vários fills + 1 select + opcional wait). O parser executa todas em ordem antes da pausa.
+>
+> Esta regra vale **APENAS** pra `tutoriais_visual/`. Trilha E2E continua com passos atômicos (1 ação por passo); trilha Humana é prosa narrativa.
 
 ## Passo 01 — Navegar até Empresa
 
@@ -136,25 +147,37 @@ validacao_ref: casos_de_teste/UC-F01_visual_fp.yaml#passo_01_navegar_empresa
 
 ---
 
-## Passo 03 — Preencher CNPJ com `(11) 11.111.111/0001-11` (prefixo DEMO)
+## Passo 02 — Preencher seção "Dados Básicos"
 
-**O que vai acontecer:**
-O browser vai digitar `DEMO_11111111000111` no campo CNPJ, caractere por caractere (slow_mo 500ms).
+**O que vai acontecer (agrupado em 1 marco):**
+O browser vai preencher os 4 campos da seção Dados Básicos em sequência (slow_mo 500ms): Razão Social → Nome Fantasia → CNPJ → Inscrição Estadual.
 
 **Observe criticamente:**
-- A máscara é aplicada durante a digitação ou só no blur?
+- A máscara do CNPJ é aplicada durante a digitação ou só no blur?
 - Aparece feedback visual (badge, cor) quando o CNPJ vira válido?
+- O asterisco vermelho está nos campos obrigatórios (Razão Social, CNPJ)?
+- Algum campo recusa caractere ou trunca texto?
 
 ```yaml
+id: passo_02_preencher_dados_basicos
 acao_executor:
   sequencia:
-    - fill:
-        seletor: 'input[name=cnpj]'
-        valor_from_dataset: empresa.cnpj_entrada
-validacao_ref: casos_de_teste/UC-F01_visual_fp.yaml#passo_03_preencher_cnpj
+    - tipo: fill
+      seletor: 'label:has-text("Razao Social") ~ div input.text-input'
+      valor_from_dataset: empresa.razao_social
+    - tipo: fill
+      seletor: 'label:has-text("Nome Fantasia") ~ div input.text-input'
+      valor_from_dataset: empresa.nome_fantasia
+    - tipo: fill
+      seletor: 'label:has-text("CNPJ") ~ div input.text-input'
+      valor_from_dataset: empresa.cnpj
+    - tipo: fill
+      seletor: 'label:has-text("Inscricao Estadual") ~ div input.text-input'
+      valor_from_dataset: empresa.inscricao_estadual
+validacao_ref: casos_de_teste/UC-F01_visual_fp.yaml#passo_02_dados_basicos
 ```
 
-# ... (demais passos)
+# ... demais passos lógicos: Presença Digital, Endereço, Salvar
 ```
 
 ### Trilha Humana (`testes/tutoriais_humano/<uc_id>_<variacao>.md`)
@@ -262,7 +285,9 @@ No card "Informações Cadastrais", localize o campo "CNPJ". Digite **68.218.777
    - Evite: "clique em Salvar". Prefira: "Clique no botão 'Salvar Alterações' (azul, canto inferior direito do card Telefones)".
    - Evite: "aparece mensagem de sucesso". Prefira: "Aparece 'Salvo!' em verde claro, à direita do botão Salvar, e some após ~2 segundos".
 
-4. **Pausas na trilha visual são obrigatórias.** Cada passo deve ter `screenshots_obrigatorios: [antes, depois]` e `aceita_comentario: true`.
+4. **Pausas na trilha visual são obrigatórias.** Cada passo deve ter `screenshots_obrigatorios: [antes, depois]` e `aceita_comentario: true`. A pausa exige decisão **Aprovado/Reprovado** antes do botão Continuar habilitar.
+
+4-bis. **Trilha visual usa passos LÓGICOS, não atômicos.** Agrupe ações relacionadas (ex: todos os campos de uma seção da tela) num único passo com `acao_executor.sequencia: [...]`. Critério: por seção visual ou por marco de UX que o usuário-final percebe como "uma coisa". Alvo prático: **3-7 passos lógicos por UC**, não 16+. Esta regra vale APENAS pra `tutoriais_visual/` — E2E mantém atômico, Humano é narrativo.
 
 5. **Trilha E2E não tem prosa.** Só YAML runnable. Qualquer "explicação" vira comentário YAML.
 

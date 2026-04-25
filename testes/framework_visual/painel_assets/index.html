@@ -103,6 +103,12 @@
   button.parar { background: #607d8b; }
   button.reiniciar { background: #9c27b0; }
   button.correcao { background: #ff9800; }
+  button.aprovar { background: #4caf50; font-size: 13pt; }
+  button.aprovar:hover { background: #3d8b40; }
+  button.aprovar.ativo { box-shadow: 0 0 0 3px #8bc34a; }
+  button.reprovar { background: #f44336; font-size: 13pt; }
+  button.reprovar:hover { background: #d32f2f; }
+  button.reprovar.ativo { box-shadow: 0 0 0 3px #ff8a80; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   textarea {
     width: 100%;
@@ -199,21 +205,27 @@
     <h3 style="color: #ffc107; margin: 1em 0 0.5em 0; font-size: 11pt;">👀 Observe criticamente:</h3>
     <ul class="obs-list" id="obs-list"></ul>
 
-    <div class="botoes">
-      <button class="continuar" id="btn-continuar">▶️ Continuar</button>
-      <button class="correcao" id="btn-correcao">⚠️ Marcar Correção</button>
+    <div class="botoes" style="margin-top: 1em;">
+      <strong style="width: 100%; display: block; margin-bottom: 0.5em;">Sua decisão pra este passo:</strong>
+      <button class="aprovar" id="btn-aprovar">✅ Aprovar</button>
+      <button class="reprovar" id="btn-reprovar">❌ Reprovar</button>
+      <span id="veredicto-po-pill" class="veredito PENDENTE" style="margin-left: 1em;">não decidido</span>
+    </div>
+
+    <div style="margin-top: 1em;">
+      <strong>Observação (opcional):</strong>
+      <textarea id="comentario-input" placeholder="Sua observação para este passo..."></textarea>
+      <button id="btn-salvar-comentario" style="margin-top: 0.5em;">💾 Salvar observação</button>
+    </div>
+
+    <div class="botoes" style="margin-top: 1.5em; border-top: 1px solid #2a3f5f; padding-top: 1em;">
+      <button class="continuar" id="btn-continuar" disabled>▶️ Continuar</button>
       <button class="parar" id="btn-parar">⏹️ Parar</button>
       <button class="reiniciar" id="btn-reiniciar">🔄 Reiniciar</button>
     </div>
 
     <div style="margin-top: 1em;">
-      <strong>Comentário:</strong>
-      <textarea id="comentario-input" placeholder="Sua observação para este passo..."></textarea>
-      <button id="btn-salvar-comentario" style="margin-top: 0.5em;">💾 Salvar comentário</button>
-    </div>
-
-    <div style="margin-top: 1em;">
-      <strong>Veredito automático:</strong>
+      <strong>Veredito automático (DOM/Rede):</strong>
       <span class="veredito PENDENTE" id="veredito-badge">PENDENTE</span>
     </div>
   </section>

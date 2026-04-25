@@ -427,7 +427,7 @@ Ao fim dos 3 passes, `/corrigir-divergencias UC-F01` compara os 3 relatórios:
 8. `testes/casos_de_uso/README.md` indexado
 
 ### Fase D — Harness E2E (3h30)
-9. `scripts/lib/judge-semantic.ts` (Anthropic SDK, voto majoritário)
+9. ~~`scripts/lib/judge-semantic.ts` (Anthropic SDK, voto majoritário)~~ — **REMOVIDO.** Camada semântica é feita por Claude lendo screenshots ao final via Read tool, não via API externa.
 10. `scripts/lib/report-generator.ts`
 11. `scripts/lib/artifact-loader.ts` (resolve referências entre dataset/caso de teste/tutorial, carrega `contextos/<ciclo>/contexto.yaml`)
 12. `scripts/run-validation.ts`

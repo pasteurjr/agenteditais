@@ -435,23 +435,45 @@ Saída: `testes/relatorios/automatico/UC-F01_2026-04-25_103000.md`
 
 1. `python testes/framework_visual/executor.py UC-F01`.
 2. Duas janelas abrem:
-   - **Janela A (browser real):** Chromium **visível**, slow_mo=500ms. Você vê o sistema rodando.
-   - **Janela B (painel de controle):** HTML servido por Flask em `http://localhost:9876`. Mostra:
-     - Passo atual em Markdown renderizado
-     - Screenshot "antes" da ação
-     - Screenshot "depois" (após executar)
-     - Barra de progresso (UC X de Y, Passo N de M)
-     - Botões: **[Continuar]**, **[Parar]**, **[Reiniciar]**
-     - Textarea de **Comentário** e botão **[Correção necessária]**
-3. Para cada passo:
-   - O painel mostra: *"Passo 3: Preencher CNPJ com `DEMO_CNPJ 11.111.111/0001-11`"*
-   - O browser executa a ação (slow_mo, você vê o CNPJ sendo digitado letra por letra)
-   - **PAUSA.** Sistema aguarda você clicar Continuar.
-   - Você olha a tela, confirma que o valor aparece como esperado, e opcionalmente:
-     - Digita observação: *"O campo aceita sem máscara, deveria formatar imediatamente"*
-     - Clica **[Correção necessária]** se achou um bug
-     - Clica **[Continuar]** quando estiver satisfeito
-4. Ao final, relatório em `testes/relatorios/visual/UC-F01_<timestamp>.md`.
+   - **Janela A (browser real):** Chromium **visível**, slow_mo=500ms. Você vê o sistema executando como se fosse um usuário (navegando, preenchendo, clicando).
+   - **Janela B (painel de controle):** HTML servido por Flask em `http://localhost:9876`.
+
+3. **Modelo de passos lógicos (vs atômicos).** O tutorial visual NÃO é uma lista de "1 fill = 1 passo". Cada passo é um **marco de UX** que faz sentido pro humano acompanhar — ele agrega várias ações atômicas que conceitualmente acontecem juntas. Exemplo pra UC-F01:
+
+   - **Passo lógico 1:** Navegar até EmpresaPage (1 ação: goto)
+   - **Passo lógico 2:** Preencher seção "Dados Básicos" (4 fills: Razão, Fantasia, CNPJ, IE)
+   - **Passo lógico 3:** Preencher seção "Presença Digital" (4 fills: Site, IG, LI, FB)
+   - **Passo lógico 4:** Preencher seção "Endereço" (4 ações: 3 fills + 1 select UF)
+   - **Passo lógico 5:** Salvar e confirmar (click + wait response + wait "Salvo!")
+
+   Critério de agrupamento: **por seção visual da tela** ou **por marco que o usuário-final percebe como "uma coisa".**
+
+4. **Ciclo por passo lógico:**
+   - Executor roda automaticamente todas as ações atômicas do passo (com slow_mo, você vê na Janela A)
+   - Ao terminar o passo, **PAUSA** e mostra na Janela B:
+     - Screenshot DEPOIS (estado final do passo, fresco)
+     - Descrição em Markdown + pontos a observar
+     - Resultado das camadas automáticas (DOM/Rede)
+     - **Decisão obrigatória:** ✅ **Aprovar** ou ❌ **Reprovar** (Continuar fica desabilitado até marcar)
+     - Textarea de **Observação** (opcional)
+   - Você marca, opcionalmente comenta, e clica **▶️ Continuar** → executor avança pro próximo passo
+   - Outros botões: **⏹️ Parar** (encerra), **🔄 Reiniciar** (volta pro 1)
+
+5. Ao final, relatório em `testes/relatorios/visual/UC-F01_<timestamp>.md` com a decisão Aprovar/Reprovar de cada passo + observações.
+
+#### Regra do agrupamento lógico — vale APENAS para `tutoriais_visual/`
+
+| Artefato | Granularidade |
+|---|---|
+| `datasets/UC-*.yaml` | Único (atende as 3 trilhas) — só dados |
+| `casos_de_teste/UC-*_e2e_*.yaml` | **Atômico** — 1 assert por campo, pra precisão de debugging |
+| `casos_de_teste/UC-*_visual_*.yaml` | **Atômico nos asserts** + **agrupado nos `passos`** (o YAML pode ter sub-passos `passo_lógico → ações`) |
+| `casos_de_teste/UC-*_humano_*.md` | Prosa narrativa |
+| `tutoriais_playwright/UC-*.md` (E2E) | **Atômico** — passos finos pro runner headless |
+| `tutoriais_visual/UC-*.md` (Visual) | **Lógico** — agregados em marcos de UX |
+| `tutoriais_humano/UC-*.md` (Humano) | Prosa pro Arnaldo executar manual |
+
+Por que só visual agrega: É a única trilha onde o ritmo da pausa **é parte da UX**. Na E2E ninguém olha; na Humana o agrupamento já é narrativo. Na Visual, agrupar 16 ações em 5 marcos transforma "16 cliques no Continuar" em "5 decisões úteis".
 
 #### O diferencial da trilha visual
 

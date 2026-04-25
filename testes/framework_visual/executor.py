@@ -99,6 +99,12 @@ def _executar_acao(page: Page, acao: Acao, valor: str | None) -> None:
         if valor is None:
             raise ValueError("fill sem valor")
         page.fill(seletor, valor, timeout=acao.timeout)
+    elif acao.tipo == "select":
+        if not seletor:
+            raise ValueError("select sem seletor")
+        if valor is None:
+            raise ValueError("select sem valor")
+        page.select_option(seletor, valor, timeout=acao.timeout)
     elif acao.tipo == "wait_for":
         if not seletor:
             raise ValueError("wait_for sem seletor")
@@ -221,7 +227,16 @@ def main():
                 print("[executor] Reiniciar solicitado.")
                 estado.evento_reiniciar.clear()
                 idx = 0
-                # Limpar comentários e correções (mas preservar histórico em arquivo)
+                for r in estado.resultados:
+                    r.comentarios_po = []
+                    r.correcao_necessaria = False
+                    r.correcao_descricao = None
+                    r.veredito_automatico = "PENDENTE"
+                    r.veredicto_po = None
+                    r.detalhes_validacao = {}
+                    r.duracao_ms = 0
+                    r.screenshot_antes = None
+                    r.screenshot_depois = None
                 continue
 
             estado.passo_atual_idx = idx

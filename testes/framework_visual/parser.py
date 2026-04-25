@@ -106,7 +106,7 @@ def _extrair_passo_visual(secao_md: str, bloco_yaml: dict[str, Any]) -> PassoVis
     # Extrair pontos de observação se houver "Observe criticamente" ou similar
     pontos: list[str] = []
     obs_match = re.search(
-        r"\*\*Observe criticamente:?\*\*\s*\n((?:-\s*.+\n?)+)",
+        r"\*\*Observe criticamente:?\*\*[^\n]*\n((?:-\s*.+\n?)+)",
         secao_md,
         re.IGNORECASE,
     )

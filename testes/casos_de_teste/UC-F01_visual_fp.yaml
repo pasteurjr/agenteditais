@@ -1,0 +1,70 @@
+uc_id: UC-F01
+variacao: fp
+trilha: visual
+dataset_ref: testes/datasets/UC-F01_visual.yaml
+
+# Passos LÓGICOS — agrupam asserts de várias ações atômicas que fazem parte
+# do mesmo marco de UX. Cada passo aqui corresponde a 1 parada no painel.
+passos:
+
+  - id: passo_01_navegar_empresa
+    descricao: "Usuario navega para Configuracoes > Empresa, sistema carrega form"
+    asserts_dom:
+      - selector: 'label:has-text("Razao Social")'
+      - selector: 'label:has-text("CNPJ")'
+      - selector: 'label:has-text("UF")'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: "GET"
+        status: 200
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Cabecalho 'Dados da Empresa' com icone Building"
+        - "Card 'Informacoes Cadastrais'"
+        - "Form com 4 secoes (Dados Basicos, Presenca Digital, Endereco, Emails/Telefones)"
+
+  - id: passo_02_preencher_dados_basicos
+    descricao: "Razao Social, Nome Fantasia, CNPJ, Inscricao Estadual preenchidos"
+    asserts_dom:
+      - selector: 'label:has-text("Razao Social") ~ div input.text-input'
+      - selector: 'label:has-text("CNPJ") ~ div input.text-input'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Razao Social = 'DEMO 002 Comércio e Representações Ltda'"
+        - "CNPJ = '56.700.252/4415-59' (com mascara aplicada)"
+        - "Asterisco vermelho em Razao Social e CNPJ (campos obrigatorios)"
+
+  - id: passo_03_preencher_presenca_digital
+    descricao: "Website, Instagram, LinkedIn, Facebook preenchidos"
+    asserts_dom:
+      - selector: 'label:has-text("Instagram") ~ div input.text-input'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Prefixo '@' visivel a esquerda do campo Instagram"
+        - "Os 4 campos de redes sociais preenchidos"
+
+  - id: passo_04_preencher_endereco
+    descricao: "Endereco, Cidade, UF (dropdown), CEP preenchidos"
+    asserts_dom:
+      - selector: 'label:has-text("UF") ~ div select.select-input'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Campo UF eh um <select> dropdown (NAO TextInput)"
+        - "Opcao 'SP' selecionada e visivel"
+      elementos_proibidos:
+        - "Campo UF como TextInput livre permitindo qualquer texto"
+
+  - id: passo_05_salvar_e_confirmar
+    descricao: "Click em Salvar -> request -> indicador 'Salvo!' aparece"
+    asserts_dom:
+      - selector: 'text=Salvo!'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo_in: ["POST", "PUT"]
+        status_in: [200, 201]
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Indicador 'Salvo!' em verde aparece ao lado do botao"
+      elementos_proibidos:
+        - "Mensagem de erro vermelha"
+        - "Botao 'Tentar novamente'"

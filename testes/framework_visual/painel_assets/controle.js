@@ -31,13 +31,33 @@ function renderEstado(d) {
 
     $("veredito-badge").outerHTML = `<span class="veredito ${p.veredito_automatico}" id="veredito-badge">${p.veredito_automatico}</span>`;
 
-    // Bot dão estado pausado: continuar habilitado; senão desabilitado
-    $("btn-continuar").disabled = (d.estado !== "pausado");
+    // Veredicto do PO (aprovar/reprovar)
+    const vp = p.veredicto_po;
+    const pill = $("veredicto-po-pill");
+    if (vp === "APROVADO") {
+      pill.className = "veredito APROVADO";
+      pill.textContent = "✅ APROVADO";
+    } else if (vp === "REPROVADO") {
+      pill.className = "veredito REPROVADO";
+      pill.textContent = "❌ REPROVADO";
+    } else {
+      pill.className = "veredito PENDENTE";
+      pill.textContent = "não decidido";
+    }
+    $("btn-aprovar").classList.toggle("ativo", vp === "APROVADO");
+    $("btn-reprovar").classList.toggle("ativo", vp === "REPROVADO");
+
+    // Continuar só habilita se pausado E veredicto marcado
+    $("btn-continuar").disabled = !(d.estado === "pausado" && vp);
+    $("btn-aprovar").disabled = (d.estado !== "pausado");
+    $("btn-reprovar").disabled = (d.estado !== "pausado");
   } else {
     $("passo-titulo").textContent = d.estado === "terminado" ? "✅ Tutorial concluído" : "Aguardando início…";
     $("passo-descricao").innerHTML = "";
     $("obs-list").innerHTML = "";
     $("btn-continuar").disabled = true;
+    $("btn-aprovar").disabled = true;
+    $("btn-reprovar").disabled = true;
   }
 
   // Histórico (passos já concluídos, exceto o atual)
@@ -104,9 +124,12 @@ $("btn-reiniciar").addEventListener("click", async () => {
   if (confirm("Reiniciar do primeiro passo? Histórico será preservado.")) await post("/reiniciar");
 });
 
-$("btn-correcao").addEventListener("click", async () => {
-  const desc = prompt("Descreva o problema observado:");
-  if (desc !== null) await post("/correcao", {descricao: desc});
+$("btn-aprovar").addEventListener("click", async () => {
+  await post("/aprovar");
+});
+
+$("btn-reprovar").addEventListener("click", async () => {
+  await post("/reprovar");
 });
 
 $("btn-salvar-comentario").addEventListener("click", async () => {

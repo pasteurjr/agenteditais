@@ -1,0 +1,57 @@
+ciclo_id: piloto-ucf01
+criado_em: '2026-04-24T21:56:14'
+ambiente: agenteditais
+sprints_no_ciclo:
+- 1
+trilhas:
+  e2e:
+    usuario:
+      email: valida3@valida.com.br
+      senha: '123456'
+      id: d5d84220-438c-4138-b6b6-e284b2df5e48
+    empresa:
+      cnpj_pretendido: 03.522.299/4091-03
+      razao_social_pretendida: E2E_pilotoucf01_EMPRESA_001
+      id: null
+    editais_selecionados: []
+    documentos_renderizados:
+      contrato_social: testes/contextos/piloto-ucf01/docs/e2e/contrato_social.pdf
+      cnd_federal: testes/contextos/piloto-ucf01/docs/e2e/cnd_federal.pdf
+      fgts: testes/contextos/piloto-ucf01/docs/e2e/fgts.pdf
+      trabalhista: testes/contextos/piloto-ucf01/docs/e2e/trabalhista.pdf
+      sicaf: testes/contextos/piloto-ucf01/docs/e2e/sicaf.pdf
+      alvara: testes/contextos/piloto-ucf01/docs/e2e/alvara.pdf
+  visual:
+    usuario:
+      email: valida4@valida.com.br
+      senha: '123456'
+      id: c9351323-0ecb-4f7d-9d5b-2e764accc9fe
+    empresa:
+      cnpj_pretendido: 56.700.252/4415-59
+      razao_social_pretendida: DEMO 002 Comércio e Representações Ltda
+      id: null
+    editais_selecionados: []
+    documentos_renderizados:
+      contrato_social: testes/contextos/piloto-ucf01/docs/visual/contrato_social.pdf
+      cnd_federal: testes/contextos/piloto-ucf01/docs/visual/cnd_federal.pdf
+      fgts: testes/contextos/piloto-ucf01/docs/visual/fgts.pdf
+      trabalhista: testes/contextos/piloto-ucf01/docs/visual/trabalhista.pdf
+      sicaf: testes/contextos/piloto-ucf01/docs/visual/sicaf.pdf
+      alvara: testes/contextos/piloto-ucf01/docs/visual/alvara.pdf
+  humano:
+    usuario:
+      email: valida5@valida.com.br
+      senha: '123456'
+      id: 6f299377-7040-4645-ae5f-a63f24f29174
+    empresa:
+      cnpj_pretendido: 16.932.570/5021-71
+      razao_social_pretendida: RP3X 003 Comércio e Representações Ltda
+      id: null
+    editais_selecionados: []
+    documentos_renderizados:
+      contrato_social: testes/contextos/piloto-ucf01/docs/humano/contrato_social.pdf
+      cnd_federal: testes/contextos/piloto-ucf01/docs/humano/cnd_federal.pdf
+      fgts: testes/contextos/piloto-ucf01/docs/humano/fgts.pdf
+      trabalhista: testes/contextos/piloto-ucf01/docs/humano/trabalhista.pdf
+      sicaf: testes/contextos/piloto-ucf01/docs/humano/sicaf.pdf
+      alvara: testes/contextos/piloto-ucf01/docs/humano/alvara.pdf
