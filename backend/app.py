@@ -1256,24 +1256,33 @@ def listar_vinculos():
 @app.route("/api/auth/minhas-empresas", methods=["GET"])
 @require_auth
 def minhas_empresas():
-    """Retorna empresas vinculadas ao usuário logado via usuario_empresa."""
+    """Retorna empresas para super (todas) e vinculadas ao usuario.
+
+    - empresas: lista que o usuario PODE acessar/navegar (super=todas, comum=so vinculadas)
+    - vinculadas: lista das empresas EXPLICITAMENTE vinculadas via usuario_empresa
+                  (mesmo pra super, mostra so as vinculadas dele em particular)
+    """
     db = get_db()
     try:
+        # vinculadas explicitas (sempre por usuario_empresa)
+        ues = db.query(UsuarioEmpresa).filter(
+            UsuarioEmpresa.user_id == request.user_id,
+            UsuarioEmpresa.ativo == True
+        ).all()
+        vinculadas = []
+        for ue in ues:
+            e = ue.empresa
+            if e:
+                vinculadas.append({"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": ue.papel})
+
         if request.is_super:
-            # Superuser vê todas as empresas
+            # Super ve todas as empresas para navegar
             empresas = db.query(Empresa).filter(Empresa.ativo == True).all()
             result = [{"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": "super"} for e in empresas]
         else:
-            ues = db.query(UsuarioEmpresa).filter(
-                UsuarioEmpresa.user_id == request.user_id,
-                UsuarioEmpresa.ativo == True
-            ).all()
-            result = []
-            for ue in ues:
-                e = ue.empresa
-                if e:
-                    result.append({"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": ue.papel})
-        return jsonify({"empresas": result})
+            result = vinculadas
+
+        return jsonify({"empresas": result, "vinculadas": vinculadas})
     finally:
         db.close()
 

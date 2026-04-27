@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
-import { login as apiLogin, logout as apiLogout, refreshToken as apiRefresh, register as apiRegister, minhasEmpresas as minhasEmpresasApi } from "../api/auth";
+import { login as apiLogin, logout as apiLogout, refreshToken as apiRefresh, register as apiRegister, minhasEmpresasComVinculadas as minhasEmpresasApi } from "../api/auth";
 import type { User, EmpresaInfo } from "../api/auth";
 
 const ACCESS_TOKEN_KEY = "editais_ia_access_token";
@@ -8,6 +8,7 @@ const REFRESH_TOKEN_KEY = "editais_ia_refresh_token";
 const USER_KEY = "editais_ia_user";
 const EMPRESA_KEY = "editais_ia_empresa";
 const MINHAS_EMPRESAS_KEY = "editais_ia_minhas_empresas";
+const VINCULADAS_KEY = "editais_ia_empresas_vinculadas";
 const PAPEL_KEY = "editais_ia_papel";
 
 export interface EmpresaVinculada {
@@ -29,6 +30,8 @@ interface AuthContextType {
   isLoading: boolean;
   accessToken: string | null;
   minhasEmpresasList: EmpresaVinculada[];
+  empresasVinculadas: EmpresaVinculada[];
+  recarregarEmpresas: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -45,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [refreshTokenValue, setRefreshToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [minhasEmpresasList, setMinhasEmpresasList] = useState<EmpresaVinculada[]>([]);
+  const [empresasVinculadas, setEmpresasVinculadas] = useState<EmpresaVinculada[]>([]);
   const [papel, setPapel] = useState<string | null>(null);
 
   // Load stored auth state on mount
@@ -54,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem(USER_KEY);
     const storedEmpresa = localStorage.getItem(EMPRESA_KEY);
     const storedMinhasEmpresas = localStorage.getItem(MINHAS_EMPRESAS_KEY);
+    const storedVinculadas = localStorage.getItem(VINCULADAS_KEY);
     const storedPapel = localStorage.getItem(PAPEL_KEY);
 
     if (storedAccessToken && storedRefreshToken && storedUser) {
@@ -66,6 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedMinhasEmpresas) {
         try { setMinhasEmpresasList(JSON.parse(storedMinhasEmpresas)); } catch { /* invalid */ }
       }
+      if (storedVinculadas) {
+        try { setEmpresasVinculadas(JSON.parse(storedVinculadas)); } catch { /* invalid */ }
+      }
       if (storedPapel) setPapel(storedPapel);
     }
     setIsLoading(false);
@@ -77,14 +85,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(EMPRESA_KEY);
     localStorage.removeItem(MINHAS_EMPRESAS_KEY);
+    localStorage.removeItem(VINCULADAS_KEY);
     localStorage.removeItem(PAPEL_KEY);
     setAccessToken(null);
     setRefreshToken(null);
     setUser(null);
     setEmpresa(null);
     setMinhasEmpresasList([]);
+    setEmpresasVinculadas([]);
     setPapel(null);
   }, []);
+
+  const recarregarEmpresas = useCallback(async () => {
+    const token = accessToken || localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) return;
+    const { empresas, vinculadas } = await minhasEmpresasApi(token);
+    setMinhasEmpresasList(empresas);
+    setEmpresasVinculadas(vinculadas);
+    localStorage.setItem(MINHAS_EMPRESAS_KEY, JSON.stringify(empresas));
+    localStorage.setItem(VINCULADAS_KEY, JSON.stringify(vinculadas));
+  }, [accessToken]);
 
   const saveAuth = useCallback((access: string, refresh: string, userData: User, empresaData?: EmpresaInfo) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, access);
@@ -128,9 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRefreshToken(response.refresh_token);
     setUser(response.user);
 
-    const empresas = await minhasEmpresasApi(response.access_token);
+    const { empresas, vinculadas } = await minhasEmpresasApi(response.access_token);
     setMinhasEmpresasList(empresas);
+    setEmpresasVinculadas(vinculadas);
     localStorage.setItem(MINHAS_EMPRESAS_KEY, JSON.stringify(empresas));
+    localStorage.setItem(VINCULADAS_KEY, JSON.stringify(vinculadas));
 
     if (empresas.length === 1) {
       const res = await fetch('/api/auth/switch-empresa', {
@@ -200,6 +222,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         accessToken,
         minhasEmpresasList,
+        empresasVinculadas,
+        recarregarEmpresas,
         login,
         register,
         logout,

@@ -29,6 +29,7 @@ import { ParametrizacoesPage } from "./pages/ParametrizacoesPage";
 import { CRMPage } from "./pages/CRMPage";
 import { AssociarEmpresaUsuario } from "./pages/AssociarEmpresaUsuario";
 import { SelecionarEmpresaPage } from "./pages/SelecionarEmpresaPage";
+import { SemEmpresaVinculadaPage } from "./pages/SemEmpresaVinculadaPage";
 import { AuditoriaPage } from "./pages/AuditoriaPage";
 import { SMTPPage } from "./pages/SMTPPage";
 import { CrudPage } from "./components/CrudPage";
@@ -43,12 +44,14 @@ import { PanelLeftClose, PanelLeft } from "lucide-react";
 import "./styles/globals.css";
 
 function AppContent() {
-  const { user, isAuthenticated, isSuper, isAdmin, isLoading: authLoading, logout, getAccessToken, empresa, minhasEmpresasList } = useAuth();
+  const { user, isAuthenticated, isSuper, isAdmin, isLoading: authLoading, logout, getAccessToken, empresa, minhasEmpresasList, empresasVinculadas } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>("dashboard");
   const [chatOpen, setChatOpen] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  // FA-07 (UC-F01 V6): super sem empresa vinculada — quando true, bypassa tela e entra no shell
+  const [bypassSemVinculo, setBypassSemVinculo] = useState(false);
   const { sessions, addSession, removeSession, updateSessionName, refreshSessions } = useSessions();
   const { messages, isLoading: chatLoading, loadingStatus, send, loadSession, clearMessages } = useChat();
 
@@ -234,32 +237,50 @@ function AppContent() {
     return <LoginPage onSwitchToRegister={() => setAuthMode("register")} />;
   }
 
+  // FA-07 (UC-F01 V6): Super sem empresa vinculada — 3 opcoes que reusam paginas existentes
+  if (isAuthenticated && !empresa && isSuper && empresasVinculadas.length === 0 && !bypassSemVinculo) {
+    return (
+      <SemEmpresaVinculadaPage
+        onCriarEmpresa={() => {
+          // Reusa CRUD de empresas existente
+          setCurrentPage("crud:empresas");
+          setBypassSemVinculo(true);
+        }}
+        onAssociar={() => {
+          // Reusa pagina existente Associar Empresa/Usuario
+          setCurrentPage("associar-empresa");
+          setBypassSemVinculo(true);
+        }}
+        onEntrar={() => {
+          // Mostra SelecionarEmpresaPage se houver empresas, senao força criar via CRUD
+          if (minhasEmpresasList.length > 0) {
+            setBypassSemVinculo(true); // shell vai mostrar SelecionarEmpresa abaixo
+          } else {
+            setCurrentPage("crud:empresas");
+            setBypassSemVinculo(true);
+          }
+        }}
+      />
+    );
+  }
+
   // Autenticado mas sem empresa selecionada — redirecionar para seleção
-  if (isAuthenticated && !empresa && minhasEmpresasList.length > 0) {
+  if (isAuthenticated && !empresa && minhasEmpresasList.length > 0 && !bypassSemVinculo) {
+    return <SelecionarEmpresaPage />;
+  }
+  // Caso super tenha clicado "Entrar" e nao escolheu empresa ainda
+  if (isAuthenticated && !empresa && isSuper && bypassSemVinculo && currentPage === "dashboard") {
     return <SelecionarEmpresaPage />;
   }
 
-  // Autenticado mas sem nenhuma empresa disponível (user normal sem vínculo)
-  if (isAuthenticated && !empresa && minhasEmpresasList.length === 0) {
+  // Usuario comum sem vinculo
+  if (isAuthenticated && !empresa && !isSuper && minhasEmpresasList.length === 0) {
     return (
-      <div className="login-page">
-        <div className="login-container" style={{ maxWidth: 480, textAlign: "center" }}>
-          <div className="login-header">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <h1 style={{ marginTop: 16 }}>Sem empresa vinculada</h1>
-            <p>Seu usuário ainda não foi alocado a nenhuma empresa.<br />Entre em contato com o administrador do sistema.</p>
-          </div>
-          <button
-            className="login-btn"
-            style={{ marginTop: 24 }}
-            onClick={logout}
-          >
-            Sair
-          </button>
-        </div>
-      </div>
+      <SemEmpresaVinculadaPage
+        onCriarEmpresa={() => {}}
+        onAssociar={() => {}}
+        onEntrar={() => {}}
+      />
     );
   }
 

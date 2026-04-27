@@ -24,6 +24,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import configparser
 import os
 import sys
 import time
@@ -41,8 +42,18 @@ from parser import Acao, PassoVisual, Tutorial, carregar_tutorial, resolve_valor
 from painel import EstadoSessao, ResultadoPasso, iniciar_painel_em_thread  # type: ignore
 from relatorio import salvar_relatorio  # type: ignore
 
-PORTA_PAINEL = 9876
-SLOW_MO = 500  # ms entre ações pra você ver acontecendo
+# Carrega defaults do validaeditais.ini na raiz do projeto, com fallback hardcoded.
+_INI_PATH = PROJECT_ROOT / "validaeditais.ini"
+_cfg = configparser.ConfigParser()
+if _INI_PATH.exists():
+    _cfg.read(_INI_PATH, encoding="utf-8")
+
+PORTA_PAINEL = _cfg.getint("visual", "porta_painel", fallback=9876)
+SLOW_MO_DEFAULT = _cfg.getint("visual", "slow_mo_ms", fallback=80)
+DELAY_POR_TECLA_DEFAULT = _cfg.getint("visual", "delay_por_tecla_ms", fallback=50)
+PAUSA_ENTRE_ACOES_DEFAULT = _cfg.getint("visual", "pausa_entre_acoes_ms", fallback=300)
+EMAIL_DEFAULT = _cfg.get("login", "email", fallback="valida4@valida.com.br")
+SENHA_DEFAULT = _cfg.get("login", "senha", fallback="123456")
 
 
 def _login(page: Page, email: str = "valida1@valida.com.br", senha: str = "123456"):
@@ -75,13 +86,27 @@ def _login(page: Page, email: str = "valida1@valida.com.br", senha: str = "12345
         print(f"[executor] Login falhou ou nao precisou: {e}")
 
 
-def _executar_acao(page: Page, acao: Acao, valor: str | None) -> None:
-    """Executa uma ação do tutorial."""
+def _executar_acao(
+    page: Page,
+    acao: Acao,
+    valor: str | None,
+    dataset: dict | None = None,
+    contexto: dict | None = None,
+    trilha: str = "visual",
+    pausa_entre_acoes_ms: int = 0,
+    delay_por_tecla_ms: int = 50,
+) -> None:
+    """Executa uma ação do tutorial. Resolve `valor_from_*` recursivamente nas sub-ações.
+
+    - pausa_entre_acoes_ms: delay extra entre sub-acoes de uma sequencia.
+    - delay_por_tecla_ms: delay entre cada tecla digitada (efeito humano).
+    """
     if acao.sequencia:
-        for sub in acao.sequencia:
-            sub_valor = None
-            # Para sub-acoes, valor passado nao se aplica — cada uma resolve o seu
-            _executar_acao(page, sub, sub_valor)
+        for i, sub in enumerate(acao.sequencia):
+            sub_valor = resolve_valor_acao(sub, dataset or {}, contexto, trilha) if (dataset is not None or contexto is not None) else None
+            _executar_acao(page, sub, sub_valor, dataset, contexto, trilha, pausa_entre_acoes_ms, delay_por_tecla_ms)
+            if pausa_entre_acoes_ms > 0 and i < len(acao.sequencia) - 1:
+                page.wait_for_timeout(pausa_entre_acoes_ms)
         return
 
     seletor = acao.seletor or acao.alternativa
@@ -98,7 +123,10 @@ def _executar_acao(page: Page, acao: Acao, valor: str | None) -> None:
             raise ValueError("fill sem seletor")
         if valor is None:
             raise ValueError("fill sem valor")
-        page.fill(seletor, valor, timeout=acao.timeout)
+        # Digita tecla-por-tecla (humano) em vez de paste instantaneo (page.fill)
+        loc = page.locator(seletor).first
+        loc.click(timeout=acao.timeout)
+        loc.press_sequentially(valor, delay=delay_por_tecla_ms, timeout=acao.timeout)
     elif acao.tipo == "select":
         if not seletor:
             raise ValueError("select sem seletor")
@@ -173,10 +201,16 @@ def main():
     parser.add_argument("--ciclo", help="ID do ciclo (busca contexto)")
     parser.add_argument("--no-browser", action="store_true", help="Nao abrir aba do painel")
     parser.add_argument("--porta", type=int, default=PORTA_PAINEL)
-    parser.add_argument("--email", default="valida1@valida.com.br")
-    parser.add_argument("--senha", default="123456")
+    parser.add_argument("--email", default=EMAIL_DEFAULT)
+    parser.add_argument("--senha", default=SENHA_DEFAULT)
     parser.add_argument("--auto-login", action="store_true",
                         help="Faz login automatico ANTES do passo 01 (atalho legado). Por padrao, login fica como passo 00 do tutorial pra voce ver acontecer.")
+    parser.add_argument("--slow-mo", type=int, default=SLOW_MO_DEFAULT,
+                        help=f"Delay (ms) do Playwright entre operacoes baixas. Default: {SLOW_MO_DEFAULT}")
+    parser.add_argument("--delay-tecla", type=int, default=DELAY_POR_TECLA_DEFAULT,
+                        help=f"Delay (ms) entre cada tecla digitada — efeito humano. Default: {DELAY_POR_TECLA_DEFAULT}")
+    parser.add_argument("--pausa", type=int, default=PAUSA_ENTRE_ACOES_DEFAULT,
+                        help=f"Delay (ms) extra entre sub-acoes (entre fills consecutivos). Default: {PAUSA_ENTRE_ACOES_DEFAULT}")
     args = parser.parse_args()
 
     print(f"[executor] Carregando tutorial {args.uc_id}/{args.variacao}...")
@@ -222,9 +256,9 @@ def main():
     time.sleep(1.5)  # dá tempo do Flask subir
 
     # Sobe Playwright headed
-    print(f"[executor] Subindo browser (headed, slow_mo={SLOW_MO}ms)...")
+    print(f"[executor] Subindo browser (headed, slow_mo={args.slow_mo}ms, delay/tecla={args.delay_tecla}ms, pausa entre sub-acoes={args.pausa}ms)...")
     with sync_playwright() as p:
-        browser: Browser = p.chromium.launch(headless=False, slow_mo=SLOW_MO)
+        browser: Browser = p.chromium.launch(headless=False, slow_mo=args.slow_mo)
         context = browser.new_context(
             base_url=tut.base_url,
             viewport={"width": 1400, "height": 900},
@@ -290,7 +324,7 @@ def main():
             # Executa ação
             try:
                 valor = resolve_valor_acao(passo.acao, tut.dataset, tut.contexto, "visual")
-                _executar_acao(page, passo.acao, valor)
+                _executar_acao(page, passo.acao, valor, tut.dataset, tut.contexto, "visual", args.pausa, args.delay_tecla)
             except Exception as e:
                 erro_acao = str(e)
 

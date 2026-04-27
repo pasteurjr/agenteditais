@@ -95,11 +95,30 @@ export async function register(name: string, email: string, password: string): P
   return res.json();
 }
 
-export async function minhasEmpresas(accessToken: string): Promise<{ id: string; razao_social: string; cnpj: string; nome_fantasia?: string; papel: string }[]> {
+export interface EmpresaApi {
+  id: string;
+  razao_social: string;
+  cnpj: string;
+  nome_fantasia?: string;
+  papel: string;
+}
+
+export async function minhasEmpresas(accessToken: string): Promise<EmpresaApi[]> {
   const res = await fetch(`${API_BASE}/api/auth/minhas-empresas`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return [];
   const data = await res.json();
   return data.empresas || [];
+}
+
+export async function minhasEmpresasComVinculadas(
+  accessToken: string
+): Promise<{ empresas: EmpresaApi[]; vinculadas: EmpresaApi[] }> {
+  const res = await fetch(`${API_BASE}/api/auth/minhas-empresas`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return { empresas: [], vinculadas: [] };
+  const data = await res.json();
+  return { empresas: data.empresas || [], vinculadas: data.vinculadas || [] };
 }

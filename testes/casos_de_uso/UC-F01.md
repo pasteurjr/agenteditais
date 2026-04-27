@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 192
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F01 — Manter cadastro principal da empresa
@@ -71,6 +71,23 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario navega para "Cadastros > Empresa" em vez de "Configuracoes > Empresa".
 2. Sistema exibe CRUD generico simplificado (sem redes sociais, endereco completo, etc.).
 3. Alteracoes feitas aqui atualizam a mesma tabela `empresas`, porem com menos campos.
+
+**FA-07 — Super sem empresa vinculada (V6, reuso de telas existentes)**
+
+> Pre-condicao: `users.super=true` E nenhum vinculo ativo em `usuario_empresa` para o usuario logado.
+
+> Principio: NAO cria tela nova nem endpoint novo. Reusa CRUD de empresas e Associar Empresa/Usuario existentes.
+
+1. Apos login, sistema chama `GET /api/auth/minhas-empresas` que retorna `{empresas, vinculadas}`. `vinculadas` vazio.
+2. Frontend detecta `isSuper && vinculadas.length === 0` e exibe `[Página: "Sem Empresa Vinculada"]` com 3 botoes:
+   - `[Botão: "Criar Nova Empresa"]` → redireciona para `crud:empresas` (CRUD generico existente)
+   - `[Botão: "Vincular Empresa a Usuário"]` → redireciona para `associar-empresa` (pagina existente)
+   - `[Botão: "Entrar no Sistema"]` → habilitado se ha empresas; mostra `SelecionarEmpresaPage` existente. Se banco vazio, redireciona para CRUD de empresas.
+3. **FA-07.A — Criar via CRUD existente:** super clica `[Novo]` no CRUD, preenche dados, salva via `/api/crud/empresas` (endpoint existente). Em seguida pode usar Admin → Associar Empresa para se vincular.
+4. **FA-07.B — Vincular via pagina existente:** super seleciona usuario+empresa+papel e cria vinculo via `POST /api/admin/associar-empresa`.
+5. **FA-07.C — Entrar e selecionar:** super escolhe uma das empresas existentes (ve todas porque e super).
+
+Pos-condicao: super pode ter criado empresa nova, vinculado a usuarios, e/ou estar dentro do shell com uma empresa selecionada.
 
 ### Fluxos de Excecao
 
