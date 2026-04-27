@@ -224,10 +224,19 @@
       <button class="reiniciar" id="btn-reiniciar">🔄 Reiniciar</button>
     </div>
 
-    <div style="margin-top: 1em;">
-      <strong>Veredito automático (DOM/Rede):</strong>
-      <span class="veredito PENDENTE" id="veredito-badge">PENDENTE</span>
-    </div>
+    <details style="margin-top: 1em; font-size: 9pt; color: #aaa;">
+      <summary style="cursor: pointer; user-select: none;">
+        🔧 Detalhes da camada automática (DOM/Rede) — <span class="veredito PENDENTE" id="veredito-badge" style="font-size: 8pt; padding: 0.1em 0.4em;">PENDENTE</span>
+      </summary>
+      <div style="margin-top: 0.6em; padding: 0.6em; background: #0f3460; border-radius: 4px;">
+        <div style="margin-bottom: 0.4em;"><strong>URL atual:</strong> <code id="url-atual">—</code></div>
+        <div style="margin-bottom: 0.4em;"><strong>Camada decisiva:</strong> <span id="camada-decisiva">—</span></div>
+        <div><strong>Mensagem:</strong> <span id="msg-validacao">—</span></div>
+        <div style="margin-top: 0.4em;"><strong>Asserts DOM checados:</strong>
+          <ul id="asserts-list" style="list-style: none; padding-left: 0.5em; margin-top: 0.3em;"></ul>
+        </div>
+      </div>
+    </details>
   </section>
 
   <section class="card">

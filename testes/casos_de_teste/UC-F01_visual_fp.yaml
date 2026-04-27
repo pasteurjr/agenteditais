@@ -7,6 +7,19 @@ dataset_ref: testes/datasets/UC-F01_visual.yaml
 # do mesmo marco de UX. Cada passo aqui corresponde a 1 parada no painel.
 passos:
 
+  - id: passo_00_login
+    descricao: "Usuario faz login com valida4@valida.com.br"
+    asserts_dom:
+      - selector: 'text=Dashboard'
+    asserts_rede:
+      - url_contem: "/api/auth/login"
+        metodo: "POST"
+        status: 200
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Menu lateral visivel com item 'Dashboard' ativo"
+        - "Cabecalho mostra usuario logado (Validador 4 ou similar)"
+
   - id: passo_01_navegar_empresa
     descricao: "Usuario navega para Configuracoes > Empresa, sistema carrega form"
     asserts_dom:

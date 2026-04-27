@@ -113,29 +113,57 @@ def _executar_acao(page: Page, acao: Acao, valor: str | None) -> None:
         raise ValueError(f"Tipo de acao nao suportado: {acao.tipo}")
 
 
-def _validar_dom(page: Page, asserts: list[dict]) -> tuple[bool, str]:
-    """Validações DOM simples. Retorna (ok, mensagem)."""
+def _validar_dom(page: Page, asserts: list[dict]) -> tuple[bool, str, list[dict]]:
+    """Validações DOM simples. Retorna (ok, mensagem, detalhe_por_assert)."""
+    detalhe: list[dict] = []
     if not asserts:
-        return True, "sem asserts DOM"
+        return True, "sem asserts DOM", detalhe
+    ok_geral = True
+    msg_primeiro_erro = ""
     for a in asserts:
         sel = a.get("selector")
         if not sel:
             continue
+        item: dict = {"selector": sel, "ok": False, "info": ""}
         loc = page.locator(sel).first
         try:
             count = loc.count()
+            item["count"] = count
         except Exception as e:
-            return False, f"erro contando {sel}: {e}"
+            item["info"] = f"erro contando: {e}"
+            detalhe.append(item)
+            if ok_geral:
+                ok_geral = False
+                msg_primeiro_erro = item["info"]
+            continue
         if count == 0 and a.get("visible") is not False:
-            return False, f"selector nao encontrado: {sel}"
+            item["info"] = "selector nao encontrado"
+            detalhe.append(item)
+            if ok_geral:
+                ok_geral = False
+                msg_primeiro_erro = f"selector nao encontrado: {sel}"
+            continue
         if a.get("texto_contem"):
             try:
                 txt = loc.text_content() or ""
                 if a["texto_contem"].lower() not in txt.lower():
-                    return False, f"texto '{a['texto_contem']}' nao em {sel}"
+                    item["info"] = f"texto '{a['texto_contem']}' nao encontrado"
+                    detalhe.append(item)
+                    if ok_geral:
+                        ok_geral = False
+                        msg_primeiro_erro = item["info"]
+                    continue
             except Exception:
-                return False, f"erro lendo texto de {sel}"
-    return True, ""
+                item["info"] = f"erro lendo texto"
+                detalhe.append(item)
+                if ok_geral:
+                    ok_geral = False
+                    msg_primeiro_erro = item["info"]
+                continue
+        item["ok"] = True
+        item["info"] = "OK"
+        detalhe.append(item)
+    return ok_geral, msg_primeiro_erro, detalhe
 
 
 def main():
@@ -147,6 +175,8 @@ def main():
     parser.add_argument("--porta", type=int, default=PORTA_PAINEL)
     parser.add_argument("--email", default="valida1@valida.com.br")
     parser.add_argument("--senha", default="123456")
+    parser.add_argument("--auto-login", action="store_true",
+                        help="Faz login automatico ANTES do passo 01 (atalho legado). Por padrao, login fica como passo 00 do tutorial pra voce ver acontecer.")
     args = parser.parse_args()
 
     print(f"[executor] Carregando tutorial {args.uc_id}/{args.variacao}...")
@@ -209,11 +239,14 @@ def main():
             if t_visual:
                 email = t_visual["usuario"]["email"]
                 senha = t_visual["usuario"]["senha"]
-        print(f"[executor] Login com {email}...")
-        try:
-            _login(page, email=email, senha=senha)
-        except Exception as e:
-            print(f"[executor] Login falhou: {e}")
+        if args.auto_login:
+            print(f"[executor] Login automatico (--auto-login) com {email}...")
+            try:
+                _login(page, email=email, senha=senha)
+            except Exception as e:
+                print(f"[executor] Login falhou: {e}")
+        else:
+            print(f"[executor] Sem login automatico — login deve ser passo 00 do tutorial")
 
         estado.estado = "executando"
         idx = 0
@@ -272,9 +305,17 @@ def main():
             resultado.duracao_ms = int((time.time() - t0) * 1000)
 
             # Validação automática
+            try:
+                url_at_erro = page.url
+            except Exception:
+                url_at_erro = ""
             if erro_acao:
                 resultado.veredito_automatico = "REPROVADO"
-                resultado.detalhes_validacao = {"acao_erro": erro_acao}
+                resultado.detalhes_validacao = {
+                    "acao_erro": erro_acao,
+                    "url_atual": url_at_erro,
+                    "camada_decisiva": "Acao",
+                }
             elif passo.validacao_ref:
                 # Para a versao visual, buscamos asserts_dom no caso de teste pelo step_id
                 step_id = passo.validacao_ref.split("#")[-1] if "#" in passo.validacao_ref else passo.id
@@ -286,9 +327,17 @@ def main():
                         if cp.get("id") == step_id:
                             asserts_dom = cp.get("asserts_dom", []) or []
                             break
-                ok, msg = _validar_dom(page, asserts_dom)
+                ok, msg, detalhe_asserts = _validar_dom(page, asserts_dom)
                 resultado.veredito_automatico = "APROVADO" if ok else "REPROVADO"
-                resultado.detalhes_validacao = {"dom": {"ok": ok, "mensagem": msg}}
+                try:
+                    url_atual = page.url
+                except Exception:
+                    url_atual = ""
+                resultado.detalhes_validacao = {
+                    "dom": {"ok": ok, "mensagem": msg, "asserts": detalhe_asserts},
+                    "url_atual": url_atual,
+                    "camada_decisiva": "DOM" if not ok else ("DOM" if asserts_dom else "—"),
+                }
             else:
                 resultado.veredito_automatico = "INCONCLUSIVO"
                 resultado.detalhes_validacao = {"motivo": "sem validacao_ref"}

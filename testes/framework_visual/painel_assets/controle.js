@@ -29,7 +29,24 @@ function renderEstado(d) {
     $("img-antes").src = p.screenshot_antes || placeholder;
     $("img-depois").src = p.screenshot_depois || placeholder;
 
-    $("veredito-badge").outerHTML = `<span class="veredito ${p.veredito_automatico}" id="veredito-badge">${p.veredito_automatico}</span>`;
+    $("veredito-badge").outerHTML = `<span class="veredito ${p.veredito_automatico}" id="veredito-badge" style="font-size: 8pt; padding: 0.1em 0.4em;">${p.veredito_automatico}</span>`;
+
+    // Detalhes da camada automatica
+    const det = p.detalhes_validacao || {};
+    $("url-atual").textContent = det.url_atual || "—";
+    $("camada-decisiva").textContent = det.camada_decisiva || "—";
+    let msg = "";
+    if (det.acao_erro) msg = `❌ erro de acao: ${det.acao_erro}`;
+    else if (det.dom) msg = det.dom.ok ? `✓ ${det.dom.mensagem || "ok"}` : `❌ ${det.dom.mensagem}`;
+    else msg = "—";
+    $("msg-validacao").innerHTML = escapeHtml(msg);
+
+    const asserts = (det.dom && det.dom.asserts) || [];
+    $("asserts-list").innerHTML = asserts.length === 0 ? "<li class='vazio'>(sem asserts DOM)</li>" : asserts.map(a => `
+      <li style="padding: 0.2em 0; font-family: monospace; font-size: 8pt;">
+        ${a.ok ? '✅' : '❌'} <code>${escapeHtml(a.selector)}</code>
+        — ${escapeHtml(a.info || '')} ${a.count !== undefined ? `(count=${a.count})` : ''}
+      </li>`).join("");
 
     // Veredicto do PO (aprovar/reprovar)
     const vp = p.veredicto_po;

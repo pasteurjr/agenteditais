@@ -12,9 +12,48 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F01_visual_fp.yaml
 
 > **PO:** acompanhe a execução automática no browser headed (slow_mo 500ms). Cada parada é um marco lógico — você decide ✅ Aprovar ou ❌ Reprovar e opcionalmente comenta antes de clicar ▶️ Continuar.
 
-## Passo 01 — Navegar até EmpresaPage
+## Passo 00 — Login no sistema
 
-O browser vai navegar até `/app/empresa` (Configurações > Empresa).
+O browser vai abrir a página inicial, limpar localStorage, recarregar, e fazer login com `valida4@valida.com.br` / `123456`.
+
+**Observe criticamente:**
+- Tela de login aparece com campos email e senha
+- Após clique em "Entrar", aguarda alguns segundos
+- Se aparecer "Selecionar Empresa", clica em "CH Hospitalar"
+- Termina no Dashboard (item "Dashboard" ativo no menu lateral)
+
+```yaml
+id: passo_00_login
+acao:
+  sequencia:
+    - tipo: navigate
+      url: "/"
+      timeout: 15000
+    - tipo: wait_for
+      seletor: 'input[type="email"]'
+      timeout: 10000
+    - tipo: fill
+      seletor: 'input[type="email"]'
+      valor_from_contexto: "usuario.email"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'input[type="password"]'
+      valor_from_contexto: "usuario.senha"
+      timeout: 5000
+    - tipo: click
+      seletor: 'button[type="submit"]'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'text=Dashboard'
+      timeout: 15000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_00_login"
+```
+
+## Passo 01 — Navegar até EmpresaPage via menu lateral
+
+O app é SPA sem React Router (navegação por estado interno). O browser vai:
+1. Clicar no header da seção **"Configuracoes"** no menu lateral pra expandir
+2. Clicar no item **"Empresa"** dentro da seção expandida
 
 **Observe criticamente:**
 - Cabeçalho exibe ícone Building + título "Dados da Empresa"
@@ -28,9 +67,12 @@ O browser vai navegar até `/app/empresa` (Configurações > Empresa).
 id: passo_01_navegar_empresa
 acao:
   sequencia:
-    - tipo: navigate
-      url: "/app/empresa"
-      timeout: 15000
+    - tipo: click
+      seletor: '.nav-section-header:has-text("Configuracoes")'
+      timeout: 5000
+    - tipo: click
+      seletor: '.nav-item-label:has-text("Empresa")'
+      timeout: 5000
     - tipo: wait_for
       seletor: 'label:has-text("Razao Social")'
       timeout: 10000
