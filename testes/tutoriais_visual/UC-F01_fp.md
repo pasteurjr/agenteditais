@@ -8,19 +8,21 @@ dataset_ref: testes/datasets/UC-F01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-F01_visual_fp.yaml
 ---
 
-# UC-F01 — Cadastrar empresa (Fluxo Principal) — Trilha Visual
+# UC-F01 — Cadastrar empresa (Fluxo Principal + FA-07.A) — Trilha Visual
 
-> **PO:** acompanhe a execução automática no browser headed (slow_mo 500ms). Cada parada é um marco lógico — você decide ✅ Aprovar ou ❌ Reprovar e opcionalmente comenta antes de clicar ▶️ Continuar.
+> **PO:** acompanhe a execução. Cada parada é um marco lógico — você decide ✅ Aprovar ou ❌ Reprovar e opcionalmente comenta antes de clicar ▶️ Continuar.
+>
+> **Cenario B:** super `valida4` sem vinculos entra → cria empresa via FA-07.A (CRUD generico) → seleciona a empresa criada → completa cadastro principal na EmpresaPage. Cobre **CT-F01-FA07-A** e **CT-F01-01**.
 
-## Passo 00 — Login no sistema
+## Passo 00 — Login (FA-07 entrada)
 
-O browser vai abrir a página inicial, limpar localStorage, recarregar, e fazer login com `valida4@valida.com.br` / `123456`.
+O browser vai logar com `valida4@valida.com.br`. Como o super não tem vínculos em `usuario_empresa`, o sistema deve mostrar a tela "Você não tem empresas vinculadas" com 3 botões.
 
 **Observe criticamente:**
-- Tela de login aparece com campos email e senha
-- Após clique em "Entrar", aguarda alguns segundos
-- Se aparecer "Selecionar Empresa", clica em "CH Hospitalar"
-- Termina no Dashboard (item "Dashboard" ativo no menu lateral)
+- Tela "Você não tem empresas vinculadas" aparece após login (FA-07 entrada)
+- 3 botões visíveis: "Criar Nova Empresa" (azul), "Vincular Empresa a Usuário" (roxo), "Entrar no Sistema" (verde)
+- Botão "Sair" disponível embaixo
+- Subtitulo: "Como superusuário, você pode escolher uma das opções abaixo"
 
 ```yaml
 id: passo_00_login
@@ -44,31 +46,195 @@ acao:
       seletor: 'button[type="submit"]'
       timeout: 5000
     - tipo: wait_for
-      seletor: 'text=Dashboard'
+      seletor: 'h1:has-text("Você não tem empresas vinculadas"), h1:has-text("Sem empresa vinculada")'
       timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_00_login"
 ```
 
-## Passo 01 — Navegar até EmpresaPage via menu lateral
+## Passo 01 — Clicar "Criar Nova Empresa" (FA-07.A)
 
-O app é SPA sem React Router (navegação por estado interno). O browser vai:
-1. Clicar no header da seção **"Configuracoes"** no menu lateral pra expandir
-2. Clicar no item **"Empresa"** dentro da seção expandida
+O browser vai clicar no botão "➕ Criar Nova Empresa" para entrar no fluxo de criação via CRUD genérico.
+
+**Observe criticamente:**
+- Após clicar, sistema entra no shell autenticado
+- Sidebar visível à esquerda
+- Tela do CRUD de Empresas aparece com cabeçalho "Empresas"
+- Botão "Novo" visível no canto direito superior
+- Lista de empresas (pode estar vazia ou ter empresas pré-existentes do banco)
+
+```yaml
+id: passo_01_criar_via_fa07a
+acao:
+  sequencia:
+    - tipo: click
+      seletor: 'button[data-action="criar-empresa"], button:has-text("Criar Nova Empresa")'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'button:has-text("Novo")'
+      timeout: 10000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_01_criar_via_fa07a"
+```
+
+## Passo 02 — Clicar [Novo] no CRUD
+
+O browser clica no botão "Novo" do CRUD de Empresas para abrir o formulário de criação.
+
+**Observe criticamente:**
+- Card "Novo Empresas" abre (ou similar) com formulário em form-grid-2
+- Campos visíveis: CNPJ, Razão Social (obrigatórios com `*`), Nome Fantasia, Inscrição Estadual, Inscrição Municipal, Regime Tributário, Porte, Endereço, Cidade, UF, CEP, Telefone, Email, Áreas de Atuação, Ativo
+- Botões "Salvar" (primary) e "Cancelar" no header
+
+```yaml
+id: passo_02_clicar_novo
+acao:
+  sequencia:
+    - tipo: click
+      seletor: 'button:has-text("Novo")'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'label:has-text("CNPJ")'
+      timeout: 5000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_02_clicar_novo"
+```
+
+## Passo 03 — Preencher TODOS os campos do CRUD
+
+O browser preenche todos os campos do formulário do CRUD em sequência: CNPJ, Razão Social, Nome Fantasia, Inscrição Estadual, Inscrição Municipal, Regime Tributário (select), Porte (select), Endereço, Cidade, UF, CEP, Telefone, Email.
+
+**Observe criticamente:**
+- Campo CNPJ tem placeholder "00.000.000/0001-00" e máscara
+- Asterisco vermelho indica obrigatórios (CNPJ e Razão Social apenas)
+- Regime Tributário e Porte são dropdowns (select), não text input
+- Aceita todos os valores sem alerta vermelho
+- **NÃO há campos** de Website/Instagram/LinkedIn/Facebook neste CRUD — esses só existem na EmpresaPage (preenchidos no passo 08)
+
+```yaml
+id: passo_03_preencher_dados_basicos_crud
+acao:
+  sequencia:
+    - tipo: fill
+      seletor: 'label:has-text("CNPJ") ~ input.text-input, label:has-text("CNPJ") + input'
+      valor_from_dataset: "empresa.cnpj"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Razão Social") ~ input.text-input, label:has-text("Razão Social") + input'
+      valor_from_dataset: "empresa.razao_social"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Nome Fantasia") ~ input.text-input, label:has-text("Nome Fantasia") + input'
+      valor_from_dataset: "empresa.nome_fantasia"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Inscrição Estadual") ~ input.text-input, label:has-text("Inscrição Estadual") + input'
+      valor_from_dataset: "empresa.inscricao_estadual"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Inscrição Municipal") ~ input.text-input, label:has-text("Inscrição Municipal") + input'
+      valor_from_dataset: "empresa.inscricao_municipal"
+      timeout: 5000
+    - tipo: select
+      seletor: 'label:has-text("Regime Tributário") ~ select.select-input, label:has-text("Regime Tributário") + select'
+      valor_from_dataset: "empresa.regime_tributario"
+      timeout: 5000
+    - tipo: select
+      seletor: 'label:has-text("Porte") ~ select.select-input, label:has-text("Porte") + select'
+      valor_from_dataset: "empresa.porte"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Endereço") ~ textarea, label:has-text("Endereço") + textarea, label:has-text("Endereço") ~ input.text-input'
+      valor_from_dataset: "empresa.endereco"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Cidade") ~ input.text-input, label:has-text("Cidade") + input'
+      valor_from_dataset: "empresa.cidade"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("UF") ~ input.text-input, label:has-text("UF") + input'
+      valor_from_dataset: "empresa.uf"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("CEP") ~ input.text-input, label:has-text("CEP") + input'
+      valor_from_dataset: "empresa.cep"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Telefone") ~ input.text-input, label:has-text("Telefone") + input'
+      valor_from_dataset: "empresa.telefone"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Email") ~ input[type="email"], label:has-text("Email") + input'
+      valor_from_dataset: "empresa.email"
+      timeout: 5000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_03_preencher_dados_basicos_crud"
+```
+
+## Passo 04 — Salvar empresa no CRUD
+
+O browser clica em "Salvar" no CRUD. Backend faz `POST /api/crud/empresas` e empresa é criada.
+
+**Observe criticamente:**
+- Botão "Salvar" entra em estado loading (spinner)
+- Após retorno OK, o form fecha e a empresa aparece na listagem
+- Sem mensagem de erro vermelha
+- CNPJ exibido com máscara `56.700.252/4415-59`
+
+```yaml
+id: passo_04_salvar_no_crud
+acao:
+  sequencia:
+    - tipo: click
+      seletor: 'button.action-button-primary:has-text("Salvar")'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'text=DEMO 002, text=56.700.252'
+      timeout: 10000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_salvar_no_crud"
+```
+
+## Passo 05 — Selecionar a empresa recém-criada
+
+O browser vai navegar para a tela "Selecionar Empresa" e clicar na DEMO 002.
+
+**Observe criticamente:**
+- Lista de empresas aparece em cards
+- Empresa "DEMO 002 Comércio e Representações Ltda" presente na lista
+- Após clicar, top bar passa a mostrar nome da empresa
+- Sidebar fica completa com todos os módulos
+
+```yaml
+id: passo_05_selecionar_empresa
+acao:
+  sequencia:
+    - tipo: click
+      seletor: '.nav-item-label:has-text("Selecionar Empresa"), [data-nav="selecionar-empresa"]'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'text=DEMO 002'
+      timeout: 10000
+    - tipo: click
+      seletor: 'text=DEMO 002'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: '.top-bar-empresa, text=Dashboard'
+      timeout: 10000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_05_selecionar_empresa"
+```
+
+## Passo 06 — Navegar até EmpresaPage (Configurações > Empresa)
+
+O browser clica no menu lateral Configurações → Empresa para acessar a EmpresaPage completa.
 
 **Observe criticamente:**
 - Cabeçalho exibe ícone Building + título "Dados da Empresa"
 - Subtítulo: "Cadastro de informações e documentos da empresa"
-- Card "Informações Cadastrais" carregado
-- Há botão "Verificar Documentos" no header (referência a UC-F03)
-- Form aparece com 4 seções: Dados Básicos, Presença Digital, Endereço, Emails/Telefones
-- Sem spinner travado depois de 2-3 segundos
+- Card "Informações Cadastrais" carregado com Razão e CNPJ já preenchidos (vieram do CRUD)
+- Form com 4 seções: Dados Básicos, Presença Digital, Endereço, Emails/Telefones
 
 ```yaml
-id: passo_01_navegar_empresa
+id: passo_06_navegar_empresa_page
 acao:
   sequencia:
     - tipo: click
-      seletor: '.nav-section-header:has-text("Configuracoes")'
+      seletor: '.nav-section-header:has-text("Configuracoes"), .nav-section-header:has-text("Configurações")'
       timeout: 5000
     - tipo: click
       seletor: '.nav-item-label:has-text("Empresa")'
@@ -76,55 +242,41 @@ acao:
     - tipo: wait_for
       seletor: 'label:has-text("Razao Social")'
       timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_01_navegar_empresa"
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_06_navegar_empresa_page"
 ```
 
-## Passo 02 — Preencher seção "Dados Básicos"
+## Passo 07 — Verificar dados já preenchidos do CRUD (validação)
 
-O browser vai preencher os 4 campos da seção Dados Básicos em sequência: Razão Social, Nome Fantasia, CNPJ (`56.700.252/4415-59` válido RF), Inscrição Estadual.
+Os dados básicos (CNPJ, Razão, Nome Fantasia, IE, IM, Endereço, Cidade, UF, CEP, Telefone, Email) já vieram do CRUD criado no passo 04. A EmpresaPage carrega esses dados via `crudList("empresas", { limit: 1 })`.
 
 **Observe criticamente:**
-- Asterisco vermelho em **Razão Social** e **CNPJ** (campos obrigatórios)
-- Sem asterisco em Nome Fantasia e Inscrição Estadual (opcionais)
-- Campo CNPJ tem placeholder visível "00.000.000/0000-00"
-- Máscara é aplicada durante a digitação ou só no blur?
-- Aceita os valores sem alerta vermelho de validação
+- Razão Social, CNPJ, Nome Fantasia, IE preenchidos automaticamente
+- UF mostrado como dropdown com SP selecionado (V5 correção FE-05)
+- Endereço, Cidade, CEP preenchidos
+- Asterisco vermelho só em Razão Social e CNPJ
+- Sem alerta de erro de carregamento
 
 ```yaml
-id: passo_02_preencher_dados_basicos
+id: passo_07_verificar_dados_carregados
 acao:
-  sequencia:
-    - tipo: fill
-      seletor: 'label:has-text("Razao Social") ~ div input.text-input'
-      valor_from_dataset: "empresa.razao_social"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'label:has-text("Nome Fantasia") ~ div input.text-input'
-      valor_from_dataset: "empresa.nome_fantasia"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'label:has-text("CNPJ") ~ div input.text-input'
-      valor_from_dataset: "empresa.cnpj"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'label:has-text("Inscricao Estadual") ~ div input.text-input'
-      valor_from_dataset: "empresa.inscricao_estadual"
-      timeout: 5000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_02_preencher_dados_basicos"
+  tipo: wait_for
+  seletor: 'label:has-text("Razao Social")'
+  timeout: 5000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_07_completar_dados_basicos"
 ```
 
-## Passo 03 — Preencher seção "Presença Digital"
+## Passo 08 — Preencher Presença Digital (Website + redes sociais)
 
-O browser vai preencher os 4 campos: Website, Instagram (com prefixo `@`), LinkedIn, Facebook.
+O browser preenche os 4 campos de redes sociais: Website, Instagram, LinkedIn, Facebook. **Estes 4 campos NÃO existem no CRUD** — só estão na EmpresaPage. É a única razão de termos vindo até aqui depois de criar via CRUD.
 
 **Observe criticamente:**
 - Prefixo "@" aparece à esquerda do campo Instagram
-- Campo Instagram aceita o texto sem duplicar o "@"
-- Website tem validação tipo URL (sem rejeitar enquanto digita)
-- Todos os 4 campos são opcionais (sem asterisco)
+- Campo Website tem validação tipo URL (sem rejeitar enquanto digita)
+- Todos os 4 campos opcionais (sem asterisco)
+- Estes campos estão vazios (vieram nulos do registro CRUD)
 
 ```yaml
-id: passo_03_preencher_presenca_digital
+id: passo_08_completar_presenca_digital
 acao:
   sequencia:
     - tipo: fill
@@ -143,63 +295,29 @@ acao:
       seletor: 'label:has-text("Facebook") ~ div input.text-input'
       valor_from_dataset: "empresa.facebook"
       timeout: 5000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_03_preencher_presenca_digital"
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_08_completar_presenca_digital"
 ```
 
-## Passo 04 — Preencher seção "Endereço"
+## Passo 09 — Salvar Alterações e confirmar feedback
 
-O browser vai preencher: Endereço, Cidade, UF (dropdown SP), CEP.
-
-**Observe criticamente:** (V5 correção crítica — FE-05)
-- O campo **UF deve ser dropdown <select>**, NÃO TextInput livre
-- Dropdown deve listar 27 estados (AC, AL, AM... TO)
-- Se UF for TextInput aceitando "XX" livre = bug FE-05 ainda presente
-- Atenção ao CEP: o frontend tenta autocompletar via ViaCEP — pode sobrescrever Endereço/Cidade/UF se digitar 8 dígitos válidos
-
-```yaml
-id: passo_04_preencher_endereco
-acao:
-  sequencia:
-    - tipo: fill
-      seletor: 'label:has-text("Endereco") ~ div input.text-input'
-      valor_from_dataset: "empresa.endereco"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'label:has-text("Cidade") ~ div input.text-input'
-      valor_from_dataset: "empresa.cidade"
-      timeout: 5000
-    - tipo: select
-      seletor: 'label:has-text("UF") ~ div select.select-input'
-      valor_from_dataset: "empresa.uf"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'label:has-text("CEP") ~ div input.text-input'
-      valor_from_dataset: "empresa.cep"
-      timeout: 5000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_preencher_endereco"
-```
-
-## Passo 05 — Salvar e confirmar feedback
-
-O browser vai clicar em "Salvar Alteracoes", aguardar a resposta do backend (POST/PUT `/api/crud/empresas`), e aguardar o indicador "Salvo!" aparecer.
+O browser clica em "Salvar Alterações" na EmpresaPage. Backend faz POST/PUT e indicador "Salvo!" verde deve aparecer.
 
 **Observe criticamente:** (V5 correção crítica — FE-06)
 - Botão "Salvar Alteracoes" visível com cor de destaque (variant primary)
-- Após clique, botão entra em estado loading (spinner ou desabilitado)
-- Indicador **"Salvo!" em verde** aparece ao lado do botão (correção V5: FE-06)
+- Após clique, botão entra em estado loading
+- Indicador **"Salvo!" em verde** aparece ao lado do botão
 - Sem mensagem vermelha de erro
 - Sem botão "Tentar novamente"
-- Se nada aparecer = bug FE-06 (toast de sucesso ausente) ainda presente
 
 ```yaml
-id: passo_05_salvar_e_confirmar
+id: passo_09_salvar_e_confirmar
 acao:
   sequencia:
     - tipo: click
-      seletor: 'button:has-text("Salvar Alteracoes")'
+      seletor: 'button:has-text("Salvar Alteracoes"), button:has-text("Salvar Alterações")'
       timeout: 5000
     - tipo: wait_for
       seletor: 'text=Salvo!'
-      timeout: 8000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_05_salvar_e_confirmar"
+      timeout: 10000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_salvar_e_confirmar"
 ```

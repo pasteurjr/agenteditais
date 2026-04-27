@@ -3,72 +3,119 @@ variacao: fp
 trilha: visual
 dataset_ref: testes/datasets/UC-F01_visual.yaml
 
-# Passos LÓGICOS — agrupam asserts de várias ações atômicas que fazem parte
-# do mesmo marco de UX. Cada passo aqui corresponde a 1 parada no painel.
+# Cenario B da Opcao B: cobre CT-F01-FA07-A + CT-F01-01 num unico fluxo:
+# - FA-07.A: super sem vinculo entra, cria empresa via CRUD generico
+# - Fluxo Principal: super volta pra EmpresaPage e completa cadastro
+#
+# 10 passos logicos com varias acoes atomicas em sequencia.
 passos:
 
   - id: passo_00_login
-    descricao: "Usuario faz login com valida4@valida.com.br"
+    descricao: "Login do super valida4 sem vinculos em usuario_empresa"
     asserts_dom:
-      - selector: 'text=Dashboard'
+      - selector: 'h1:has-text("Você não tem empresas vinculadas"), h1:has-text("Sem empresa vinculada")'
     asserts_rede:
       - url_contem: "/api/auth/login"
         metodo: "POST"
         status: 200
     asserts_semantica:
       elementos_obrigatorios:
-        - "Menu lateral visivel com item 'Dashboard' ativo"
-        - "Cabecalho mostra usuario logado (Validador 4 ou similar)"
+        - "Tela 'Você não tem empresas vinculadas' (FA-07 entrada)"
+        - "3 botoes: Criar Nova Empresa / Vincular Empresa / Entrar no Sistema"
 
-  - id: passo_01_navegar_empresa
-    descricao: "Usuario navega para Configuracoes > Empresa, sistema carrega form"
+  - id: passo_01_criar_via_fa07a
+    descricao: "Super clica em 'Criar Nova Empresa' (FA-07.A) — redireciona para CRUD de Empresas"
     asserts_dom:
-      - selector: 'label:has-text("Razao Social")'
+      - selector: 'h1:has-text("Empresas"), h2:has-text("Empresas"), .card-title:has-text("Empresas")'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Tela do CRUD de Empresas (Cadastros > Empresa)"
+        - "Botao 'Novo' visivel"
+
+  - id: passo_02_clicar_novo
+    descricao: "Clica em [Novo] no CRUD para abrir formulario de criacao"
+    asserts_dom:
+      - selector: '.card-title:has-text("Novo"), h3:has-text("Novo Empresa"), label:has-text("CNPJ")'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Formulario de criacao aberto com label 'Novo Empresas' ou similar"
+        - "Campos CNPJ e Razao Social visiveis com asterisco vermelho"
+
+  - id: passo_03_preencher_dados_basicos_crud
+    descricao: "Preencher TODOS os campos do CRUD: CNPJ, Razao Social, Nome Fantasia, IE, IM, Regime, Porte, Endereco, Cidade, UF, CEP, Telefone, Email"
+    asserts_dom:
       - selector: 'label:has-text("CNPJ")'
+      - selector: 'label:has-text("Razão Social")'
+      - selector: 'label:has-text("Cidade")'
       - selector: 'label:has-text("UF")'
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Todos os 13 campos do CRUD preenchidos com dados do dataset"
+        - "Regime Tributario e Porte sao dropdowns (select) com valor escolhido"
+        - "Asterisco vermelho aparece apenas em CNPJ e Razao Social"
+      elementos_proibidos:
+        - "Campos de Website, Instagram, LinkedIn ou Facebook (esses NAO existem neste CRUD)"
+
+  - id: passo_04_salvar_no_crud
+    descricao: "Clicar em Salvar no CRUD — empresa eh criada via POST /api/crud/empresas"
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: "POST"
+        status_in: [200, 201]
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Mensagem de sucesso ou empresa aparece na listagem do CRUD"
+      elementos_proibidos:
+        - "Mensagem de erro vermelha"
+
+  - id: passo_05_selecionar_empresa
+    descricao: "Sair do CRUD e selecionar a empresa recem-criada via Selecionar Empresa"
+    asserts_dom:
+      - selector: 'h1:has-text("Selecionar Empresa"), .top-bar-empresa, h2:has-text("Selecionar")'
+    asserts_rede:
+      - url_contem: "/api/auth/switch-empresa"
+        metodo: "POST"
+        status: 200
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Empresa DEMO 002 aparece selecionada na top bar OU usuario clica nela na tela Selecionar Empresa"
+
+  - id: passo_06_navegar_empresa_page
+    descricao: "Navegar via menu lateral Configuracoes > Empresa para a EmpresaPage completa"
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), label:has-text("Razao Social")'
     asserts_rede:
       - url_contem: "/api/crud/empresas"
         metodo: "GET"
         status: 200
     asserts_semantica:
       elementos_obrigatorios:
-        - "Cabecalho 'Dados da Empresa' com icone Building"
-        - "Card 'Informacoes Cadastrais'"
+        - "Cabecalho 'Dados da Empresa' visivel"
         - "Form com 4 secoes (Dados Basicos, Presenca Digital, Endereco, Emails/Telefones)"
+        - "CNPJ e Razao ja vem preenchidos da criacao no CRUD"
 
-  - id: passo_02_preencher_dados_basicos
-    descricao: "Razao Social, Nome Fantasia, CNPJ, Inscricao Estadual preenchidos"
+  - id: passo_07_completar_dados_basicos
+    descricao: "Verificar que dados criados no CRUD estao carregados na EmpresaPage (sem reedicao)"
     asserts_dom:
-      - selector: 'label:has-text("Razao Social") ~ div input.text-input'
-      - selector: 'label:has-text("CNPJ") ~ div input.text-input'
+      - selector: 'label:has-text("Razao Social")'
+      - selector: 'label:has-text("UF")'
     asserts_semantica:
       elementos_obrigatorios:
-        - "Razao Social = 'DEMO 002 Comércio e Representações Ltda'"
-        - "CNPJ = '56.700.252/4415-59' (com mascara aplicada)"
-        - "Asterisco vermelho em Razao Social e CNPJ (campos obrigatorios)"
+        - "CNPJ, Razao Social, Nome Fantasia, IE, Endereco, Cidade, UF, CEP, Telefone, Email pre-preenchidos do CRUD"
+        - "UF mostrado como dropdown com SP selecionado (V5 FE-05)"
 
-  - id: passo_03_preencher_presenca_digital
-    descricao: "Website, Instagram, LinkedIn, Facebook preenchidos"
+  - id: passo_08_completar_presenca_digital
+    descricao: "Preencher Website, Instagram, LinkedIn, Facebook (campos que so existem na EmpresaPage)"
     asserts_dom:
-      - selector: 'label:has-text("Instagram") ~ div input.text-input'
+      - selector: 'label:has-text("Instagram")'
+      - selector: 'label:has-text("Website")'
     asserts_semantica:
       elementos_obrigatorios:
-        - "Prefixo '@' visivel a esquerda do campo Instagram"
-        - "Os 4 campos de redes sociais preenchidos"
+        - "Prefixo @ visivel no campo Instagram"
+        - "Os 4 campos de redes sociais preenchidos com valores do dataset"
 
-  - id: passo_04_preencher_endereco
-    descricao: "Endereco, Cidade, UF (dropdown), CEP preenchidos"
-    asserts_dom:
-      - selector: 'label:has-text("UF") ~ div select.select-input'
-    asserts_semantica:
-      elementos_obrigatorios:
-        - "Campo UF eh um <select> dropdown (NAO TextInput)"
-        - "Opcao 'SP' selecionada e visivel"
-      elementos_proibidos:
-        - "Campo UF como TextInput livre permitindo qualquer texto"
-
-  - id: passo_05_salvar_e_confirmar
-    descricao: "Click em Salvar -> request -> indicador 'Salvo!' aparece"
+  - id: passo_10_salvar_e_confirmar
+    descricao: "Clicar em Salvar Alteracoes na EmpresaPage e ver feedback Salvo!"
     asserts_dom:
       - selector: 'text=Salvo!'
     asserts_rede:
@@ -77,7 +124,7 @@ passos:
         status_in: [200, 201]
     asserts_semantica:
       elementos_obrigatorios:
-        - "Indicador 'Salvo!' em verde aparece ao lado do botao"
+        - "Indicador 'Salvo!' verde aparece ao lado do botao (FE-06 corrigido)"
       elementos_proibidos:
         - "Mensagem de erro vermelha"
         - "Botao 'Tentar novamente'"

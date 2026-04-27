@@ -2,20 +2,30 @@ uc_id: UC-F01
 trilha: visual
 ciclo_id_default: piloto-ucf01
 
-# Dados pra DEMO (memoraveis pro PO ler na tela)
+# Cenario B (Opção B): super valida4 sem vinculos cria empresa via FA-07.A
+# (preenche TODOS os campos do CRUD generico) e depois completa redes sociais
+# na EmpresaPage (campos que so existem la).
+
 empresa:
+  # Campos que existem no CRUD generico (preenchidos no passo 03)
+  cnpj: "56.700.252/4415-59"
   razao_social: "DEMO 002 Comércio e Representações Ltda"
   nome_fantasia: "DEMO Comércio"
-  cnpj: "56.700.252/4415-59"
   inscricao_estadual: "111.222.333.444"
-  website: "https://demo.com.br"
-  instagram: "demo_comercio"
-  linkedin: "demo-comercio"
-  facebook: "demo.comercio"
+  inscricao_municipal: "12345-6"
+  regime_tributario: "simples"
+  porte: "me"
   endereco: "Av. da Validação, 1000"
   cidade: "São Paulo"
   uf: "SP"
   cep: "01000-000"
+  telefone: "(11) 4000-0000"
+  email: "contato@demo.com.br"
+
+  # Campos que so existem na EmpresaPage (preenchidos depois)
+  website: "https://demo.com.br"
+  instagram: "demo_comercio"
+  linkedin: "demo-comercio"
+  facebook: "demo.comercio"
 
 # Login resolvido a partir de contexto.trilhas.visual.usuario
-# (email/senha vem de testes/contextos/piloto-ucf01/contexto.yaml)
