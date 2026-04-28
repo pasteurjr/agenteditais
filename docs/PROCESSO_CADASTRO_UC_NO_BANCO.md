@@ -1,9 +1,12 @@
 # Processo de Cadastro de UC (Tutorial + Passos + Dataset + Predecessores) no Banco `testesvalidacoes`
 
-**Versão:** 1.1
+**Versão:** 1.2
 **Data:** 2026-04-28
 **Autor:** Claude (consolidando processo aplicado para UC-F01)
 **Audiência:** desenvolvedores, agentes Claude futuros, **app gerador de validações com LLM** que possa ser construído depois
+
+**Mudanças V1.2:**
+- Pre-flight passa a usar **política autocontida**: predecessor satisfeito **somente** se incluído no próprio teste. Histórico de `uc_execucoes_satisfatorias` **não satisfaz** mais (cada teste tem ciclo isolado com dados novos). Tabela continua sendo populada para auditoria.
 
 **Mudanças V1.1:**
 - Nova seção 6: **Predecessores entre UCs — registro no banco** (tabelas `uc_predecessores` + `uc_execucoes_satisfatorias`, regra de ouro, mapeamento, pre-flight, auditoria adversarial). Seções 6+ renumeradas para 7+.
@@ -493,6 +496,10 @@ UCs que não existem no banco (ex: Sprint 2-5 ainda não cadastradas) ficam como
 
 ### 6.5. Como o pre-flight usa
 
+**Política:** cada teste é **autocontido** — predecessor satisfeito **somente se incluído no próprio teste atual**. Histórico de execuções passadas **não conta**.
+
+**Por que:** cada teste cria ciclo isolado com dados novos (CNPJ único, emails únicos). Empresa criada num teste anterior tem CNPJ antigo e não satisfaz UC-F02 do teste atual, que precisa editar a empresa nova com CNPJ único do ciclo atual.
+
 Quando tester clica "Iniciar Teste" no app web:
 
 1. Backend (`/api/testes/<id>/iniciar`) chama `_validar_predecessores(db, teste)`
@@ -500,9 +507,7 @@ Quando tester clica "Iniciar Teste" no app web:
    - Calcula predecessores (consulta `uc_predecessores`)
    - Para cada item AND ou grupo OR:
      - Marcador → sempre OK
-     - UC concreto → satisfeito se:
-       - Está em `uc_execucoes_satisfatorias` para o user (executado antes), OU
-       - Está incluído no próprio teste atual (vai rodar agora)
+     - UC concreto → satisfeito **somente se incluído no próprio teste atual**
 3. Se algum UC tem pendência → bloqueia com 409:
    ```json
    {"exige_predecessores": true, "pendencias": [{"uc_id": "UC-F02", "faltam": ["UC-F01"]}]}
@@ -512,14 +517,18 @@ Quando tester clica "Iniciar Teste" no app web:
 - Coluna "Predecessores" mostra ✓ verde / ✗ vermelho por UC
 - Coluna "Status" mostra `✓ já executado` / `⚠ deps faltando` / `—`
 
-### 6.6. Quando registrar satisfação
+### 6.6. Tabela `uc_execucoes_satisfatorias` — uso atual
 
-O `executor_sprint1.py` insere em `uc_execucoes_satisfatorias` quando um CT termina **executado até o fim**, ou seja:
+A tabela é **populada pelo executor** quando um CT termina (`aprovado` ou `reprovado`), mas **não é consultada pelo pre-flight**.
 
-- Estado da execução = `aprovado` OU `reprovado` (qualquer um conta)
-- **Não importa o veredito do PO** sobre a UI
+**Razão:** decisão V1 de "cada teste autocontido" tornou histórico irrelevante. A tabela continua sendo populada para:
+- Auditoria histórica (quem rodou o quê e quando)
+- Possível uso futuro (relatórios de cobertura, métricas por user)
+- Reverter para política híbrida se mudarmos de ideia (sem perder dados)
 
-**Razão:** o estado físico no banco `editais` (empresa criada, edital salvo, etc.) é consequência dos passos executados, não do veredito do PO sobre a aparência da tela. Mesmo que o último passo "Salvar Alterações" reprove visualmente, os passos anteriores já criaram o que outro UC depende.
+**Quando registrar:**
+- Estado da execução = `aprovado` OU `reprovado` (qualquer um conta — UC foi executado até o fim)
+- **Não importa o veredito do PO** sobre a UI — o que importa é se os passos do tutorial chegaram ao fim
 
 **Estados que NÃO contam:** `pulado`, `cancelado`, `pausado`, `em_execucao`, `pendente`.
 

@@ -385,20 +385,12 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
     for r in preds_rows:
         predecessores_por_uc.setdefault(r.uc_id, []).append(r)
 
-    # 3. UCs ja satisfeitos para este user (historico)
-    satis_rows = (
-        db.query(UcExecucaoSatisfatoria)
-        .filter_by(user_id=teste.user_id, expirado=0)
-        .all()
-    )
-    uc_ids_satisfeitos_historico = set(s.uc_id for s in satis_rows)
-
-    # 4. UCs que vao ser executados no proprio teste (incluido = predecessor satisfeito implicito,
-    #    desde que venham na ordem certa — assumimos ordem por ordem do CT)
-    # Pra simplificar V1: se UC esta no proprio teste, ja conta como satisfeito.
+    # 3. UCs incluidos no proprio teste — UNICA fonte de satisfacao.
+    # Cada teste e autocontido: o ciclo gera dados novos (CNPJ unico),
+    # entao predecessor de execucao passada NAO satisfaz UC novo deste teste.
     uc_ids_no_proprio_teste = uc_ids_no_teste
 
-    # 5. Avalia cada UC do teste
+    # 4. Avalia cada UC do teste
     pendencias_por_uc = []  # lista de {uc_id_str, faltam: [str]}
 
     for uc_id_db, lista_preds in predecessores_por_uc.items():
@@ -414,12 +406,12 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
             if grupo_num == 0:
                 # AND: cada item deve ser satisfeito sozinho
                 for it in items:
-                    if not _predecessor_satisfeito(it, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db):
+                    if not _predecessor_satisfeito(it, uc_ids_no_proprio_teste):
                         faltam.append(_label_predecessor(it, db))
             else:
                 # OR: pelo menos um do grupo deve satisfazer
                 algum_ok = any(
-                    _predecessor_satisfeito(it, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db)
+                    _predecessor_satisfeito(it, uc_ids_no_proprio_teste)
                     for it in items
                 )
                 if not algum_ok:
@@ -436,24 +428,23 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
         return False, {
             "ok": False,
             "pendencias": pendencias_por_uc,
-            "msg": "Predecessores nao satisfeitos. Execute esses UCs antes (em outro teste) OU inclua-os neste teste.",
+            "msg": "Predecessores nao satisfeitos. Inclua os UCs predecessores neste teste.",
         }
 
     return True, {"ok": True, "msg": "Todos os predecessores satisfeitos"}
 
 
-def _predecessor_satisfeito(pred_row, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db) -> bool:
-    """Avalia 1 linha de uc_predecessores."""
+def _predecessor_satisfeito(pred_row, uc_ids_no_proprio_teste) -> bool:
+    """Avalia 1 linha de uc_predecessores. Predecessor satisfeito SOMENTE se incluido no teste atual."""
     if pred_row.marcador:
         # Marcadores [login], [infra], [seed] sao considerados satisfeitos
         # (quem garante eh setup do ambiente, nao validacao de UC)
         return True
     if pred_row.predecessor_id:
-        # UC concreto: satisfeito se executado antes (historico) OU incluido no teste atual
-        return (
-            pred_row.predecessor_id in uc_ids_satisfeitos_historico
-            or pred_row.predecessor_id in uc_ids_no_proprio_teste
-        )
+        # UC concreto: satisfeito SOMENTE se incluido no teste atual.
+        # Historico de execucoes passadas NAO conta — cada teste e isolado
+        # (ciclo proprio com dados novos).
+        return pred_row.predecessor_id in uc_ids_no_proprio_teste
     return False
 
 
@@ -497,10 +488,6 @@ def api_sprint_ucs_resumo(sprint_id):
     try:
         ucs = db.query(CasoDeUso).filter_by(sprint_id=sprint_id, ativo=1).order_by(CasoDeUso.uc_id).all()
 
-        # UCs ja executados pelo user (historico)
-        satis = db.query(UcExecucaoSatisfatoria).filter_by(user_id=session["user_id"], expirado=0).all()
-        uc_ids_no_historico = set(s.uc_id for s in satis)
-
         # Predecessores de cada UC
         preds_rows = (
             db.query(UcPredecessor)
@@ -521,7 +508,9 @@ def api_sprint_ucs_resumo(sprint_id):
                                        and c.trilha_sugerida == "visual"
                                        and c.passos_tutorial)
 
-            # Mapeia predecessores em forma legivel
+            # Mapeia predecessores em forma legivel.
+            # satisfeito=False sempre — o frontend avalia satisfacao via UCs marcados
+            # no proprio teste (cada teste e autocontido, historico nao conta).
             preds_uc = preds_por_uc.get(uc.id, [])
             preds_lista = []
             for r in preds_uc:
@@ -538,11 +527,10 @@ def api_sprint_ucs_resumo(sprint_id):
                         "tipo": "uc",
                         "uc_id": pred_uc.uc_id if pred_uc else "?",
                         "label": pred_uc.uc_id if pred_uc else "?",
-                        "satisfeito": r.predecessor_id in uc_ids_no_historico,
+                        "satisfeito": False,  # so satisfeito se incluido no teste atual (avaliado no front)
                         "grupo_or": r.grupo_or,
                     })
 
-            ja_satisfeito = uc.id in uc_ids_no_historico
             result.append({
                 "id": uc.id,
                 "uc_id": uc.uc_id,
@@ -551,7 +539,7 @@ def api_sprint_ucs_resumo(sprint_id):
                 "n_com_passos": n_com_passos,
                 "n_cenario_visual_executavel": n_cenario_com_passos,
                 "executavel": n_cenario_com_passos > 0,
-                "ja_executado": ja_satisfeito,
+                "ja_executado": False,  # historico nao conta — cada teste e autocontido
                 "predecessores": preds_lista,
             })
         return jsonify({"sprint_id": sprint_id, "ucs": result})
