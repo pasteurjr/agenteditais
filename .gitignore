@@ -50,3 +50,8 @@ tests/results/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# React app de validacao
+testes_validacoes_ui/node_modules/
+testes_validacoes_ui/dist/
+testes_validacoes_ui/.vite/
