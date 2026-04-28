@@ -1,0 +1,205 @@
+/* ===========================================================
+   Estilo comum do webapp Validacao Visual
+   =========================================================== */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+a { color: #8bc34a; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Login / pages centralizadas */
+.center-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+  padding: 2em;
+}
+
+.card-centered {
+  background: #16213e;
+  border: 1px solid #2a3f5f;
+  border-radius: 8px;
+  padding: 2em;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.card-centered h1 {
+  font-size: 18pt;
+  color: #e94560;
+  margin-bottom: 0.3em;
+  text-align: center;
+}
+
+.card-centered .subtitle {
+  text-align: center;
+  color: #aaa;
+  font-size: 11pt;
+  margin-bottom: 1.5em;
+}
+
+label {
+  display: block;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  font-size: 10pt;
+  color: #cbd5e1;
+}
+
+input[type="text"], input[type="email"], input[type="password"],
+textarea, select {
+  width: 100%;
+  padding: 0.7em;
+  background: #0f3460;
+  color: #fff;
+  border: 1px solid #2a3f5f;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11pt;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+button, .btn {
+  display: inline-block;
+  background: #e94560;
+  color: white;
+  border: none;
+  padding: 0.7em 1.5em;
+  font-size: 11pt;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: 600;
+  transition: all 0.2s;
+  margin-top: 1em;
+}
+
+button:hover, .btn:hover {
+  background: #c2334b;
+  transform: translateY(-1px);
+}
+
+button.primary, .btn.primary { background: #4caf50; }
+button.primary:hover, .btn.primary:hover { background: #3d8b40; }
+
+button.secondary, .btn.secondary { background: #607d8b; }
+
+button.full, .btn.full { width: 100%; }
+
+/* Mensagens flash */
+.flash {
+  padding: 0.8em 1em;
+  border-radius: 4px;
+  margin-bottom: 1em;
+  font-size: 10pt;
+}
+.flash-erro { background: rgba(244, 67, 54, 0.1); border: 1px solid #f44336; color: #ff8a80; }
+.flash-info { background: rgba(33, 150, 243, 0.1); border: 1px solid #2196f3; color: #90caf9; }
+.flash-ok { background: rgba(76, 175, 80, 0.1); border: 1px solid #4caf50; color: #a5d6a7; }
+
+/* Top bar (paginas internas) */
+.topbar {
+  background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+  padding: 1em 2em;
+  border-bottom: 2px solid #e94560;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar h1 { color: #fff; font-size: 16pt; }
+.topbar .right { font-size: 10pt; color: #aaa; }
+.topbar .right .badge-admin {
+  background: #9c27b0;
+  color: white;
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  font-size: 9pt;
+  margin-left: 0.5em;
+}
+
+/* Conteudo principal */
+.content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2em;
+}
+
+.kpis { display: flex; gap: 1em; margin-bottom: 2em; flex-wrap: wrap; }
+.kpi {
+  background: #16213e;
+  border: 1px solid #2a3f5f;
+  border-radius: 6px;
+  padding: 1em 1.5em;
+  flex: 1;
+  min-width: 180px;
+}
+.kpi .label { color: #aaa; font-size: 10pt; }
+.kpi .value { color: #fff; font-size: 22pt; font-weight: 700; margin-top: 0.2em; }
+
+.section { margin-bottom: 2em; }
+.section h2 {
+  color: #e94560;
+  font-size: 14pt;
+  border-bottom: 1px solid #2a3f5f;
+  padding-bottom: 0.5em;
+  margin-bottom: 1em;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #16213e;
+  border: 1px solid #2a3f5f;
+  border-radius: 6px;
+  overflow: hidden;
+}
+th, td {
+  padding: 0.7em 1em;
+  text-align: left;
+  border-bottom: 1px solid #2a3f5f;
+  font-size: 10pt;
+}
+th { background: #0f3460; color: #cbd5e1; font-weight: 600; }
+tr:hover td { background: rgba(255,255,255,0.03); }
+
+.tag {
+  display: inline-block;
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  font-size: 9pt;
+  font-weight: 600;
+}
+.tag-criado { background: #2a3f5f; color: #fff; }
+.tag-em_andamento { background: #4caf50; color: #fff; }
+.tag-pausado { background: #ffc107; color: #000; }
+.tag-concluido { background: #607d8b; color: #fff; }
+.tag-cancelado { background: #f44336; color: #fff; }
+
+.empty {
+  color: #777;
+  font-style: italic;
+  padding: 2em;
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5em;
+  margin-bottom: 1em;
+  flex-wrap: wrap;
+}

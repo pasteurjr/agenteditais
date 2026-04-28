@@ -158,7 +158,6 @@ class Teste(Base):
     )
     pid_executor = Column(Integer, nullable=True)
     porta_painel = Column(Integer, nullable=True)
-    pediu_continuar = Column(TINYINT(1), nullable=False, default=0)
     iniciado_em = Column(DateTime, nullable=True)
     atualizado_em = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
     concluido_em = Column(DateTime, nullable=True)
@@ -273,6 +272,7 @@ class PassoExecucao(Base):
         nullable=False, default="PENDENTE"
     )
     veredicto_po = Column(Enum("APROVADO", "REPROVADO"), nullable=True)
+    pediu_continuar = Column(TINYINT(1), nullable=False, default=0)
     duracao_ms = Column(Integer, nullable=True)
     detalhes_validacao_json = Column(JSON, nullable=True)
     correcao_necessaria = Column(TINYINT(1), nullable=False, default=0)
