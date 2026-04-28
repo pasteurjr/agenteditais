@@ -1,9 +1,13 @@
-# Processo de Cadastro de UC (Tutorial + Passos + Dataset) no Banco `testesvalidacoes`
+# Processo de Cadastro de UC (Tutorial + Passos + Dataset + Predecessores) no Banco `testesvalidacoes`
 
-**Versão:** 1.0
+**Versão:** 1.1
 **Data:** 2026-04-28
 **Autor:** Claude (consolidando processo aplicado para UC-F01)
 **Audiência:** desenvolvedores, agentes Claude futuros, **app gerador de validações com LLM** que possa ser construído depois
+
+**Mudanças V1.1:**
+- Nova seção 6: **Predecessores entre UCs — registro no banco** (tabelas `uc_predecessores` + `uc_execucoes_satisfatorias`, regra de ouro, mapeamento, pre-flight, auditoria adversarial). Seções 6+ renumeradas para 7+.
+- Etapa 4 do fluxo passo-a-passo agora inclui: mapear predecessores em `gerar_ucs_v7.py` + rodar seed do banco + verificar `uc_predecessores`.
 
 ---
 
@@ -383,7 +387,188 @@ O agente `validation-dataset-auditor` deve, ao revisar um dataset novo:
 
 ---
 
-## 6. Script de cadastro — referência canônica
+## 6. Predecessores entre UCs — registro no banco
+
+**Por que existem:** UC-F02 (gerir contatos da empresa) só faz sentido se UC-F01 (cadastrar empresa) já criou uma empresa antes. UC-R01 (gerar proposta) precisa de UC-CV03 (salvar edital), UC-P04 (configurar custos), etc. Há um **grafo de dependências** entre UCs que precisa ser respeitado para o pre-flight bloquear testes incompletos.
+
+**Onde fica:**
+
+- **Documentação humana** — seção `### UCs predecessores` em cada `testes/casos_de_uso/UC-*.md` e nos docs consolidados V7 (gerada automaticamente por `scripts/gerar_ucs_v7.py`).
+- **Banco testesvalidacoes** — tabela `uc_predecessores` (1 linha por aresta do grafo). Carregada por `seed/seed_uc_predecessores.py`.
+- **Tabela de satisfação** — `uc_execucoes_satisfatorias` registra quando um UC é executado até o fim por um user. Populada pelo `executor_sprint1.py` automaticamente.
+
+### 6.1. Schema das tabelas
+
+```sql
+CREATE TABLE uc_predecessores (
+  id              VARCHAR(36) PRIMARY KEY,
+  uc_id           VARCHAR(36) NOT NULL,           -- UC dependente (ex: UC-F02)
+  predecessor_id  VARCHAR(36) NULL,               -- UC que satisfaz (NULL se for marcador)
+  marcador        VARCHAR(20) NULL,               -- '[login]'|'[infra]'|'[seed]' (NULL se for UC)
+  grupo_or        INT NOT NULL DEFAULT 0,         -- 0=AND, N>0=OR (mesmo N = alternativas)
+  ordem           INT NOT NULL DEFAULT 0,
+  -- Constraint logica: predecessor_id XOR marcador (validado na app, MariaDB nao aceita CHECK com nomes)
+  FOREIGN KEY (uc_id) REFERENCES casos_de_uso(id) ON DELETE CASCADE,
+  FOREIGN KEY (predecessor_id) REFERENCES casos_de_uso(id) ON DELETE SET NULL
+);
+
+CREATE TABLE uc_execucoes_satisfatorias (
+  id              VARCHAR(36) PRIMARY KEY,
+  user_id         VARCHAR(36) NOT NULL,
+  uc_id           VARCHAR(36) NOT NULL,           -- UC executado ate o fim
+  ambiente        VARCHAR(50) NOT NULL,           -- agenteditais | editaisvalida
+  ciclo_id        VARCHAR(120) NULL,
+  execucao_id     VARCHAR(36) NOT NULL,           -- FK pra execucoes_caso_de_teste
+  satisfeito_em   DATETIME NOT NULL,
+  expirado        TINYINT(1) DEFAULT 0,           -- marca se cleanup invalida
+  motivo_expiracao VARCHAR(255) NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (uc_id) REFERENCES casos_de_uso(id),
+  FOREIGN KEY (execucao_id) REFERENCES execucoes_caso_de_teste(id) ON DELETE CASCADE
+);
+```
+
+### 6.2. Como mapear pré-condições para predecessores
+
+**Regra de ouro:** olhar **pós-condições** dos outros UCs do mesmo documento. Se um UC declara em pós-condição "X criado/salvo/persistido", ele é predecessor de qualquer UC que tenha "X existe" como pré-condição.
+
+**Categorias** (cada item das pré-condições do UC vira UMA destas):
+
+| Categoria | Quando usar | Exemplo |
+|---|---|---|
+| **`UC-XXX`** | Outro UC concreto cria o estado nas pós-condições | "Empresa em edição" → `UC-F01` (cria empresa) |
+| **`[login]`** | Apenas autenticação — não é UC | "Usuário autenticado" → `[login]` |
+| **`[infra]`** | Endpoint/serviço operacional — não é UC | "API X disponível" → `[infra]` |
+| **`[seed]`** | Dado pré-cadastrado no banco — não é UC | "Lista de áreas carregada" → `[seed]` (áreas vêm do seed) |
+| **`UC-A OU UC-B`** | Alternativas — qualquer um satisfaz | "Produtos cadastrados" → `UC-F07 OU UC-F08` |
+| **`UC-A OU [seed]`** | UC concreto OU dado pré-cadastrado | "Hierarquia carregada" → `UC-F13 OU [seed]` |
+
+**Cuidado crítico:** UC só é predecessor se ele **CRIA** o estado. UCs de **consulta/visualização** (que não escrevem no banco) **NÃO são predecessores**, mesmo que pareçam relacionados.
+
+**Exemplo do erro a evitar:**
+- ❌ "UC-F02 precisa de áreas → predecessor é UC-F13 (consulta classificação)"
+  - **Errado:** UC-F13 só visualiza, não cria áreas. Pós-condição: *"Usuário visualiza a árvore"*.
+- ✅ "UC-F02 precisa de áreas → predecessor é `[seed]`"
+  - **Certo:** áreas são pré-cadastradas no banco. Não há UC que crie áreas na Sprint 1.
+
+### 6.3. Onde declarar os predecessores
+
+**Único ponto de verdade:** dict `PREDECESSORES` em `scripts/gerar_ucs_v7.py`.
+
+```python
+PREDECESSORES = {
+    "UC-F01": ["[login]", "[infra]"],                  # raiz
+    "UC-F02": ["UC-F01", "[seed]"],                    # AND: ambos exigidos
+    "UC-F04": ["UC-F01", "[seed]", "[infra]"],         # AND: 3 condições
+    "UC-F06": ["[login]", "UC-F07 OU UC-F08", "[seed]"],  # 1 grupo OR no meio
+    # ...
+}
+```
+
+**Convenção:**
+- Cada item da lista vira uma "linha lógica" da pré-condição.
+- Items separados por vírgula são **AND** (todos exigidos).
+- Items com ` OU ` na string são **OR** (basta um).
+- Marcadores (`[login]`, `[infra]`, `[seed]`) são sempre considerados satisfeitos.
+
+### 6.4. Geração e carga
+
+**Etapa A — Documentação:**
+```bash
+python3 scripts/gerar_ucs_v7.py
+```
+
+Lê o dict `PREDECESSORES`, injeta seção `### UCs predecessores` em todos os UCs:
+- Em `testes/casos_de_uso/UC-*.md` (89 splits)
+- Em `docs/CASOS DE USO ... V7.md` (5 docs consolidados)
+
+**Etapa B — Banco:**
+```bash
+python3 testes/framework_visual/seed/seed_uc_predecessores.py
+```
+
+Lê o mesmo dict + busca UCs no banco `testesvalidacoes` + popula `uc_predecessores`. Idempotente (DELETE antes de INSERT).
+
+UCs que não existem no banco (ex: Sprint 2-5 ainda não cadastradas) ficam como warning, mas a Sprint 1 (17 UCs / 38-42 arestas) carrega.
+
+### 6.5. Como o pre-flight usa
+
+Quando tester clica "Iniciar Teste" no app web:
+
+1. Backend (`/api/testes/<id>/iniciar`) chama `_validar_predecessores(db, teste)`
+2. Para cada UC do teste:
+   - Calcula predecessores (consulta `uc_predecessores`)
+   - Para cada item AND ou grupo OR:
+     - Marcador → sempre OK
+     - UC concreto → satisfeito se:
+       - Está em `uc_execucoes_satisfatorias` para o user (executado antes), OU
+       - Está incluído no próprio teste atual (vai rodar agora)
+3. Se algum UC tem pendência → bloqueia com 409:
+   ```json
+   {"exige_predecessores": true, "pendencias": [{"uc_id": "UC-F02", "faltam": ["UC-F01"]}]}
+   ```
+
+**Frontend** (`NovoTeste.jsx`) também avalia em tempo real:
+- Coluna "Predecessores" mostra ✓ verde / ✗ vermelho por UC
+- Coluna "Status" mostra `✓ já executado` / `⚠ deps faltando` / `—`
+
+### 6.6. Quando registrar satisfação
+
+O `executor_sprint1.py` insere em `uc_execucoes_satisfatorias` quando um CT termina **executado até o fim**, ou seja:
+
+- Estado da execução = `aprovado` OU `reprovado` (qualquer um conta)
+- **Não importa o veredito do PO** sobre a UI
+
+**Razão:** o estado físico no banco `editais` (empresa criada, edital salvo, etc.) é consequência dos passos executados, não do veredito do PO sobre a aparência da tela. Mesmo que o último passo "Salvar Alterações" reprove visualmente, os passos anteriores já criaram o que outro UC depende.
+
+**Estados que NÃO contam:** `pulado`, `cancelado`, `pausado`, `em_execucao`, `pendente`.
+
+### 6.7. Auditoria adversarial dos predecessores
+
+Antes de cadastrar um UC novo no `PREDECESSORES`:
+
+1. **Ler pós-condições de todos os outros UCs** que possam satisfazer cada pré-condição
+2. **Verificar se UC realmente cria** (escreve no banco) ou só consulta
+3. **Documentar a justificativa** se for ambíguo: comentário inline em `PREDECESSORES`
+4. **Não inferir por nome** — `UC-F13` (Consultar classificação) **não é predecessor** de UC-F02 mesmo parecendo "produzir áreas". Áreas vêm de seed.
+
+Heurísticas comuns:
+
+| Pré-condição comum | Predecessor correto |
+|---|---|
+| "Empresa existente / cadastrada com CNPJ / em edição" | `UC-F01` |
+| "Produtos cadastrados" | `UC-F07 OU UC-F08` |
+| "Lista de áreas carregada" | `[seed]` (áreas vêm do banco, não há UC criador) |
+| "Edital salvo" | `UC-CV03` |
+| "Itens importados" | `UC-CV09` |
+| "Proposta gerada" | `UC-R01` (motor) ou `UC-R02` (upload externo) |
+| "Contrato cadastrado" | `UC-CT01` |
+| "Resultado registrado" | `UC-FU01` |
+| "Usuário autenticado" | `[login]` |
+| "Endpoint X disponível" | `[infra]` |
+
+### 6.8. Atualização do grafo
+
+Quando descobrir que um predecessor está errado ou novo UC for adicionado:
+
+1. Editar `PREDECESSORES` em `scripts/gerar_ucs_v7.py`
+2. Rodar `python3 scripts/gerar_ucs_v7.py` (atualiza docs + splits)
+3. Rodar `python3 testes/framework_visual/seed/seed_uc_predecessores.py` (atualiza banco)
+4. Recarregar frontend pra refletir hints
+5. Commit com mensagem explicando o motivo da mudança (não só o quê)
+
+**Exemplo de commit explicativo:**
+```
+fix: UC-F02/F04/F06/F08 nao dependem de UC-F13/F16
+
+UC-F13 (consultar classificacao) so visualiza arvore Area->Classe->Subclasse
+no banco — nao cria nada (pos-condicoes: 'Usuario visualiza', 'Usuario entende').
+Logo UC-F13 nao pode ser predecessor de UCs que precisam de areas no banco.
+```
+
+---
+
+## 7. Script de cadastro — referência canônica
 
 O **script `testes/framework_visual/seed/importar_tutorial_uc_f01.py`** é a referência viva. Para cadastrar um UC novo, **copiar este script e adaptar 3 pontos**:
 
@@ -423,7 +608,7 @@ Ao mudar o tutorial em disco, basta re-rodar o script para atualizar o banco.
 
 ---
 
-## 7. Fluxo completo passo-a-passo
+## 8. Fluxo completo passo-a-passo
 
 Para cadastrar um UC novo:
 
@@ -447,9 +632,13 @@ Para cadastrar um UC novo:
 - [ ] Copiar `importar_tutorial_uc_f01.py` → `importar_tutorial_uc_fNN.py`
 - [ ] Adaptar 3 pontos (uc_id, ct_id, paths)
 - [ ] `python3 testes/framework_visual/seed/importar_tutorial_uc_fNN.py`
+- [ ] **Mapear predecessores** em `scripts/gerar_ucs_v7.py` (dict `PREDECESSORES`) — ler pré-condições do UC, identificar quais UCs criam o estado, ou marcar `[seed]/[infra]/[login]` (ver seção 6)
+- [ ] `python3 scripts/gerar_ucs_v7.py` (atualiza docs + splits)
+- [ ] `python3 testes/framework_visual/seed/seed_uc_predecessores.py` (popula `uc_predecessores` no banco)
 - [ ] Verificar:
   - `SELECT COUNT(*) FROM datasets WHERE caso_de_uso_id = '...'` → 1
   - `SELECT COUNT(*) FROM passos_tutorial WHERE caso_de_teste_id = '...'` → N (mesmo número do MD)
+  - `SELECT COUNT(*) FROM uc_predecessores WHERE uc_id = '...'` → ≥1 (ou 0 se UC raiz só com marcadores)
 
 ### Etapa 5 — Smoke test
 - [ ] Subir backend `:5060` + frontend `:5181`
@@ -468,7 +657,7 @@ Para cadastrar um UC novo:
 
 ---
 
-## 8. Como o `executor_sprint1.py` consome o banco em runtime
+## 9. Como o `executor_sprint1.py` consome o banco em runtime
 
 Para o app gerador futuro entender o ciclo completo:
 
@@ -513,7 +702,7 @@ Para o app gerador futuro entender o ciclo completo:
 
 ---
 
-## 9. Especificação para o app gerador com LLM
+## 10. Especificação para o app gerador com LLM
 
 Caso seja construído um app que use LLM para gerar tutoriais e cadastrar UCs automaticamente, o LLM deve produzir:
 
@@ -590,7 +779,7 @@ Se algo for ambíguo no UC, pergunte ANTES de gerar.
 
 ---
 
-## 10. Exemplo concreto — UC-F01 (já cadastrado)
+## 11. Exemplo concreto — UC-F01 (já cadastrado)
 
 Para conferir o resultado do processo aplicado:
 
@@ -620,7 +809,7 @@ ORDER BY pt.ordem;
 
 ---
 
-## 11. Próximas iterações
+## 12. Próximas iterações
 
 | Item | Quando |
 |---|---|
@@ -633,7 +822,7 @@ ORDER BY pt.ordem;
 
 ---
 
-## 12. Glossário
+## 13. Glossário
 
 - **UC** — caso de uso (UC-F01..UC-F17 na Sprint 1)
 - **CT** — caso de teste (1 UC pode ter N CTs: FP, FA-NN, FE-NN)
