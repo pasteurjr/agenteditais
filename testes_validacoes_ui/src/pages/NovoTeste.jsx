@@ -11,15 +11,9 @@ export default function NovoTeste() {
 
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
-  const [cicloId, setCicloId] = useState('piloto-ucf01')
   const [projetoId, setProjetoId] = useState('')
   const [sprintId, setSprintId] = useState('')
-  const [selCts, setSelCts] = useState({}) // {ct_id: true}
-
-  const [filtroCats, setFiltroCats] = useState({Cenário: true, Classe: false, Fronteira: false, Combinado: false})
-  const [filtroTrilha, setFiltroTrilha] = useState('visual')
-  const [soComPassos, setSoComPassos] = useState(true)
-  const [abertos, setAbertos] = useState({})
+  const [selUcs, setSelUcs] = useState({}) // {uc_id: true}
 
   const [busy, setBusy] = useState(false)
   const [erro, setErro] = useState(null)
@@ -35,51 +29,41 @@ export default function NovoTeste() {
   }, [projetoId])
 
   useEffect(() => {
-    setUcs([])
+    setUcs([]); setSelUcs({})
     if (!sprintId) return
-    const params = {}
-    if (filtroTrilha) params.trilha = filtroTrilha
-    if (soComPassos) params.so_com_passos = '1'
-    api.sprintUcs(sprintId, params).then(d => {
-      setUcs(d.ucs)
-      // Por padrao abre primeiro UC
-      if (d.ucs.length) setAbertos({[d.ucs[0].uc_id]: true})
-    }).catch(e => setErro(e.message))
-  }, [sprintId, filtroTrilha, soComPassos])
+    api.sprintUcsResumo(sprintId).then(d => setUcs(d.ucs)).catch(e => setErro(e.message))
+  }, [sprintId])
 
-  // Filtro por categoria — client-side
-  const ucsFiltrados = ucs.map(uc => ({
-    ...uc,
-    cts: uc.cts.filter(ct => filtroCats[ct.categoria]),
-  })).filter(uc => uc.cts.length > 0)
+  const ucsExecutaveis = ucs.filter(uc => uc.executavel)
+  const ucsNaoExecutaveis = ucs.filter(uc => !uc.executavel)
 
-  const totalSel = Object.values(selCts).filter(Boolean).length
-  const podeSubmit = totalSel > 0 && titulo.trim() && sprintId && !busy
+  const totalUcsSel = Object.values(selUcs).filter(Boolean).length
+  const totalCtsEstimado = ucs
+    .filter(uc => selUcs[uc.id])
+    .reduce((acc, uc) => acc + uc.n_cenario_visual_executavel, 0)
 
-  const toggleCt = (ctId) => {
-    setSelCts(s => ({...s, [ctId]: !s[ctId]}))
+  const podeSubmit = totalUcsSel > 0 && titulo.trim() && sprintId && !busy
+
+  const toggleUc = (id) => setSelUcs(s => ({...s, [id]: !s[id]}))
+
+  const marcarTodos = () => {
+    const novo = {}
+    ucsExecutaveis.forEach(uc => { novo[uc.id] = true })
+    setSelUcs(novo)
   }
 
-  const toggleUC = (uc) => {
-    const todasMarcadas = uc.cts.every(c => selCts[c.id])
-    const nova = {...selCts}
-    uc.cts.forEach(c => {
-      if (c.tem_passos) nova[c.id] = !todasMarcadas
-    })
-    setSelCts(nova)
-  }
+  const desmarcarTodos = () => setSelUcs({})
 
   const criar = async (e) => {
     e.preventDefault()
     setErro(null); setBusy(true)
     try {
-      const ct_ids = Object.entries(selCts).filter(([_,v]) => v).map(([k]) => k)
+      const uc_ids = Object.entries(selUcs).filter(([_,v]) => v).map(([k]) => k)
       const r = await api.criarTeste({
         titulo: titulo.trim(),
         descricao: descricao.trim() || null,
         sprint_id: sprintId,
-        ciclo_id: cicloId.trim() || null,
-        ct_ids,
+        uc_ids,
       })
       nav(`/teste/${r.teste_id}`)
     } catch (err) {
@@ -96,12 +80,8 @@ export default function NovoTeste() {
         <form onSubmit={criar}>
           <div className="form-grid">
             <div>
-              <label>Título *</label>
-              <input value={titulo} onChange={e=>setTitulo(e.target.value)} required autoFocus placeholder="Ex: Smoke regressao Sprint 1" />
-            </div>
-            <div>
-              <label>Ciclo (opcional)</label>
-              <input value={cicloId} onChange={e=>setCicloId(e.target.value)} placeholder="Ex: piloto-ucf01" />
+              <label>Título do teste *</label>
+              <input value={titulo} onChange={e=>setTitulo(e.target.value)} required autoFocus placeholder="Ex: Smoke regressao Sprint 1 - dia 28/04" />
             </div>
             <div>
               <label>Projeto *</label>
@@ -117,92 +97,100 @@ export default function NovoTeste() {
                 {sprints.map(s => <option key={s.id} value={s.id}>Sprint {s.numero} — {s.nome}</option>)}
               </select>
             </div>
-            <div className="full-row">
+            <div>
               <label>Descrição (opcional)</label>
-              <textarea rows={2} value={descricao} onChange={e=>setDescricao(e.target.value)} />
+              <textarea rows={1} value={descricao} onChange={e=>setDescricao(e.target.value)} />
             </div>
           </div>
 
-          <h2 style={{color:'#e94560', marginTop:'2em'}}>Selecionar Casos de Teste</h2>
-
-          <div className="filtros">
-            <strong>Filtros:</strong>
-            {Object.keys(filtroCats).map(cat => (
-              <label key={cat}>
-                <input type="checkbox" checked={filtroCats[cat]} onChange={()=> setFiltroCats(c => ({...c, [cat]: !c[cat]}))}/>
-                {cat}
-              </label>
-            ))}
-            <label style={{marginLeft:'1em'}}>Trilha:
-              <select value={filtroTrilha} onChange={e=>setFiltroTrilha(e.target.value)}>
-                <option value="visual">visual</option>
-                <option value="">todas</option>
-                <option value="e2e">e2e</option>
-                <option value="humana">humana</option>
-              </select>
-            </label>
-            <label><input type="checkbox" checked={soComPassos} onChange={()=>setSoComPassos(s=>!s)}/> só com passos cadastrados</label>
+          <div className="flash flash-info" style={{marginTop:'1.5em'}}>
+            <strong>Como funciona:</strong> ao criar este teste, o sistema gera automaticamente
+            uma <strong>empresa nova com CNPJ único</strong> (ciclo isolado).
+            Para cada UC marcado, todos os CTs Cenário+visual com passos cadastrados serão
+            executados em ordem (FP → FAs → FEs).
           </div>
 
-          <div>
-            {ucsFiltrados.length === 0 ? (
-              <div className="empty">{sprintId ? 'Nenhum CT bate com os filtros (ou sprint sem CTs cadastrados).' : 'Selecione um projeto e sprint.'}</div>
-            ) : (
-              ucsFiltrados.map(uc => (
-                <UcAccordion
-                  key={uc.id}
-                  uc={uc}
-                  aberto={abertos[uc.uc_id]}
-                  onToggleAccordion={() => setAbertos(a => ({...a, [uc.uc_id]: !a[uc.uc_id]}))}
-                  selCts={selCts}
-                  onToggleCt={toggleCt}
-                  onToggleUC={() => toggleUC(uc)}
-                />
-              ))
-            )}
-          </div>
+          <h2 style={{color:'#e94560', marginTop:'2em'}}>Selecionar Casos de Uso</h2>
+
+          {sprintId && ucsExecutaveis.length > 0 && (
+            <div className="actions">
+              <button type="button" onClick={marcarTodos} className="btn-sm">Marcar todos executáveis</button>
+              <button type="button" onClick={desmarcarTodos} className="secondary btn-sm">Desmarcar todos</button>
+            </div>
+          )}
+
+          {!sprintId ? (
+            <div className="empty">Selecione projeto e sprint primeiro.</div>
+          ) : ucs.length === 0 ? (
+            <div className="empty">Carregando UCs...</div>
+          ) : (
+            <>
+              {ucsExecutaveis.length === 0 ? (
+                <div className="flash flash-erro">
+                  Nenhum UC desta sprint tem CTs executáveis (CTs Cenário+visual com passos cadastrados).
+                  Cadastre passos primeiro.
+                </div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{width:'30px'}}></th>
+                      <th>UC</th>
+                      <th>Nome</th>
+                      <th>CTs executáveis</th>
+                      <th>Total CTs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ucsExecutaveis.map(uc => (
+                      <tr key={uc.id} onClick={() => toggleUc(uc.id)} style={{cursor:'pointer'}}>
+                        <td><input type="checkbox" checked={!!selUcs[uc.id]} onChange={()=>toggleUc(uc.id)} onClick={e=>e.stopPropagation()}/></td>
+                        <td><strong className="ct-id-mono">{uc.uc_id}</strong></td>
+                        <td>{uc.nome}</td>
+                        <td><span style={{color:'#4caf50', fontWeight:'600'}}>{uc.n_cenario_visual_executavel}</span></td>
+                        <td><span style={{color:'#aaa'}}>{uc.n_total_cts}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {ucsNaoExecutaveis.length > 0 && (
+                <details style={{marginTop:'1.5em'}}>
+                  <summary style={{cursor:'pointer', color:'#aaa', fontSize:'10pt'}}>
+                    {ucsNaoExecutaveis.length} UC(s) sem CTs executáveis (clique para ver)
+                  </summary>
+                  <table style={{marginTop:'0.5em', opacity:'0.6'}}>
+                    <thead>
+                      <tr><th>UC</th><th>Nome</th><th>Total CTs</th></tr>
+                    </thead>
+                    <tbody>
+                      {ucsNaoExecutaveis.map(uc => (
+                        <tr key={uc.id}>
+                          <td><strong className="ct-id-mono">{uc.uc_id}</strong></td>
+                          <td>{uc.nome}</td>
+                          <td>{uc.n_total_cts} (sem passos)</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              )}
+            </>
+          )}
 
           <div className="resumo-bottom">
             <div>
-              <strong style={{color:'#4caf50', fontSize:'14pt'}}>{totalSel}</strong> CTs selecionados
-              — estimativa: ~{Math.max(1, totalSel * 5)} min
+              <strong style={{color:'#4caf50', fontSize:'14pt'}}>{totalUcsSel}</strong> UC(s) selecionado(s)
+              · <strong>{totalCtsEstimado}</strong> CT(s) serão executados
+              · estimativa: ~{Math.max(1, totalCtsEstimado * 5)} min
             </div>
             <button type="submit" className="primary" disabled={!podeSubmit}>
-              {busy ? 'Criando...' : 'Criar Teste'}
+              {busy ? 'Criando...' : 'Criar Teste (gera ciclo único)'}
             </button>
           </div>
         </form>
       </div>
     </>
-  )
-}
-
-function UcAccordion({ uc, aberto, onToggleAccordion, selCts, onToggleCt, onToggleUC }) {
-  const todasMarcadas = uc.cts.every(c => selCts[c.id]) && uc.cts.length > 0
-  return (
-    <div className="uc-accordion">
-      <div className="uc-header" onClick={onToggleAccordion}>
-        <div onClick={e => e.stopPropagation()}>
-          <input type="checkbox" checked={todasMarcadas} onChange={onToggleUC} style={{marginRight:'0.5em'}} />
-          <span className="titulo">{uc.uc_id}</span> — {uc.nome}
-        </div>
-        <span className="count">{uc.cts.length} CT(s) {aberto ? '▼' : '▶'}</span>
-      </div>
-      {aberto && (
-        <div className="uc-cts">
-          {uc.cts.map(c => (
-            <div key={c.id} className={'ct-item ' + (c.tem_passos ? '' : 'ct-no-passos')}>
-              <input type="checkbox" id={'ct-'+c.id} checked={!!selCts[c.id]} disabled={!c.tem_passos} onChange={() => onToggleCt(c.id)} />
-              <label htmlFor={'ct-'+c.id}>
-                <span className={'badge-cat badge-cat-' + c.categoria.toLowerCase().replace('á','a')}>{c.categoria}</span>
-                <span className="ct-id-mono">{c.ct_id}</span>{' '}
-                <span style={{color:'#aaa'}}>[{c.tipo}/{c.trilha_sugerida}]</span> — {c.descricao}
-                {c.tem_passos && <span style={{color:'#aaa', marginLeft:'0.5em'}}>({c.n_passos} passos)</span>}
-              </label>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }

@@ -94,12 +94,13 @@ def create_app():
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 8
 
-    # CORS aberto (qualquer origin) com credentials
-    # SameSite=None pra cookie cross-origin funcionar
-    app.config["SESSION_COOKIE_SAMESITE"] = "None"
-    app.config["SESSION_COOKIE_SECURE"] = False  # dev — em prod virar True+HTTPS
+    # CORS — proxy do Vite repassa pra /api do mesmo origin (5181), entao cookie
+    # eh same-origin do ponto de vista do browser. SameSite=Lax funciona.
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = False
     CORS(app,
-         origins="*",
+         origins=["http://localhost:5181", "http://127.0.0.1:5181",
+                  "http://localhost:5180", "http://127.0.0.1:5180"],
          supports_credentials=True,
          allow_headers="*",
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -215,6 +216,37 @@ def api_sprints(projeto_id):
         db.close()
 
 
+@app.route("/api/sprints/<sprint_id>/ucs-resumo")
+@login_required
+def api_sprint_ucs_resumo(sprint_id):
+    """Lista UCs da sprint com contagem de CTs cadastrados (com passos).
+    Pra UI de selecao por UC inteiro."""
+    db = get_db()
+    try:
+        ucs = db.query(CasoDeUso).filter_by(sprint_id=sprint_id, ativo=1).order_by(CasoDeUso.uc_id).all()
+        result = []
+        for uc in ucs:
+            cts = db.query(CasoDeTeste).filter_by(caso_de_uso_id=uc.id, ativo=1).all()
+            n_total = len(cts)
+            n_com_passos = sum(1 for c in cts if c.passos_tutorial)
+            n_cenario_com_passos = sum(1 for c in cts
+                                       if c.categoria == "Cenário"
+                                       and c.trilha_sugerida == "visual"
+                                       and c.passos_tutorial)
+            result.append({
+                "id": uc.id,
+                "uc_id": uc.uc_id,
+                "nome": uc.nome,
+                "n_total_cts": n_total,
+                "n_com_passos": n_com_passos,
+                "n_cenario_visual_executavel": n_cenario_com_passos,
+                "executavel": n_cenario_com_passos > 0,
+            })
+        return jsonify({"sprint_id": sprint_id, "ucs": result})
+    finally:
+        db.close()
+
+
 @app.route("/api/sprints/<sprint_id>/ucs")
 @login_required
 def api_sprint_ucs(sprint_id):
@@ -289,43 +321,107 @@ def api_testes_lista():
 @app.route("/api/testes", methods=["POST"])
 @login_required
 def api_teste_criar():
+    """Cria teste por UCs (preferido) ou CTs individuais (legacy).
+
+    Body:
+      {titulo, sprint_id, uc_ids: [...]} -> expande pra todos os CTs
+        Cenario+visual com passos cadastrados, em ordem do uc_id+ct_id.
+      {titulo, sprint_id, ct_ids: [...]} -> legacy, aceita CTs individuais.
+
+    Sempre gera ciclo unico via context_manager (CNPJ + valida<N> proprio).
+    """
     data = request.get_json(silent=True) or {}
     titulo = (data.get("titulo") or "").strip()
     sprint_id = data.get("sprint_id")
+    uc_ids = data.get("uc_ids") or []
     ct_ids = data.get("ct_ids") or []
-    ciclo_id = data.get("ciclo_id") or None
     descricao = data.get("descricao") or None
 
-    if not titulo or not sprint_id or not ct_ids:
-        return jsonify({"error": "titulo, sprint_id e ct_ids[] obrigatorios"}), 400
+    if not titulo or not sprint_id or (not uc_ids and not ct_ids):
+        return jsonify({"error": "titulo, sprint_id e uc_ids[] (ou ct_ids[]) obrigatorios"}), 400
 
     db = get_db()
     try:
         sprint = db.query(Sprint).filter_by(id=sprint_id, ativo=1).first()
         if not sprint:
             return jsonify({"error": "sprint invalida"}), 400
-        cts = db.query(CasoDeTeste).filter(CasoDeTeste.id.in_(ct_ids), CasoDeTeste.ativo == 1).all()
-        if not cts:
-            return jsonify({"error": "nenhum CT valido encontrado"}), 400
 
+        # Modo UC: expande pra todos os CTs Cenario+visual+com_passos
+        if uc_ids:
+            ucs = (
+                db.query(CasoDeUso)
+                .filter(CasoDeUso.id.in_(uc_ids), CasoDeUso.ativo == 1)
+                .order_by(CasoDeUso.uc_id)
+                .all()
+            )
+            if not ucs:
+                return jsonify({"error": "nenhum UC valido encontrado"}), 400
+            cts_ordenados = []
+            for uc in ucs:
+                cts_uc = (
+                    db.query(CasoDeTeste)
+                    .filter_by(caso_de_uso_id=uc.id, ativo=1,
+                               categoria="Cenário", trilha_sugerida="visual")
+                    .order_by(CasoDeTeste.ct_id)
+                    .all()
+                )
+                # so pega os com passos cadastrados
+                for c in cts_uc:
+                    if c.passos_tutorial:
+                        cts_ordenados.append(c)
+            if not cts_ordenados:
+                return jsonify({"error": "Nenhum CT executavel nos UCs selecionados (precisam de passos cadastrados)"}), 400
+        else:
+            # Modo legacy: ct_ids diretos
+            cts_raw = db.query(CasoDeTeste).filter(CasoDeTeste.id.in_(ct_ids), CasoDeTeste.ativo == 1).all()
+            if not cts_raw:
+                return jsonify({"error": "nenhum CT valido encontrado"}), 400
+            ct_map = {c.id: c for c in cts_raw}
+            cts_ordenados = [ct_map[cid] for cid in ct_ids if cid in ct_map]
+
+        # 1. Cria registro Teste com ciclo_id ainda vazio
         teste = Teste(
             projeto_id=sprint.projeto_id, sprint_id=sprint.id,
             user_id=session["user_id"], titulo=titulo,
-            descricao=descricao, ciclo_id=ciclo_id, estado="criado",
+            descricao=descricao, ciclo_id=None, estado="criado",
         )
         db.add(teste)
         db.flush()
 
-        ct_map = {c.id: c for c in cts}
-        for ordem, ct_id in enumerate(ct_ids, start=1):
-            if ct_id not in ct_map:
-                continue
+        # 2. Provisiona ciclo unico (CNPJ + valida<N> sequencial)
+        ciclo_id = f"teste-{teste.id[:8]}"
+        try:
+            sys.path.insert(0, str(_PROJECT / "testes" / "framework_provisionamento"))
+            from context_manager import criar_ciclo  # type: ignore
+            ctx = criar_ciclo(
+                ciclo_id=ciclo_id,
+                ambiente="agenteditais",
+                precisa_editais=False,
+                sprints_no_ciclo=[sprint.numero],
+            )
+            print(f"[api] ciclo {ciclo_id} provisionado: {ctx['trilhas']['visual']['empresa']['cnpj_pretendido']}")
+        except FileExistsError:
+            print(f"[api] ciclo {ciclo_id} ja existia — reusando")
+        except Exception as e:
+            print(f"[api] WARN: falha ao provisionar ciclo: {e}")
+            # Nao bloqueia — cai pra ciclo nulo, executor usa default
+            ciclo_id = None
+
+        teste.ciclo_id = ciclo_id
+
+        # 3. Cria execucoes_caso_de_teste em ordem
+        for ordem, ct in enumerate(cts_ordenados, start=1):
             db.add(ExecucaoCasoDeTeste(
-                teste_id=teste.id, caso_de_teste_id=ct_id,
+                teste_id=teste.id, caso_de_teste_id=ct.id,
                 ordem=ordem, estado="pendente",
             ))
         db.commit()
-        return jsonify({"ok": True, "teste_id": teste.id}), 201
+        return jsonify({
+            "ok": True,
+            "teste_id": teste.id,
+            "ciclo_id": ciclo_id,
+            "n_cts": len(cts_ordenados),
+        }), 201
     except Exception as e:
         db.rollback()
         return jsonify({"error": str(e)}), 500

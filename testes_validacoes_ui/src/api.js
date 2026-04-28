@@ -34,6 +34,7 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return req(`/api/sprints/${sid}/ucs${q ? "?" + q : ""}`);
   },
+  sprintUcsResumo:(sid)        => req(`/api/sprints/${sid}/ucs-resumo`),
 
   // testes
   testes:        (params={})   => {

@@ -393,7 +393,23 @@ def main():
         if not teste:
             raise SystemExit(f"Teste {teste_id} nao encontrado")
 
-        # Carrega execucoes pendentes
+        # Reset CTs que ficaram em em_execucao (executor caiu/foi morto antes de concluir)
+        # — voltam pra pendente, apagam passos parciais e sao re-executados do passo 0
+        execs_em_curso = (
+            db.query(ExecucaoCasoDeTeste)
+            .filter_by(teste_id=teste.id, estado="em_execucao")
+            .all()
+        )
+        if execs_em_curso:
+            for e in execs_em_curso:
+                # Apaga passos_execucao parciais (cascade leva observacoes junto)
+                db.query(PassoExecucao).filter_by(execucao_id=e.id).delete()
+                e.estado = "pendente"
+                e.iniciado_em = None
+            db.commit()
+            print(f"[exec] {len(execs_em_curso)} CT(s) em_execucao resetados (retomada)")
+
+        # Carrega execucoes pendentes (em ordem)
         execs = (
             db.query(ExecucaoCasoDeTeste)
             .filter_by(teste_id=teste.id, estado="pendente")
