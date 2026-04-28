@@ -101,6 +101,7 @@ class CasoDeUso(Base):
 
     sprint = relationship("Sprint", back_populates="casos_de_uso")
     casos_de_teste = relationship("CasoDeTeste", back_populates="caso_de_uso", cascade="all, delete-orphan")
+    datasets = relationship("Dataset", back_populates="caso_de_uso", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("sprint_id", "uc_id", name="uq_uc_sprint"),
@@ -131,6 +132,7 @@ class CasoDeTeste(Base):
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
 
     caso_de_uso = relationship("CasoDeUso", back_populates="casos_de_teste")
+    passos_tutorial = relationship("PassoTutorial", back_populates="caso_de_teste", cascade="all, delete-orphan", order_by="PassoTutorial.ordem")
 
     __table_args__ = (
         UniqueConstraint("caso_de_uso_id", "ct_id", name="uq_ct_uc"),
@@ -342,8 +344,55 @@ class TesteTag(Base):
     tag_id = Column(String(36), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
 
 
+# ============================================================
+# 15. Dataset (NOVO — migration 003)
+# ============================================================
+class Dataset(Base):
+    __tablename__ = "datasets"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    caso_de_uso_id = Column(String(36), ForeignKey("casos_de_uso.id", ondelete="CASCADE"), nullable=False)
+    trilha = Column(Enum("visual", "e2e", "humana"), nullable=False, default="visual")
+    dados_json = Column(JSON, nullable=False)
+    criado_em = Column(DateTime, nullable=False, default=datetime.now)
+    atualizado_em = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    caso_de_uso = relationship("CasoDeUso", back_populates="datasets")
+
+    __table_args__ = (
+        UniqueConstraint("caso_de_uso_id", "trilha", name="uq_dataset_uc_trilha"),
+    )
+
+
+# ============================================================
+# 16. PassoTutorial (NOVO — migration 003)
+# ============================================================
+class PassoTutorial(Base):
+    __tablename__ = "passos_tutorial"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    caso_de_teste_id = Column(String(36), ForeignKey("casos_de_teste.id", ondelete="CASCADE"), nullable=False)
+    ordem = Column(Integer, nullable=False)
+    passo_id = Column(String(120), nullable=False)
+    titulo = Column(String(255), nullable=False)
+    descricao_painel = Column(Text, nullable=True)
+    pontos_observacao = Column(JSON, nullable=True)
+    acoes_json = Column(JSON, nullable=False)
+    asserts_json = Column(JSON, nullable=True)
+    criado_em = Column(DateTime, nullable=False, default=datetime.now)
+    atualizado_em = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    caso_de_teste = relationship("CasoDeTeste", back_populates="passos_tutorial")
+
+    __table_args__ = (
+        UniqueConstraint("caso_de_teste_id", "ordem", name="uq_passo_ct_ordem"),
+        Index("ix_passo_ct", "caso_de_teste_id"),
+    )
+
+
 __all__ = [
     "User", "Projeto", "Sprint", "CasoDeUso", "CasoDeTeste",
     "Teste", "ExecucaoCasoDeTeste", "PassoExecucao", "Observacao",
     "Relatorio", "LogAuditoria", "Anexo", "Tag", "TesteTag",
+    "Dataset", "PassoTutorial",
 ]
