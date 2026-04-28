@@ -4,64 +4,416 @@
   <meta charset="UTF-8">
   <title>{{ teste.titulo }} — Executar</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .layout { display: grid; grid-template-columns: 380px 1fr; gap: 1.5em; }
+    .col-painel { background: #16213e; border: 1px solid #2a3f5f; border-radius: 6px; padding: 1.2em; }
+    .col-screens { background: #16213e; border: 1px solid #2a3f5f; border-radius: 6px; padding: 1.2em; }
+    .step-info {
+      background: #0f3460; border-left: 4px solid #4caf50;
+      padding: 1em; border-radius: 4px; margin-bottom: 1em;
+    }
+    .step-info h3 { color: #fff; font-size: 13pt; margin-bottom: 0.4em; }
+    .step-info .ct-tag {
+      display: inline-block; padding: 0.2em 0.5em; background: #2a3f5f;
+      color: #8bc34a; font-family: monospace; font-size: 9pt; border-radius: 3px;
+      margin-right: 0.5em;
+    }
+    .step-desc {
+      background: #0f3460; padding: 0.8em; border-radius: 4px; margin-top: 0.5em;
+      font-size: 10pt; color: #cbd5e1;
+      max-height: 200px; overflow-y: auto;
+    }
+    .obs-list {
+      background: rgba(255,193,7,0.1); border-left: 4px solid #ffc107;
+      padding: 0.8em 0.8em 0.8em 2em; border-radius: 4px; margin-top: 0.5em;
+      list-style-type: '👀 '; font-size: 10pt;
+    }
+    .obs-list li { margin-bottom: 0.3em; }
+    .auto-status {
+      padding: 0.5em 0.8em; border-radius: 3px; font-size: 9pt; font-weight: 600;
+      display: inline-block; margin-top: 0.5em;
+    }
+    .auto-PENDENTE { background: #607d8b; color: white; }
+    .auto-APROVADO { background: #4caf50; color: white; }
+    .auto-REPROVADO { background: #f44336; color: white; }
+    .auto-INCONCLUSIVO { background: #ff9800; color: white; }
+
+    .botoes-acao { display: flex; gap: 0.5em; flex-wrap: wrap; margin-top: 1em; }
+    .botoes-acao button {
+      flex: 1; min-width: 120px; padding: 0.6em 1em; font-size: 11pt;
+      font-weight: 600; border: none; border-radius: 4px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-aprovar { background: #4caf50; color: white; }
+    .btn-aprovar:hover:not(:disabled) { background: #3d8b40; transform: translateY(-1px); }
+    .btn-aprovar.ativo { box-shadow: 0 0 0 3px #8bc34a; }
+    .btn-reprovar { background: #f44336; color: white; }
+    .btn-reprovar:hover:not(:disabled) { background: #d32f2f; transform: translateY(-1px); }
+    .btn-reprovar.ativo { box-shadow: 0 0 0 3px #ff8a80; }
+    .btn-continuar { background: #4caf50; color: white; font-size: 13pt; }
+    .btn-continuar:disabled { background: #475569; cursor: not-allowed; opacity: 0.6; }
+    .btn-pausar { background: #607d8b; color: white; }
+    .btn-iniciar { background: #4caf50; color: white; font-size: 13pt; }
+
+    textarea.coment-input {
+      width: 100%; min-height: 70px; padding: 0.6em; margin-top: 0.5em;
+      background: #0f3460; color: #fff; border: 1px solid #2a3f5f; border-radius: 4px;
+      font-family: inherit; font-size: 10pt; resize: vertical;
+    }
+
+    .screens-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+    .screens-pair .label { font-size: 9pt; color: #aaa; text-align: center; margin-bottom: 0.3em; }
+    .screens-pair img { width: 100%; border: 2px solid #2a3f5f; border-radius: 4px; }
+
+    .timeline {
+      max-height: 350px; overflow-y: auto;
+      margin-top: 1em; padding-top: 1em; border-top: 1px solid #2a3f5f;
+    }
+    .timeline-item {
+      padding: 0.5em; margin-bottom: 0.4em; border-radius: 3px;
+      font-size: 9pt; display: flex; justify-content: space-between; align-items: center;
+    }
+    .timeline-item.pendente { background: #2a3f5f; }
+    .timeline-item.em_execucao { background: rgba(255,193,7,0.15); animation: pulse 1.5s infinite; }
+    .timeline-item.aprovado { background: rgba(76,175,80,0.2); }
+    .timeline-item.reprovado { background: rgba(244,67,54,0.2); }
+    .timeline-item.pulado { background: #475569; }
+    .timeline-item .ct-id { color: #8bc34a; font-family: monospace; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .status-pill {
+      padding: 0.3em 0.8em; border-radius: 12px; background: #2a3f5f; color: #fff;
+      font-size: 9pt; font-weight: 600; text-transform: uppercase;
+    }
+    .status-pill.criado { background: #2a3f5f; }
+    .status-pill.em_andamento { background: #4caf50; animation: pulse 1.5s infinite; }
+    .status-pill.pausado { background: #ffc107; color: #000; }
+    .status-pill.concluido { background: #607d8b; }
+    .status-pill.cancelado { background: #f44336; }
+
+    .progress-bar { height: 6px; background: #0f3460; border-radius: 3px; overflow: hidden; margin: 0.5em 0; }
+    .progress-bar .bar { height: 100%; background: linear-gradient(90deg, #4caf50, #8bc34a); transition: width 0.5s; }
+
+    .empty-painel {
+      text-align: center; padding: 3em 1em; color: #777;
+    }
+    .empty-painel .icone { font-size: 48pt; margin-bottom: 0.5em; }
+  </style>
 </head>
 <body>
 <header class="topbar">
   <h1>🎬 {{ teste.titulo }}</h1>
   <div class="right">
-    <span class="tag tag-{{ teste.estado }}">{{ teste.estado }}</span>
-    <a href="/home" style="margin-left: 1em;">← Voltar Home</a>
+    <span class="status-pill {{ teste.estado }}" id="estado-pill">{{ teste.estado }}</span>
+    <a href="/home" style="margin-left: 1em;">← Home</a>
   </div>
 </header>
 
 <div class="content">
-  <div class="section">
-    <h2>Sumário</h2>
-    <p><strong>ID:</strong> {{ teste.id }}</p>
-    <p><strong>Sprint:</strong> {{ teste.sprint.nome if teste.sprint else "-" }}</p>
-    <p><strong>Ciclo:</strong> {{ teste.ciclo_id or "—" }}</p>
-    <p><strong>Criado em:</strong> {{ teste.criado_em.strftime("%Y-%m-%d %H:%M") if teste.criado_em else "-" }}</p>
-  </div>
+  <div class="layout">
 
-  <div class="section">
-    <h2>Casos de Teste no conjunto ({{ cts|length }})</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>CT</th>
-          <th>Descrição</th>
-          <th>Estado</th>
-          <th>Veredito Auto</th>
-          <th>Veredito PO</th>
-          <th>Tutorial?</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in cts %}
-        <tr>
-          <td>{{ c.ordem }}</td>
-          <td><code>{{ c.ct_id }}</code></td>
-          <td>{{ c.descricao }}</td>
-          <td><span class="tag tag-{{ c.estado }}">{{ c.estado }}</span></td>
-          <td>{{ c.veredito_automatico }}</td>
-          <td>{{ c.veredicto_po }}</td>
-          <td>{{ "✓" if c.tem_tutorial else "—" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    <!-- COLUNA 1: PAINEL DE COMANDO -->
+    <div class="col-painel">
+      <div class="step-info" id="step-info">
+        <div class="empty-painel" id="empty-msg">
+          <div class="icone">⚙️</div>
+          <p style="font-size: 11pt;">Aguardando início do teste.</p>
+          <p style="font-size: 9pt; color: #aaa; margin-top: 0.5em;">
+            Clique em <strong>Iniciar Teste</strong> abaixo.
+          </p>
+        </div>
+        <div id="painel-ativo" style="display: none;">
+          <h3>
+            <span class="ct-tag" id="ct-id-tag">—</span>
+            <span id="passo-titulo">—</span>
+          </h3>
+          <div style="font-size: 9pt; color: #aaa;">
+            CT <span id="ct-ordem">—</span> · Passo <span id="passo-ordem">—</span>
+          </div>
 
-  <div class="section">
-    <h2>Controles</h2>
-    <p style="color: #ffc107; padding: 1em; background: rgba(255,193,7,0.1); border-radius: 4px;">
-      ⚠️ Fase E pendente: o painel de execução com Playwright headed e botões Aprovar/Reprovar/Comentar
-      será integrado nesta tela. Por enquanto, esta é apenas a visão estática dos CTs.
-    </p>
-    <button class="primary" disabled>▶️ Iniciar (Fase D/E pendente)</button>
-    <a href="/home" class="btn secondary">Voltar</a>
+          <div class="step-desc" id="passo-descricao">—</div>
+
+          <strong style="color: #ffc107; font-size: 10pt; display: block; margin-top: 0.8em;">👀 Observe criticamente:</strong>
+          <ul class="obs-list" id="obs-list"></ul>
+
+          <div>
+            <strong style="color: #cbd5e1; font-size: 10pt;">Veredito automático (DOM/Rede):</strong>
+            <span class="auto-status auto-PENDENTE" id="auto-status">PENDENTE</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="bloco-decisao" style="display: none;">
+        <strong style="color: #fff;">Sua decisão:</strong>
+        <div class="botoes-acao">
+          <button class="btn-aprovar" id="btn-aprovar">✅ Aprovar</button>
+          <button class="btn-reprovar" id="btn-reprovar">❌ Reprovar</button>
+        </div>
+        <textarea class="coment-input" id="coment-input" placeholder="Observação opcional para este passo..."></textarea>
+        <button class="btn-pausar" id="btn-comentar" style="margin-top: 0.5em; padding: 0.4em 0.8em; font-size: 9pt;">💬 Salvar observação</button>
+
+        <div class="botoes-acao" style="margin-top: 1em; border-top: 1px solid #2a3f5f; padding-top: 1em;">
+          <button class="btn-continuar" id="btn-continuar" disabled>▶️ Continuar</button>
+        </div>
+      </div>
+
+      <div class="botoes-acao" style="margin-top: 1.5em; border-top: 1px solid #2a3f5f; padding-top: 1em;">
+        {% if teste.estado in ['criado', 'pausado'] %}
+        <button class="btn-iniciar" id="btn-iniciar">▶️ {{ "Retomar" if teste.estado == "pausado" else "Iniciar Teste" }}</button>
+        {% endif %}
+        <button class="btn-pausar" id="btn-pausar" style="display: none;">⏸️ Pausar</button>
+        <button class="btn-reprovar" id="btn-cancelar" style="display: none;">⏹️ Cancelar</button>
+      </div>
+    </div>
+
+    <!-- COLUNA 2: SCREENSHOTS + TIMELINE -->
+    <div class="col-screens">
+      <h2 style="color: #e94560; font-size: 14pt; border-bottom: 1px solid #2a3f5f; padding-bottom: 0.5em; margin-bottom: 1em;">Telas (antes / depois)</h2>
+      <div class="screens-pair">
+        <div>
+          <div class="label">ANTES</div>
+          <img id="img-antes" src="" alt="antes" style="display:none;">
+          <div id="img-antes-empty" class="empty" style="border: 2px dashed #2a3f5f; padding: 2em; text-align: center; font-size: 9pt;">aguardando</div>
+        </div>
+        <div>
+          <div class="label">DEPOIS</div>
+          <img id="img-depois" src="" alt="depois" style="display:none;">
+          <div id="img-depois-empty" class="empty" style="border: 2px dashed #2a3f5f; padding: 2em; text-align: center; font-size: 9pt;">aguardando</div>
+        </div>
+      </div>
+
+      <h3 style="color: #e94560; font-size: 12pt; margin-top: 1.5em; margin-bottom: 0.5em;">Progresso do teste</h3>
+      <div class="progress-bar"><div class="bar" id="progress-bar" style="width: 0%"></div></div>
+      <div style="font-size: 9pt; color: #aaa;" id="progress-text">0/0 CTs concluídos</div>
+
+      <div class="timeline" id="timeline"></div>
+    </div>
+
   </div>
 </div>
+
+<script>
+window.TESTE_ID = "{{ teste.id }}";
+window.USER_NAME = "{{ user_name }}";
+const POLL_MS = 1500;
+let _ultimoPassoId = null;
+
+const $ = (id) => document.getElementById(id);
+
+function escape(s) {
+  if (!s) return "";
+  return String(s).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':'&quot;',"'":"&#39;"}[m]));
+}
+
+async function fetchEstado() {
+  try {
+    const r = await fetch(`/teste/${window.TESTE_ID}/estado`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    console.error("estado falhou:", e);
+    return null;
+  }
+}
+
+async function postCmd(path, body) {
+  try {
+    const r = await fetch(`/teste/${window.TESTE_ID}${path}`, {
+      method: "POST",
+      headers: body ? {"Content-Type": "application/json"} : {},
+      body: body ? JSON.stringify(body) : null,
+    });
+    return await r.json().catch(() => ({}));
+  } catch (e) {
+    return {ok: false, err: String(e)};
+  }
+}
+
+function render(d) {
+  if (!d) return;
+
+  // Estado do teste
+  const estadoPill = $("estado-pill");
+  estadoPill.textContent = d.teste.estado;
+  estadoPill.className = "status-pill " + d.teste.estado;
+
+  // Botoes do teste (iniciar/pausar/cancelar)
+  const btnIniciar = $("btn-iniciar");
+  const btnPausar = $("btn-pausar");
+  const btnCancelar = $("btn-cancelar");
+  if (d.teste.pid_alive) {
+    if (btnIniciar) btnIniciar.style.display = "none";
+    btnPausar.style.display = "";
+    btnCancelar.style.display = "";
+  } else {
+    if (btnIniciar) {
+      btnIniciar.style.display = (d.teste.estado === "criado" || d.teste.estado === "pausado") ? "" : "none";
+    }
+    btnPausar.style.display = "none";
+    btnCancelar.style.display = "none";
+  }
+
+  // Painel ativo
+  const painelAtivo = $("painel-ativo");
+  const emptyMsg = $("empty-msg");
+  const blocoDecisao = $("bloco-decisao");
+
+  const ipc = d.ipc || {};
+  if (ipc && ipc.passo_atual_titulo) {
+    painelAtivo.style.display = "";
+    emptyMsg.style.display = "none";
+    $("ct-id-tag").textContent = ipc.ct_id || "—";
+    $("ct-ordem").textContent = "—";
+    $("passo-ordem").textContent = ipc.passo_atual_ordem || "—";
+    $("passo-titulo").textContent = ipc.passo_atual_titulo;
+    $("passo-descricao").innerHTML = renderMd(ipc.passo_atual_descricao || "");
+
+    const obs = $("obs-list");
+    if (ipc.pontos_observacao && ipc.pontos_observacao.length) {
+      obs.innerHTML = ipc.pontos_observacao.map(o => `<li>${escape(o)}</li>`).join("");
+    } else {
+      obs.innerHTML = "<li style='color:#777;font-style:italic;list-style:none;margin-left:-1em;'>(sem pontos)</li>";
+    }
+
+    const autoStatus = $("auto-status");
+    autoStatus.textContent = ipc.veredito_automatico || "PENDENTE";
+    autoStatus.className = "auto-status auto-" + (ipc.veredito_automatico || "PENDENTE");
+
+    // Screenshots
+    if (ipc.screenshot_antes_url) {
+      $("img-antes").src = ipc.screenshot_antes_url + "&_=" + Date.now();
+      $("img-antes").style.display = "";
+      $("img-antes-empty").style.display = "none";
+    }
+    if (ipc.screenshot_depois_url) {
+      $("img-depois").src = ipc.screenshot_depois_url + "&_=" + Date.now();
+      $("img-depois").style.display = "";
+      $("img-depois-empty").style.display = "none";
+    } else if (ipc.estado === "executando") {
+      $("img-depois").style.display = "none";
+      $("img-depois-empty").style.display = "";
+      $("img-depois-empty").textContent = "executando...";
+    }
+
+    // Bloco de decisao so aparece quando estado = aguardando_decisao
+    if (ipc.estado === "aguardando_decisao") {
+      blocoDecisao.style.display = "";
+      // Reset visual dos botoes ao mudar de passo
+      const novoPassoId = `${ipc.ct_id}::${ipc.passo_atual_ordem}`;
+      if (novoPassoId !== _ultimoPassoId) {
+        _ultimoPassoId = novoPassoId;
+        $("btn-aprovar").classList.remove("ativo");
+        $("btn-reprovar").classList.remove("ativo");
+        $("btn-continuar").disabled = true;
+        $("coment-input").value = "";
+      }
+    } else {
+      blocoDecisao.style.display = "none";
+    }
+  } else {
+    painelAtivo.style.display = "none";
+    emptyMsg.style.display = "";
+    blocoDecisao.style.display = "none";
+  }
+
+  // Timeline
+  const tl = $("timeline");
+  if (d.execucoes && d.execucoes.length) {
+    tl.innerHTML = d.execucoes.map(e => `
+      <div class="timeline-item ${e.estado}">
+        <span><span class="ct-id">${e.ordem}. ${escape(e.ct_id)}</span></span>
+        <span style="font-size:8pt;">
+          auto:${e.veredito_automatico} po:${e.veredicto_po || "—"}
+        </span>
+      </div>
+    `).join("");
+    const total = d.execucoes.length;
+    const concluidos = d.execucoes.filter(e => ["aprovado","reprovado","pulado"].includes(e.estado)).length;
+    $("progress-text").textContent = `${concluidos}/${total} CTs concluídos`;
+    $("progress-bar").style.width = (100 * concluidos / Math.max(total, 1)) + "%";
+  }
+}
+
+function renderMd(md) {
+  // Conversao simplista: h3, **bold**, *italic*, `code`, \n -> <br>
+  return escape(md)
+    .replace(/^###\s+(.+)$/gm, "<h3 style='color:#8bc34a;font-size:11pt;margin:0.4em 0;'>$1</h3>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code style='background:#1a1a2e;padding:1px 4px;border-radius:2px;'>$1</code>")
+    .replace(/\n/g, "<br>");
+}
+
+// ----- Handlers dos botoes -----
+
+if ($("btn-iniciar")) {
+  $("btn-iniciar").addEventListener("click", async () => {
+    $("btn-iniciar").disabled = true;
+    $("btn-iniciar").textContent = "Iniciando...";
+    const r = await postCmd("/iniciar");
+    if (!r.ok) {
+      alert("Erro: " + (r.msg || "falha ao iniciar"));
+      $("btn-iniciar").disabled = false;
+      $("btn-iniciar").textContent = "▶️ Iniciar Teste";
+    }
+  });
+}
+
+$("btn-pausar").addEventListener("click", async () => {
+  if (!confirm("Pausar a execução? Você poderá retomar depois do mesmo ponto.")) return;
+  await postCmd("/pausar");
+});
+
+$("btn-cancelar").addEventListener("click", async () => {
+  if (!confirm("Cancelar o teste? Os CTs já executados ficam no histórico mas o teste fica como cancelado.")) return;
+  await postCmd("/cancelar");
+});
+
+$("btn-aprovar").addEventListener("click", async () => {
+  $("btn-aprovar").classList.add("ativo");
+  $("btn-reprovar").classList.remove("ativo");
+  $("btn-continuar").disabled = false;
+  await postCmd("/aprovar");
+});
+
+$("btn-reprovar").addEventListener("click", async () => {
+  $("btn-reprovar").classList.add("ativo");
+  $("btn-aprovar").classList.remove("ativo");
+  $("btn-continuar").disabled = false;
+  await postCmd("/reprovar");
+});
+
+$("btn-continuar").addEventListener("click", async () => {
+  // Salvar comentario antes se houver
+  const txt = $("coment-input").value.trim();
+  if (txt) {
+    await postCmd("/comentario", {texto: txt});
+    $("coment-input").value = "";
+  }
+  // O backend ja marcou pediu_continuar=1 ao receber aprovar/reprovar, executor avanca sozinho
+  $("btn-continuar").disabled = true;
+  $("btn-aprovar").classList.remove("ativo");
+  $("btn-reprovar").classList.remove("ativo");
+});
+
+$("btn-comentar").addEventListener("click", async () => {
+  const txt = $("coment-input").value.trim();
+  if (!txt) return;
+  const r = await postCmd("/comentario", {texto: txt});
+  if (r.ok) {
+    $("coment-input").value = "";
+    $("btn-comentar").textContent = "✓ salvo";
+    setTimeout(() => { $("btn-comentar").textContent = "💬 Salvar observação"; }, 1500);
+  }
+});
+
+// Loop de polling
+async function loop() {
+  const d = await fetchEstado();
+  render(d);
+}
+setInterval(loop, POLL_MS);
+loop();
+</script>
 </body>
 </html>
