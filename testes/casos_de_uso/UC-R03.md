@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1670
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-R03 — Personalizar Descricao Tecnica (A/B)
@@ -28,6 +28,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Proposta gerada (UC-R01) e selecionada
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-R01**
+
 
 ### Pos-condicoes
 1. Descricao tecnica personalizada com backup do original

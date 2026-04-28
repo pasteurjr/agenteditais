@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1239
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P11 — Pipeline IA de Precificacao
@@ -29,6 +29,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Vinculo item-produto existente
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P02**
+
 
 ### Pos-condicoes
 1. Insights salvos no banco, campos A-E pre-preenchidos

@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 84
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-I01 — Validacao Legal do Edital
@@ -32,6 +32,18 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Edital foi salvo na CaptacaoPage (status "salvo" no banco)
 3. Documento do edital esta disponivel (PDF importado ou texto extraido)
 4. Base de legislacao configurada (Lei 14.133/2021, decretos regulamentadores, jurisprudencias)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Relatorio de validacao legal gerado com inconsistencias classificadas

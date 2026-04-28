@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 348
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F02 — Gerir contatos e area padrao
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Empresa em edicao.
 2. Lista de areas carregada de `/api/areas-produto`.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F01**
+- **UC-F13 OU [seed]**
+
 
 ### Pos-condicoes
 1. Emails e telefones ficam consolidados no cadastro da empresa.

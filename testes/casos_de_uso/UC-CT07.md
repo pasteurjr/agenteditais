@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1292
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT07 — Gestao de Empenhos *(NOVO V3)*
@@ -26,6 +26,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Contrato cadastrado e selecionado (UC-CT01) com status "vigente"
 3. Contrato classificado como venda recorrente (consumiveis ao longo do fluxo de execucao)
 4. Itens do contrato cadastrados com valores unitarios
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Empenho registrado com numero, valor e data

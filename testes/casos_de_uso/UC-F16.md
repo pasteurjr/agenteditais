@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 2093
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F16 — Configurar fontes, palavras-chave e NCMs de busca
@@ -28,6 +28,16 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. `fontes_editais` e `parametros_score` disponiveis.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Fontes ficam ativadas ou desativadas.

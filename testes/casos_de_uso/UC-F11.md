@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1569
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F11 — Verificar completude tecnica do produto
@@ -30,6 +30,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Produto existente.
 2. Endpoint de completude disponivel.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F07 OU UC-F08**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Usuario obtem um diagnostico de completude dos campos basicos e da mascara tecnica.

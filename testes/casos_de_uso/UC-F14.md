@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1842
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F14 — Configurar pesos e limiares de score
@@ -29,6 +29,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Registro de `parametros_score` existente ou passivel de criacao.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Pesos ficam persistidos.

@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 282
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV02 — Explorar resultados e painel lateral do edital
@@ -28,6 +28,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Resultado de busca retornado.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV01**
+
 
 ### Pos-condicoes
 1. Usuario visualiza detalhes completos do edital selecionado.

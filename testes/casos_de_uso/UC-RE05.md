@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1315
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE05 — Gerar Laudo de Contra-Razao
@@ -32,6 +32,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Documento de recurso disponivel (PDF/DOCX) ou informacoes sobre os fundamentos
 3. Proposta do usuario e edital completo disponiveis
 4. Base de legislacao e jurisprudencias carregada
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-R01 OU UC-R02**
+- **UC-CV03**
+
 
 ### Pos-condicoes
 1. Laudo de contra-razao gerado com secao de defesa e secao de ataque

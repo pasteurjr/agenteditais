@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 943
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F06 — Listar, filtrar e inspecionar produtos
@@ -31,6 +31,18 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado (ver secao Modelo de Acesso).
 2. Produtos cadastrados.
 3. Hierarquia Area -> Classe -> Subclasse disponivel.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F07 OU UC-F08**
+- **UC-F13 OU [seed]**
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Usuario consegue localizar produtos por texto e classificacao.

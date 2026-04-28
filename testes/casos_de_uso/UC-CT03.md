@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 991
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT03 — Acompanhar Cronograma de Entregas
@@ -24,6 +24,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Usuario autenticado com contrato selecionado (UC-CT01)
 2. Entregas cadastradas com `data_prevista` (UC-CT02)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT02**
+
 
 ### Pos-condicoes
 1. Cronograma visual exibido com status por entrega

@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 695
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV05 — Exportar e consolidar resultados da busca
@@ -21,6 +21,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Resultados de busca carregados.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV01**
+
 
 ### Pos-condicoes
 1. Usuario consegue exportar a grade corrente em CSV.

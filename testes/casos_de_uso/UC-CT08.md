@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1445
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT08 — Auditoria Empenhos x Faturas x Pedidos *(NOVO V3)*
@@ -25,6 +25,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Contrato selecionado com ao menos um empenho registrado (UC-CT07)
 3. Entregas e faturas vinculadas aos empenhos
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Relatorio de conciliacao gerado com visao consolidada

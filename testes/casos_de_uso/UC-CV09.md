@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 1201
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV09 — Importar itens e extrair lotes por IA
@@ -30,6 +30,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Edital selecionado.
 2. Itens do edital inexistentes ou incompletos.
 3. PDF do edital disponivel para extracao de lotes.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03 OU UC-CV07**
+
 
 ### Pos-condicoes
 1. Itens podem ser importados do PNCP.

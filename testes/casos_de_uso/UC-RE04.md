@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1144
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE04 — Gerar Laudo de Recurso
@@ -33,6 +33,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 3. Inconsistencias identificadas e classificadas
 4. Base de legislacao e jurisprudencias disponivel
 5. Template de laudo selecionado (padrao ou customizado)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-RE02**
+- **UC-RE01**
+
 
 ### Pos-condicoes
 1. Laudo de recurso gerado com secoes juridica e tecnica obrigatorias

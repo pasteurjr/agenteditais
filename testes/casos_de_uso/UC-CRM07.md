@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2817
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CRM07 — Registrar Motivo de Perda *(NOVO V3)*
@@ -25,6 +25,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Edital com resultado final de perda registrado (subcard "Perdidos" em Resultados Definitivos)
 3. Motivos de Derrota parametrizados (UC-CRM02)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-FU01**
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Motivos detalhados de perda registrados com categorias

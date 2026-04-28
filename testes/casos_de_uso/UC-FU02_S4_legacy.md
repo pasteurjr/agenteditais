@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1779
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-FU02_S4_legacy — Configurar Alertas de Vencimento
@@ -22,6 +22,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Contratos e Atas de Registro de Preco (ARPs) cadastrados no sistema
 2. Datas de vencimento definidas nos registros
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01 OU UC-AT01**
+
 
 ### Pos-condicoes
 1. Vencimentos proximos exibidos com badges de urgencia

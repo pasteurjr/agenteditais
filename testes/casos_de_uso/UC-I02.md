@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 225
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-I02 — Sugerir Esclarecimento ou Impugnacao
@@ -30,6 +30,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Validacao legal concluida (UC-I01)
 2. Inconsistencias detectadas e classificadas por gravidade
 3. Base de legislacao e jurisprudencias carregada
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-I01**
+
+Pre-requisitos nao-UC:
+
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Cada inconsistencia tem tipo de peticao sugerido (Impugnacao ou Esclarecimento)

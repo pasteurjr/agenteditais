@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1135
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P10 — Gestao de Comodato
@@ -29,6 +29,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Edital envolve comodato de equipamento
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Dados de comodato registrados com amortizacao calculada

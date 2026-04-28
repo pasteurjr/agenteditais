@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 356
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-I03 — Gerar Peticao de Impugnacao
@@ -32,6 +32,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Pelo menos uma inconsistencia marcada como "Impugnacao"
 3. Base de legislacao e jurisprudencias disponivel
 4. Templates de peticao configurados (padrao ou customizado)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-I02**
+
+Pre-requisitos nao-UC:
+
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Peticao de impugnacao gerada com texto completo

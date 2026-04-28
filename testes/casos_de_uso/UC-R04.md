@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1752
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-R04 — Auditoria ANVISA (Semaforo Regulatorio)
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Proposta selecionada com produtos vinculados
 2. Produtos tem campo `registro_anvisa` preenchido
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-R01 OU UC-R02**
+- **UC-F07 OU UC-F08**
+
 
 ### Pos-condicoes
 1. Cada produto tem status ANVISA visivel (Valido/Proximo Venc./Vencido)

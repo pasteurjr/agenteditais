@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 234
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-FU02 — Configurar Alertas de Prazo
@@ -23,6 +23,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario esta autenticado no sistema
 2. Contratos e ARPs cadastrados com datas de vencimento definidas
 3. Sistema de notificacoes configurado
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01 OU UC-AT01**
+
 
 ### Pos-condicoes
 1. Vencimentos proximos exibidos com badges de urgencia consolidados

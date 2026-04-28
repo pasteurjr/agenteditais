@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1102
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F07 — Cadastrar produto por IA a partir de manual, IFU, folder, NFS, plano de contas ou website
@@ -31,6 +31,16 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado.
 2. Servicos de IA e chat operacionais.
 3. Opcionalmente classificacao por subclasse informada para melhorar a mascara de extracao.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Um ou mais produtos podem ser cadastrados a partir de documento ou website.

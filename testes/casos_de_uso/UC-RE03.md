@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1033
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE03 — Chatbox de Analise
@@ -30,6 +30,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Analise da proposta vencedora concluida (UC-RE02)
 2. Dados do edital, proposta vencedora e inconsistencias carregados no contexto da IA
 3. Base de legislacao e jurisprudencias disponivel
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-RE02**
+
 
 ### Pos-condicoes
 1. Conversa registrada no historico do edital

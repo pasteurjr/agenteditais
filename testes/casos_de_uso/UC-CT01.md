@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 778
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT01 — Cadastrar Contrato
@@ -25,6 +25,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Modelo `Contrato` existe no banco
 3. Resultado de vitoria registrado em UC-FU01 (desejavel)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-FU01**
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Contrato cadastrado com todos os campos obrigatorios

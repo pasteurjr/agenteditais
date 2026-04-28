@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1076
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT04 — Gestao de Aditivos
@@ -24,6 +24,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Usuario autenticado com contrato selecionado (UC-CT01)
 2. Valor original do contrato registrado
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Aditivo registrado na tabela `contrato_aditivos`

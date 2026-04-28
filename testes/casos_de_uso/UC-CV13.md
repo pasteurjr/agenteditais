@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 1795
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV13 — Usar IA na validacao: resumo, perguntas e acoes rapidas
@@ -30,6 +30,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Edital selecionado.
 2. Servico de chat/IA disponivel.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03 OU UC-CV07**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Usuario consegue resumir, perguntar e obter respostas especificas sobre o edital.

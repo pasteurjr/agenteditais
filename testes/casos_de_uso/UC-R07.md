@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 2042
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-R07 — Gerenciar Status e Submissao
@@ -29,6 +29,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Proposta criada (qualquer status)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-R01 OU UC-R02**
+
 
 ### Pos-condicoes
 1. Proposta progrediu no fluxo de status (rascunho -> revisao -> aprovada -> enviada)

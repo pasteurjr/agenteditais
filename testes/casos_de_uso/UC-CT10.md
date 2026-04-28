@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1699
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT10 — KPIs de Execucao *(NOVO V3)*
@@ -25,6 +25,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Contratos cadastrados com dados de status e datas (UC-CT01)
 3. Dados de vencimento e renovacao disponiveis (UC-CT09)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. KPIs de execucao calculados e exibidos em stat cards

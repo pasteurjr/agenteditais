@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1747
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F13 — Consultar classificacao e funil de monitoramento
@@ -30,6 +30,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Areas, classes e subclasses cadastradas.
 2. Monitoramentos existentes ou nao.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Usuario visualiza a arvore de classificacao parametrizada.

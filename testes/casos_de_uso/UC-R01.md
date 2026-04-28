@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1442
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-R01 — Gerar Proposta Tecnica (Motor Automatico)
@@ -31,6 +31,19 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Precificacao completa (camadas A-F definidas para pelo menos 1 lote)
 2. Edital salvo com dados do orgao
 3. Produto com specs tecnicas no portfolio
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P04**
+- **UC-P05**
+- **UC-P06**
+- **UC-P07**
+- **UC-P08**
+- **UC-CV03**
+- **UC-F07 OU UC-F08**
+
 
 ### Pos-condicoes
 1. Proposta tecnica gerada com dados cruzados (preco + edital)

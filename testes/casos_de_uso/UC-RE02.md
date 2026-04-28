@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 894
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE02 — Analisar Proposta Vencedora
@@ -32,6 +32,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Proposta vencedora disponivel para analise (documento ou dados do portal)
 3. Edital completo com requisitos tecnicos e legais disponivel
 4. Base de legislacao e jurisprudencias carregada
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+
+Pre-requisitos nao-UC:
+
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Relatorio de analise da proposta vencedora gerado

@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 418
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P03 — Calculo Tecnico de Volumetria
@@ -29,6 +29,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Lote configurado com itens e produtos vinculados (UC-P01 + UC-P02)
 2. Produtos tem campo "rendimento por kit" preenchido no portfolio
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P01**
+- **UC-P02**
+
 
 ### Pos-condicoes
 1. Quantidade de kits calculada com arredondamento ceil para cada item

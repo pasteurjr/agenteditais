@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2580
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CRM05 — KPIs do CRM *(NOVO V3)*
@@ -25,6 +25,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Editais registrados nas diversas etapas do pipeline do CRM
 3. Resultados de ganhos e perdas registrados (UC-FU01)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-FU01**
+
 
 ### Pos-condicoes
 1. KPIs de performance comercial calculados e exibidos

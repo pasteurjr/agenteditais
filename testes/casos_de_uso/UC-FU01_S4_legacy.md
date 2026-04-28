@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1620
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-FU01_S4_legacy — Registrar Resultado de Edital
@@ -23,6 +23,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Edital submetido (proposta enviada ao portal)
 2. Resultado do certame publicado (vitoria, derrota ou cancelamento)
 3. Usuario autenticado no sistema
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Resultado registrado no banco vinculado ao edital

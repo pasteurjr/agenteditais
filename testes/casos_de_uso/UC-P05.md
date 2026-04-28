@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 618
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P05 — Montar Preco Base (Camada B)
@@ -29,6 +29,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Base de custos definida (UC-P04)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P04**
+
 
 ### Pos-condicoes
 1. Preco base definido por uma das 3 opcoes

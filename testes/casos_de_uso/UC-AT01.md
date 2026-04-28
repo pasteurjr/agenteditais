@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 412
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-AT01 — Buscar Atas no PNCP
@@ -23,6 +23,16 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Backend `tool_buscar_atas_pncp` operacional
 3. API do PNCP acessivel
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Atas encontradas exibidas na tabela de resultados

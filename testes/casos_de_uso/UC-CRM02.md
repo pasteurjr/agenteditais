@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2243
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CRM02 — Parametrizacoes do CRM *(NOVO V3)*
@@ -25,6 +25,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema com permissao de administracao
 2. Pagina CRMPage acessivel
 3. Empresa do usuario cadastrada no sistema
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+- **UC-FU01**
+
 
 ### Pos-condicoes
 1. Tipos de Edital do Business parametrizados e disponiveis para classificacao

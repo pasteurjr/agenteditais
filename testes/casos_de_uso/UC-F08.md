@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1260
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F08 — Editar produto e especificacoes tecnicas
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Produto existente.
 2. Subclasse com mascara de campos tecnicos disponivel.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F07 OU UC-F08**
+- **UC-F13 OU [seed]**
+
 
 ### Pos-condicoes
 1. Dados basicos do produto sao atualizados.

@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 772
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV06 — Gerir monitoramentos automaticos de busca
@@ -22,6 +22,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Pagina `CaptacaoPage` acessivel.
 2. CRUD de `monitoramentos` disponivel.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Monitoramento fica criado, pausado, retomado ou excluido.

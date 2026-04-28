@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1456
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE06 — Submissao Assistida no Portal
@@ -32,6 +32,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Documento dentro dos limites de tamanho do portal
 3. Credenciais de acesso ao portal configuradas
 4. Prazo de submissao nao expirado
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-I03 OU UC-RE04 OU UC-RE05**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Peticao validada (formato, tamanho, secoes obrigatorias)

@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 1963
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F15 — Configurar parametros comerciais, regioes e modalidades
@@ -24,6 +24,16 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Registro de `parametros_score` disponivel.
 2. Modalidades cadastradas em `modalidades_licitacao`.
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Regioes, tempo de entrega, custos e modalidades ficam persistidos.

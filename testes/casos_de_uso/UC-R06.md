@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1956
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-R06 — Exportar Dossie Completo
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Proposta selecionada
 2. Auditorias concluidas (recomendado)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-R01 OU UC-R02**
+- **UC-R04 OU UC-R05**
+
 
 ### Pos-condicoes
 1. Pacote completo gerado (PDF + DOCX + ZIP)

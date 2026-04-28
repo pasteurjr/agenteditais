@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 583
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-AT03 — Dashboard de Atas Consultadas
@@ -24,6 +24,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Usuario autenticado no sistema
 2. Ao menos uma ata salva na tabela `atas_consultadas` (via UC-AT01)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-AT01**
+
 
 ### Pos-condicoes
 1. Dashboard exibe visao consolidada de todas as atas consultadas

@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1037
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P09 — Consultar Historico de Precos (Camada F)
@@ -29,6 +29,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Produto selecionado (em qualquer etapa da precificacao)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F06**
+
 
 ### Pos-condicoes
 1. Usuario visualizou historico e usou como referencia consultiva

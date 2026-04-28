@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1913
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CR02 — Pedidos em Atraso
@@ -22,6 +22,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Usuario autenticado no sistema
 2. Ao menos um contrato com entregas atrasadas
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+- **UC-CT02**
+
 
 ### Pos-condicoes
 1. Entregas atrasadas listadas com severidade visual

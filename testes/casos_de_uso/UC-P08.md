@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 916
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P08 — Definir Estrategia Competitiva
@@ -29,6 +29,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Lances configurados (UC-P07)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P07**
+
 
 ### Pos-condicoes
 1. Perfil de estrategia definido (Quero Ganhar / Nao Ganhei no Minimo)

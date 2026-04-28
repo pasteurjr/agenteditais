@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 1919
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-FU03_S4_legacy — Score Logistico
@@ -23,6 +23,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Produto vinculado ao edital (via PortfolioPage)
 2. Parametros logisticos configurados (distancia, prazo, capacidade)
 3. Edital com dados de entrega definidos
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+- **UC-F15 OU [seed]**
+
 
 ### Pos-condicoes
 1. Score logistico calculado e exibido com valor numerico

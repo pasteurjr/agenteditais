@@ -31,6 +31,16 @@ split_gerado_em: "2026-04-24T19:19:04"
 1. Usuario autenticado (ver secao Modelo de Acesso).
 2. CRUD de `empresas` disponivel.
 
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
+
 ### Pos-condicoes
 1. Registro em `empresas` criado ou atualizado.
 2. Dados cadastrais ficam reutilizaveis nas demais etapas do sistema.

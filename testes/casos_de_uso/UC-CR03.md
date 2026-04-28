@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2002
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CR03 — Alertas de Vencimento Multi-tier
@@ -24,6 +24,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Usuario autenticado no sistema
 2. Contratos, ARPs e entregas cadastrados com datas de vencimento
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Vencimentos proximos de todas as categorias listados consolidadamente

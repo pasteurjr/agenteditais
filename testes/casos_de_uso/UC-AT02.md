@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 501
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-AT02 — Extrair Resultados de Ata PDF
@@ -25,6 +25,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. PDF da ata disponivel (via download do PNCP ou URL direta)
 3. Backend tools `tool_baixar_ata_pncp` e `tool_extrair_ata_pdf` operacionais
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-AT01**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Itens da ata extraidos com descricao, vencedor, preco e quantidade

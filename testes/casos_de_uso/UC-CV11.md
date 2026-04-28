@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 1481
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV11 — Analisar riscos, recorrencia, atas e concorrentes
@@ -30,6 +30,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Edital selecionado.
 2. PDF e dados do edital disponiveis para processamento.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03 OU UC-CV07**
+
 
 ### Pos-condicoes
 1. Usuario obtem pipeline de riscos e trechos relevantes.

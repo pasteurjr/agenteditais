@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2358
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CRM03 — Mapa Geografico de Processos *(NOVO V3)*
@@ -25,6 +25,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Editais captados com localizacao geografica (UF/municipio do orgao)
 3. Pipeline do CRM populado com editais em diversas etapas
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+
 
 ### Pos-condicoes
 1. Mapa do Brasil exibido com marcadores coloridos por etapa do pipeline

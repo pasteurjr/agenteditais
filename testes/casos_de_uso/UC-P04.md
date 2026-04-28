@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 519
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P04 — Configurar Base de Custos (ERP + Tributario)
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Volumetria calculada (UC-P03) ou opcao "Nao Preciso" selecionada
 2. Produto tem NCM cadastrado no portfolio
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P03**
+- **UC-F07 OU UC-F08**
+
 
 ### Pos-condicoes
 1. Custo base do item definido

@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 1358
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P12 — Relatorio de Custos e Precos
@@ -21,6 +21,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 
 ### Pre-condicoes
 1. Vinculo selecionado com dados de custos/precos
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P04 OU UC-P05**
+
 
 ### Pos-condicoes
 1. Relatorio MD gerado com opcao de download

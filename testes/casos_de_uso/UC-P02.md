@@ -5,7 +5,7 @@ sprint: "Sprint 3-4 (Precificação e Proposta)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO PRECIFICACAO E PROPOSTA V5.md"
 linha_inicio_no_doc: 274
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-P02 — Selecao Inteligente de Portfolio (Agente Assistido)
@@ -30,6 +30,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Lotes do edital estao configurados (UC-P01 concluido)
 2. Portfolio de produtos esta cadastrado com specs tecnicas
 3. Itens dos lotes tem parametros tecnicos definidos
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-P01**
+- **UC-F07 OU UC-F08**
+
 
 ### Pos-condicoes
 1. Cada item do lote tem produto do portfolio vinculado

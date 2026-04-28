@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 584
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV04 — Definir estrategia, intencao e margem do edital
@@ -29,6 +29,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 ### Pre-condicoes
 1. Edital selecionado no painel lateral.
 2. Registro de edital salvo ou passivel de salvamento.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV02**
+- **UC-CV03**
+
 
 ### Pos-condicoes
 1. Estrategia comercial do edital fica persistida.

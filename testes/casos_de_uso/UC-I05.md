@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 631
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-I05 — Controle de Prazo
@@ -31,6 +31,18 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Edital salvo no sistema com data de abertura definida
 2. Peticao em elaboracao ou planejada para o edital
 3. Canais de notificacao configurados (email, WhatsApp, sistema)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+- **UC-I03 OU UC-I04**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Alertas configurados para 3 dias uteis antes da abertura

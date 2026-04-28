@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 656
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CT06 — Saldo de ARP / Controle de Carona
@@ -25,6 +25,14 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Ao menos uma ata salva (UC-AT01/AT03)
 3. Dados de itens da ARP extraidos com quantidades
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-AT01**
+- **UC-AT02**
+
 
 ### Pos-condicoes
 1. Saldo por item da ARP exibido com barras de consumo

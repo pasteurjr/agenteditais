@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 474
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F03 — Gerir documentos da empresa
@@ -30,6 +30,18 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Empresa existente.
 2. Endpoint `/api/empresa-documentos/upload` disponivel.
 3. Lista de tipos/documentos necessarios carregada.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F01**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+- `[seed]` — dado pre-cadastrado no banco (seed)
+
 
 ### Pos-condicoes
 1. Documento fica associado a empresa em `empresa_documentos`.

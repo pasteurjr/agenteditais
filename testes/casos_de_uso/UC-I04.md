@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 514
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-I04 — Upload de Peticao Externa
@@ -31,6 +31,17 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario esta autenticado no sistema
 2. Edital esta salvo no sistema
 3. Usuario possui peticao de impugnacao elaborada fora do sistema (DOCX/PDF)
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03**
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Peticao importada no sistema com status "rascunho"

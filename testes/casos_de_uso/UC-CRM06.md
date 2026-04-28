@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 2720
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CRM06 — Registrar Decisao de Nao-Participacao *(NOVO V3)*
@@ -25,6 +25,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Edital em etapa "Em Analise" no pipeline do CRM (UC-CRM01)
 3. Decisao de nao participar tomada pela equipe comercial
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Motivos da nao-participacao registrados com log do usuario

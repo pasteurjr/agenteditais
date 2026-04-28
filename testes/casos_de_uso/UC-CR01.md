@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 1799
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CR01 — Dashboard Contratado X Realizado
@@ -23,6 +23,13 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado no sistema
 2. Ao menos um contrato cadastrado com entregas (UC-CT01 + UC-CT02)
 3. Endpoint GET /api/dashboard/contratado-realizado implementado
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CT01**
+
 
 ### Pos-condicoes
 1. Dashboard exibe comparativo visual de todos os contratos

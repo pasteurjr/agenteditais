@@ -5,7 +5,7 @@ sprint: "Sprint 5"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO SPRINT5 V5.md"
 linha_inicio_no_doc: 109
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-FU01 — Registrar Resultado (Vitoria/Derrota)
@@ -25,6 +25,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario esta autenticado no sistema
 2. Ao menos um edital possui status "submetido" no banco de dados
 3. Proposta foi enviada para o orgao contratante (submissao registrada)
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Resultado registrado no banco com tipo (vitoria/derrota/cancelado)

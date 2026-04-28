@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 1341
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV10 — Confrontar documentacao necessaria com a empresa
@@ -30,6 +30,19 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Edital selecionado.
 2. Empresa e documentacao da empresa cadastradas.
 3. Endpoint `/api/editais/{id}/documentacao-necessaria` disponivel.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-CV03 OU UC-CV07**
+- **UC-F01**
+- **UC-F03**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Usuario visualiza documentos exigidos, faltantes e vencidos.

@@ -5,7 +5,7 @@ sprint: "Sprint 2"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
 linha_inicio_no_doc: 135
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-CV01 — Buscar editais por termo, classificacao e score
@@ -31,6 +31,19 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Usuario autenticado.
 2. Fontes e parametros basicos configurados.
 3. Endpoints `/api/editais/buscar`, `/api/modalidades`, `/api/origens` e `/api/areas-produto` disponiveis.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F14**
+- **UC-F15**
+- **UC-F16**
+
+Pre-requisitos nao-UC:
+
+- `[login]` — autenticacao basica do usuario
+
 
 ### Pos-condicoes
 1. Lista de editais encontrada e exibida na tabela.

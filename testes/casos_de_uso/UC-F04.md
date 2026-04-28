@@ -5,7 +5,7 @@ sprint: "Sprint 1"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
 linha_inicio_no_doc: 618
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-F04 — Buscar, revisar e anexar certidoes
@@ -31,6 +31,18 @@ split_gerado_em: "2026-04-24T19:14:51"
 1. Empresa cadastrada com CNPJ.
 2. Fontes de certidao configuradas ou sincronizadas. (**V5 correcao: fontes devem ser inicializadas ANTES de buscar — ver FA-01 e FE-01**)
 3. Endpoints de certidoes operacionais.
+
+### UCs predecessores
+
+Estado satisfeito por execucao previa de:
+
+- **UC-F01**
+- **UC-F16 OU [seed]**
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Registros em `empresa_certidoes` sao atualizados.

@@ -5,7 +5,7 @@ sprint: "Sprint 4 (Recursos e Impugnações)"
 versao_uc: "5.0"
 doc_origem: "CASOS DE USO RECURSOS E IMPUGNACOES V5.md"
 linha_inicio_no_doc: 756
-split_gerado_em: "2026-04-24T19:14:51"
+split_gerado_em: "2026-04-24T19:19:04"
 ---
 
 # UC-RE01 — Monitorar Janela de Recurso
@@ -32,6 +32,15 @@ split_gerado_em: "2026-04-24T19:14:51"
 2. Resultado do certame publicado ou em vias de publicacao
 3. Canais de notificacao configurados (WhatsApp, email, alerta sistema)
 4. Portal gov.br acessivel para monitoramento
+
+### UCs predecessores
+
+**UC raiz** — nao depende de execucao previa de outros UCs.
+
+Pre-requisitos nao-UC:
+
+- `[infra]` — endpoint/servico operacional (nao eh UC)
+
 
 ### Pos-condicoes
 1. Abertura da janela de recurso detectada automaticamente
