@@ -35,6 +35,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
     administrador = Column(TINYINT(1), nullable=False, default=0)
+    pasta_documentos_teste = Column(String(500), nullable=True)  # path absoluto na maquina do tester
     ativo = Column(TINYINT(1), nullable=False, default=1)
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
 

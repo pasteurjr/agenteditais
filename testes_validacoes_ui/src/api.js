@@ -49,4 +49,10 @@ export const api = {
 
   // helper
   screenshotUrl: (path)        => `/api/screenshot?path=${encodeURIComponent(path)}`,
+
+  // configuracoes — pasta de documentos sintetizados
+  getPastaDocumentos:    ()        => req("/api/configuracoes/pasta-documentos"),
+  setPastaDocumentos:    (pasta)   => req("/api/configuracoes/pasta-documentos", {method: "POST", body: JSON.stringify({pasta})}),
+  validarPastaDocumentos:(pasta)   => req("/api/configuracoes/pasta-documentos/validar", {method: "POST", body: JSON.stringify({pasta})}),
+  zipDocumentosUrl:      ()        => "/api/documentos-sintetizados.zip",
 };

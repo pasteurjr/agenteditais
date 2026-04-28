@@ -213,6 +213,13 @@ def main():
         for s, u, d in falhas:
             print(f"    - {s}/{u}/{d}")
     print(f"  Diretorio: {saida_root}")
+
+    # Gera ZIP pra download via app
+    import shutil
+    zip_path = PROJECT_ROOT / "docs" / "documentos_sintetizados"
+    zip_out = shutil.make_archive(str(zip_path), "zip", str(saida_root.parent), saida_root.name)
+    print(f"  ZIP: {zip_out}")
+
     return 0 if not falhas else 1
 
 

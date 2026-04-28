@@ -7,6 +7,7 @@ import Home from './pages/Home'
 import NovoTeste from './pages/NovoTeste'
 import Teste from './pages/Teste'
 import Relatorio from './pages/Relatorio'
+import Configuracoes from './pages/Configuracoes'
 
 // ===== Contexto de auth =====
 const AuthCtx = createContext(null)
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/novo" element={<RequireAuth><NovoTeste /></RequireAuth>} />
           <Route path="/teste/:id" element={<RequireAuth><Teste /></RequireAuth>} />
           <Route path="/relatorio/:id" element={<RequireAuth><Relatorio /></RequireAuth>} />
+          <Route path="/configuracoes" element={<RequireAuth><Configuracoes /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

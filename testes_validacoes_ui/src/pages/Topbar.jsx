@@ -12,7 +12,8 @@ export default function Topbar({ title, breadcrumb }) {
         {breadcrumb && <span style={{marginRight:'1em', color:'#aaa'}}>{breadcrumb}</span>}
         Olá, <strong>{user?.name || user?.email}</strong>
         {user?.administrador && <span className="badge-admin">ADMIN</span>}
-        <button onClick={onLogout} className="secondary btn-sm" style={{marginLeft:'1em'}}>Logout</button>
+        <button onClick={() => nav('/configuracoes')} className="secondary btn-sm" style={{marginLeft:'1em'}}>⚙ Config</button>
+        <button onClick={onLogout} className="secondary btn-sm" style={{marginLeft:'0.5em'}}>Logout</button>
       </div>
     </header>
   )

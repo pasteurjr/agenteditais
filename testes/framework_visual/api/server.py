@@ -184,14 +184,128 @@ def api_logout():
 def api_me():
     if not session.get("user_id"):
         return jsonify({"user": None}), 401
-    return jsonify({
-        "user": {
-            "id": session["user_id"],
-            "email": session["user_email"],
-            "name": session["user_name"],
-            "administrador": session.get("is_admin", False),
+    db = get_db()
+    try:
+        u = db.query(User).filter_by(id=session["user_id"]).first()
+        return jsonify({
+            "user": {
+                "id": session["user_id"],
+                "email": session["user_email"],
+                "name": session["user_name"],
+                "administrador": session.get("is_admin", False),
+                "pasta_documentos_teste": u.pasta_documentos_teste if u else None,
+            }
+        })
+    finally:
+        db.close()
+
+
+# ============================================================
+# Configuracoes do tester — pasta de documentos sintetizados
+# ============================================================
+
+@app.route("/api/configuracoes/pasta-documentos", methods=["GET"])
+@login_required
+def api_get_pasta_documentos():
+    """Retorna a pasta atual + status de validacao."""
+    db = get_db()
+    try:
+        u = db.query(User).filter_by(id=session["user_id"]).first()
+        pasta = u.pasta_documentos_teste if u else None
+        valido, detalhes = _validar_pasta_documentos(pasta)
+        return jsonify({
+            "pasta": pasta,
+            "valida": valido,
+            "detalhes": detalhes,
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/configuracoes/pasta-documentos", methods=["POST"])
+@login_required
+def api_set_pasta_documentos():
+    """Salva a pasta apos validar a estrutura."""
+    data = request.get_json() or {}
+    pasta = (data.get("pasta") or "").strip()
+    if not pasta:
+        return jsonify({"ok": False, "msg": "pasta vazia"}), 400
+
+    valido, detalhes = _validar_pasta_documentos(pasta)
+    if not valido:
+        return jsonify({
+            "ok": False,
+            "msg": "Pasta invalida: " + detalhes.get("erro", "estrutura nao reconhecida"),
+            "detalhes": detalhes,
+        }), 400
+
+    db = get_db()
+    try:
+        u = db.query(User).filter_by(id=session["user_id"]).first()
+        if not u:
+            return jsonify({"ok": False, "msg": "user nao encontrado"}), 404
+        u.pasta_documentos_teste = pasta
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "pasta": pasta,
+            "detalhes": detalhes,
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/configuracoes/pasta-documentos/validar", methods=["POST"])
+@login_required
+def api_validar_pasta_documentos():
+    """Valida a pasta sem salvar (preview no frontend antes do save)."""
+    data = request.get_json() or {}
+    pasta = (data.get("pasta") or "").strip()
+    valido, detalhes = _validar_pasta_documentos(pasta)
+    return jsonify({"valida": valido, "detalhes": detalhes})
+
+
+@app.route("/api/documentos-sintetizados.zip", methods=["GET"])
+@login_required
+def api_download_zip_documentos():
+    """Serve o ZIP de documentos sintetizados pra download."""
+    from flask import send_file
+    zip_path = _PROJECT / "docs" / "documentos_sintetizados.zip"
+    if not zip_path.exists():
+        return jsonify({"error": "ZIP nao encontrado em " + str(zip_path)}), 404
+    return send_file(
+        str(zip_path),
+        as_attachment=True,
+        download_name="documentos_sintetizados.zip",
+        mimetype="application/zip",
+    )
+
+
+def _validar_pasta_documentos(pasta: str | None) -> tuple[bool, dict]:
+    """Confere que pasta existe, eh diretorio e tem estrutura sprintN/UC-XXX/.
+    Retorna (valido, detalhes_dict)."""
+    if not pasta:
+        return False, {"erro": "pasta nao configurada"}
+    p = Path(pasta)
+    if not p.exists():
+        return False, {"erro": f"pasta nao existe: {pasta}"}
+    if not p.is_dir():
+        return False, {"erro": f"nao eh diretorio: {pasta}"}
+
+    sprints_esperadas = ["sprint1", "sprint2", "sprint3-4", "sprint4", "sprint5"]
+    sprints_encontradas = [s for s in sprints_esperadas if (p / s).is_dir()]
+    if not sprints_encontradas:
+        return False, {
+            "erro": "nenhuma subpasta sprint* encontrada — descompacte o ZIP nesta pasta",
+            "esperado": sprints_esperadas,
         }
-    })
+
+    pdfs_total = sum(1 for _ in p.rglob("*.pdf"))
+    return True, {
+        "sprints_encontradas": sprints_encontradas,
+        "pdfs_total": pdfs_total,
+        "msg": f"OK — {len(sprints_encontradas)} sprints, {pdfs_total} PDFs",
+    }
 
 
 @app.route("/api/projetos")
