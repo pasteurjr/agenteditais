@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Relatorio — {{ teste.titulo }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .ct-block {
+      background: #16213e; border: 1px solid #2a3f5f; border-radius: 6px;
+      margin-bottom: 1.5em; padding: 1em;
+    }
+    .ct-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em; }
+    .ct-titulo { color: #8bc34a; font-weight: 600; }
+    .passo-block {
+      border-left: 3px solid #2a3f5f; padding-left: 1em; margin: 1em 0;
+    }
+    .passo-block.aprovado { border-left-color: #4caf50; }
+    .passo-block.reprovado { border-left-color: #f44336; }
+    .passo-block.pendente { border-left-color: #ffc107; }
+    .screenshots-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1em; }
+    .screenshots-pair img { width: 100%; border: 1px solid #2a3f5f; border-radius: 4px; }
+    .screenshots-pair .label { font-size: 9pt; color: #aaa; text-align: center; margin-bottom: 0.3em; }
+    .observacao { background: rgba(255,193,7,0.1); border-left: 3px solid #ffc107; padding: 0.5em 1em; margin: 0.5em 0; font-size: 10pt; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <h1>📄 Relatório — {{ teste.titulo }}</h1>
+  <div class="right">
+    <a href="/relatorio/{{ teste.id }}/md" class="btn secondary" style="padding: 0.3em 0.8em; margin: 0; font-size: 9pt;">Baixar MD</a>
+    <a href="/home" style="margin-left: 1em;">← Home</a>
+  </div>
+</header>
+
+<div class="content">
+  <div class="section">
+    <h2>Sumário</h2>
+    <table>
+      <tr><th>Teste ID</th><td><code>{{ teste.id }}</code></td></tr>
+      <tr><th>Sprint</th><td>{{ teste.sprint.nome if teste.sprint else "-" }}</td></tr>
+      <tr><th>Tester</th><td>{{ teste.user.email if teste.user else "-" }}</td></tr>
+      <tr><th>Ciclo</th><td>{{ teste.ciclo_id or "-" }}</td></tr>
+      <tr><th>Estado</th><td><span class="tag tag-{{ teste.estado }}">{{ teste.estado }}</span></td></tr>
+      <tr><th>Iniciado em</th><td>{{ teste.iniciado_em.strftime("%Y-%m-%d %H:%M") if teste.iniciado_em else "-" }}</td></tr>
+      <tr><th>Concluído em</th><td>{{ teste.concluido_em.strftime("%Y-%m-%d %H:%M") if teste.concluido_em else "-" }}</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Casos de Teste ({{ execucoes|length }})</h2>
+    {% for e in execucoes %}
+    <div class="ct-block">
+      <div class="ct-header">
+        <div>
+          <span class="ct-titulo">{{ e.ordem }}. {{ e.ct_id }}</span> — {{ e.ct_descricao }}
+        </div>
+        <div>
+          <span class="tag tag-{{ e.estado }}">{{ e.estado }}</span>
+          <span style="color:#aaa; margin-left: 0.5em;">{{ "%.1f"|format((e.duracao_ms or 0)/1000) }}s</span>
+        </div>
+      </div>
+
+      {% if e.passos %}
+        {% for p in e.passos %}
+        <div class="passo-block {{ p.veredicto_po|lower if p.veredicto_po else 'pendente' }}">
+          <strong>Passo {{ p.ordem }} — <code>{{ p.passo_id }}</code></strong>
+          {% if p.passo_titulo %}<span style="color:#aaa">— {{ p.passo_titulo }}</span>{% endif %}
+          <div style="font-size: 9pt; color: #aaa; margin-top: 0.3em;">
+            Auto: <strong>{{ p.veredito_automatico }}</strong>
+            | PO: <strong>{{ p.veredicto_po or "—" }}</strong>
+            | {{ "%.1f"|format((p.duracao_ms or 0)/1000) }}s
+            {% if p.correcao_necessaria %} | <span style="color:#ff9800">⚠ Correção necessária</span>{% endif %}
+          </div>
+          {% if p.screenshot_antes_url or p.screenshot_depois_url %}
+          <div class="screenshots-pair">
+            {% if p.screenshot_antes_url %}<div><div class="label">ANTES</div><img src="{{ p.screenshot_antes_url }}" alt="antes"></div>{% endif %}
+            {% if p.screenshot_depois_url %}<div><div class="label">DEPOIS</div><img src="{{ p.screenshot_depois_url }}" alt="depois"></div>{% endif %}
+          </div>
+          {% endif %}
+          {% for o in p.observacoes %}
+          <div class="observacao">💬 [{{ o.criado_em }}] {{ o.texto }}</div>
+          {% endfor %}
+          {% if p.correcao_descricao %}
+          <div class="observacao" style="border-left-color: #ff9800;">🔧 Correção: {{ p.correcao_descricao }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">Sem passos registrados.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+</body>
+</html>

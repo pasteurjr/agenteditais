@@ -63,11 +63,15 @@ def create_app() -> Flask:
     from webapp.routes_home import bp as bp_home  # type: ignore
     from webapp.routes_api import bp as bp_api  # type: ignore
     from webapp.routes_testes import bp as bp_testes  # type: ignore
+    from webapp.routes_painel import bp as bp_painel  # type: ignore
+    from webapp.routes_relatorios import bp as bp_relatorios  # type: ignore
 
     app.register_blueprint(bp_login)
     app.register_blueprint(bp_home)
     app.register_blueprint(bp_api)
     app.register_blueprint(bp_testes)
+    app.register_blueprint(bp_painel)
+    app.register_blueprint(bp_relatorios)
 
     # Health
     @app.route("/healthz")

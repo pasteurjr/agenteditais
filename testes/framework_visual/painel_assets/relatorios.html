@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ titulo_pagina }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>📊 {{ titulo_pagina }}</h1>
+  <div class="right">
+    Olá, <strong>{{ user_name }}</strong>
+    {% if is_admin %}<span class="badge-admin">ADMIN</span>{% endif %}
+    <a href="/home" style="margin-left: 1em;">← Home</a>
+  </div>
+</header>
+
+<div class="content">
+  {% if relatorios %}
+    <table>
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Sprint</th>
+          <th>Tester</th>
+          <th>Estado</th>
+          <th>Gerado em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in relatorios %}
+        <tr>
+          <td>{{ r.titulo }}</td>
+          <td>{{ r.sprint }}</td>
+          <td>{{ r.tester }}</td>
+          <td><span class="tag tag-{{ r.estado }}">{{ r.estado }}</span></td>
+          <td>{{ r.gerado_em }}</td>
+          <td>
+            <a href="/relatorio/{{ r.teste_id }}" class="btn" style="padding: 0.3em 0.8em; margin: 0; font-size: 9pt;">Ver</a>
+            <a href="/relatorio/{{ r.teste_id }}/md" class="btn secondary" style="padding: 0.3em 0.8em; margin: 0; font-size: 9pt;">MD</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">Nenhum relatório gerado ainda.</div>
+  {% endif %}
+</div>
+</body>
+</html>
