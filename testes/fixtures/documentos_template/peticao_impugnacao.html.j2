@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Petição de Impugnação — Edital {{ edital.numero | default('001/2026') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('PETIÇÃO DE IMPUGNAÇÃO', 'Pregão Eletrônico ' + (edital.numero | default('001/2026'))) }}
+{{ aviso_ficticio() }}
+<p style="text-align:right;">São Paulo, {{ hoje_extenso }}.</p>
+<h2>Ao Senhor(a) Pregoeiro(a)</h2>
+<p>Da {{ edital.orgao | default('Secretaria Municipal de Saúde — São Paulo') }}<br>
+Pregão Eletrônico <strong>{{ edital.numero | default('001/2026') }}</strong></p>
+<h2>Identificação da Impugnante</h2>
+{{ bloco_empresa(empresa) }}
+<h2>I — DOS FATOS</h2>
+<p>A empresa supra qualificada, vem, por meio desta petição, no prazo legal estabelecido pelo art. 164 da Lei 14.133/2021 (cinco dias úteis antes da abertura), apresentar IMPUGNAÇÃO ao edital em referência, conforme razões abaixo expostas.</p>
+<h2>II — DA TEMPESTIVIDADE</h2>
+<p>O edital foi publicado em {{ edital.dt_publicacao | default('15/01/' + ano_atual | string) }}. A sessão pública está designada para {{ edital.dt_abertura | default('30/01/' + ano_atual | string) }}. A presente impugnação é apresentada em prazo, observando o limite de 5 dias úteis anteriores à sessão.</p>
+<h2>III — DAS RAZÕES DE IMPUGNAÇÃO</h2>
+<h3>1. Da exigência de exclusividade restritiva (item 6.4 do edital)</h3>
+<p>O edital exige Atestado de Capacidade Técnica comprovando fornecimento de quantitativo igual ou superior a <strong>100% do objeto licitado</strong>, o que viola o princípio da ampla participação previsto no art. 5º da Lei 14.133/2021 e na Súmula 263/TCU.</p>
+<p>Conforme entendimento consolidado do TCU (Acórdãos 1.231/2014, 1.214/2013), a exigência de quantitativo mínimo em atestado deve guardar proporção razoável com o objeto, sendo aceito o limite de <strong>50%</strong> como parâmetro.</p>
+<h3>2. Da especificação técnica direcionada (item 4.2)</h3>
+<p>O edital especifica "Display TFT 12 polegadas com resolução exata de 1024×768", restringindo a participação a um único fabricante. A jurisprudência do TCU veda especificações que direcionem para marca ou modelo específico (Acórdão 2.401/2006).</p>
+<h3>3. Da ausência de cronograma físico-financeiro (item 5)</h3>
+<p>O edital não apresenta cronograma físico-financeiro detalhado, em desacordo com o art. 6º, XXIII, da Lei 14.133/2021.</p>
+<h2>IV — DOS PEDIDOS</h2>
+<p>Diante do exposto, requer-se:</p>
+<ol type="a">
+<li>O recebimento e processamento da presente impugnação por ser tempestiva e regular;</li>
+<li>A ANULAÇÃO PARCIAL do edital, com as seguintes alterações:
+<ul>
+<li>Redução do quantitativo mínimo no atestado para 50% do objeto licitado;</li>
+<li>Substituição da especificação fechada por requisito mínimo (display ≥ 10");</li>
+<li>Inclusão de cronograma físico-financeiro detalhado;</li>
+</ul>
+</li>
+<li>A REPUBLICAÇÃO do edital com as devidas correções, reabrindo-se prazo legal;</li>
+<li>Caso não acolhida, a NOTIFICAÇÃO ao TCU para apuração de eventuais irregularidades.</li>
+</ol>
+<p>Termos em que pede e espera deferimento.</p>
+{{ assinatura('Representante Legal — ' + (empresa.razao_social | upper) + ' — OAB/SP 123.456') }}
+</body></html>

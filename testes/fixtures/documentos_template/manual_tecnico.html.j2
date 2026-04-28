@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Manual Técnico — {{ produto.nome | default('Produto Modelo') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Manual Técnico', produto.fabricante | default('Fabricante Genérico Ltda')) }}
+{{ aviso_ficticio() }}
+<h2>Identificação do Produto</h2>
+<table class="dados">
+<tr><th>Nome Comercial</th><td>{{ produto.nome | default('Equipamento Médico Genérico') }}</td></tr>
+<tr><th>Modelo</th><td>{{ produto.modelo | default('GEN-2024') }}</td></tr>
+<tr><th>Fabricante</th><td>{{ produto.fabricante | default('Fabricante Genérico Ltda') }}</td></tr>
+<tr><th>Registro ANVISA</th><td>{{ produto.registro_anvisa | default('80149340136') }}</td></tr>
+<tr><th>Classe de Risco</th><td>{{ produto.classe_risco | default('II — Médio Risco') }}</td></tr>
+</table>
+<h2>1. Especificações Técnicas</h2>
+<ul>
+<li><strong>Tensão de operação:</strong> 100-240 VAC, 50/60 Hz</li>
+<li><strong>Consumo:</strong> 80 W (máximo)</li>
+<li><strong>Dimensões:</strong> 350 × 280 × 180 mm (L×P×A)</li>
+<li><strong>Peso:</strong> 4,5 kg</li>
+<li><strong>Temperatura de operação:</strong> 5°C a 40°C</li>
+<li><strong>Umidade relativa:</strong> 30% a 80% (sem condensação)</li>
+<li><strong>Display:</strong> LCD 7" colorido, resolução 800×480</li>
+<li><strong>Conectividade:</strong> USB 2.0, Ethernet RJ45, Wi-Fi opcional</li>
+</ul>
+<h2>2. Princípio de Funcionamento</h2>
+<p>O equipamento opera por meio de sensores eletrônicos calibrados que convertem o sinal biológico do paciente em dados digitais processados em tempo real. Os parâmetros são exibidos no display e podem ser exportados via interface USB ou rede.</p>
+<h2>3. Indicações de Uso</h2>
+<p>Indicado para monitoramento contínuo de pacientes adultos e pediátricos em ambiente hospitalar, ambulatorial e domiciliar, sob supervisão de profissional de saúde habilitado.</p>
+<h2>4. Contraindicações</h2>
+<p>Não há contraindicações absolutas. Seguir orientações do fabricante quanto a uso em pacientes com marca-passo.</p>
+<h2>5. Operação Básica</h2>
+<ol>
+<li>Conectar o equipamento à rede elétrica adequada (110V ou 220V).</li>
+<li>Acionar o interruptor traseiro (posição I).</li>
+<li>Aguardar a auto-verificação do sistema (~30 segundos).</li>
+<li>Conectar os sensores ao paciente conforme manual ilustrado.</li>
+<li>Iniciar monitoramento pressionando o botão "START".</li>
+</ol>
+<h2>6. Manutenção e Calibração</h2>
+<p>Manutenção preventiva: a cada 12 meses por técnico autorizado. Calibração metrológica: a cada 24 meses, conforme RDC ANVISA nº 16/2013.</p>
+<h2>7. Garantia</h2>
+<p>Garantia de fábrica: 24 meses contra defeitos de fabricação. Garantia estendida disponível mediante contratação.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Manual revisão {{ ano_atual }}.1 — uso restrito a profissionais de saúde.</p>
+</body></html>

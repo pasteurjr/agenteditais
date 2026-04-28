@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Comprovante de Entrega — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('COMPROVANTE DE ENTREGA', 'Termo de Recebimento') }}
+{{ aviso_ficticio() }}
+<h2>1. Identificação</h2>
+<table class="dados">
+<tr><th>Número do Comprovante</th><td><span class="numero">CE-{{ ano_atual }}-{{ "%05d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 99999) }}</span></td></tr>
+<tr><th>Data de Entrega</th><td>{{ hoje }}</td></tr>
+<tr><th>Hora</th><td>14:30</td></tr>
+<tr><th>NF Vinculada</th><td>NF-e <span class="numero">{{ "%09d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 999999999) }}</span></td></tr>
+<tr><th>Contrato</th><td>{{ ((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999) | string + '/' + ano_atual | string }}</td></tr>
+</table>
+<h2>2. Fornecedor</h2>
+{{ bloco_empresa(empresa) }}
+<h2>3. Recebedor</h2>
+<table class="dados">
+<tr><th>Razão Social</th><td>Hospital Municipal Modelo</td></tr>
+<tr><th>CNPJ</th><td>12.345.678/0001-90</td></tr>
+<tr><th>Setor</th><td>Almoxarifado Central</td></tr>
+<tr><th>Responsável</th><td>Carlos Eduardo Mendes — Matrícula 54321</td></tr>
+</table>
+<h2>4. Itens Recebidos</h2>
+<table class="dados">
+<tr><th>Item</th><th>Descrição</th><th>Qtd Pedida</th><th>Qtd Entregue</th><th>Status</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetros UTI — GEN-2024-PRO</td><td>50</td><td>50</td><td>✓ OK</td></tr>
+<tr><td>2</td><td>Bomba infusão volumétrica — INF-100</td><td>100</td><td>100</td><td>✓ OK</td></tr>
+<tr><td>3</td><td>Desfibrilador externo automático — DEA-PRO</td><td>20</td><td>20</td><td>✓ OK</td></tr>
+</table>
+<h2>5. Verificação</h2>
+<ul>
+<li>✓ Embalagens íntegras, sem violações</li>
+<li>✓ Produtos conferidos quantitativamente</li>
+<li>✓ Notas Fiscais corretas e dentro do prazo</li>
+<li>✓ Manuais de operação inclusos em português</li>
+<li>✓ Garantia documentada (24 meses)</li>
+<li>✓ Acessórios completos conforme especificação</li>
+</ul>
+<h2>6. Observações</h2>
+<p>Mercadoria entregue conforme pedido. Recebimento provisório efetuado neste ato. O recebimento definitivo será realizado após instalação, treinamento e testes operacionais, em até 10 dias úteis.</p>
+{{ assinatura('Carlos Eduardo Mendes — Almoxarifado Central — Matrícula 54321') }}
+</body></html>

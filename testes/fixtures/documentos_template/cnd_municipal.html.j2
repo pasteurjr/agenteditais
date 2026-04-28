@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>CND Municipal — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Certidão Negativa de Débitos Municipais', 'Prefeitura Municipal de São Paulo — Secretaria da Fazenda') }}
+{{ aviso_ficticio() }}
+{{ bloco_empresa(empresa) }}
+<p>Certificamos que, na presente data, NÃO CONSTAM débitos relativos aos tributos administrados pela Secretaria Municipal da Fazenda em nome da pessoa jurídica acima identificada.</p>
+<table class="dados">
+<tr><th>Inscrição Municipal</th><td>{{ "%07d-%d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999999, ((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 10)) }}</td></tr>
+<tr><th>Data de Emissão</th><td>{{ hoje }}</td></tr>
+<tr><th>Validade</th><td>{{ validade }}</td></tr>
+<tr><th>Código de Validação</th><td><span class="numero">CND-MUN-{{ ano_atual }}-{{ empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') }}</span></td></tr>
+</table>
+<p>A autenticidade desta certidão poderá ser confirmada no portal da Secretaria Municipal da Fazenda mediante o código de validação.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Documento emitido eletronicamente. Não necessita de assinatura física.</p>
+</body></html>

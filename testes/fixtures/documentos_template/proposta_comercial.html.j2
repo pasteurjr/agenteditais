@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Proposta Comercial — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('PROPOSTA COMERCIAL', 'Pregão Eletrônico ' + (edital.numero | default('001/2026'))) }}
+{{ aviso_ficticio() }}
+<p style="text-align:right;">São Paulo, {{ hoje_extenso }}.</p>
+<h2>À</h2>
+<p>{{ edital.orgao | default('Secretaria Municipal de Saúde — São Paulo') }}<br>
+Comissão Permanente de Licitação<br>
+Pregão Eletrônico nº <strong>{{ edital.numero | default('001/2026') }}</strong></p>
+<h2>Da Proponente</h2>
+{{ bloco_empresa(empresa) }}
+<h2>1. Objeto</h2>
+<p>Apresentamos nossa proposta comercial para fornecimento dos itens constantes do Termo de Referência (Anexo I do edital em referência).</p>
+<h2>2. Itens Cotados</h2>
+<table class="dados">
+<tr><th>Item</th><th>Descrição</th><th>Marca/Modelo</th><th>Qtd</th><th>Valor Unit. (R$)</th><th>Valor Total (R$)</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetros UTI</td><td>FabGenérico GEN-2024-PRO</td><td>50</td><td>4.850,00</td><td>242.500,00</td></tr>
+<tr><td>2</td><td>Bomba infusão volumétrica</td><td>FabGenérico INF-100</td><td>100</td><td>2.100,00</td><td>210.000,00</td></tr>
+<tr><td>3</td><td>Desfibrilador externo automático</td><td>FabGenérico DEA-PRO</td><td>20</td><td>5.900,00</td><td>118.000,00</td></tr>
+<tr><td colspan="5"><strong>Valor Total da Proposta</strong></td><td><strong>R$ 570.500,00</strong></td></tr>
+</table>
+<p><strong>Valor por extenso:</strong> quinhentos e setenta mil e quinhentos reais.</p>
+<h2>3. Condições</h2>
+<ul>
+<li><strong>Prazo de entrega:</strong> 25 (vinte e cinco) dias corridos após emissão da Nota de Empenho</li>
+<li><strong>Validade da proposta:</strong> 60 (sessenta) dias</li>
+<li><strong>Garantia técnica:</strong> 24 meses contados do recebimento definitivo</li>
+<li><strong>Forma de pagamento:</strong> 30 dias após apresentação da Nota Fiscal atestada</li>
+<li><strong>Local de entrega:</strong> CIF — Almoxarifado Central da Secretaria</li>
+</ul>
+<h2>4. Declarações</h2>
+<p>Declaramos que:</p>
+<ul>
+<li>Concordamos integralmente com os termos do edital e seus anexos;</li>
+<li>Os preços ofertados incluem todas as despesas com tributos, frete, seguro e demais encargos;</li>
+<li>Os produtos atendem às especificações técnicas exigidas;</li>
+<li>Possuímos todas as certificações e registros sanitários necessários (ANVISA);</li>
+<li>Não nos enquadramos nas vedações dos arts. 14 e 156 da Lei 14.133/2021.</li>
+</ul>
+<h2>5. Dados Bancários</h2>
+<p>Banco: 001 (Banco do Brasil) | Agência: 1234-5 | Conta Corrente: 67890-1<br>
+Titular: {{ empresa.razao_social }} — CNPJ {{ empresa.cnpj }}</p>
+{{ assinatura('Representante Legal — ' + (empresa.razao_social | upper)) }}
+</body></html>

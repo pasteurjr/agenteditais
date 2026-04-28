@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TEMPLATES_DIR = PROJECT_ROOT / "testes" / "fixtures" / "documentos_template"
 
 # Tipos de documento disponíveis (cada um tem um template .html.j2)
+# Os 6 originais (rendererizar_todos itera sobre eles) + extensoes p/ documentos sintetizados
 TIPOS_DOCUMENTO = [
     "contrato_social",
     "cnd_federal",
@@ -30,6 +31,32 @@ TIPOS_DOCUMENTO = [
     "sicaf",
     "alvara",
 ]
+
+# Tipos extras suportados (gerador de documentos sintetizados de UCs).
+# Nao incluidos em TIPOS_DOCUMENTO p/ nao quebrar renderizar_todos do context_manager.
+TIPOS_DOCUMENTO_EXTRAS = [
+    "estatuto_social",
+    "cnd_municipal",
+    "cnd_estadual",
+    "balanco_patrimonial",
+    "atestado_capacidade_tecnica",
+    "manual_tecnico",
+    "folder_catalogo",
+    "nota_fiscal",
+    "edital",
+    "termo_referencia",
+    "ata_pregao",
+    "proposta_comercial",
+    "proposta_tecnica",
+    "peticao_impugnacao",
+    "laudo_recurso",
+    "contrato",
+    "aditivo_contrato",
+    "comprovante_entrega",
+    "registro_anvisa",
+    "instrucoes_uso",
+]
+TIPOS_VALIDOS = TIPOS_DOCUMENTO + TIPOS_DOCUMENTO_EXTRAS
 
 
 def _make_env() -> Environment:
@@ -75,8 +102,8 @@ def renderizar(
     Returns:
         Path do PDF gerado
     """
-    if tipo not in TIPOS_DOCUMENTO:
-        raise ValueError(f"Tipo desconhecido: {tipo}. Disponíveis: {TIPOS_DOCUMENTO}")
+    if tipo not in TIPOS_VALIDOS:
+        raise ValueError(f"Tipo desconhecido: {tipo}. Disponíveis: {TIPOS_VALIDOS}")
 
     template_file = f"{tipo}.html.j2"
     if not (TEMPLATES_DIR / template_file).exists():

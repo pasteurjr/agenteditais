@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Balanço Patrimonial — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Balanço Patrimonial', 'Demonstração Contábil — Exercício ' + (ano_atual - 1) | string) }}
+{{ aviso_ficticio() }}
+{{ bloco_empresa(empresa) }}
+<p>Demonstrações financeiras encerradas em 31 de dezembro de {{ ano_atual - 1 }}, elaboradas conforme as práticas contábeis adotadas no Brasil (CPC).</p>
+<h2>ATIVO</h2>
+<table class="dados">
+<tr><th>Conta</th><th>{{ ano_atual - 1 }} (R$)</th><th>{{ ano_atual - 2 }} (R$)</th></tr>
+<tr><td><strong>Ativo Circulante</strong></td><td>1.250.000,00</td><td>1.080.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Caixa e Equivalentes</td><td>320.000,00</td><td>270.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Contas a Receber</td><td>580.000,00</td><td>490.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Estoques</td><td>350.000,00</td><td>320.000,00</td></tr>
+<tr><td><strong>Ativo Não Circulante</strong></td><td>850.000,00</td><td>900.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Imobilizado</td><td>720.000,00</td><td>770.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Intangível</td><td>130.000,00</td><td>130.000,00</td></tr>
+<tr><td><strong>TOTAL DO ATIVO</strong></td><td><strong>2.100.000,00</strong></td><td><strong>1.980.000,00</strong></td></tr>
+</table>
+<h2>PASSIVO</h2>
+<table class="dados">
+<tr><th>Conta</th><th>{{ ano_atual - 1 }} (R$)</th><th>{{ ano_atual - 2 }} (R$)</th></tr>
+<tr><td><strong>Passivo Circulante</strong></td><td>520.000,00</td><td>490.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Fornecedores</td><td>280.000,00</td><td>260.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Obrigações Tributárias</td><td>140.000,00</td><td>130.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Salários e Encargos</td><td>100.000,00</td><td>100.000,00</td></tr>
+<tr><td><strong>Passivo Não Circulante</strong></td><td>280.000,00</td><td>320.000,00</td></tr>
+<tr><td><strong>Patrimônio Líquido</strong></td><td>1.300.000,00</td><td>1.170.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Capital Social</td><td>500.000,00</td><td>500.000,00</td></tr>
+<tr><td>&nbsp;&nbsp;Reservas de Lucros</td><td>800.000,00</td><td>670.000,00</td></tr>
+<tr><td><strong>TOTAL DO PASSIVO + PL</strong></td><td><strong>2.100.000,00</strong></td><td><strong>1.980.000,00</strong></td></tr>
+</table>
+<h2>Índices de Liquidez (Lei 8.666/93 e 14.133/21)</h2>
+<table class="dados">
+<tr><th>Índice</th><th>Valor</th><th>Mínimo Exigido</th></tr>
+<tr><td>Liquidez Geral (LG)</td><td>2,55</td><td>≥ 1,00</td></tr>
+<tr><td>Solvência Geral (SG)</td><td>2,63</td><td>≥ 1,00</td></tr>
+<tr><td>Liquidez Corrente (LC)</td><td>2,40</td><td>≥ 1,00</td></tr>
+</table>
+{{ assinatura('Contador Responsável — CRC/SP 1SP123456/O-7') }}
+</body></html>

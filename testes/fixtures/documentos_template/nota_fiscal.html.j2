@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Nota Fiscal Eletrônica — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('NOTA FISCAL ELETRÔNICA', 'NF-e Modelo 55 — Série 1') }}
+{{ aviso_ficticio() }}
+<table class="dados">
+<tr><th>Número da NF-e</th><td><span class="numero">{{ "%09d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 999999999) }}</span></td><th>Série</th><td>1</td></tr>
+<tr><th>Data de Emissão</th><td>{{ hoje }}</td><th>Natureza da Operação</th><td>Venda de mercadoria</td></tr>
+<tr><th>Chave de Acesso</th><td colspan="3"><span class="numero">3526{{ "%010d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999999999) }}55001000{{ "%09d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 999999999) }}1{{ "%07d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999999) }}</span></td></tr>
+</table>
+<h2>Emitente</h2>
+<table class="dados">
+<tr><th>Razão Social</th><td>{{ empresa.razao_social }}</td></tr>
+<tr><th>CNPJ</th><td><span class="numero">{{ empresa.cnpj }}</span></td></tr>
+<tr><th>Endereço</th><td>{{ empresa.endereco | default('Av. da Validação, 1000 — São Paulo/SP — CEP 01000-000') }}</td></tr>
+</table>
+<h2>Destinatário</h2>
+<table class="dados">
+<tr><th>Razão Social</th><td>Hospital Municipal Modelo</td></tr>
+<tr><th>CNPJ</th><td><span class="numero">12.345.678/0001-90</span></td></tr>
+<tr><th>Endereço</th><td>Rua dos Hospitais, 500 — Centro — São Paulo/SP</td></tr>
+</table>
+<h2>Itens da Nota Fiscal</h2>
+<table class="dados">
+<tr><th>#</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th>UN</th><th>Qtd</th><th>Vlr Unit (R$)</th><th>Vlr Total (R$)</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetros UTI</td><td>9018.19.90</td><td>5102</td><td>UN</td><td>10</td><td>5.000,00</td><td>50.000,00</td></tr>
+<tr><td>2</td><td>Bomba de infusão volumétrica</td><td>9018.31.19</td><td>5102</td><td>UN</td><td>20</td><td>2.250,00</td><td>45.000,00</td></tr>
+<tr><td>3</td><td>Desfibrilador externo automático</td><td>9018.90.95</td><td>5102</td><td>UN</td><td>5</td><td>6.000,00</td><td>30.000,00</td></tr>
+</table>
+<h2>Totais</h2>
+<table class="dados">
+<tr><th>Base de Cálculo ICMS</th><td>R$ 125.000,00</td><th>Valor do ICMS</th><td>R$ 22.500,00 (18%)</td></tr>
+<tr><th>Base de Cálculo IPI</th><td>R$ 0,00</td><th>Valor do IPI</th><td>R$ 0,00 (Isento)</td></tr>
+<tr><th>Valor Total dos Produtos</th><td colspan="3"><strong>R$ 125.000,00</strong></td></tr>
+<tr><th>Frete</th><td>R$ 0,00 (CIF)</td><th>Seguro</th><td>R$ 0,00</td></tr>
+<tr><th>VALOR TOTAL DA NF-e</th><td colspan="3"><strong>R$ 125.000,00</strong></td></tr>
+</table>
+<p>Informações Complementares: Mercadoria entregue no endereço do destinatário. Conforme Pedido de Compra nº {{ "%05d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 99999) }}/{{ ano_atual }}.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Documento autorizado pela SEFAZ-SP. Validado eletronicamente.</p>
+</body></html>

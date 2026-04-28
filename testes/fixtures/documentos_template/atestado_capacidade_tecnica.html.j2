@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Atestado de Capacidade Técnica — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Atestado de Capacidade Técnica', 'Emitido por Cliente Pessoa Jurídica de Direito Público') }}
+{{ aviso_ficticio() }}
+<h2>Identificação do Emissor</h2>
+<table class="dados">
+<tr><th>Órgão Emissor</th><td>Hospital Estadual {{ ['Pereira Barreto', 'Sao Camilo', 'das Clinicas'] | random }} — Secretaria Estadual de Saúde</td></tr>
+<tr><th>CNPJ do Emissor</th><td>46.392.130/0001-18</td></tr>
+<tr><th>Endereço</th><td>Av. Dr. Enéas Carvalho de Aguiar, 255 — Cerqueira César — São Paulo/SP</td></tr>
+</table>
+<h2>Empresa Atestada</h2>
+{{ bloco_empresa(empresa) }}
+<h2>Objeto do Atestado</h2>
+<p>Atestamos, para os devidos fins, que a empresa <strong>{{ empresa.razao_social }}</strong>, inscrita no CNPJ <span class="numero">{{ empresa.cnpj }}</span>, prestou serviços de fornecimento e instalação de equipamentos médico-hospitalares para esta instituição, nos termos do Contrato nº {{ "%04d" | format((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999) }}/{{ ano_atual - 1 }}, com início em janeiro de {{ ano_atual - 1 }} e conclusão em dezembro de {{ ano_atual - 1 }}.</p>
+<h2>Detalhamento dos Serviços</h2>
+<table class="dados">
+<tr><th>Item</th><th>Descrição</th><th>Quantidade</th><th>Valor (R$)</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetro de sinais vitais</td><td>50 unid.</td><td>250.000,00</td></tr>
+<tr><td>2</td><td>Bomba de infusão volumétrica</td><td>80 unid.</td><td>180.000,00</td></tr>
+<tr><td>3</td><td>Desfibrilador externo automático</td><td>20 unid.</td><td>120.000,00</td></tr>
+<tr><td colspan="3"><strong>Total Geral</strong></td><td><strong>550.000,00</strong></td></tr>
+</table>
+<h2>Avaliação do Desempenho</h2>
+<p>Os serviços foram prestados com pontualidade, qualidade técnica adequada às especificações contratadas, observando-se rigorosamente os prazos de entrega e os padrões de qualidade estabelecidos. A empresa demonstrou capacidade técnica e operacional plena para a execução do objeto contratado.</p>
+<p>Não houve registros de aplicação de penalidades, glosas ou rescisão antecipada.</p>
+<p style="margin-top:2em;">Por ser verdade, firmamos o presente atestado.</p>
+<p>São Paulo, {{ hoje_extenso }}.</p>
+{{ assinatura('Diretor Administrativo — Hospital Estadual') }}
+</body></html>

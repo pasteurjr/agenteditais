@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Instruções de Uso — {{ produto.nome | default('Equipamento Médico') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('INSTRUÇÕES DE USO', 'Equipamento Médico — Conforme RDC ANVISA 16/2013') }}
+{{ aviso_ficticio() }}
+<h2>1. Antes de Usar</h2>
+<p>Leia atentamente todo este manual antes do primeiro uso do equipamento. Mantenha-o em local acessível para consultas futuras.</p>
+<h2>2. Verificação Inicial</h2>
+<ol>
+<li>Confira a integridade da embalagem e do equipamento.</li>
+<li>Verifique se todos os acessórios estão presentes (conforme lista no item 5).</li>
+<li>Identifique a tensão da rede elétrica local (110V ou 220V).</li>
+<li>Selecione a chave de tensão na traseira do equipamento.</li>
+<li>Conecte o cabo de força à tomada com aterramento adequado.</li>
+</ol>
+<h2>3. Operação Básica</h2>
+<h3>3.1. Ligar o Equipamento</h3>
+<ol>
+<li>Pressione o botão "POWER" na lateral direita.</li>
+<li>Aguarde a auto-verificação do sistema (~30 segundos).</li>
+<li>O display exibirá a tela de status com data e hora.</li>
+</ol>
+<h3>3.2. Configurar Paciente</h3>
+<ol>
+<li>Pressione "MENU" > "PACIENTE" > "NOVO".</li>
+<li>Preencha os dados solicitados: nome, idade, peso, sexo.</li>
+<li>Confirme com "ENTER".</li>
+</ol>
+<h3>3.3. Iniciar Monitoramento</h3>
+<ol>
+<li>Conecte os sensores ao paciente conforme indicação no item 4.</li>
+<li>Pressione "START".</li>
+<li>Aguarde a estabilização dos sinais (~60 segundos).</li>
+<li>Os parâmetros serão exibidos no display.</li>
+</ol>
+<h2>4. Conexão de Sensores</h2>
+<table class="dados">
+<tr><th>Parâmetro</th><th>Sensor</th><th>Local de Aplicação</th></tr>
+<tr><td>SpO2</td><td>Clip dedo</td><td>Dedo indicador</td></tr>
+<tr><td>ECG</td><td>3 ou 5 eletrodos</td><td>Tórax (DI/DII/DIII ou V1-V5)</td></tr>
+<tr><td>PA Não-Invasiva</td><td>Manguito adulto/ped</td><td>Braço (preferencial esquerdo)</td></tr>
+<tr><td>Temperatura</td><td>Sonda axilar/oral</td><td>Conforme indicação clínica</td></tr>
+</table>
+<h2>5. Acessórios Inclusos</h2>
+<ul>
+<li>Cabo de força (NBR 14136)</li>
+<li>Manual de operação</li>
+<li>Kit de sensores básicos</li>
+<li>Maleta de transporte</li>
+<li>Certificado de garantia</li>
+<li>Carregador adicional</li>
+</ul>
+<h2>6. Cuidados e Limpeza</h2>
+<ul>
+<li>Limpe o equipamento com pano úmido em solução de álcool 70%.</li>
+<li>Não imerja em líquidos.</li>
+<li>Sensores podem ser desinfetados com hipoclorito a 1%.</li>
+<li>Armazene em ambiente seco, temperatura entre 5°C e 40°C.</li>
+</ul>
+<h2>7. Resolução de Problemas</h2>
+<table class="dados">
+<tr><th>Sintoma</th><th>Possível Causa</th><th>Solução</th></tr>
+<tr><td>Equipamento não liga</td><td>Cabo solto / fusível</td><td>Verifique conexões / acione assistência</td></tr>
+<tr><td>SpO2 não aparece</td><td>Sensor mal posicionado</td><td>Reposicione no dedo</td></tr>
+<tr><td>ECG com ruído</td><td>Eletrodos secos</td><td>Substitua eletrodos</td></tr>
+</table>
+<h2>8. Suporte Técnico</h2>
+<p>Em caso de dúvidas ou problemas: 0800-100-2000 (24/7) | suporte@fabricantegenerico.com.br</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Documento conforme RDC ANVISA nº 16/2013 e RDC nº 67/2009.</p>
+</body></html>

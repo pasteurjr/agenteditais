@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Contrato Administrativo — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('CONTRATO ADMINISTRATIVO', 'Contrato Nº ' + ((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999) | string + '/' + ano_atual | string) }}
+{{ aviso_ficticio() }}
+<h2>1. Partes</h2>
+<p><strong>CONTRATANTE:</strong> {{ edital.orgao | default('Município de São Paulo — Secretaria Municipal de Saúde') }}, CNPJ 46.392.130/0001-18, com sede na Rua dos Hospitais, 500 — São Paulo/SP.</p>
+<p><strong>CONTRATADA:</strong></p>
+{{ bloco_empresa(empresa) }}
+<h2>2. Objeto</h2>
+<p>O presente contrato tem por objeto o fornecimento de equipamentos médico-hospitalares conforme detalhamento constante do Edital de Pregão Eletrônico nº {{ edital.numero | default('001/2026') }} e seus anexos, parte integrante deste instrumento.</p>
+<h2>3. Valor</h2>
+<p>O valor global do contrato é de <strong>R$ 570.500,00 (quinhentos e setenta mil e quinhentos reais)</strong>, conforme proposta vencedora apresentada pela CONTRATADA.</p>
+<h2>4. Vigência</h2>
+<p>O contrato tem vigência de 12 (doze) meses, contados da data de sua assinatura, podendo ser prorrogado nos termos da Lei 14.133/2021.</p>
+<h2>5. Prazo e Condições de Entrega</h2>
+<table class="dados">
+<tr><th>Etapa</th><th>Prazo</th></tr>
+<tr><td>Emissão da Nota de Empenho</td><td>Até 5 dias após a assinatura</td></tr>
+<tr><td>Entrega dos Equipamentos</td><td>Até 25 dias após a Nota de Empenho</td></tr>
+<tr><td>Instalação e Treinamento</td><td>Até 30 dias após a entrega</td></tr>
+<tr><td>Recebimento Definitivo</td><td>Após 10 dias da instalação completa</td></tr>
+</table>
+<h2>6. Pagamento</h2>
+<p>O pagamento será efetuado em até 30 (trinta) dias após apresentação da Nota Fiscal devidamente atestada pelo gestor do contrato, mediante depósito em conta corrente da CONTRATADA.</p>
+<h2>7. Garantia</h2>
+<p>Garantia mínima de 24 (vinte e quatro) meses contados do recebimento definitivo. Assistência técnica obrigatória durante todo o período de garantia.</p>
+<h2>8. Sanções</h2>
+<p>O atraso na entrega ensejará multa de 0,5% por dia, limitada a 10%. A inexecução parcial ou total do contrato sujeitará a CONTRATADA às demais sanções previstas no art. 156 da Lei 14.133/2021.</p>
+<h2>9. Gestão e Fiscalização</h2>
+<p><strong>Gestor do Contrato:</strong> Sr. João Carlos Almeida — Matrícula 12345 — Setor de Compras<br>
+<strong>Fiscal do Contrato:</strong> Sra. Ana Paula Souza — Matrícula 67890 — Setor Técnico</p>
+<h2>10. Foro</h2>
+<p>Fica eleito o foro da Comarca de São Paulo/SP para dirimir quaisquer questões oriundas deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+<p>E, por estarem assim ajustadas, as partes assinam o presente contrato em 2 (duas) vias de igual teor e forma.</p>
+<p>São Paulo, {{ hoje_extenso }}.</p>
+<table style="width:100%;margin-top:3em;">
+<tr><td style="text-align:center;width:50%;">__________________________________<br>CONTRATANTE</td><td style="text-align:center;width:50%;">__________________________________<br>CONTRATADA</td></tr>
+</table>
+</body></html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Ata de Pregão — {{ edital.numero | default('001/2026') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('ATA DA SESSÃO PÚBLICA', 'Pregão Eletrônico ' + (edital.numero | default('001/2026'))) }}
+{{ aviso_ficticio() }}
+<h2>1. Identificação</h2>
+<table class="dados">
+<tr><th>Pregão</th><td>{{ edital.numero | default('001/2026') }}</td></tr>
+<tr><th>Órgão</th><td>{{ edital.orgao | default('Secretaria Municipal de Saúde — São Paulo') }}</td></tr>
+<tr><th>Pregoeiro</th><td>{{ edital.pregoeiro | default('Maria Santos da Silva') }}</td></tr>
+<tr><th>Data da Sessão</th><td>{{ edital.dt_abertura | default('30/01/' + ano_atual | string) }}</td></tr>
+<tr><th>Início</th><td>09:00</td><th>Encerramento</th><td>14:30</td></tr>
+</table>
+<h2>2. Objeto</h2>
+<p>{{ edital.objeto | default('Aquisição de equipamentos médico-hospitalares.') }}</p>
+<h2>3. Licitantes Participantes</h2>
+<table class="dados">
+<tr><th>#</th><th>Razão Social</th><th>CNPJ</th><th>Status</th></tr>
+<tr><td>1</td><td>{{ empresa.razao_social }}</td><td><span class="numero">{{ empresa.cnpj }}</span></td><td>Habilitada</td></tr>
+<tr><td>2</td><td>Distribuidora MedTech Ltda</td><td><span class="numero">12.345.678/0001-90</span></td><td>Habilitada</td></tr>
+<tr><td>3</td><td>Hospitalar Express Ltda</td><td><span class="numero">98.765.432/0001-21</span></td><td>Habilitada</td></tr>
+<tr><td>4</td><td>Saúde Plus Comércio Ltda</td><td><span class="numero">11.222.333/0001-44</span></td><td>Inabilitada (CND vencida)</td></tr>
+</table>
+<h2>4. Resultado dos Lances (Item 1)</h2>
+<table class="dados">
+<tr><th>Posição</th><th>Empresa</th><th>Lance Final (R$)</th><th>% Desconto</th></tr>
+<tr><td><strong>1º</strong></td><td><strong>{{ empresa.razao_social }}</strong></td><td><strong>4.850,00</strong></td><td>11,82%</td></tr>
+<tr><td>2º</td><td>Distribuidora MedTech Ltda</td><td>4.920,00</td><td>10,55%</td></tr>
+<tr><td>3º</td><td>Hospitalar Express Ltda</td><td>5.100,00</td><td>7,27%</td></tr>
+</table>
+<h2>5. Habilitação da Vencedora</h2>
+<p>A empresa <strong>{{ empresa.razao_social }}</strong> apresentou toda a documentação exigida no edital, incluindo:</p>
+<ul>
+<li>✓ Certidões de regularidade fiscal (federal, estadual, municipal)</li>
+<li>✓ FGTS e CNDT</li>
+<li>✓ Atestado de Capacidade Técnica</li>
+<li>✓ Balanço Patrimonial (índices conformes)</li>
+<li>✓ Registros ANVISA</li>
+</ul>
+<p>A documentação foi analisada e <strong>HABILITADA</strong>.</p>
+<h2>6. Manifestação de Recurso</h2>
+<p>Aberto o prazo regulamentar para manifestação de intenção de recurso. <strong>Não houve manifestação</strong>.</p>
+<h2>7. Adjudicação e Homologação</h2>
+<p>Em conformidade com o disposto no art. 71 da Lei 14.133/2021, fica o objeto adjudicado à empresa <strong>{{ empresa.razao_social }}</strong>, pelo valor total de R$ 4.850,00 (quatro mil oitocentos e cinquenta reais) por unidade, totalizando o valor global de <strong>R$ 242.500,00</strong>.</p>
+<p>Nada mais havendo a tratar, foi encerrada a sessão pública. Lavrada a presente ata.</p>
+{{ assinatura('Pregoeiro Oficial — Decreto Municipal nº ' + (ano_atual - 1) | string + '/12345') }}
+</body></html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Edital de Licitação — {{ edital.numero | default('001/2026') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('EDITAL DE LICITAÇÃO', edital.modalidade | default('Pregão Eletrônico')) }}
+{{ aviso_ficticio() }}
+<h2>1. Identificação</h2>
+<table class="dados">
+<tr><th>Número do Edital</th><td>{{ edital.numero | default('001/2026') }}</td></tr>
+<tr><th>Modalidade</th><td>{{ edital.modalidade | default('Pregão Eletrônico') }}</td></tr>
+<tr><th>Tipo</th><td>{{ edital.tipo | default('Menor Preço') }}</td></tr>
+<tr><th>Forma de Disputa</th><td>{{ edital.forma_disputa | default('Aberta + Fechada') }}</td></tr>
+<tr><th>Critério de Julgamento</th><td>{{ edital.criterio | default('Menor Preço por Item') }}</td></tr>
+<tr><th>Regime de Execução</th><td>{{ edital.regime | default('Empreitada por Preço Unitário') }}</td></tr>
+<tr><th>Modo de Compra</th><td>{{ edital.modo_compra | default('SRP — Sistema de Registro de Preços') }}</td></tr>
+</table>
+<h2>2. Órgão Promotor</h2>
+<table class="dados">
+<tr><th>Órgão</th><td>{{ edital.orgao | default('Secretaria Municipal de Saúde — São Paulo') }}</td></tr>
+<tr><th>CNPJ do Órgão</th><td>{{ edital.cnpj_orgao | default('46.392.130/0001-18') }}</td></tr>
+<tr><th>UASG</th><td>{{ edital.uasg | default('925456') }}</td></tr>
+<tr><th>Pregoeiro</th><td>{{ edital.pregoeiro | default('Maria Santos da Silva') }}</td></tr>
+</table>
+<h2>3. Objeto</h2>
+<p>{{ edital.objeto | default('Aquisição de equipamentos médico-hospitalares destinados ao atendimento das unidades de saúde municipais, conforme especificações detalhadas no Termo de Referência (Anexo I).') }}</p>
+<h2>4. Valor Estimado</h2>
+<p>Valor total estimado: <strong>{{ edital.valor_estimado | default('R$ 2.500.000,00 (dois milhões e quinhentos mil reais)') }}</strong>.</p>
+<h2>5. Cronograma</h2>
+<table class="dados">
+<tr><th>Evento</th><th>Data/Hora</th></tr>
+<tr><td>Publicação do Edital</td><td>{{ edital.dt_publicacao | default('15/01/' + ano_atual | string) }}</td></tr>
+<tr><td>Limite para Esclarecimentos</td><td>{{ edital.dt_esclarecimento | default('22/01/' + ano_atual | string) }}</td></tr>
+<tr><td>Limite para Impugnações</td><td>{{ edital.dt_impugnacao | default('22/01/' + ano_atual | string) }}</td></tr>
+<tr><td>Abertura da Sessão Pública</td><td>{{ edital.dt_abertura | default('30/01/' + ano_atual | string + ' às 09:00') }}</td></tr>
+</table>
+<h2>6. Documentação Exigida</h2>
+<h3>6.1. Habilitação Jurídica</h3>
+<ul><li>Contrato Social ou Estatuto</li><li>Última alteração contratual</li><li>Atos de eleição dos administradores</li></ul>
+<h3>6.2. Regularidade Fiscal</h3>
+<ul><li>Certidão Negativa Federal (RFB+PGFN)</li><li>Certidão Negativa Estadual (ICMS)</li><li>Certidão Negativa Municipal (ISS+IPTU)</li><li>FGTS — Certificado de Regularidade</li><li>CNDT — Certidão Trabalhista</li></ul>
+<h3>6.3. Qualificação Econômico-Financeira</h3>
+<ul><li>Balanço Patrimonial do último exercício</li><li>Demonstração de Resultados (DRE)</li><li>Índices de Liquidez ≥ 1,00</li><li>Capital Social mínimo de R$ 250.000,00</li></ul>
+<h3>6.4. Qualificação Técnica</h3>
+<ul><li>Atestado de Capacidade Técnica (mínimo 1 contrato similar)</li><li>Registro ANVISA dos produtos ofertados</li><li>Autorização de Funcionamento da Empresa (AFE)</li></ul>
+<h2>7. Prazos e Garantias</h2>
+<p>Prazo de entrega: 30 dias após a emissão do empenho. Garantia técnica mínima: 12 meses. Validade da proposta: 60 dias.</p>
+<h2>8. Disposições Finais</h2>
+<p>Os interessados poderão obter este edital e seus anexos no Portal Nacional de Contratações Públicas (PNCP) ou no site oficial do órgão promotor.</p>
+<p style="margin-top:2em;text-align:center;font-size:10pt;color:#666;">Este edital constitui ato administrativo público — Lei 14.133/2021.</p>
+</body></html>

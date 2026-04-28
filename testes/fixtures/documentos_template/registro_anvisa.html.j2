@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Registro ANVISA — {{ produto.nome | default('Produto Modelo') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('REGISTRO DE PRODUTO PARA SAÚDE', 'Agência Nacional de Vigilância Sanitária — ANVISA') }}
+{{ aviso_ficticio() }}
+<h2>1. Identificação do Registro</h2>
+<table class="dados">
+<tr><th>Número do Registro</th><td><span class="numero">{{ produto.registro_anvisa | default('80149340136') }}</span></td></tr>
+<tr><th>Data do Registro</th><td>{{ produto.data_registro | default('15/03/' + (ano_atual - 2) | string) }}</td></tr>
+<tr><th>Validade</th><td>{{ produto.validade_anvisa | default('15/03/' + (ano_atual + 8) | string) }} (10 anos)</td></tr>
+<tr><th>Situação</th><td><strong>VÁLIDO</strong></td></tr>
+</table>
+<h2>2. Produto</h2>
+<table class="dados">
+<tr><th>Nome Comercial</th><td>{{ produto.nome | default('Equipamento Médico Genérico') }}</td></tr>
+<tr><th>Modelo</th><td>{{ produto.modelo | default('GEN-2024-PRO') }}</td></tr>
+<tr><th>Categoria</th><td>{{ produto.categoria | default('Equipamentos') }}</td></tr>
+<tr><th>Classe de Risco</th><td>{{ produto.classe_risco | default('II — Médio Risco') }}</td></tr>
+<tr><th>Família/Linha</th><td>{{ produto.linha | default('Monitoramento de Pacientes') }}</td></tr>
+</table>
+<h2>3. Detentor do Registro</h2>
+<table class="dados">
+<tr><th>Razão Social</th><td>{{ produto.fabricante | default('FabGenérico Industrial S/A') }}</td></tr>
+<tr><th>CNPJ</th><td>{{ produto.cnpj_fabricante | default('11.222.333/0001-44') }}</td></tr>
+<tr><th>Autorização de Funcionamento</th><td>{{ produto.afe | default('AFE 1.23.456-7') }}</td></tr>
+</table>
+<h2>4. Indicação de Uso</h2>
+<p>{{ produto.indicacao | default('Equipamento destinado ao monitoramento de parâmetros vitais de pacientes em ambiente hospitalar e domiciliar, sob supervisão de profissional de saúde habilitado.') }}</p>
+<h2>5. Especificações Técnicas Aprovadas</h2>
+<ul>
+<li>Tensão: 100-240 VAC, 50/60 Hz</li>
+<li>Display: 12" TFT colorido HD</li>
+<li>Conformidade: IEC 60601-1, IEC 60601-2-49</li>
+<li>Bateria interna: Lítio 4h</li>
+<li>Conectividade: USB, Ethernet, Wi-Fi</li>
+</ul>
+<h2>6. Comprovação de Adequação</h2>
+<p>Produto submetido aos testes de conformidade pelo INMETRO/IPT, atendendo plenamente às normas técnicas brasileiras (NBR-IEC) e internacionais (ISO 13485). Documentação técnica completa arquivada na ANVISA.</p>
+<h2>7. Restrições e Observações</h2>
+<p>Comercialização restrita a estabelecimentos com Autorização de Funcionamento (AFE) e cadastrados na Vigilância Sanitária local. Uso restrito a profissionais de saúde habilitados.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">A autenticidade deste registro pode ser verificada em www.consultas.anvisa.gov.br/registros</p>
+</body></html>

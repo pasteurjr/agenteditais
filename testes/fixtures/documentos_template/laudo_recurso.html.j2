@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Recurso Administrativo — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('RECURSO ADMINISTRATIVO', 'Pregão Eletrônico ' + (edital.numero | default('001/2026'))) }}
+{{ aviso_ficticio() }}
+<p style="text-align:right;">São Paulo, {{ hoje_extenso }}.</p>
+<h2>À</h2>
+<p>{{ edital.orgao | default('Secretaria Municipal de Saúde') }}<br>
+Pregoeiro(a) — {{ edital.pregoeiro | default('Maria Santos da Silva') }}<br>
+Pregão Eletrônico <strong>{{ edital.numero | default('001/2026') }}</strong></p>
+<h2>Recorrente</h2>
+{{ bloco_empresa(empresa) }}
+<h2>I — TEMPESTIVIDADE</h2>
+<p>A sessão pública foi encerrada em {{ edital.dt_abertura | default('30/01/' + ano_atual | string) }}, tendo a recorrente manifestado, na ata, intenção de recorrer. Apresenta-se neste ato as razões recursais dentro do prazo de 3 (três) dias úteis (art. 165, Lei 14.133/2021).</p>
+<h2>II — DOS FATOS</h2>
+<p>Na sessão pública supracitada, foi declarada vencedora a empresa <strong>Distribuidora MedTech Ltda</strong>, CNPJ 12.345.678/0001-90, pelo valor de R$ 4.920,00 por unidade. A recorrente apresentou lance de R$ 4.850,00 (valor inferior em 1,42%), tendo sido classificada em 1º lugar inicialmente.</p>
+<p>Entretanto, na fase de habilitação, a recorrente foi <strong>INDEVIDAMENTE inabilitada</strong> sob o argumento de "ausência de Atestado de Capacidade Técnica em quantitativo conforme exigido".</p>
+<h2>III — DAS RAZÕES DO RECURSO</h2>
+<h3>1. A inabilitação foi indevida</h3>
+<p>O atestado apresentado pela recorrente comprova fornecimento de 65 unidades do mesmo equipamento ao Hospital Estadual Pereira Barreto em {{ ano_atual - 1 }}, conforme contrato nº 2345/{{ ano_atual - 1 }}. O edital exige, no item 6.4, "comprovação de fornecimento de quantitativo equivalente a no mínimo 50% do objeto licitado" — ou seja, 25 unidades, considerando o total de 50.</p>
+<p>O quantitativo apresentado (65 unidades) supera em 160% o mínimo exigido, atendendo plenamente ao requisito.</p>
+<h3>2. Da incompatibilidade técnica da vencedora</h3>
+<p>O equipamento ofertado pela empresa vencedora (modelo MED-X1) possui display de apenas 10 polegadas, em desacordo com a exigência mínima de 12 polegadas estabelecida no Termo de Referência (item 4.1).</p>
+<h3>3. Da economicidade</h3>
+<p>A recorrente apresentou proposta R$ 70,00 (1,42%) inferior à da vencedora, gerando economia total de R$ 3.500,00 ao erário considerando os 50 itens da licitação.</p>
+<h2>IV — DOS PEDIDOS</h2>
+<p>Requer-se:</p>
+<ol type="a">
+<li>O recebimento do presente recurso por ser tempestivo;</li>
+<li>A REVERSÃO da inabilitação da recorrente, com sua imediata HABILITAÇÃO no certame;</li>
+<li>A INABILITAÇÃO da empresa Distribuidora MedTech Ltda por descumprimento técnico;</li>
+<li>A ADJUDICAÇÃO do objeto à recorrente pelo valor final de R$ 4.850,00 por unidade.</li>
+</ol>
+<p>Subsidiariamente, requer-se a designação de DILIGÊNCIA para análise técnica detalhada.</p>
+<p>Termos em que pede e espera deferimento.</p>
+{{ assinatura('Representante Legal — ' + (empresa.razao_social | upper) + ' — OAB/SP 123.456') }}
+</body></html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Termo de Referência — Anexo I do Edital {{ edital.numero | default('001/2026') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('TERMO DE REFERÊNCIA', 'Anexo I — Edital ' + (edital.numero | default('001/2026'))) }}
+{{ aviso_ficticio() }}
+<h2>1. Objeto</h2>
+<p>{{ edital.objeto | default('Aquisição de equipamentos médico-hospitalares para unidades de saúde municipais.') }}</p>
+<h2>2. Justificativa</h2>
+<p>A presente contratação visa atender à demanda crescente das unidades de saúde, modernizando o parque tecnológico e garantindo atendimento adequado à população.</p>
+<h2>3. Especificações Técnicas Detalhadas</h2>
+<table class="dados">
+<tr><th>Item</th><th>Descrição</th><th>Unidade</th><th>Qtd</th><th>Valor Unit. Estimado (R$)</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetros, display 12", módulos SpO2, ECG, PA-NI, Tax</td><td>UN</td><td>50</td><td>5.500,00</td></tr>
+<tr><td>2</td><td>Bomba de infusão volumétrica, 1 canal, bateria 4h</td><td>UN</td><td>100</td><td>2.300,00</td></tr>
+<tr><td>3</td><td>Desfibrilador externo automático (DEA) com monitor</td><td>UN</td><td>20</td><td>6.500,00</td></tr>
+<tr><td>4</td><td>Eletrocardiógrafo 12 derivações, portátil</td><td>UN</td><td>15</td><td>8.000,00</td></tr>
+<tr><td>5</td><td>Aspirador cirúrgico portátil, fluxo 30L/min</td><td>UN</td><td>30</td><td>1.800,00</td></tr>
+</table>
+<h2>4. Requisitos Mínimos por Item</h2>
+<h3>Item 1 — Monitor multiparâmetros</h3>
+<ul>
+<li>Display TFT colorido mínimo 12 polegadas</li>
+<li>Resolução mínima 800×600 pixels</li>
+<li>Bateria interna mínima 4 horas</li>
+<li>Conectividade USB e Ethernet</li>
+<li>Registro ANVISA Classe II ou superior</li>
+<li>Garantia mínima 24 meses</li>
+</ul>
+<h3>Item 2 — Bomba de infusão</h3>
+<ul>
+<li>Faixa de fluxo: 0,1 a 1.000 mL/h</li>
+<li>Precisão ≤ 5%</li>
+<li>Detecção de oclusão e bolha de ar</li>
+<li>Alarmes audiovisuais</li>
+<li>Bateria mínima 4 horas</li>
+</ul>
+<h2>5. Local e Prazo de Entrega</h2>
+<p>Entrega em até 30 (trinta) dias corridos após emissão da Nota de Empenho. Locais: Almoxarifado Central da Secretaria de Saúde — Rua dos Hospitais, 500 — Centro — São Paulo/SP.</p>
+<h2>6. Garantia e Assistência Técnica</h2>
+<p>Garantia mínima de 24 (vinte e quatro) meses contados a partir do recebimento definitivo. Assistência técnica obrigatória durante todo o período de garantia, com atendimento em até 48h úteis.</p>
+<h2>7. Forma de Pagamento</h2>
+<p>Pagamento em até 30 dias da apresentação da Nota Fiscal devidamente atestada pelo gestor do contrato.</p>
+<h2>8. Penalidades</h2>
+<p>Atraso na entrega: multa de 0,5% ao dia, limitada a 10%. Inexecução parcial: 10% do valor do contrato. Inexecução total: 20% do valor + suspensão por 2 anos.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Termo de Referência elaborado conforme art. 40 da Lei 14.133/2021.</p>
+</body></html>

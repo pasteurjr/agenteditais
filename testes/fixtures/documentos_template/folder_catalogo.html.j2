@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Folder/Catálogo — {{ produto.nome | default('Linha de Produtos') }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Catálogo Comercial — Linha ' + (produto.linha | default('Premium 2026'))) }}
+{{ aviso_ficticio() }}
+<p style="font-size:13pt;text-align:center;color:#444;margin:1.5em 0;font-style:italic;">"Excelência em equipamentos médico-hospitalares há mais de 20 anos."</p>
+<h2>Sobre o Produto</h2>
+<table class="dados">
+<tr><th>Modelo</th><td>{{ produto.modelo | default('GEN-2024-PRO') }}</td></tr>
+<tr><th>Categoria</th><td>{{ produto.categoria | default('Equipamento Médico-Hospitalar') }}</td></tr>
+<tr><th>Aplicação</th><td>{{ produto.aplicacao | default('UTI / Centro Cirúrgico / Pronto Atendimento') }}</td></tr>
+</table>
+<h2>Diferenciais</h2>
+<ul>
+<li>✓ Tecnologia de ponta com 5 anos de garantia estendida</li>
+<li>✓ Display HD touch screen 7" com interface intuitiva</li>
+<li>✓ Conectividade Wi-Fi e exportação direta ao prontuário eletrônico</li>
+<li>✓ Bateria interna de 4 horas para uso ininterrupto</li>
+<li>✓ Manutenção preventiva incluída no primeiro ano</li>
+<li>✓ Treinamento técnico para até 10 profissionais</li>
+<li>✓ Suporte técnico 24/7 via 0800 e WhatsApp</li>
+</ul>
+<h2>Configurações Disponíveis</h2>
+<table class="dados">
+<tr><th>Modelo</th><th>Display</th><th>Conectividade</th><th>Bateria</th></tr>
+<tr><td>BÁSICO</td><td>5" LCD</td><td>USB</td><td>2h</td></tr>
+<tr><td>STANDARD</td><td>7" LCD</td><td>USB + Ethernet</td><td>4h</td></tr>
+<tr><td><strong>PRO</strong></td><td><strong>7" Touch HD</strong></td><td><strong>USB + Ethernet + Wi-Fi</strong></td><td><strong>4h</strong></td></tr>
+<tr><td>PREMIUM</td><td>10" Touch HD</td><td>Full + 4G</td><td>8h</td></tr>
+</table>
+<h2>Certificações e Conformidade</h2>
+<p>Produto registrado na ANVISA sob o nº <span class="numero">{{ produto.registro_anvisa | default('80149340136') }}</span>. Conforme normas IEC 60601-1, IEC 60601-2 e ISO 13485. Marcação CE Marking compatível.</p>
+<h2>Acessórios Inclusos</h2>
+<ul>
+<li>Cabo de força padrão NBR 14136</li>
+<li>Manual de operação em português</li>
+<li>Kit de sensores básicos (SpO2, ECG, PA)</li>
+<li>Maleta de transporte rígida</li>
+<li>Certificado de garantia</li>
+</ul>
+<h2>Contato Comercial</h2>
+<p><strong>Vendas:</strong> vendas@fabricantegenerico.com.br | (11) 4000-1000 | www.fabricantegenerico.com.br</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Catálogo {{ ano_atual }} — preços e especificações sujeitos a alterações sem aviso prévio.</p>
+</body></html>

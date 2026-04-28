@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Termo Aditivo — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('TERMO ADITIVO Nº 01', 'Contrato ' + ((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 9999) | string + '/' + ano_atual | string) }}
+{{ aviso_ficticio() }}
+<h2>1. Partes</h2>
+<p><strong>CONTRATANTE:</strong> Município de São Paulo — Secretaria Municipal de Saúde — CNPJ 46.392.130/0001-18.</p>
+<p><strong>CONTRATADA:</strong></p>
+{{ bloco_empresa(empresa) }}
+<h2>2. Objeto do Aditivo</h2>
+<p>O presente Termo Aditivo tem por objeto a alteração quantitativa do contrato original, com base no art. 124, I, "a" da Lei 14.133/2021, que autoriza acréscimo de até 25% do valor inicial atualizado.</p>
+<h2>3. Acréscimo Quantitativo</h2>
+<table class="dados">
+<tr><th>Item</th><th>Descrição</th><th>Qtd Original</th><th>Acréscimo</th><th>Qtd Total</th></tr>
+<tr><td>1</td><td>Monitor multiparâmetros UTI</td><td>50</td><td>+12</td><td>62</td></tr>
+<tr><td>2</td><td>Bomba infusão volumétrica</td><td>100</td><td>+25</td><td>125</td></tr>
+</table>
+<h2>4. Alteração de Valor</h2>
+<table class="dados">
+<tr><th>Discriminação</th><th>Valor (R$)</th></tr>
+<tr><td>Valor Original do Contrato</td><td>570.500,00</td></tr>
+<tr><td>Valor do Acréscimo (24,8%)</td><td>+ 141.500,00</td></tr>
+<tr><td><strong>Valor Total Aditivado</strong></td><td><strong>712.000,00</strong></td></tr>
+</table>
+<h2>5. Justificativa</h2>
+<p>O acréscimo se justifica pela ampliação da demanda das unidades de saúde, com necessidade de equipar 2 (dois) novos pronto-atendimentos não previstos no quantitativo original. A medida atende ao princípio da economicidade, evitando nova licitação.</p>
+<h2>6. Disposições Finais</h2>
+<p>Permanecem inalteradas todas as demais cláusulas e condições do contrato original, inclusive prazo de vigência, garantia técnica e condições de pagamento.</p>
+<p>São Paulo, {{ hoje_extenso }}.</p>
+<table style="width:100%;margin-top:3em;">
+<tr><td style="text-align:center;width:50%;">__________________________________<br>CONTRATANTE</td><td style="text-align:center;width:50%;">__________________________________<br>CONTRATADA</td></tr>
+</table>
+</body></html>

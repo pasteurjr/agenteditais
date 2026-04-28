@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio, assinatura %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Estatuto Social — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Estatuto Social', 'Sociedade Anônima — Modelo Fictício') }}
+{{ aviso_ficticio() }}
+{{ bloco_empresa(empresa) }}
+<h2>Capítulo I — Da Denominação, Sede, Objeto e Duração</h2>
+<p><strong>Art. 1º</strong> — A {{ empresa.razao_social }}, sociedade por ações de capital fechado, doravante denominada "Companhia", é regida por este Estatuto, pela legislação brasileira aplicável às sociedades por ações e pela legislação correlata.</p>
+<p><strong>Art. 2º</strong> — A Companhia tem sede e foro no município de São Paulo, Estado de São Paulo, podendo abrir filiais, sucursais, agências ou escritórios de representação em qualquer parte do território nacional ou no exterior.</p>
+<p><strong>Art. 3º</strong> — A Companhia tem como objeto social: (i) comércio, importação e exportação de produtos médico-hospitalares; (ii) prestação de serviços de assistência técnica; (iii) representação comercial; (iv) participação em outras sociedades.</p>
+<p><strong>Art. 4º</strong> — O prazo de duração da Companhia é indeterminado.</p>
+<h2>Capítulo II — Do Capital Social e das Ações</h2>
+<p><strong>Art. 5º</strong> — O capital social, totalmente subscrito e integralizado, é de <strong>R$ 1.000.000,00</strong> (um milhão de reais), dividido em 1.000.000 (um milhão) de ações ordinárias nominativas, sem valor nominal.</p>
+<p><strong>Art. 6º</strong> — As ações são indivisíveis em relação à Companhia, e cada ação dará direito a um voto nas deliberações da Assembleia Geral.</p>
+<h2>Capítulo III — Da Administração</h2>
+<p><strong>Art. 7º</strong> — A Companhia será administrada por uma Diretoria, eleita pela Assembleia Geral, composta por 2 (dois) a 5 (cinco) membros, acionistas ou não, residentes no País.</p>
+<p><strong>Art. 8º</strong> — Compete à Diretoria a representação da Companhia, ativa e passivamente, judicial ou extrajudicialmente, bem como a prática de todos os atos necessários à consecução do objeto social.</p>
+<h2>Capítulo IV — Da Assembleia Geral</h2>
+<p><strong>Art. 9º</strong> — A Assembleia Geral reunir-se-á ordinariamente até 4 (quatro) meses após o término do exercício social, e extraordinariamente sempre que os interesses sociais o exigirem.</p>
+<h2>Capítulo V — Do Exercício Social, Lucros e Reservas</h2>
+<p><strong>Art. 10</strong> — O exercício social inicia-se em 1º de janeiro e encerra-se em 31 de dezembro de cada ano.</p>
+<p><strong>Art. 11</strong> — Do lucro líquido apurado em cada exercício, 5% (cinco por cento) serão destinados à constituição da Reserva Legal, até o limite de 20% (vinte por cento) do capital social.</p>
+<p>Estatuto registrado na Junta Comercial sob nº JUCESP {{ ano_atual }}/{{ "%07d" | format(empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int % 9999999) }}.</p>
+{{ assinatura('Diretor Presidente — ' + (empresa.razao_social | upper)) }}
+</body></html>

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+{% from '_macros.html.j2' import cabecalho, bloco_empresa, aviso_ficticio %}
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>CND Estadual — {{ empresa.razao_social }}</title>
+<link rel="stylesheet" href="_base.css"></head><body>
+{{ cabecalho('Certidão Negativa de Débitos Estaduais (ICMS)', 'Secretaria de Estado da Fazenda — São Paulo') }}
+{{ aviso_ficticio() }}
+{{ bloco_empresa(empresa) }}
+<p>Certificamos que, na presente data, NÃO CONSTAM débitos referentes ao ICMS e demais tributos estaduais inscritos em Dívida Ativa em nome da pessoa jurídica acima identificada.</p>
+<table class="dados">
+<tr><th>Inscrição Estadual</th><td>{{ "%03d.%03d.%03d.%03d" | format(((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 1000000000000) // 1000000000, (((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 1000000000) // 1000000), (((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 1000000) // 1000), ((empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | int) % 1000)) }}</td></tr>
+<tr><th>Data de Emissão</th><td>{{ hoje }}</td></tr>
+<tr><th>Validade</th><td>{{ validade }}</td></tr>
+<tr><th>Código de Validação</th><td><span class="numero">CND-EST-{{ ano_atual }}-SP-{{ empresa.cnpj | replace('.', '') | replace('/', '') | replace('-', '') }}</span></td></tr>
+</table>
+<p>Certidão emitida nos termos do art. 205 do CTN. A autenticidade poderá ser conferida no portal da SEFAZ-SP.</p>
+<p style="text-align:center;margin-top:2em;font-size:10pt;color:#666;">Documento emitido eletronicamente.</p>
+</body></html>
