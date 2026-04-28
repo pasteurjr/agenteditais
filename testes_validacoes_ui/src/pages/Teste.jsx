@@ -29,7 +29,21 @@ export default function Teste() {
       window.open(r.painel_url || 'http://localhost:9876', '_blank')
       carregar()
     } catch (e) {
-      setErro(e.message)
+      // Erro estruturado: mostra pendencias de predecessor de forma legivel
+      const body = e.body || {}
+      if (body.exige_predecessores && body.pendencias) {
+        const linhas = body.pendencias.map(p =>
+          `  ${p.uc_id} precisa de: ${p.faltam.join(', ')}`
+        ).join('\n')
+        setErro(
+          `Predecessores nao satisfeitos:\n${linhas}\n\n` +
+          `Inclua esses UCs no proprio teste ou execute-os antes em outro teste.`
+        )
+      } else if (body.exige_configuracao) {
+        setErro(body.msg || e.message)
+      } else {
+        setErro(e.message)
+      }
     } finally {
       setIniciando(false)
     }

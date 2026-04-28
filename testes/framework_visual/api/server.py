@@ -56,7 +56,7 @@ from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     User, Projeto, Sprint, CasoDeUso, CasoDeTeste,
     Teste, ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
-    PassoTutorial,
+    PassoTutorial, UcPredecessor, UcExecucaoSatisfatoria,
 )
 from sqlalchemy import desc
 
@@ -350,6 +350,122 @@ def _validar_pasta_documentos(pasta: str | None) -> tuple[bool, dict]:
     }
 
 
+# Estados de execucao que contam como "UC foi executado ate o fim"
+ESTADOS_EXECUCAO_COMPLETA = ("aprovado", "reprovado")
+
+
+def _validar_predecessores(db, teste) -> tuple[bool, dict]:
+    """
+    Pre-flight: para cada UC do teste, verifica se seus predecessores
+    estao satisfeitos (executados ate o fim por este user OU incluidos no proprio teste).
+
+    Retorna (ok, detalhes_dict).
+    """
+    # 1. UCs do teste
+    execs = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=teste.id).all()
+    ct_ids = [e.caso_de_teste_id for e in execs]
+    if not ct_ids:
+        return True, {"msg": "teste sem CTs — nada pra validar"}
+
+    cts = db.query(CasoDeTeste).filter(CasoDeTeste.id.in_(ct_ids)).all()
+    uc_ids_no_teste = set(c.caso_de_uso_id for c in cts)
+    uc_strs_no_teste = set(
+        uc.uc_id
+        for uc in db.query(CasoDeUso).filter(CasoDeUso.id.in_(uc_ids_no_teste)).all()
+    )
+
+    # 2. Para cada UC, busca predecessores
+    predecessores_por_uc = {}  # uc_id_db -> [ {grupo_or, predecessor_uc_db_id, marcador} ]
+    preds_rows = (
+        db.query(UcPredecessor)
+        .filter(UcPredecessor.uc_id.in_(uc_ids_no_teste))
+        .order_by(UcPredecessor.uc_id, UcPredecessor.ordem, UcPredecessor.grupo_or)
+        .all()
+    )
+    for r in preds_rows:
+        predecessores_por_uc.setdefault(r.uc_id, []).append(r)
+
+    # 3. UCs ja satisfeitos para este user (historico)
+    satis_rows = (
+        db.query(UcExecucaoSatisfatoria)
+        .filter_by(user_id=teste.user_id, expirado=0)
+        .all()
+    )
+    uc_ids_satisfeitos_historico = set(s.uc_id for s in satis_rows)
+
+    # 4. UCs que vao ser executados no proprio teste (incluido = predecessor satisfeito implicito,
+    #    desde que venham na ordem certa — assumimos ordem por ordem do CT)
+    # Pra simplificar V1: se UC esta no proprio teste, ja conta como satisfeito.
+    uc_ids_no_proprio_teste = uc_ids_no_teste
+
+    # 5. Avalia cada UC do teste
+    pendencias_por_uc = []  # lista de {uc_id_str, faltam: [str]}
+
+    for uc_id_db, lista_preds in predecessores_por_uc.items():
+        uc_str = next((u.uc_id for u in db.query(CasoDeUso).filter_by(id=uc_id_db).all()), uc_id_db)
+
+        # Agrupa por grupo_or: AND entre grupos, OR dentro do grupo
+        grupos = {}  # grupo_or_num -> [pred_row]
+        for r in lista_preds:
+            grupos.setdefault(r.grupo_or, []).append(r)
+
+        faltam = []
+        for grupo_num, items in grupos.items():
+            if grupo_num == 0:
+                # AND: cada item deve ser satisfeito sozinho
+                for it in items:
+                    if not _predecessor_satisfeito(it, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db):
+                        faltam.append(_label_predecessor(it, db))
+            else:
+                # OR: pelo menos um do grupo deve satisfazer
+                algum_ok = any(
+                    _predecessor_satisfeito(it, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db)
+                    for it in items
+                )
+                if not algum_ok:
+                    labels = " OU ".join(_label_predecessor(it, db) for it in items)
+                    faltam.append(f"[{labels}]")
+
+        if faltam:
+            pendencias_por_uc.append({
+                "uc_id": uc_str,
+                "faltam": faltam,
+            })
+
+    if pendencias_por_uc:
+        return False, {
+            "ok": False,
+            "pendencias": pendencias_por_uc,
+            "msg": "Predecessores nao satisfeitos. Execute esses UCs antes (em outro teste) OU inclua-os neste teste.",
+        }
+
+    return True, {"ok": True, "msg": "Todos os predecessores satisfeitos"}
+
+
+def _predecessor_satisfeito(pred_row, uc_ids_satisfeitos_historico, uc_ids_no_proprio_teste, db) -> bool:
+    """Avalia 1 linha de uc_predecessores."""
+    if pred_row.marcador:
+        # Marcadores [login], [infra], [seed] sao considerados satisfeitos
+        # (quem garante eh setup do ambiente, nao validacao de UC)
+        return True
+    if pred_row.predecessor_id:
+        # UC concreto: satisfeito se executado antes (historico) OU incluido no teste atual
+        return (
+            pred_row.predecessor_id in uc_ids_satisfeitos_historico
+            or pred_row.predecessor_id in uc_ids_no_proprio_teste
+        )
+    return False
+
+
+def _label_predecessor(pred_row, db) -> str:
+    if pred_row.marcador:
+        return pred_row.marcador
+    if pred_row.predecessor_id:
+        uc = db.query(CasoDeUso).filter_by(id=pred_row.predecessor_id).first()
+        return uc.uc_id if uc else "UC-?"
+    return "?"
+
+
 @app.route("/api/projetos")
 @login_required
 def api_projetos():
@@ -380,6 +496,21 @@ def api_sprint_ucs_resumo(sprint_id):
     db = get_db()
     try:
         ucs = db.query(CasoDeUso).filter_by(sprint_id=sprint_id, ativo=1).order_by(CasoDeUso.uc_id).all()
+
+        # UCs ja executados pelo user (historico)
+        satis = db.query(UcExecucaoSatisfatoria).filter_by(user_id=session["user_id"], expirado=0).all()
+        uc_ids_no_historico = set(s.uc_id for s in satis)
+
+        # Predecessores de cada UC
+        preds_rows = (
+            db.query(UcPredecessor)
+            .filter(UcPredecessor.uc_id.in_([u.id for u in ucs]))
+            .all()
+        )
+        preds_por_uc = {}
+        for r in preds_rows:
+            preds_por_uc.setdefault(r.uc_id, []).append(r)
+
         result = []
         for uc in ucs:
             cts = db.query(CasoDeTeste).filter_by(caso_de_uso_id=uc.id, ativo=1).all()
@@ -389,6 +520,29 @@ def api_sprint_ucs_resumo(sprint_id):
                                        if c.categoria == "Cenário"
                                        and c.trilha_sugerida == "visual"
                                        and c.passos_tutorial)
+
+            # Mapeia predecessores em forma legivel
+            preds_uc = preds_por_uc.get(uc.id, [])
+            preds_lista = []
+            for r in preds_uc:
+                if r.marcador:
+                    preds_lista.append({
+                        "tipo": "marcador",
+                        "label": r.marcador,
+                        "satisfeito": True,  # marcadores [login]/[infra]/[seed] = sempre OK
+                        "grupo_or": r.grupo_or,
+                    })
+                elif r.predecessor_id:
+                    pred_uc = db.query(CasoDeUso).filter_by(id=r.predecessor_id).first()
+                    preds_lista.append({
+                        "tipo": "uc",
+                        "uc_id": pred_uc.uc_id if pred_uc else "?",
+                        "label": pred_uc.uc_id if pred_uc else "?",
+                        "satisfeito": r.predecessor_id in uc_ids_no_historico,
+                        "grupo_or": r.grupo_or,
+                    })
+
+            ja_satisfeito = uc.id in uc_ids_no_historico
             result.append({
                 "id": uc.id,
                 "uc_id": uc.uc_id,
@@ -397,6 +551,8 @@ def api_sprint_ucs_resumo(sprint_id):
                 "n_com_passos": n_com_passos,
                 "n_cenario_visual_executavel": n_cenario_com_passos,
                 "executavel": n_cenario_com_passos > 0,
+                "ja_executado": ja_satisfeito,
+                "predecessores": preds_lista,
             })
         return jsonify({"sprint_id": sprint_id, "ucs": result})
     finally:
@@ -710,6 +866,17 @@ def api_teste_iniciar(teste_id):
                     "exige_configuracao": True,
                     "detalhes": det,
                 }), 409
+
+        # Pre-flight de predecessores: cada UC do teste precisa ter seus
+        # predecessores executados (no proprio teste OU no historico do user)
+        ok_pred, det_pred = _validar_predecessores(db, t)
+        if not ok_pred:
+            return jsonify({
+                "ok": False,
+                "msg": det_pred.get("msg", "Predecessores nao satisfeitos"),
+                "exige_predecessores": True,
+                "pendencias": det_pred.get("pendencias", []),
+            }), 409
 
         # Spawn executor_sprint1.py
         cmd = [

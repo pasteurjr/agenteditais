@@ -138,19 +138,49 @@ export default function NovoTeste() {
                       <th>UC</th>
                       <th>Nome</th>
                       <th>CTs executáveis</th>
-                      <th>Total CTs</th>
+                      <th>Predecessores</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ucsExecutaveis.map(uc => (
-                      <tr key={uc.id} onClick={() => toggleUc(uc.id)} style={{cursor:'pointer'}}>
-                        <td><input type="checkbox" checked={!!selUcs[uc.id]} onChange={()=>toggleUc(uc.id)} onClick={e=>e.stopPropagation()}/></td>
-                        <td><strong className="ct-id-mono">{uc.uc_id}</strong></td>
-                        <td>{uc.nome}</td>
-                        <td><span style={{color:'#4caf50', fontWeight:'600'}}>{uc.n_cenario_visual_executavel}</span></td>
-                        <td><span style={{color:'#aaa'}}>{uc.n_total_cts}</span></td>
-                      </tr>
-                    ))}
+                    {ucsExecutaveis.map(uc => {
+                      // Calcula status dos predecessores: satisfeito se ja_executado pelo user OU presente no proprio teste
+                      const predsUcConcretos = (uc.predecessores || []).filter(p => p.tipo === 'uc')
+                      const predsAtendidos = predsUcConcretos.map(p => {
+                        const ucPred = ucs.find(u => u.uc_id === p.uc_id)
+                        const noTeste = ucPred && selUcs[ucPred.id]
+                        return { ...p, atendido: p.satisfeito || noTeste }
+                      })
+                      const todosOk = predsAtendidos.every(p => p.atendido)
+                      const labelPreds = predsUcConcretos.length === 0
+                        ? <span style={{color:'#777'}}>—</span>
+                        : predsAtendidos.map((p, i) => (
+                            <span key={i} style={{
+                              display:'inline-block', marginRight:'4px', padding:'1px 6px',
+                              borderRadius:3, fontSize:'9pt',
+                              background: p.atendido ? '#1a3a1a' : '#3a1a1a',
+                              color: p.atendido ? '#4a8a4a' : '#8a4a4a',
+                              border: '1px solid ' + (p.atendido ? '#2a5a2a' : '#5a2a2a'),
+                            }}>{p.atendido ? '✓' : '✗'} {p.uc_id}</span>
+                          ))
+                      const statusBadge = uc.ja_executado ? (
+                        <span style={{color:'#4a8a4a', fontSize:'9pt'}}>✓ já executado</span>
+                      ) : todosOk ? (
+                        <span style={{color:'#aaa', fontSize:'9pt'}}>—</span>
+                      ) : (
+                        <span style={{color:'#e94560', fontSize:'9pt'}} title="Predecessores ausentes">⚠ deps faltando</span>
+                      )
+                      return (
+                        <tr key={uc.id} onClick={() => toggleUc(uc.id)} style={{cursor:'pointer'}}>
+                          <td><input type="checkbox" checked={!!selUcs[uc.id]} onChange={()=>toggleUc(uc.id)} onClick={e=>e.stopPropagation()}/></td>
+                          <td><strong className="ct-id-mono">{uc.uc_id}</strong></td>
+                          <td>{uc.nome}</td>
+                          <td><span style={{color:'#4caf50', fontWeight:'600'}}>{uc.n_cenario_visual_executavel}</span></td>
+                          <td>{labelPreds}</td>
+                          <td>{statusBadge}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}

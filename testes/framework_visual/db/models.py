@@ -391,9 +391,57 @@ class PassoTutorial(Base):
     )
 
 
+# ============================================================
+# 16. UcPredecessor (grafo de dependencias entre UCs)
+# ============================================================
+class UcPredecessor(Base):
+    __tablename__ = "uc_predecessores"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    uc_id = Column(String(36), ForeignKey("casos_de_uso.id", ondelete="CASCADE"), nullable=False)
+    predecessor_id = Column(String(36), ForeignKey("casos_de_uso.id", ondelete="SET NULL"), nullable=True)
+    marcador = Column(String(20), nullable=True)  # '[login]'|'[infra]'|'[seed]'
+    grupo_or = Column(Integer, nullable=False, default=0)
+    ordem = Column(Integer, nullable=False, default=0)
+    criado_em = Column(DateTime, nullable=False, default=datetime.now)
+
+    uc = relationship("CasoDeUso", foreign_keys=[uc_id])
+    predecessor = relationship("CasoDeUso", foreign_keys=[predecessor_id])
+
+    __table_args__ = (
+        Index("ix_predecessor_uc", "uc_id"),
+    )
+
+
+# ============================================================
+# 17. UcExecucaoSatisfatoria (registro de "UC X satisfeito pelo user Y")
+# ============================================================
+class UcExecucaoSatisfatoria(Base):
+    __tablename__ = "uc_execucoes_satisfatorias"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    uc_id = Column(String(36), ForeignKey("casos_de_uso.id", ondelete="CASCADE"), nullable=False)
+    ambiente = Column(String(50), nullable=False, default="agenteditais")
+    ciclo_id = Column(String(120), nullable=True)
+    execucao_id = Column(String(36), ForeignKey("execucoes_caso_de_teste.id", ondelete="CASCADE"), nullable=False)
+    satisfeito_em = Column(DateTime, nullable=False, default=datetime.now)
+    expirado = Column(TINYINT(1), nullable=False, default=0)
+    motivo_expiracao = Column(String(255), nullable=True)
+
+    user = relationship("User")
+    uc = relationship("CasoDeUso")
+    execucao = relationship("ExecucaoCasoDeTeste")
+
+    __table_args__ = (
+        Index("ix_satisfacao_lookup", "user_id", "uc_id", "ambiente", "expirado"),
+        Index("ix_satisfacao_exec", "execucao_id"),
+    )
+
+
 __all__ = [
     "User", "Projeto", "Sprint", "CasoDeUso", "CasoDeTeste",
     "Teste", "ExecucaoCasoDeTeste", "PassoExecucao", "Observacao",
     "Relatorio", "LogAuditoria", "Anexo", "Tag", "TesteTag",
-    "Dataset", "PassoTutorial",
+    "Dataset", "PassoTutorial", "UcPredecessor", "UcExecucaoSatisfatoria",
 ]

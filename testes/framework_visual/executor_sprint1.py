@@ -334,6 +334,27 @@ def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
     if ultimo_screenshot:
         exec_obj.screenshot_depois_path = ultimo_screenshot
     db.commit()
+
+    # Registra satisfacao quando o CT foi executado ate o fim (aprovado OU reprovado).
+    # Razao: o estado fisico no banco editais (empresa criada, edital salvo, etc) eh
+    # consequencia dos passos executados, nao do veredito do PO sobre a UI. Mesmo que
+    # o ultimo passo reprove, os passos anteriores ja criaram o estado que outro UC
+    # depende.
+    try:
+        from db.models import UcExecucaoSatisfatoria  # type: ignore
+        satis = UcExecucaoSatisfatoria(
+            user_id=exec_obj.teste.user_id if exec_obj.teste else None,
+            uc_id=uc.id,
+            ambiente="agenteditais",
+            ciclo_id=exec_obj.teste.ciclo_id if exec_obj.teste else None,
+            execucao_id=exec_obj.id,
+        )
+        db.add(satis)
+        db.commit()
+        print(f"[exec] {uc.uc_id} executado ate o fim (registrado em uc_execucoes_satisfatorias)")
+    except Exception as e:
+        print(f"[exec] WARN: nao registrou satisfacao: {e}", file=sys.stderr)
+
     print(f"[exec] {ct.ct_id}: {exec_obj.estado} ({duracao_total}ms)")
     return exec_obj.estado
 
