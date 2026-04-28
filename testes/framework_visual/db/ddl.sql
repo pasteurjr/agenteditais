@@ -121,42 +121,15 @@ CREATE TABLE IF NOT EXISTS testes (
   PRIMARY KEY (id),
   KEY ix_testes_user_estado (user_id, estado),
   KEY ix_testes_sprint (sprint_id),
+  KEY ix_testes_ciclo (ciclo_id),
   CONSTRAINT fk_testes_projeto FOREIGN KEY (projeto_id) REFERENCES projetos(id),
   CONSTRAINT fk_testes_sprint  FOREIGN KEY (sprint_id)  REFERENCES sprints(id),
   CONSTRAINT fk_testes_user    FOREIGN KEY (user_id)    REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- 7. conjuntos_de_teste
--- ============================================================
-CREATE TABLE IF NOT EXISTS conjuntos_de_teste (
-  id        CHAR(36)     NOT NULL,
-  teste_id  CHAR(36)     NOT NULL,
-  nome      VARCHAR(255) NOT NULL,
-  descricao TEXT         NULL,
-  criado_em DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  KEY ix_conjuntos_teste (teste_id),
-  CONSTRAINT fk_conjuntos_teste FOREIGN KEY (teste_id) REFERENCES testes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- 8. conjunto_casos_de_teste — juncao ordenada
--- ============================================================
-CREATE TABLE IF NOT EXISTS conjunto_casos_de_teste (
-  id               CHAR(36) NOT NULL,
-  conjunto_id      CHAR(36) NOT NULL,
-  caso_de_teste_id CHAR(36) NOT NULL,
-  ordem            INT      NOT NULL,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_conjunto_ordem (conjunto_id, ordem),
-  UNIQUE KEY uq_conjunto_ct (conjunto_id, caso_de_teste_id),
-  CONSTRAINT fk_conj_cdt_conjunto FOREIGN KEY (conjunto_id)      REFERENCES conjuntos_de_teste(id) ON DELETE CASCADE,
-  CONSTRAINT fk_conj_cdt_ct       FOREIGN KEY (caso_de_teste_id) REFERENCES casos_de_teste(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- 9. execucoes_caso_de_teste — resultado consolidado por CT
+-- 7. execucoes_caso_de_teste — resultado consolidado por CT
+--    (conjuntos_de_teste removidos por redundancia — migration 002)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS execucoes_caso_de_teste (
   id                       CHAR(36)     NOT NULL,
@@ -263,18 +236,18 @@ CREATE TABLE IF NOT EXISTS log_auditoria (
 -- 13. anexos
 -- ============================================================
 CREATE TABLE IF NOT EXISTS anexos (
-  id            CHAR(36)     NOT NULL,
-  execucao_id   CHAR(36)     NOT NULL,
-  user_id       CHAR(36)     NOT NULL,
-  nome          VARCHAR(255) NOT NULL,
-  mime_type     VARCHAR(100) NULL,
-  tamanho_bytes BIGINT       NULL,
-  path_arquivo  VARCHAR(500) NOT NULL,
-  criado_em     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                CHAR(36)     NOT NULL,
+  passo_execucao_id CHAR(36)     NOT NULL,
+  user_id           CHAR(36)     NOT NULL,
+  nome              VARCHAR(255) NOT NULL,
+  mime_type         VARCHAR(100) NULL,
+  tamanho_bytes     BIGINT       NULL,
+  path_arquivo      VARCHAR(500) NOT NULL,
+  criado_em         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY ix_anexos_execucao (execucao_id),
-  CONSTRAINT fk_anexos_exec FOREIGN KEY (execucao_id) REFERENCES execucoes_caso_de_teste(id) ON DELETE CASCADE,
-  CONSTRAINT fk_anexos_user FOREIGN KEY (user_id)     REFERENCES users(id)
+  KEY ix_anexos_passo (passo_execucao_id),
+  CONSTRAINT fk_anexos_passo FOREIGN KEY (passo_execucao_id) REFERENCES passos_execucao(id) ON DELETE CASCADE,
+  CONSTRAINT fk_anexos_user  FOREIGN KEY (user_id)           REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

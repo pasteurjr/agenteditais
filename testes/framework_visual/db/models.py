@@ -167,7 +167,6 @@ class Teste(Base):
     user = relationship("User", back_populates="testes")
     projeto = relationship("Projeto")
     sprint = relationship("Sprint")
-    conjuntos = relationship("ConjuntoDeTeste", back_populates="teste", cascade="all, delete-orphan")
     execucoes = relationship("ExecucaoCasoDeTeste", back_populates="teste", cascade="all, delete-orphan")
     relatorios = relationship("Relatorio", back_populates="teste", cascade="all, delete-orphan")
 
@@ -178,43 +177,7 @@ class Teste(Base):
 
 
 # ============================================================
-# 7. ConjuntoDeTeste
-# ============================================================
-class ConjuntoDeTeste(Base):
-    __tablename__ = "conjuntos_de_teste"
-
-    id = Column(String(36), primary_key=True, default=_uuid)
-    teste_id = Column(String(36), ForeignKey("testes.id", ondelete="CASCADE"), nullable=False)
-    nome = Column(String(255), nullable=False)
-    descricao = Column(Text, nullable=True)
-    criado_em = Column(DateTime, nullable=False, default=datetime.now)
-
-    teste = relationship("Teste", back_populates="conjuntos")
-    items = relationship("ConjuntoCasosDeTeste", back_populates="conjunto", cascade="all, delete-orphan")
-
-
-# ============================================================
-# 8. ConjuntoCasosDeTeste
-# ============================================================
-class ConjuntoCasosDeTeste(Base):
-    __tablename__ = "conjunto_casos_de_teste"
-
-    id = Column(String(36), primary_key=True, default=_uuid)
-    conjunto_id = Column(String(36), ForeignKey("conjuntos_de_teste.id", ondelete="CASCADE"), nullable=False)
-    caso_de_teste_id = Column(String(36), ForeignKey("casos_de_teste.id"), nullable=False)
-    ordem = Column(Integer, nullable=False)
-
-    conjunto = relationship("ConjuntoDeTeste", back_populates="items")
-    caso_de_teste = relationship("CasoDeTeste")
-
-    __table_args__ = (
-        UniqueConstraint("conjunto_id", "ordem", name="uq_conjunto_ordem"),
-        UniqueConstraint("conjunto_id", "caso_de_teste_id", name="uq_conjunto_ct"),
-    )
-
-
-# ============================================================
-# 9. ExecucaoCasoDeTeste
+# 7. ExecucaoCasoDeTeste (era 9 antes — conjuntos removidos)
 # ============================================================
 class ExecucaoCasoDeTeste(Base):
     __tablename__ = "execucoes_caso_de_teste"
@@ -242,7 +205,6 @@ class ExecucaoCasoDeTeste(Base):
     teste = relationship("Teste", back_populates="execucoes")
     caso_de_teste = relationship("CasoDeTeste")
     passos = relationship("PassoExecucao", back_populates="execucao", cascade="all, delete-orphan")
-    anexos = relationship("Anexo", back_populates="execucao", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("teste_id", "caso_de_teste_id", name="uq_exec_teste_ct"),
@@ -282,6 +244,7 @@ class PassoExecucao(Base):
 
     execucao = relationship("ExecucaoCasoDeTeste", back_populates="passos")
     observacoes = relationship("Observacao", back_populates="passo_execucao", cascade="all, delete-orphan")
+    anexos = relationship("Anexo", back_populates="passo_execucao", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("execucao_id", "ordem", name="uq_passo_execucao_ordem"),
@@ -350,7 +313,7 @@ class Anexo(Base):
     __tablename__ = "anexos"
 
     id = Column(String(36), primary_key=True, default=_uuid)
-    execucao_id = Column(String(36), ForeignKey("execucoes_caso_de_teste.id", ondelete="CASCADE"), nullable=False)
+    passo_execucao_id = Column(String(36), ForeignKey("passos_execucao.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     nome = Column(String(255), nullable=False)
     mime_type = Column(String(100), nullable=True)
@@ -358,7 +321,7 @@ class Anexo(Base):
     path_arquivo = Column(String(500), nullable=False)
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
 
-    execucao = relationship("ExecucaoCasoDeTeste", back_populates="anexos")
+    passo_execucao = relationship("PassoExecucao", back_populates="anexos")
 
 
 # ============================================================
@@ -381,7 +344,6 @@ class TesteTag(Base):
 
 __all__ = [
     "User", "Projeto", "Sprint", "CasoDeUso", "CasoDeTeste",
-    "Teste", "ConjuntoDeTeste", "ConjuntoCasosDeTeste",
-    "ExecucaoCasoDeTeste", "PassoExecucao", "Observacao",
+    "Teste", "ExecucaoCasoDeTeste", "PassoExecucao", "Observacao",
     "Relatorio", "LogAuditoria", "Anexo", "Tag", "TesteTag",
 ]

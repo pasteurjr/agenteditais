@@ -24,8 +24,7 @@ sys.path.insert(0, str(_FW_VISUAL))
 from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     User, Projeto, Sprint, CasoDeUso, CasoDeTeste,
-    Teste, ConjuntoDeTeste, ConjuntoCasosDeTeste,
-    ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
+    Teste, ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
 )
 
 
@@ -100,21 +99,6 @@ def main():
         )
         db.add(teste)
         db.flush()
-
-        # Conjunto + item
-        conj = ConjuntoDeTeste(
-            teste_id=teste.id,
-            nome="Piloto UC-F01",
-            descricao="1 CT (CT-F01-FP) — fluxo principal completo + FA-07.A",
-        )
-        db.add(conj)
-        db.flush()
-
-        db.add(ConjuntoCasosDeTeste(
-            conjunto_id=conj.id,
-            caso_de_teste_id=ct_fp.id,
-            ordem=1,
-        ))
 
         # Execucao do CT
         # Vereditos: 8 APROVADOS + 2 REPROVADOS → CT consolidado: REPROVADO

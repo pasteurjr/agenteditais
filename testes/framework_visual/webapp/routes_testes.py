@@ -15,7 +15,7 @@ sys.path.insert(0, str(_FW_VISUAL))
 from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     Projeto, Sprint, CasoDeUso, CasoDeTeste,
-    Teste, ConjuntoDeTeste, ConjuntoCasosDeTeste, ExecucaoCasoDeTeste,
+    Teste, ExecucaoCasoDeTeste,
 )
 from webapp.auth import login_required  # type: ignore
 
@@ -86,25 +86,11 @@ def teste_novo_criar():
         db.add(teste)
         db.flush()
 
-        # Criar conjunto
-        conjunto = ConjuntoDeTeste(
-            teste_id=teste.id,
-            nome=f"Conjunto principal de {titulo}",
-            descricao=f"{len(cts)} CTs selecionados em {datetime.now().isoformat(timespec='seconds')}",
-        )
-        db.add(conjunto)
-        db.flush()
-
-        # Ordem do front: usar a posicao no array ct_ids
+        # Criar execucoes (1 por CT selecionado, na ordem do form)
         ct_by_id = {c.id: c for c in cts}
         for ordem, ct_id in enumerate(ct_ids, start=1):
             if ct_id not in ct_by_id:
                 continue
-            db.add(ConjuntoCasosDeTeste(
-                conjunto_id=conjunto.id,
-                caso_de_teste_id=ct_id,
-                ordem=ordem,
-            ))
             db.add(ExecucaoCasoDeTeste(
                 teste_id=teste.id,
                 caso_de_teste_id=ct_id,
