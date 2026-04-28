@@ -37,10 +37,10 @@ split_gerado_em: "2026-04-24T19:19:04"
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
-- **UC-F16 OU [seed]**
 
 Pre-requisitos nao-UC:
 
+- `[seed]` — dado pre-cadastrado no banco (seed)
 - `[infra]` — endpoint/servico operacional (nao eh UC)
 
 

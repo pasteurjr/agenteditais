@@ -22,13 +22,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PREDECESSORES = {
     # Sprint 1
     "UC-F01": ["[login]", "[infra]"],
-    "UC-F02": ["UC-F01", "UC-F13 OU [seed]"],
+    "UC-F02": ["UC-F01", "[seed]"],  # areas vem do seed, UC-F13 so visualiza (nao cria)
     "UC-F03": ["UC-F01", "[infra]", "[seed]"],
-    "UC-F04": ["UC-F01", "UC-F16 OU [seed]", "[infra]"],
+    "UC-F04": ["UC-F01", "[seed]", "[infra]"],  # fontes de certidao vem do seed (UC-F16 tambem so configura, nao cria fontes)
     "UC-F05": ["UC-F01", "[infra]"],
-    "UC-F06": ["[login]", "UC-F07 OU UC-F08", "UC-F13 OU [seed]"],
+    "UC-F06": ["[login]", "UC-F07 OU UC-F08", "[seed]"],  # hierarquia Area/Classe/Subclasse vem do seed
     "UC-F07": ["[login]", "[infra]"],
-    "UC-F08": ["UC-F07 OU UC-F08", "UC-F13 OU [seed]"],
+    "UC-F08": ["UC-F07 OU UC-F08", "[seed]"],  # subclasse com mascara vem do seed
     "UC-F09": ["UC-F07 OU UC-F08", "[infra]"],
     "UC-F10": ["UC-F06", "[infra]"],
     "UC-F11": ["UC-F07 OU UC-F08", "[infra]"],
