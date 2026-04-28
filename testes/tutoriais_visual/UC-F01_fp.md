@@ -321,3 +321,31 @@ acao:
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_salvar_e_confirmar"
 ```
+
+## Passo 10 — Vincular empresa ao usuário (FA-07.B via API)
+
+Após criar e salvar a empresa, é necessário criar o vínculo formal `usuario_empresa` para que o user seja considerado "com empresa vinculada" em sessões futuras (próximos UCs do mesmo teste e próximos testes). Sem este vínculo, o user (mesmo super) cai na tela "Você não tem empresas vinculadas" no próximo login.
+
+Este passo executa **FA-07.B do UC-F01** via API direta (`POST /api/admin/associar-empresa`), sem precisar navegar pela tela de Admin → Associar Empresa.
+
+**Observe criticamente:**
+- Network tab mostra POST `/api/admin/associar-empresa` com status 200
+- Response retorna `{"message": "Vínculo criado/atualizado", "vinculo": {...}}`
+- Browser não navega — chamada acontece em background
+- Próximo login do user vai cair direto na EmpresaPage (não em "Sem empresa vinculada")
+
+```yaml
+id: passo_10_vincular_empresa_ao_user
+acao:
+  sequencia:
+    - tipo: chamar_api
+      url: "/api/admin/associar-empresa"
+      metodo: POST
+      payload_json:
+        user_id: "from:contexto.usuario.id"
+        cnpj: "from:dataset.empresa.cnpj"
+        papel: "operador"
+        acao: "vincular"
+      timeout: 10000
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_vincular_empresa"
+```

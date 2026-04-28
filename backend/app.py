@@ -1181,24 +1181,42 @@ def update_empresa_atual():
 @require_auth
 @require_super
 def associar_usuario_empresa():
-    """Vincula ou desvincula usuário↔empresa. Somente superuser."""
+    """Vincula ou desvincula usuário↔empresa. Somente superuser.
+
+    Aceita identificacao da empresa por:
+      - empresa_id (UUID) — modo padrao
+      - cnpj — busca empresa por CNPJ (util pra fluxos automatizados que
+        acabaram de criar via CRUD e nao tem o UUID em mao)
+    """
     data = request.json or {}
     user_id = data.get("user_id", "").strip()
     empresa_id = data.get("empresa_id", "").strip()
+    cnpj = data.get("cnpj", "").strip()
     papel = data.get("papel", "operador").strip()
     acao = data.get("acao", "vincular").strip()
 
-    if not user_id or not empresa_id:
-        return jsonify({"error": "user_id e empresa_id são obrigatórios"}), 400
+    if not user_id or (not empresa_id and not cnpj):
+        return jsonify({"error": "user_id e (empresa_id OU cnpj) são obrigatórios"}), 400
 
     db = get_db()
     try:
         user = db.query(User).filter(User.id == user_id).first()
-        empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+        # Resolve empresa por id OU cnpj
+        if empresa_id:
+            empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+        else:
+            # Busca por CNPJ — normaliza removendo mascara
+            cnpj_clean = "".join(c for c in cnpj if c.isdigit())
+            empresa = db.query(Empresa).filter(Empresa.cnpj == cnpj_clean).first()
+            if not empresa:
+                # Tenta com mascara tambem
+                empresa = db.query(Empresa).filter(Empresa.cnpj == cnpj).first()
+            if empresa:
+                empresa_id = empresa.id
         if not user:
             return jsonify({"error": "Usuário não encontrado"}), 404
         if not empresa:
-            return jsonify({"error": "Empresa não encontrada"}), 404
+            return jsonify({"error": f"Empresa não encontrada (id={empresa_id or 'NULL'}, cnpj={cnpj or 'NULL'})"}), 404
 
         if acao == "vincular":
             ue = db.query(UsuarioEmpresa).filter(

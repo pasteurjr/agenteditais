@@ -150,8 +150,65 @@ def _executar_acao(
         if not p.is_file():
             raise ValueError(f"Path nao eh arquivo: {valor}")
         page.set_input_files(seletor, str(p))
+    elif acao.tipo == "chamar_api":
+        # Faz POST/PUT/etc na API do app via Playwright (reusa cookies/auth da sessao do browser)
+        if not acao.url:
+            raise ValueError("chamar_api sem url")
+        metodo = (acao.metodo or "POST").upper()
+        url_full = acao.url
+        # Resolve placeholders no payload (substitui {{X}} por valores do dataset/contexto)
+        payload = acao.payload_json
+        if payload is not None and (dataset is not None or contexto is not None):
+            payload = _resolver_payload(payload, dataset or {}, contexto, trilha)
+        # Usa request context do browser — cookies httponly da sessao Flask sao enviados
+        ctx_req = page.context.request
+        kwargs = {"timeout": acao.timeout}
+        if payload is not None:
+            kwargs["data"] = payload
+        if metodo == "POST":
+            resp = ctx_req.post(url_full, **kwargs)
+        elif metodo == "PUT":
+            resp = ctx_req.put(url_full, **kwargs)
+        elif metodo == "DELETE":
+            resp = ctx_req.delete(url_full, **kwargs)
+        elif metodo == "GET":
+            resp = ctx_req.get(url_full, **kwargs)
+        else:
+            raise ValueError(f"Metodo HTTP nao suportado: {metodo}")
+        if resp.status >= 400:
+            try: body = resp.text()
+            except: body = "<no body>"
+            raise RuntimeError(f"chamar_api {metodo} {url_full} -> {resp.status}: {body[:300]}")
     else:
         raise ValueError(f"Tipo de acao nao suportado: {acao.tipo}")
+
+
+def _resolver_payload(obj, dataset: dict, contexto, trilha: str = "visual"):
+    """Resolve recursivamente strings 'from:dataset.empresa.cnpj' ou 'from:contexto.usuario.email'
+    dentro do payload_json de chamar_api."""
+    if isinstance(obj, str):
+        if obj.startswith("from:dataset."):
+            chave = obj[len("from:dataset."):]
+            return _get_nested(dataset, chave)
+        if obj.startswith("from:contexto."):
+            chave = obj[len("from:contexto."):]
+            trilha_ctx = (contexto or {}).get("trilhas", {}).get(trilha, {})
+            return _get_nested(trilha_ctx, chave)
+        return obj
+    if isinstance(obj, dict):
+        return {k: _resolver_payload(v, dataset, contexto, trilha) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_resolver_payload(x, dataset, contexto, trilha) for x in obj]
+    return obj
+
+
+def _get_nested(d, key: str):
+    cur = d
+    for part in key.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return None
+        cur = cur[part]
+    return cur
 
 
 def _validar_dom(page: Page, asserts: list[dict]) -> tuple[bool, str, list[dict]]:

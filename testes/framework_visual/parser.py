@@ -35,6 +35,8 @@ class Acao:
     valor_from_pasta_docs: str | None = None  # caminho relativo dentro de users.pasta_documentos_teste
     destino: str | None = None
     url: str | None = None
+    metodo: str | None = None  # GET/POST/PUT/DELETE — usado por chamar_api
+    payload_json: dict | list | None = None  # body pra chamar_api (JSON)
     timeout: int = 10000
     sequencia: list["Acao"] = field(default_factory=list)
 
@@ -92,6 +94,8 @@ def _parse_acao(d: dict[str, Any]) -> Acao:
         valor_from_pasta_docs=d.get("valor_from_pasta_docs"),
         destino=d.get("destino"),
         url=d.get("url"),
+        metodo=d.get("metodo"),
+        payload_json=d.get("payload_json"),
         timeout=int(d.get("timeout", 10000)),
         sequencia=sub,
     )

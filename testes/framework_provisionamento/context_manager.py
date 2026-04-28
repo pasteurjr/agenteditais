@@ -62,9 +62,14 @@ def criar_ciclo(
     termo_busca_pncp: str = "diagnostico",
     n_editais: int = 3,
     sprints_no_ciclo: list[int] | None = None,
+    trilhas: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Provisiona contexto completo de um ciclo. Retorna o dict do contexto.yaml.
+
+    Args:
+        trilhas: lista de trilhas a provisionar. Default: ["visual"] (1 user).
+                 Use ["e2e", "visual", "humano"] pra processo completo de 3 trilhas.
 
     Se já existe contexto.yaml para o ciclo_id, levanta erro (use carregar_ciclo).
     """
@@ -77,23 +82,31 @@ def criar_ciclo(
             f"Contexto ja existe para ciclo_id={ciclo_id}. Use carregar_ciclo() ou apague o diretorio."
         )
 
-    print(f"[ctx] Provisionando ciclo {ciclo_id} (ambiente={ambiente})")
+    # Default: trilha visual apenas (uso atual do app testesvalidacoes)
+    trilhas_alvo = trilhas if trilhas else ["visual"]
+    # Valida
+    for t in trilhas_alvo:
+        if t not in TRILHAS:
+            raise ValueError(f"Trilha invalida: {t}. Validas: {TRILHAS}")
+    n_trilhas = len(trilhas_alvo)
+
+    print(f"[ctx] Provisionando ciclo {ciclo_id} (ambiente={ambiente}, trilhas={trilhas_alvo})")
     ctx_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Alocar 3 usuários sequenciais
-    print(f"[ctx] Alocando 3 usuarios sequenciais...")
-    usuarios = alocar_usuarios(quantidade=3)
-    if len(usuarios) != 3:
-        raise RuntimeError(f"Esperava 3 usuarios, recebi {len(usuarios)}")
+    # 1. Alocar usuarios sequenciais (1 por trilha)
+    print(f"[ctx] Alocando {n_trilhas} usuario(s) sequencial(is)...")
+    usuarios = alocar_usuarios(quantidade=n_trilhas)
+    if len(usuarios) != n_trilhas:
+        raise RuntimeError(f"Esperava {n_trilhas} usuarios, recebi {len(usuarios)}")
     print(f"[ctx]   alocados: {[u['email'] for u in usuarios]}")
 
-    # 2. Gerar 3 CNPJs únicos
-    print(f"[ctx] Gerando 3 CNPJs unicos...")
-    cnpjs = [gerar_cnpj_unico() for _ in range(3)]
+    # 2. Gerar CNPJs unicos (1 por trilha)
+    print(f"[ctx] Gerando {n_trilhas} CNPJ(s) unico(s)...")
+    cnpjs = [gerar_cnpj_unico() for _ in range(n_trilhas)]
     print(f"[ctx]   {cnpjs}")
 
     # 3. Editais (opcional)
-    editais_por_trilha: dict[str, list[dict]] = {t: [] for t in TRILHAS}
+    editais_por_trilha: dict[str, list[dict]] = {t: [] for t in trilhas_alvo}
     if precisa_editais:
         print(f"[ctx] Selecionando {n_editais} editais do PNCP (termo='{termo_busca_pncp}')...")
         try:
@@ -102,19 +115,17 @@ def criar_ciclo(
             editais = selecionar_e_baixar(
                 n=n_editais, destino_dir=editais_dir, termo_busca=termo_busca_pncp
             )
-            # Distribui mesmos editais para as 3 trilhas (validacao roda em ambientes
-            # diferentes, mas mesma seleção de editais facilita cross-check)
-            for t in TRILHAS:
+            for t in trilhas_alvo:
                 editais_por_trilha[t] = editais
             print(f"[ctx]   {len(editais)} editais baixados em {editais_dir}")
         except Exception as e:
             print(f"[ctx] AVISO: falha ao selecionar editais (continuando sem): {e}")
 
     # 4. Renderizar documentos por trilha
-    print(f"[ctx] Renderizando documentos ficticios para 3 trilhas...")
+    print(f"[ctx] Renderizando documentos ficticios para {n_trilhas} trilha(s)...")
     docs_por_trilha: dict[str, dict[str, str]] = {}
     ciclo_short = ciclo_id.split("_")[0].replace("-", "")
-    for i, trilha in enumerate(TRILHAS):
+    for i, trilha in enumerate(trilhas_alvo):
         empresa_dict = {
             "razao_social": RAZAO_SOCIAL_TEMPLATES[trilha].format(
                 ciclo_short=ciclo_short, n=i + 1
@@ -136,7 +147,7 @@ def criar_ciclo(
         "trilhas": {},
     }
 
-    for i, trilha in enumerate(TRILHAS):
+    for i, trilha in enumerate(trilhas_alvo):
         u = usuarios[i]
         razao_social = RAZAO_SOCIAL_TEMPLATES[trilha].format(
             ciclo_short=ciclo_short, n=i + 1

@@ -128,3 +128,14 @@ passos:
       elementos_proibidos:
         - "Mensagem de erro vermelha"
         - "Botao 'Tentar novamente'"
+
+  - id: passo_10_vincular_empresa
+    descricao: "FA-07.B: vincular empresa criada ao usuario via POST /api/admin/associar-empresa"
+    asserts_rede:
+      - url_contem: "/api/admin/associar-empresa"
+        metodo: "POST"
+        status: 200
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Vinculo usuario_empresa criado no banco editais"
+        - "Response retorna {message: 'Vinculo criado/atualizado', vinculo: {...}}"
