@@ -113,6 +113,8 @@ def teste_novo_criar():
             ))
 
         db.commit()
+        from webapp.audit import log as audit_log
+        audit_log("criar_teste", "teste", teste.id, {"titulo": titulo, "n_cts": len(cts)})
         return redirect(url_for("testes.teste_executar", teste_id=teste.id))
     except Exception as e:
         db.rollback()

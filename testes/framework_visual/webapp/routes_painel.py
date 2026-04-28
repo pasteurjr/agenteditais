@@ -54,6 +54,8 @@ def iniciar(teste_id):
         pid = iniciar_executor(teste_id)
         teste.pid_executor = pid
         db.commit()
+        from webapp.audit import log as audit_log
+        audit_log("iniciar_executor", "teste", teste_id, {"pid": pid})
         return jsonify({"ok": True, "pid": pid})
     finally:
         db.close()
@@ -168,6 +170,8 @@ def aprovar(teste_id):
         passo.veredicto_po = "APROVADO"
         passo.pediu_continuar = 1
         db.commit()
+        from webapp.audit import log as audit_log
+        audit_log("aprovar_passo", "passo", passo.id, {"teste_id": teste_id, "passo_id": passo.passo_id})
         return jsonify({"ok": True, "passo_id": passo.passo_id})
     finally:
         db.close()
@@ -186,6 +190,8 @@ def reprovar(teste_id):
         passo.pediu_continuar = 1
         passo.correcao_necessaria = 1
         db.commit()
+        from webapp.audit import log as audit_log
+        audit_log("reprovar_passo", "passo", passo.id, {"teste_id": teste_id, "passo_id": passo.passo_id})
         return jsonify({"ok": True, "passo_id": passo.passo_id})
     finally:
         db.close()

@@ -35,6 +35,8 @@ def login_page():
             login_user(user)
             from flask import current_app
             current_app.logger.info(f"login: {email} (admin={user.administrador})")
+            from webapp.audit import log as audit_log
+            audit_log("login", "user", user.id, {"email": email})
             next_url = request.args.get("next") or request.form.get("next") or url_for("home.home_page")
             return redirect(next_url)
         finally:
