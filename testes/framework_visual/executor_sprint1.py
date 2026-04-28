@@ -28,8 +28,10 @@ Reusa codigo do executor.py original (importa _executar_acao, _validar_dom).
 from __future__ import annotations
 
 import argparse
+import atexit
 import configparser
 import os
+import signal
 import sys
 import time
 import webbrowser
@@ -380,6 +382,37 @@ def main():
     args = parser_arg.parse_args()
 
     db = get_db()
+    teste_id_global: str | None = None  # pra usar no cleanup
+
+    def _cleanup_pid():
+        """Garante que pid_executor=NULL e estado coerente no banco, mesmo em crash/SIGTERM."""
+        if not teste_id_global:
+            return
+        try:
+            from db.engine import get_db as _get_db
+            db_clean = _get_db()
+            try:
+                t = db_clean.query(Teste).filter_by(id=teste_id_global).first()
+                if t:
+                    t.pid_executor = None
+                    if t.estado == "em_andamento":
+                        t.estado = "pausado"
+                    db_clean.commit()
+                    print(f"[exec] cleanup: pid_executor=NULL, estado={t.estado}", file=sys.stderr)
+            finally:
+                db_clean.close()
+        except Exception as e:
+            print(f"[exec] cleanup falhou: {e}", file=sys.stderr)
+
+    def _signal_handler(signum, frame):
+        print(f"[exec] recebeu sinal {signum} — limpando", file=sys.stderr)
+        _cleanup_pid()
+        sys.exit(143 if signum == signal.SIGTERM else 130)
+
+    atexit.register(_cleanup_pid)
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+
     try:
         # Modo: criar teste novo OU usar existente
         if args.teste_id:
@@ -388,6 +421,7 @@ def main():
             teste_id = _criar_teste_novo(db, args)
         else:
             raise SystemExit("Use --teste_id <UUID> OU --user_email + --titulo + --ct_ids")
+        teste_id_global = teste_id
 
         teste = db.query(Teste).filter_by(id=teste_id).first()
         if not teste:

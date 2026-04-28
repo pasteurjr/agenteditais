@@ -296,6 +296,7 @@ def api_testes_lista():
     todos = request.args.get("todos") == "1" and session.get("is_admin")
     db = get_db()
     try:
+        _gc_zumbis(db)  # garante que estado mostrado e real
         q = db.query(Teste)
         if not todos:
             q = q.filter(Teste.user_id == session["user_id"])
@@ -482,11 +483,35 @@ def _is_pid_alive(pid):
         return False
 
 
+def _gc_zumbis(db):
+    """Limpa testes com pid_executor preenchido mas processo morto.
+    Chamado antes de iniciar/listar testes — evita PIDs zumbis trancarem o painel."""
+    candidatos = (
+        db.query(Teste)
+        .filter(Teste.pid_executor.isnot(None))
+        .all()
+    )
+    limpos = 0
+    for t in candidatos:
+        if not _is_pid_alive(t.pid_executor):
+            t.pid_executor = None
+            if t.estado == "em_andamento":
+                t.estado = "pausado"
+            limpos += 1
+    if limpos:
+        db.commit()
+        print(f"[api] gc_zumbis: {limpos} PID(s) orfaos limpos")
+    return limpos
+
+
 @app.route("/api/testes/<teste_id>/iniciar", methods=["POST"])
 @login_required
 def api_teste_iniciar(teste_id):
     db = get_db()
     try:
+        # GC: limpa PIDs zumbis (processos mortos sem o cleanup ter rodado)
+        _gc_zumbis(db)
+
         t = db.query(Teste).filter_by(id=teste_id).first()
         if not t:
             return jsonify({"error": "nao encontrado"}), 404
@@ -494,6 +519,21 @@ def api_teste_iniciar(teste_id):
             return jsonify({"error": "acesso negado"}), 403
         if _is_pid_alive(t.pid_executor):
             return jsonify({"ok": False, "msg": f"executor ja rodando pid={t.pid_executor}"}), 409
+
+        # Checagem global: painel :9876 e unico por maquina, so 1 teste pode estar rodando
+        outro = (
+            db.query(Teste)
+            .filter(Teste.id != t.id, Teste.pid_executor.isnot(None))
+            .all()
+        )
+        for o in outro:
+            if _is_pid_alive(o.pid_executor):
+                return jsonify({
+                    "ok": False,
+                    "msg": f"Ja ha outro teste rodando: '{o.titulo}' (PID {o.pid_executor}). Pause/cancele antes de iniciar este.",
+                    "outro_teste_id": o.id,
+                    "outro_titulo": o.titulo,
+                }), 409
 
         # Spawn executor_sprint1.py
         cmd = [
