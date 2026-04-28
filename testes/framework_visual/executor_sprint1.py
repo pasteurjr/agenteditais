@@ -51,6 +51,10 @@ from db.models import (  # type: ignore
     User, Teste, ExecucaoCasoDeTeste, CasoDeTeste, CasoDeUso,
     Dataset, PassoTutorial, PassoExecucao, Observacao, Relatorio,
 )
+from dados.placeholders import (  # type: ignore
+    construir_mapa_placeholders, resolver_placeholders,
+    listar_placeholders_nao_resolvidos,
+)
 
 _INI_PATH = PROJECT_ROOT / "validaeditais.ini"
 _cfg = configparser.ConfigParser()
@@ -167,7 +171,18 @@ def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
         .filter_by(caso_de_uso_id=uc.id, trilha="visual")
         .first()
     )
-    dataset_dict = dataset_obj.dados_json if dataset_obj else {}
+    dataset_raw = dataset_obj.dados_json if dataset_obj else {}
+
+    # Resolve placeholders ({{CNPJ_UNICO}}, {{EMAIL_PRINCIPAL}}, etc) usando ciclo + ctx.
+    # Ver docs/PROCESSO_CADASTRO_UC_NO_BANCO.md secao 5.
+    ciclo_id_real = exec_obj.teste.ciclo_id if exec_obj.teste else "fallback"
+    mapa_ph = construir_mapa_placeholders(ciclo_id_real, ciclo_contexto)
+    dataset_dict = resolver_placeholders(dataset_raw, mapa_ph)
+    nao_resolvidos = listar_placeholders_nao_resolvidos(dataset_dict)
+    if nao_resolvidos:
+        print(f"[exec] AVISO: placeholders nao resolvidos no dataset {uc.uc_id}: {nao_resolvidos}")
+    print(f"[exec] dataset {uc.uc_id} resolvido (ciclo={ciclo_id_real}, "
+          f"cnpj={mapa_ph['CNPJ_UNICO']}, email={mapa_ph['EMAIL_PRINCIPAL']})")
 
     # Marca em_execucao
     exec_obj.estado = "em_execucao"
