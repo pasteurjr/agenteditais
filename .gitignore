@@ -28,6 +28,9 @@ uploads/
 *.pdf
 *.log
 
+# Excecao: documentos sintetizados ficam versionados (fixtures de validacao)
+!docs/documentos_sintetizados/**/*.pdf
+
 # Arquivos de cache
 .cache/
 cache/
