@@ -1,0 +1,21 @@
+uc_id: UC-F02
+variacao: fa02
+trilha: visual
+descricao: "Adicionar 2 emails e remover o primeiro antes de salvar"
+passos:
+  - id: passo_00_setup_empresa_e_login
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+  - id: passo_01_adicionar_dois_emails
+    asserts_dom:
+      - selector: '.multi-field-item span:has-text("comercial+")'
+  - id: passo_02_remover_primeiro_email
+    asserts_dom:
+      - selector: '.multi-field-item span:has-text("comercial+")'
+  - id: passo_03_salvar_apos_remocao
+    asserts_dom:
+      - selector: 'span:has-text("Salvo!")'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: PUT
+        status: 200

@@ -93,7 +93,7 @@ def _dict_para_acao(d: dict) -> Acao:
 
 
 def _resolve_valor(acao: Acao, dataset_dict: dict, ciclo_contexto: dict | None, trilha: str = "visual") -> str | None:
-    """Resolve valor_literal | valor_from_dataset | valor_from_contexto."""
+    """Resolve valor_literal | valor_from_dataset | valor_from_contexto | valor_from_pasta_docs."""
     if acao.valor_literal is not None:
         return str(acao.valor_literal)
     if acao.valor_from_dataset:
@@ -102,6 +102,10 @@ def _resolve_valor(acao: Acao, dataset_dict: dict, ciclo_contexto: dict | None, 
         trilha_ctx = ciclo_contexto.get("trilhas", {}).get(trilha)
         if trilha_ctx:
             return _get_nested(trilha_ctx, acao.valor_from_contexto)
+    if acao.valor_from_pasta_docs and ciclo_contexto:
+        pasta = ciclo_contexto.get("pasta_documentos_teste")
+        if pasta:
+            return str(Path(pasta) / acao.valor_from_pasta_docs)
     return None
 
 
@@ -487,7 +491,12 @@ def main():
         print(f"[exec] Evidencias: {evid_dir}")
 
         # Carrega contexto do ciclo (opcional, pra resolver valor_from_contexto: usuario.email)
-        ciclo_contexto = _carregar_ciclo_contexto(teste.ciclo_id or args.ciclo)
+        ciclo_contexto = _carregar_ciclo_contexto(teste.ciclo_id or args.ciclo) or {}
+
+        # Injeta pasta_documentos_teste do user (usado por valor_from_pasta_docs em uploads)
+        if teste.user and teste.user.pasta_documentos_teste:
+            ciclo_contexto["pasta_documentos_teste"] = teste.user.pasta_documentos_teste
+            print(f"[exec] pasta_documentos_teste = {teste.user.pasta_documentos_teste}")
 
         # Estado compartilhado com painel
         estado = EstadoSessao(

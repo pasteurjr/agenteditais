@@ -56,6 +56,7 @@ from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     User, Projeto, Sprint, CasoDeUso, CasoDeTeste,
     Teste, ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
+    PassoTutorial,
 )
 from sqlalchemy import desc
 
@@ -279,6 +280,47 @@ def api_download_zip_documentos():
         download_name="documentos_sintetizados.zip",
         mimetype="application/zip",
     )
+
+
+def _teste_precisa_pasta_documentos(db, teste) -> bool:
+    """Retorna True se algum CT do teste tem acao upload_arquivo nos passos."""
+    import json as _json
+    execs = (
+        db.query(ExecucaoCasoDeTeste)
+        .filter_by(teste_id=teste.id)
+        .all()
+    )
+    ct_ids = [e.caso_de_teste_id for e in execs]
+    if not ct_ids:
+        return False
+    passos = (
+        db.query(PassoTutorial)
+        .filter(PassoTutorial.caso_de_teste_id.in_(ct_ids))
+        .all()
+    )
+    for p in passos:
+        acoes = p.acoes_json
+        if isinstance(acoes, str):
+            try: acoes = _json.loads(acoes)
+            except: continue
+        if not acoes:
+            continue
+        if _tem_acao_upload(acoes):
+            return True
+    return False
+
+
+def _tem_acao_upload(acoes) -> bool:
+    """Busca recursiva por tipo='upload_arquivo' em acoes_json."""
+    if isinstance(acoes, dict):
+        if acoes.get("tipo") == "upload_arquivo":
+            return True
+        if "sequencia" in acoes:
+            return _tem_acao_upload(acoes["sequencia"])
+        return False
+    if isinstance(acoes, list):
+        return any(_tem_acao_upload(a) for a in acoes)
+    return False
 
 
 def _validar_pasta_documentos(pasta: str | None) -> tuple[bool, dict]:
@@ -647,6 +689,26 @@ def api_teste_iniciar(teste_id):
                     "msg": f"Ja ha outro teste rodando: '{o.titulo}' (PID {o.pid_executor}). Pause/cancele antes de iniciar este.",
                     "outro_teste_id": o.id,
                     "outro_titulo": o.titulo,
+                }), 409
+
+        # Pre-flight: se algum CT do teste tem acao upload_arquivo, exige pasta_documentos_teste
+        precisa_pasta = _teste_precisa_pasta_documentos(db, t)
+        if precisa_pasta:
+            user = db.query(User).filter_by(id=t.user_id).first()
+            if not user or not user.pasta_documentos_teste:
+                return jsonify({
+                    "ok": False,
+                    "msg": "Este teste tem CTs com upload de arquivo. Configure a pasta de documentos em Configuracoes (botao ⚙ Config) antes de iniciar.",
+                    "exige_configuracao": True,
+                }), 409
+            # Valida que a pasta ainda eh acessivel
+            valido, det = _validar_pasta_documentos(user.pasta_documentos_teste)
+            if not valido:
+                return jsonify({
+                    "ok": False,
+                    "msg": f"Pasta de documentos invalida: {det.get('erro')}. Reconfigure em ⚙ Config.",
+                    "exige_configuracao": True,
+                    "detalhes": det,
                 }), 409
 
         # Spawn executor_sprint1.py

@@ -1,0 +1,24 @@
+uc_id: UC-F02
+variacao: fp
+trilha: visual
+descricao: "Adicionar email + telefone + selecionar area padrao + salvar"
+passos:
+  - id: passo_00_setup_empresa_e_login
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+  - id: passo_01_adicionar_email
+    asserts_dom:
+      - selector: '.multi-field-item span:has-text("atendimento+")'
+  - id: passo_02_adicionar_telefone
+    asserts_dom:
+      - selector: '.multi-field-item span:has-text("4999")'
+  - id: passo_03_selecionar_area_padrao
+    asserts_dom:
+      - selector: 'label:has-text("Area de Atuacao Padrao")'
+  - id: passo_04_salvar_alteracoes
+    asserts_dom:
+      - selector: 'span:has-text("Salvo!")'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: PUT
+        status: 200

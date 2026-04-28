@@ -1,0 +1,24 @@
+uc_id: UC-F02
+trilha: visual
+ciclo_id_default: piloto-ucf02
+
+# Empresa eh provisionada via API REST no passo 00 do tutorial (setup_empresa)
+empresa:
+  cnpj: "{{CNPJ_UNICO}}"
+  razao_social: "DEMO {{SUFIXO_CICLO}} Servicos Ltda"
+  nome_fantasia: "DEMO {{SUFIXO_CICLO}} Servicos"
+  email: "contato+{{SUFIXO_CICLO}}@demo.com.br"
+  cidade: "Sao Paulo"
+  uf: "SP"
+  cep: "01000-000"
+
+# Dados pra adicionar emails/telefones no UC-F02
+contatos:
+  email_valido: "atendimento+{{SUFIXO_CICLO}}@demo.com.br"
+  email_extra: "comercial+{{SUFIXO_CICLO}}@demo.com.br"
+  telefone_valido: "(11) 4999-1234"
+  telefone_extra: "(11) 98765-4321"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

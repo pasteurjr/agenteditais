@@ -1,0 +1,18 @@
+uc_id: UC-F02
+variacao: fa01
+trilha: visual
+descricao: "Salvar sem adicionar email nem telefone (campos opcionais)"
+passos:
+  - id: passo_00_setup_empresa_e_login
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+  - id: passo_01_pular_email_telefone
+    asserts_dom:
+      - selector: '.form-section-title:has-text("Emails de Contato")'
+  - id: passo_02_salvar_sem_contatos
+    asserts_dom:
+      - selector: 'span:has-text("Salvo!")'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: PUT
+        status: 200

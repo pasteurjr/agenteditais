@@ -1,0 +1,21 @@
+uc_id: UC-F02
+variacao: fa03
+trilha: visual
+descricao: "Adicionar email + telefone, deixar area padrao em branco e salvar (area opcional)"
+passos:
+  - id: passo_00_setup_empresa_e_login
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+  - id: passo_01_adicionar_contatos
+    asserts_dom:
+      - selector: '.multi-field-item span:has-text("atendimento+")'
+  - id: passo_02_nao_selecionar_area
+    asserts_dom:
+      - selector: 'label:has-text("Area de Atuacao Padrao")'
+  - id: passo_03_salvar_sem_area
+    asserts_dom:
+      - selector: 'span:has-text("Salvo!")'
+    asserts_rede:
+      - url_contem: "/api/crud/empresas"
+        metodo: PUT
+        status: 200

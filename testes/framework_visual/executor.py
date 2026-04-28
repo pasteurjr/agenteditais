@@ -137,6 +137,19 @@ def _executar_acao(
         if not seletor:
             raise ValueError("wait_for sem seletor")
         page.wait_for_selector(seletor, timeout=acao.timeout)
+    elif acao.tipo == "upload_arquivo":
+        # valor = path absoluto do arquivo no disco do tester
+        if not seletor:
+            raise ValueError("upload_arquivo sem seletor (deve apontar para input[type=file])")
+        if not valor:
+            raise ValueError("upload_arquivo sem valor (path do arquivo)")
+        from pathlib import Path as _P
+        p = _P(valor)
+        if not p.exists():
+            raise FileNotFoundError(f"Arquivo de upload nao existe: {valor}")
+        if not p.is_file():
+            raise ValueError(f"Path nao eh arquivo: {valor}")
+        page.set_input_files(seletor, str(p))
     else:
         raise ValueError(f"Tipo de acao nao suportado: {acao.tipo}")
 
@@ -264,6 +277,16 @@ def main():
             viewport={"width": 1400, "height": 900},
         )
         page = context.new_page()
+
+        # Auto-aceita dialogs (alert/confirm/prompt) — robo aperta OK automaticamente.
+        # Loga a mensagem no terminal pra rastreabilidade.
+        def _on_dialog(dialog):
+            print(f"[executor] DIALOG ({dialog.type}): {dialog.message!r} -> aceitando")
+            try:
+                dialog.accept()
+            except Exception as e:
+                print(f"[executor] Falha ao aceitar dialog: {e}")
+        page.on("dialog", _on_dialog)
 
         # Login (usa contexto se houver, senão padrão)
         email = args.email

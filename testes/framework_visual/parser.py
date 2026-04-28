@@ -32,6 +32,7 @@ class Acao:
     valor_literal: str | None = None
     valor_from_dataset: str | None = None
     valor_from_contexto: str | None = None
+    valor_from_pasta_docs: str | None = None  # caminho relativo dentro de users.pasta_documentos_teste
     destino: str | None = None
     url: str | None = None
     timeout: int = 10000
@@ -88,6 +89,7 @@ def _parse_acao(d: dict[str, Any]) -> Acao:
         valor_literal=d.get("valor_literal"),
         valor_from_dataset=d.get("valor_from_dataset"),
         valor_from_contexto=d.get("valor_from_contexto"),
+        valor_from_pasta_docs=d.get("valor_from_pasta_docs"),
         destino=d.get("destino"),
         url=d.get("url"),
         timeout=int(d.get("timeout", 10000)),
@@ -215,7 +217,7 @@ def resolve_valor_acao(
     contexto: dict[str, Any] | None,
     trilha: str = "visual",
 ) -> str | None:
-    """Resolve valor_literal | valor_from_dataset | valor_from_contexto."""
+    """Resolve valor_literal | valor_from_dataset | valor_from_contexto | valor_from_pasta_docs."""
     if acao.valor_literal is not None:
         return str(acao.valor_literal)
     if acao.valor_from_dataset:
@@ -224,6 +226,13 @@ def resolve_valor_acao(
         trilha_ctx = contexto.get("trilhas", {}).get(trilha)
         if trilha_ctx:
             return _get_nested(trilha_ctx, acao.valor_from_contexto)
+    if acao.valor_from_pasta_docs and contexto:
+        # contexto["pasta_documentos_teste"] eh injetado pelo executor_sprint1
+        # antes da execucao (vem de users.pasta_documentos_teste)
+        pasta = contexto.get("pasta_documentos_teste")
+        if pasta:
+            from pathlib import Path as _P
+            return str(_P(pasta) / acao.valor_from_pasta_docs)
     return None
 
 
