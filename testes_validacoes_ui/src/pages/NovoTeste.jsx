@@ -144,24 +144,54 @@ export default function NovoTeste() {
                   </thead>
                   <tbody>
                     {ucsExecutaveis.map(uc => {
-                      // Calcula status dos predecessores: satisfeito se ja_executado pelo user OU presente no proprio teste
-                      const predsUcConcretos = (uc.predecessores || []).filter(p => p.tipo === 'uc')
-                      const predsAtendidos = predsUcConcretos.map(p => {
+                      // Avalia 1 predecessor (UC ou marcador):
+                      // - marcador [login]/[infra]/[seed] sempre OK
+                      // - UC OK se ja executado no historico (p.satisfeito) OU presente no proprio teste
+                      const avaliar = (p) => {
+                        if (p.tipo === 'marcador') return true
                         const ucPred = ucs.find(u => u.uc_id === p.uc_id)
                         const noTeste = ucPred && selUcs[ucPred.id]
-                        return { ...p, atendido: p.satisfeito || noTeste }
-                      })
-                      const todosOk = predsAtendidos.every(p => p.atendido)
-                      const labelPreds = predsUcConcretos.length === 0
+                        return p.satisfeito || noTeste
+                      }
+
+                      // Agrupa por grupo_or: AND entre grupos, OR dentro
+                      const grupos = {}
+                      for (const p of (uc.predecessores || [])) {
+                        const k = p.grupo_or || 0
+                        if (!grupos[k]) grupos[k] = []
+                        grupos[k].push(p)
+                      }
+
+                      const itensVisuais = []
+                      let todosOk = true
+                      for (const [k, items] of Object.entries(grupos)) {
+                        const gNum = parseInt(k)
+                        if (gNum === 0) {
+                          // AND — cada item independente
+                          for (const it of items) {
+                            const ok = avaliar(it)
+                            if (!ok) todosOk = false
+                            itensVisuais.push({ label: it.label, ok })
+                          }
+                        } else {
+                          // OR — basta 1 ser OK
+                          const algumOk = items.some(avaliar)
+                          if (!algumOk) todosOk = false
+                          const label = items.map(it => it.label).join(' OU ')
+                          itensVisuais.push({ label, ok: algumOk, isOr: true })
+                        }
+                      }
+
+                      const labelPreds = itensVisuais.length === 0
                         ? <span style={{color:'#777'}}>—</span>
-                        : predsAtendidos.map((p, i) => (
+                        : itensVisuais.map((p, i) => (
                             <span key={i} style={{
                               display:'inline-block', marginRight:'4px', padding:'1px 6px',
                               borderRadius:3, fontSize:'9pt',
-                              background: p.atendido ? '#1a3a1a' : '#3a1a1a',
-                              color: p.atendido ? '#4a8a4a' : '#8a4a4a',
-                              border: '1px solid ' + (p.atendido ? '#2a5a2a' : '#5a2a2a'),
-                            }}>{p.atendido ? '✓' : '✗'} {p.uc_id}</span>
+                              background: p.ok ? '#1a3a1a' : '#3a1a1a',
+                              color: p.ok ? '#4a8a4a' : '#8a4a4a',
+                              border: '1px solid ' + (p.ok ? '#2a5a2a' : '#5a2a2a'),
+                            }}>{p.ok ? '✓' : '✗'} {p.label}</span>
                           ))
                       const statusBadge = uc.ja_executado ? (
                         <span style={{color:'#4a8a4a', fontSize:'9pt'}}>✓ já executado</span>
