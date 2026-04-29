@@ -1274,11 +1274,20 @@ def listar_vinculos():
 @app.route("/api/auth/minhas-empresas", methods=["GET"])
 @require_auth
 def minhas_empresas():
-    """Retorna empresas para super (todas) e vinculadas ao usuario.
+    """Retorna empresas vinculadas ao usuario (mesmo pra super).
 
-    - empresas: lista que o usuario PODE acessar/navegar (super=todas, comum=so vinculadas)
-    - vinculadas: lista das empresas EXPLICITAMENTE vinculadas via usuario_empresa
-                  (mesmo pra super, mostra so as vinculadas dele em particular)
+    Comportamento corrigido em 2026-04-29: SelecionarEmpresaPage so deve
+    mostrar empresas que o user esta EXPLICITAMENTE vinculado via
+    usuario_empresa. Mesmo super so opera em empresas onde tem vinculo
+    formal (papel definido). "Super" da poder admin global, mas para
+    SELECIONAR empresa ativa o user precisa ter sido vinculado.
+
+    - empresas: empresas vinculadas (filtro: usuario_empresa.ativo=1 + empresa.ativo=1)
+    - vinculadas: idem (mantido pra compatibilidade com FA-07 do UC-F01)
+
+    Bypass para super: query param ?todas=1 retorna todas as empresas
+    do banco — usado em telas de admin (Associar Empresa/Usuario,
+    CRUD de empresas) onde super precisa ver todas pra gerenciar.
     """
     db = get_db()
     try:
@@ -1290,13 +1299,25 @@ def minhas_empresas():
         vinculadas = []
         for ue in ues:
             e = ue.empresa
-            if e:
-                vinculadas.append({"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": ue.papel})
+            if e and e.ativo:  # filtra empresas inativas tambem
+                vinculadas.append({
+                    "id": e.id,
+                    "razao_social": e.razao_social,
+                    "cnpj": e.cnpj,
+                    "nome_fantasia": e.nome_fantasia,
+                    "papel": ue.papel,
+                })
 
-        if request.is_super:
-            # Super ve todas as empresas para navegar
-            empresas = db.query(Empresa).filter(Empresa.ativo == True).all()
-            result = [{"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj, "nome_fantasia": e.nome_fantasia, "papel": "super"} for e in empresas]
+        # Bypass admin: ?todas=1 + super => retorna todas as empresas ativas
+        # (uso restrito a telas de administracao)
+        todas_param = request.args.get("todas") == "1"
+        if todas_param and request.is_super:
+            empresas_all = db.query(Empresa).filter(Empresa.ativo == True).all()
+            result = [
+                {"id": e.id, "razao_social": e.razao_social, "cnpj": e.cnpj,
+                 "nome_fantasia": e.nome_fantasia, "papel": "super"}
+                for e in empresas_all
+            ]
         else:
             result = vinculadas
 
