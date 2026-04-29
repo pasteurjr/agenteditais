@@ -26,7 +26,7 @@ interface Vinculo {
 const API_BASE = "";
 
 export function AssociarEmpresaUsuario() {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, recarregarEmpresas, user: currentUser } = useAuth();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
@@ -98,6 +98,12 @@ export function AssociarEmpresaUsuario() {
     if (res.ok) {
       setMsg({ text: "Vínculo criado com sucesso!", error: false });
       if (filterEmpresa === selectedEmpresa) loadVinculos(filterEmpresa);
+      // Se o usuario corrente foi quem vinculou (ele mesmo), atualiza
+      // a lista de vinculadas no AuthContext — assim SelecionarEmpresaPage
+      // mostra a empresa imediatamente sem precisar relogar.
+      if (currentUser && selectedUser === currentUser.id) {
+        try { await recarregarEmpresas(); } catch (e) { console.warn("recarregarEmpresas falhou:", e); }
+      }
     } else {
       setMsg({ text: data.error || "Erro ao vincular", error: true });
     }
@@ -112,6 +118,9 @@ export function AssociarEmpresaUsuario() {
     setLoading(false);
     if (res.ok) {
       loadVinculos(filterEmpresa);
+      if (currentUser && userId === currentUser.id) {
+        try { await recarregarEmpresas(); } catch (e) { console.warn("recarregarEmpresas falhou:", e); }
+      }
     }
   };
 
