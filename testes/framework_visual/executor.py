@@ -132,20 +132,22 @@ def _executar_acao(
             raise ValueError("select sem seletor")
         if valor is None:
             raise ValueError("select sem valor")
-        # Tenta value primeiro (UUID/codigo); se falhar, tenta label (texto visivel);
-        # se falhar, tenta match parcial via regex no label.
+        # Pega o locator do select (suporta sintaxe Playwright "X >> nth=N")
+        select_loc = page.locator(seletor).first
+        # Tenta value primeiro (UUID/codigo); se falhar, label exato;
+        # se falhar, match parcial nas options.
         try:
-            page.select_option(seletor, value=valor, timeout=acao.timeout)
+            select_loc.select_option(value=valor, timeout=acao.timeout)
         except Exception:
             try:
-                page.select_option(seletor, label=valor, timeout=acao.timeout)
+                select_loc.select_option(label=valor, timeout=acao.timeout)
             except Exception:
                 # Match parcial: pega primeira option cujo texto contenha valor
-                opcoes = page.locator(f"{seletor} option").all_text_contents()
+                opcoes = select_loc.locator("option").all_text_contents()
                 idx = next((i for i, t in enumerate(opcoes) if valor in t), None)
                 if idx is None:
-                    raise ValueError(f"select: nenhuma option contem '{valor}'. Opcoes: {opcoes[:5]}")
-                page.select_option(seletor, index=idx, timeout=acao.timeout)
+                    raise ValueError(f"select: nenhuma option contem '{valor}'. Opcoes: {opcoes[:8]}")
+                select_loc.select_option(index=idx, timeout=acao.timeout)
     elif acao.tipo == "wait_for":
         if not seletor:
             raise ValueError("wait_for sem seletor")

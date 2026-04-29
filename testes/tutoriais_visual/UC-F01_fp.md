@@ -226,14 +226,18 @@ acao:
     - tipo: wait_for
       seletor: 'h1:has-text("Associar Empresa")'
       timeout: 10000
-    # 4. Seleciona empresa criada (option label = "{razao} — {cnpj}")
+    # 4. Seleciona empresa criada — primeiro select.select-input dentro do card "Novo Vinculo"
+    #    Option label = "{razao_social} — {cnpj}"
     - tipo: select
-      seletor: 'label:has-text("Empresa") ~ select, label:has-text("Empresa") + select'
+      seletor: '.section-card:has-text("Novo Vínculo") select.select-input >> nth=0'
+      alternativa: 'select.select-input >> nth=0'
       valor_from_dataset: "empresa.razao_social"
       timeout: 5000
-    # 5. Seleciona usuario corrente (option label = "{name} ({email})")
+    # 5. Seleciona usuario corrente — segundo select dentro do card "Novo Vinculo"
+    #    Option label = "{name} ({email})"
     - tipo: select
-      seletor: 'label:has-text("Usuário") ~ select, label:has-text("Usuario") ~ select, label:has-text("Usuário") + select, label:has-text("Usuario") + select'
+      seletor: '.section-card:has-text("Novo Vínculo") select.select-input >> nth=1'
+      alternativa: 'select.select-input >> nth=1'
       valor_from_contexto: "usuario.email"
       timeout: 5000
     # 6. Clica Vincular
@@ -247,42 +251,19 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
 ```
 
-## Passo 05 — Re-login para refresh do AuthContext + navegar para EmpresaPage
+## Passo 05 — Navegar para EmpresaPage
 
-**Crítico:** o frontend mantém a lista `vinculadas` em `localStorage` que foi populada no passo 0 (login original) — naquele momento o user não tinha empresas vinculadas. Após o vínculo via API no passo 4b, o `localStorage` continua **desatualizado**. Se simplesmente navegarmos para `/app/empresa`, o `RequireEmpresa` do React continua redirecionando para "Sem empresa vinculada" porque consulta `vinculadas` cacheado.
-
-Solução: limpa localStorage e re-loga. O novo login chama `GET /api/auth/minhas-empresas` que retorna o vínculo recém-criado.
+Após vincular no passo 04b, a empresa fica acessível ao usuário. Este passo navega para a página `/app/empresa` para iniciar o cadastro completo.
 
 **Observe criticamente:**
-- Navegação para `/login` limpa estado anterior
-- Re-login com mesmas credenciais
-- Após login, redirecionamento direto pra EmpresaPage (sem cair em "Sem empresa vinculada")
-- URL final: /app/empresa
+- URL muda para /app/empresa
 - Cabeçalho "Dados da Empresa" aparece
+- Sem mensagem de "Sem empresa vinculada"
 
 ```yaml
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
-    - tipo: navigate
-      url: "/login"
-      timeout: 10000
-    - tipo: wait_for
-      seletor: 'input[type="email"]'
-      timeout: 10000
-    - tipo: fill
-      seletor: 'input[type="email"]'
-      valor_from_contexto: "usuario.email"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'input[type="password"]'
-      valor_from_contexto: "usuario.senha"
-      timeout: 5000
-    - tipo: click
-      seletor: 'button[type="submit"]'
-      timeout: 5000
-    - tipo: wait
-      valor_literal: 2000
     - tipo: navigate
       url: "/app/empresa"
       timeout: 10000
