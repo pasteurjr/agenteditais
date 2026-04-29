@@ -312,22 +312,30 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04c_selecionar_empresa_ativa"
 ```
 
-## Passo 05 — Navegar para EmpresaPage
+## Passo 05 — Navegar para EmpresaPage via sidebar
 
-Após vincular no passo 04b, a empresa fica acessível ao usuário. Este passo navega para a página `/app/empresa` para iniciar o cadastro completo.
+App nao usa rotas URL (React Router) — navegacao eh via estado interno (`currentPage`). Por isso `navigate("/app/empresa")` nao funciona; o caminho correto eh **clicar no item "Empresa"** da seccao Configuracoes da sidebar.
 
 **Observe criticamente:**
-- URL muda para /app/empresa
-- Cabeçalho "Dados da Empresa" aparece
-- Sem mensagem de "Sem empresa vinculada"
+- Seccao Configuracoes ja deve estar expandida (foi expandida no passo 04c)
+- Item "Empresa" eh clicado
+- Pagina EmpresaPage carrega com cabecalho "Dados da Empresa"
+- Card "Informacoes Cadastrais" exibido com dados ja preenchidos da empresa criada
 
 ```yaml
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
-    - tipo: navigate
-      url: "/app/empresa"
-      timeout: 10000
+    # Garante que secao Configuracoes esta expandida (idempotente — se ja estiver, click reabre)
+    - tipo: wait_for
+      seletor: '.nav-item-label:has-text("Empresa")'
+      timeout: 5000
+    # Clica no item "Empresa" (Configuracoes > Empresa)
+    - tipo: click
+      seletor: '.nav-item-label:has-text("Empresa")'
+      alternativa: 'button.nav-item:has(.nav-item-label:has-text("Empresa"))'
+      timeout: 5000
+    # Aguarda EmpresaPage carregar
     - tipo: wait_for
       seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
       timeout: 15000
