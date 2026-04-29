@@ -31,6 +31,19 @@ uploads/
 # Excecao: documentos sintetizados ficam versionados (fixtures de validacao)
 !docs/documentos_sintetizados/**/*.pdf
 
+# Excecao: PDFs de tutoriais e casos de uso V2 (Sprint 1+2 com UC-F13 V8)
+!docs/tutorialsprint1-1 V2.pdf
+!docs/tutorialsprint1-2 V2.pdf
+!docs/tutorialsprint2-1 V2.pdf
+!docs/tutorialsprint2-2 V2.pdf
+!docs/dadosempportpar-1 V2.pdf
+!docs/dadosempportpar-2 V2.pdf
+!docs/dadoscapval-1 V2.pdf
+!docs/dadoscapval-2 V2.pdf
+!docs/CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V7.pdf
+!docs/CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V7.pdf
+!docs/UC-F13 (split V8).pdf
+
 # Arquivos de cache
 .cache/
 cache/
