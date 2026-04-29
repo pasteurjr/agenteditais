@@ -172,9 +172,13 @@ def _executar_acao(
         headers = {}
         if jwt_token:
             headers["Authorization"] = f"Bearer {jwt_token}"
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
         kwargs = {"timeout": acao.timeout, "headers": headers}
         if payload is not None:
-            kwargs["data"] = payload
+            import json as _json
+            # data= bytes/str manda raw com Content-Type: application/json
+            kwargs["data"] = _json.dumps(payload)
         if metodo == "POST":
             resp = ctx_req.post(url_full, **kwargs)
         elif metodo == "PUT":
