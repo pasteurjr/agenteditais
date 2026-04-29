@@ -388,7 +388,21 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
     # 3. UCs incluidos no proprio teste — UNICA fonte de satisfacao.
     # Cada teste e autocontido: o ciclo gera dados novos (CNPJ unico),
     # entao predecessor de execucao passada NAO satisfaz UC novo deste teste.
-    uc_ids_no_proprio_teste = uc_ids_no_teste
+    uc_ids_no_proprio_teste = set(uc_ids_no_teste)
+
+    # 3a. Fechamento transitivo via <<uses>>: se UC-A esta no teste e UC-A uses UC-B,
+    # entao UC-B esta IMPLICITAMENTE satisfeito (rodara como subfluxo automatico do tutorial de UC-A).
+    uses_rows = (
+        db.query(UcPredecessor)
+        .filter(
+            UcPredecessor.uc_id.in_(uc_ids_no_proprio_teste),
+            UcPredecessor.tipo == "uses",
+            UcPredecessor.predecessor_id.isnot(None),
+        )
+        .all()
+    )
+    for r in uses_rows:
+        uc_ids_no_proprio_teste.add(r.predecessor_id)
 
     # 4. Avalia cada UC do teste
     pendencias_por_uc = []  # lista de {uc_id_str, faltam: [str]}
@@ -396,9 +410,12 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
     for uc_id_db, lista_preds in predecessores_por_uc.items():
         uc_str = next((u.uc_id for u in db.query(CasoDeUso).filter_by(id=uc_id_db).all()), uc_id_db)
 
-        # Agrupa por grupo_or: AND entre grupos, OR dentro do grupo
+        # Agrupa por grupo_or: AND entre grupos, OR dentro do grupo.
+        # Ignora linhas com tipo='uses' — esses sao subfluxos automaticos, nao exigem avaliacao.
         grupos = {}  # grupo_or_num -> [pred_row]
         for r in lista_preds:
+            if r.tipo == "uses":
+                continue  # uses = subfluxo interno, satisfeito automaticamente
             grupos.setdefault(r.grupo_or, []).append(r)
 
         faltam = []
@@ -511,24 +528,30 @@ def api_sprint_ucs_resumo(sprint_id):
             # Mapeia predecessores em forma legivel.
             # satisfeito=False sempre — o frontend avalia satisfacao via UCs marcados
             # no proprio teste (cada teste e autocontido, historico nao conta).
+            # Inclui tipo (depends|uses) e, se uses, o predecessor nao precisa estar marcado.
             preds_uc = preds_por_uc.get(uc.id, [])
             preds_lista = []
             for r in preds_uc:
+                relacao = r.tipo or "depends"
                 if r.marcador:
                     preds_lista.append({
                         "tipo": "marcador",
                         "label": r.marcador,
                         "satisfeito": True,  # marcadores [login]/[infra]/[seed] = sempre OK
                         "grupo_or": r.grupo_or,
+                        "relacao": relacao,
                     })
                 elif r.predecessor_id:
                     pred_uc = db.query(CasoDeUso).filter_by(id=r.predecessor_id).first()
+                    pred_uc_str = pred_uc.uc_id if pred_uc else "?"
+                    label = f"{pred_uc_str} (uses)" if relacao == "uses" else pred_uc_str
                     preds_lista.append({
                         "tipo": "uc",
-                        "uc_id": pred_uc.uc_id if pred_uc else "?",
-                        "label": pred_uc.uc_id if pred_uc else "?",
-                        "satisfeito": False,  # so satisfeito se incluido no teste atual (avaliado no front)
+                        "uc_id": pred_uc_str,
+                        "label": label,
+                        "satisfeito": relacao == "uses",  # uses = sempre OK; depends = avaliado pelo front
                         "grupo_or": r.grupo_or,
+                        "relacao": relacao,
                     })
 
             result.append({

@@ -37,6 +37,7 @@ Estado satisfeito por execucao previa de:
 
 - **UC-CV03 OU UC-CV07**
 - **UC-F01**
+- **UC-F18**
 - **UC-F03**
 
 Pre-requisitos nao-UC:

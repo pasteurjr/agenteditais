@@ -25,18 +25,24 @@ def parse_predecessor(item: str) -> list[dict]:
     Converte 1 string de predecessor em lista de dicts pra inserir.
 
     Exemplos:
-      "UC-F01"            → [{tipo: "uc", uc_id: "UC-F01"}]
-      "[login]"           → [{tipo: "marcador", marcador: "[login]"}]
-      "UC-A OU UC-B"      → [{tipo: "uc", uc_id: "UC-A"}, {tipo: "uc", uc_id: "UC-B"}]  (mesmo grupo_or)
-      "UC-A OU [seed]"    → [{tipo: "uc", uc_id: "UC-A"}, {tipo: "marcador", marcador: "[seed]"}]
+      "UC-F01"            → [{kind: "uc", uc_id: "UC-F01", relacao: "depends"}]
+      "UC-F18 (uses)"     → [{kind: "uc", uc_id: "UC-F18", relacao: "uses"}]
+      "[login]"           → [{kind: "marcador", marcador: "[login]", relacao: "depends"}]
+      "UC-A OU UC-B"      → 2 items, mesmo grupo_or
+      "UC-A OU [seed]"    → uc + marcador no mesmo grupo
     """
     parts = [p.strip() for p in item.split(" OU ")]
     out = []
     for p in parts:
+        # Detecta sufixo "(uses)" pra marcar relacao UML <<uses>>
+        relacao = "depends"
+        if p.endswith("(uses)"):
+            relacao = "uses"
+            p = p[:-len("(uses)")].strip()
         if p.startswith("[") and p.endswith("]"):
-            out.append({"tipo": "marcador", "marcador": p})
+            out.append({"kind": "marcador", "marcador": p, "relacao": relacao})
         elif p.startswith("UC-"):
-            out.append({"tipo": "uc", "uc_id": p})
+            out.append({"kind": "uc", "uc_id": p, "relacao": relacao})
     return out
 
 
@@ -78,7 +84,8 @@ def main():
                     grupo_atual = 0  # AND, sem grupo
 
                 for opt in opcoes:
-                    if opt["tipo"] == "uc":
+                    relacao = opt.get("relacao", "depends")
+                    if opt["kind"] == "uc":
                         pred_db_id = ucs.get(opt["uc_id"])
                         if not pred_db_id:
                             warnings.append(f"  predecessor '{opt['uc_id']}' (de {uc_id_str}) nao existe no banco")
@@ -90,6 +97,7 @@ def main():
                             marcador=None,
                             grupo_or=grupo_atual,
                             ordem=ordem_global,
+                            tipo=relacao,
                         ))
                     else:  # marcador
                         db.add(UcPredecessor(

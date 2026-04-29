@@ -37,6 +37,7 @@ split_gerado_em: "2026-04-24T19:19:04"
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 

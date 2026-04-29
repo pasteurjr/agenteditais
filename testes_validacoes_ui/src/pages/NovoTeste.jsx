@@ -144,19 +144,38 @@ export default function NovoTeste() {
                   </thead>
                   <tbody>
                     {ucsExecutaveis.map(uc => {
-                      // Avalia 1 predecessor (UC ou marcador):
-                      // - marcador [login]/[infra]/[seed] sempre OK
-                      // - UC OK se ja executado no historico (p.satisfeito) OU presente no proprio teste
-                      const avaliar = (p) => {
-                        if (p.tipo === 'marcador') return true
-                        const ucPred = ucs.find(u => u.uc_id === p.uc_id)
-                        const noTeste = ucPred && selUcs[ucPred.id]
-                        return p.satisfeito || noTeste
+                      // Fechamento transitivo via <<uses>>: se UC-A esta no teste e UC-A uses UC-B,
+                      // entao UC-B esta implicitamente satisfeito (rodara como subfluxo de UC-A).
+                      // Calcula o set de uc_ids "satisfeitos automaticamente" pelos uses de UCs marcados.
+                      const ucIdsViaUses = new Set()
+                      for (const u of ucs) {
+                        if (selUcs[u.id]) {
+                          for (const p of (u.predecessores || [])) {
+                            if (p.tipo === 'uc' && p.relacao === 'uses' && p.uc_id) {
+                              ucIdsViaUses.add(p.uc_id)
+                            }
+                          }
+                        }
                       }
 
-                      // Agrupa por grupo_or: AND entre grupos, OR dentro
+                      // Avalia 1 predecessor:
+                      // - marcador → sempre OK
+                      // - UC com relacao=uses → satisfeito automaticamente (subfluxo do tutorial)
+                      // - UC com relacao=depends → OK se marcado no teste OU satisfeito via uses transitivo
+                      const avaliar = (p) => {
+                        if (p.tipo === 'marcador') return true
+                        if (p.relacao === 'uses') return true
+                        const ucPred = ucs.find(u => u.uc_id === p.uc_id)
+                        const noTeste = ucPred && selUcs[ucPred.id]
+                        const viaUses = ucIdsViaUses.has(p.uc_id)
+                        return p.satisfeito || noTeste || viaUses
+                      }
+
+                      // Agrupa por grupo_or: AND entre grupos, OR dentro.
+                      // Linhas com relacao=uses sao IGNORADAS na avaliacao (sao subfluxos automaticos).
                       const grupos = {}
                       for (const p of (uc.predecessores || [])) {
+                        if (p.relacao === 'uses') continue  // nao avaliar uses — sao subfluxos
                         const k = p.grupo_or || 0
                         if (!grupos[k]) grupos[k] = []
                         grupos[k].push(p)

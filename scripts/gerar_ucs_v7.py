@@ -21,11 +21,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Cada item da lista: "UC-XXX" | "[login]" | "[infra]" | "[seed]" | "UC-A OU UC-B"
 PREDECESSORES = {
     # Sprint 1
-    "UC-F01": ["[login]", "[infra]"],
-    "UC-F02": ["UC-F01", "[seed]"],  # areas vem do seed, UC-F13 so visualiza (nao cria)
-    "UC-F03": ["UC-F01", "[infra]", "[seed]"],
-    "UC-F04": ["UC-F01", "[seed]", "[infra]"],  # fontes de certidao vem do seed (UC-F16 tambem so configura, nao cria fontes)
-    "UC-F05": ["UC-F01", "[infra]"],
+    # UC-F01 cria empresa e dispara UC-F18 (vincular) via <<uses>>
+    "UC-F01": ["[login]", "[infra]", "UC-F18 (uses)"],
+    # UCs que precisam de empresa VINCULADA ao user corrente:
+    # UC-F01 cria a empresa, UC-F18 vincula. Ambos sao predecessores AND.
+    "UC-F02": ["UC-F01", "UC-F18", "[seed]"],
+    "UC-F03": ["UC-F01", "UC-F18", "[infra]", "[seed]"],
+    "UC-F04": ["UC-F01", "UC-F18", "[seed]", "[infra]"],
+    "UC-F05": ["UC-F01", "UC-F18", "[infra]"],
     "UC-F06": ["[login]", "UC-F07 OU UC-F08", "[seed]"],  # hierarquia Area/Classe/Subclasse vem do seed
     "UC-F07": ["[login]", "[infra]"],
     "UC-F08": ["UC-F07 OU UC-F08", "[seed]"],  # subclasse com mascara vem do seed
@@ -38,6 +41,7 @@ PREDECESSORES = {
     "UC-F15": ["[infra]", "[seed]"],
     "UC-F16": ["[infra]", "[seed]"],
     "UC-F17": ["[seed]"],
+    "UC-F18": ["[login]", "UC-F01", "[infra]"],  # vincular empresa a user — usa UC-F01 como predecessor (a empresa deve existir)
     # Sprint 2
     "UC-CV01": ["[login]", "UC-F14", "UC-F15", "UC-F16"],
     "UC-CV02": ["UC-CV01"],
@@ -48,7 +52,7 @@ PREDECESSORES = {
     "UC-CV07": ["UC-CV03", "[infra]"],
     "UC-CV08": ["UC-CV07", "[infra]"],
     "UC-CV09": ["UC-CV03 OU UC-CV07"],
-    "UC-CV10": ["UC-CV03 OU UC-CV07", "UC-F01", "UC-F03", "[infra]"],
+    "UC-CV10": ["UC-CV03 OU UC-CV07", "UC-F01", "UC-F18", "UC-F03", "[infra]"],
     "UC-CV11": ["UC-CV03 OU UC-CV07"],
     "UC-CV12": ["UC-CV03 OU UC-CV07", "[infra]"],
     "UC-CV13": ["UC-CV03 OU UC-CV07", "[infra]"],

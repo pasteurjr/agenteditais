@@ -403,6 +403,7 @@ class UcPredecessor(Base):
     marcador = Column(String(20), nullable=True)  # '[login]'|'[infra]'|'[seed]'
     grupo_or = Column(Integer, nullable=False, default=0)
     ordem = Column(Integer, nullable=False, default=0)
+    tipo = Column(Enum("depends", "uses"), nullable=False, default="depends")
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
 
     uc = relationship("CasoDeUso", foreign_keys=[uc_id])

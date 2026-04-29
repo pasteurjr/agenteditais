@@ -12,8 +12,6 @@
 **Novidade V5 (21/04/2026):** Adicionados **Fluxos Alternativos (FA)** e **Fluxos de Excecao (FE)** para cada UC, numerados FA-01..N e FE-01..N. Incorporadas correcoes identificadas na avaliacao do validador Arnaldo (`correcaaval1.md`): UC-F01 UF como dropdown, falta toast de sucesso, duplicidade de telas; UC-F02 telefone sem mascara, area padrao pode estar vazia; UC-F04 fontes de certidoes devem ser inicializadas antes; UC-F06 filtro de busca nao busca em descricao/categoria.
 **Novidade V6 (27/04/2026):** Adicionado **FA-07 do UC-F01 — Super sem empresa vinculada (primeiro acesso ou ambiente recem-instalado)**. Necessario para suportar o ciclo da trilha de validacao automatica visual onde o usuario `valida<N>@valida.com.br` (super) e provisionado sem vinculos previos. Inclui apenas: nova tela `[Página: "Sem Empresa Vinculada"]` com 3 opcoes que **redirecionam para paginas existentes** (Criar nova empresa → CRUD `crud:empresas`; Vincular empresa a usuario → `associar-empresa`; Entrar no sistema → `SelecionarEmpresaPage` se ha empresas, ou CRUD se banco vazio); ajuste no endpoint `GET /api/auth/minhas-empresas` que passa a retornar campo `vinculadas` separado de `empresas` (super ainda ve todas as empresas em `empresas`, mas suas vinculadas ficam em `vinculadas`). **Nao foram criadas paginas novas de cadastro de empresa nem endpoints novos** — reutilizacao total do que ja existe.
 
-**Novidade V7 (28/04/2026):** Adicionada secao **UCs predecessores** apos cada bloco de Pre-condicoes (mapeamento explicito de quais UCs criam o estado pre-requisito) — gerada automaticamente por `scripts/gerar_ucs_v7.py` a partir do dict `PREDECESSORES`. Pre-condicoes que dependem de empresa (UC-F02, UC-F03, UC-F04, UC-F05) foram refinadas para deixar explicito que a empresa deve estar **vinculada ao usuario corrente** (registro ativo em `usuario_empresa`) — antes a condicao dizia apenas "Empresa existente/em edicao", o que era ambiguo: empresa pode existir no banco sem o user ter vinculo. Tutorial CT-F01-FP foi estendido com passo 10 (chamar_api `/api/admin/associar-empresa`) que cria o vinculo apos o passo 09 de salvar — implementa de fato o **FA-07.B** descrito no UC-F01 V6.
-
 ---
 
 ## Regras de Negocio Implementadas (V4)
@@ -222,7 +220,9 @@ Tabelas principais realmente usadas:
 
 ### UCs predecessores
 
-**UC raiz** — nao depende de execucao previa de outros UCs.
+Estado satisfeito por execucao previa de:
+
+- **UC-F18 (uses)**
 
 Pre-requisitos nao-UC:
 
@@ -439,7 +439,7 @@ Campos relevantes em `empresas`: `cnpj`, `razao_social`, `nome_fantasia`, `inscr
 **Ator:** Usuario administrador/comercial
 
 ### Pre-condicoes
-1. Empresa em edicao **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
+1. Empresa em edicao.
 2. Lista de areas carregada de `/api/areas-produto`.
 
 ### UCs predecessores
@@ -447,6 +447,7 @@ Campos relevantes em `empresas`: `cnpj`, `razao_social`, `nome_fantasia`, `inscr
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
@@ -575,7 +576,7 @@ Pre-requisitos nao-UC:
 **Ator:** Usuario administrador/compliance
 
 ### Pre-condicoes
-1. Empresa existente **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
+1. Empresa existente.
 2. Endpoint `/api/empresa-documentos/upload` disponivel.
 3. Lista de tipos/documentos necessarios carregada.
 
@@ -584,6 +585,7 @@ Pre-requisitos nao-UC:
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
@@ -732,7 +734,7 @@ Tabela `empresa_documentos`: `empresa_id`, `tipo`, `nome_arquivo`, `path_arquivo
 **Ator:** Usuario administrador/compliance
 
 ### Pre-condicoes
-1. Empresa cadastrada com CNPJ **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
+1. Empresa cadastrada com CNPJ.
 2. Fontes de certidao configuradas ou sincronizadas. (**V5 correcao: fontes devem ser inicializadas ANTES de buscar — ver FA-01 e FE-01**)
 3. Endpoints de certidoes operacionais.
 
@@ -741,6 +743,7 @@ Tabela `empresa_documentos`: `empresa_id`, `tipo`, `nome_arquivo`, `path_arquivo
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
@@ -934,7 +937,7 @@ Tabela `empresa_certidoes`: `tipo`, `orgao_emissor`, `numero`, `data_vencimento`
 **Ator:** Usuario administrador/compliance
 
 ### Pre-condicoes
-1. Empresa existente **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
+1. Empresa existente.
 2. CRUD de `empresa-responsaveis` disponivel.
 
 ### UCs predecessores
@@ -942,6 +945,7 @@ Tabela `empresa_certidoes`: `tipo`, `orgao_emissor`, `numero`, `data_vencimento`
 Estado satisfeito por execucao previa de:
 
 - **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
