@@ -172,13 +172,18 @@ def _executar_acao(
         headers = {}
         if jwt_token:
             headers["Authorization"] = f"Bearer {jwt_token}"
-        if payload is not None:
-            headers["Content-Type"] = "application/json"
-        kwargs = {"timeout": acao.timeout, "headers": headers}
+
+        # Playwright Python: param 'data' (str/bytes) -> serializa raw com Content-Type da escolha do header.
+        # Param 'form' -> application/x-www-form-urlencoded.
+        # Param 'multipart' -> multipart/form-data.
+        # Pra JSON: use bytes serializados + header Content-Type explicito. NUNCA passe dict em 'data='.
+        kwargs = {"timeout": acao.timeout}
         if payload is not None:
             import json as _json
-            # data= bytes/str manda raw com Content-Type: application/json
-            kwargs["data"] = _json.dumps(payload)
+            headers["Content-Type"] = "application/json"
+            kwargs["data"] = _json.dumps(payload).encode("utf-8")
+        kwargs["headers"] = headers
+
         if metodo == "POST":
             resp = ctx_req.post(url_full, **kwargs)
         elif metodo == "PUT":
