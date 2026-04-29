@@ -14,75 +14,33 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F02_visual_fp.yaml
 >
 > **Cenario:** super sem vinculos cria empresa via FA-07.A, seleciona a empresa, abre EmpresaPage, adiciona email, telefone, seleciona area padrao e salva.
 
-## Passo 00 — Setup: login + criar empresa minima + abrir EmpresaPage
+## Passo 00 — Setup: navegar para EmpresaPage
 
-O browser vai logar com o usuario do ciclo, criar empresa minima via fluxo FA-07.A do UC-F01 e abrir a EmpresaPage onde o UC-F02 acontece. Sem isso, nao ha empresa pra editar.
+UC-F02 **assume UC-F01 ja foi executado no mesmo teste** (ou em sessao previa do mesmo user). Ou seja: empresa criada (UC-F01), vinculada ao user (UC-F18 invocado por UC-F01), selecionada como ativa (passo 04c do UC-F01). User esta no shell autenticado, com empresa ativa, e provavelmente ja viu EmpresaPage. Este setup so navega/garante que estamos na pagina certa.
 
 **Observe criticamente:**
-- Login bem-sucedido — sem mensagem de credencial invalida
-- Tela "Voce nao tem empresas vinculadas" aparece (super sem vinculos)
-- Apos clicar "Criar Nova Empresa" e salvar via CRUD, empresa aparece na lista
-- Apos selecionar a empresa, EmpresaPage carrega com cabecalho "Dados da Empresa"
+- User permanece logado (sessao do UC-F01)
+- Item "Empresa" da secao "Configuracoes" da sidebar visivel
+- EmpresaPage carrega com cabecalho "Dados da Empresa"
 
 ```yaml
 id: passo_00_setup_empresa_e_login
 acao:
   sequencia:
-    - tipo: navigate
-      url: "/"
-      timeout: 15000
-    - tipo: wait_for
-      seletor: 'input[type="email"]'
+    # Garante secao Configuracoes expandida (idempotente — se ja estiver, click colapsa
+    # e o wait_for falha rapido; defesa: tenta abrir e re-tenta wait).
+    - tipo: click
+      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
       timeout: 10000
-    - tipo: fill
-      seletor: 'input[type="email"]'
-      valor_from_contexto: "usuario.email"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'input[type="password"]'
-      valor_from_contexto: "usuario.senha"
-      timeout: 5000
-    - tipo: click
-      seletor: 'button[type="submit"]'
-      timeout: 5000
+    # Espera item "Empresa" da Configuracoes (button.nav-item, text-is exato)
     - tipo: wait_for
-      seletor: 'h1:has-text("Voce nao tem empresas vinculadas"), h1:has-text("Sem empresa vinculada")'
-      timeout: 15000
-    - tipo: click
-      seletor: 'button:has-text("Criar Nova Empresa")'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: 'button:has-text("Novo")'
+      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
       timeout: 10000
+    # Click no item Empresa
     - tipo: click
-      seletor: 'button:has-text("Novo")'
+      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
       timeout: 5000
-    - tipo: wait_for
-      seletor: 'label:has-text("CNPJ")'
-      timeout: 10000
-    - tipo: fill
-      seletor: 'input[name="cnpj"], label:has-text("CNPJ") + input, label:has-text("CNPJ") ~ input'
-      valor_from_dataset: "empresa.cnpj"
-      timeout: 5000
-    - tipo: fill
-      seletor: 'input[name="razao_social"], label:has-text("Razao Social") + input, label:has-text("Razao Social") ~ input'
-      valor_from_dataset: "empresa.razao_social"
-      timeout: 5000
-    - tipo: click
-      seletor: 'button:has-text("Salvar")'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: 'a:has-text("DEMO"), .empresa-card:has-text("DEMO"), text=DEMO'
-      timeout: 15000
-    - tipo: click
-      seletor: 'a:has-text("DEMO"), .empresa-card:has-text("DEMO")'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: 'a[href*="/empresa"], .nav-item-label:has-text("Empresa")'
-      timeout: 10000
-    - tipo: click
-      seletor: 'a[href*="/empresa"], .nav-item-label:has-text("Empresa")'
-      timeout: 5000
+    # Aguarda EmpresaPage carregar
     - tipo: wait_for
       seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
       timeout: 15000

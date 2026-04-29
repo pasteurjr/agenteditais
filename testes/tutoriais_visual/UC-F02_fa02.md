@@ -12,62 +12,27 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F02_visual_fa02.yaml
 
 > **PO:** confirma que remocao de email funciona (Icone X). Ao salvar, lista persiste so com email restante.
 
-## Passo 00 — Setup: login + criar empresa + abrir EmpresaPage
+## Passo 00 — Setup: navegar para EmpresaPage
 
-Mesmo setup. Login + criacao + EmpresaPage.
+UC-F02 **assume UC-F01 ja foi executado no mesmo teste**. Empresa ja existe, esta vinculada ao user e selecionada como ativa. Setup so navega para EmpresaPage.
 
 **Observe criticamente:**
-- EmpresaPage carregada com "Dados da Empresa"
+- User permanece logado (sessao do UC-F01)
+- EmpresaPage carrega com cabecalho "Dados da Empresa"
 
 ```yaml
 id: passo_00_setup_empresa_e_login
 acao:
   sequencia:
-    - tipo: navigate
-      url: "/"
-      timeout: 15000
-    - tipo: wait_for
-      seletor: 'input[type="email"]'
+    - tipo: click
+      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
       timeout: 10000
-    - tipo: fill
-      seletor: 'input[type="email"]'
-      valor_from_contexto: "usuario.email"
-    - tipo: fill
-      seletor: 'input[type="password"]'
-      valor_from_contexto: "usuario.senha"
-    - tipo: click
-      seletor: 'button[type="submit"]'
     - tipo: wait_for
-      seletor: 'h1:has-text("Voce nao tem empresas vinculadas"), h1:has-text("Sem empresa vinculada")'
-      timeout: 15000
-    - tipo: click
-      seletor: 'button:has-text("Criar Nova Empresa")'
-    - tipo: wait_for
-      seletor: 'button:has-text("Novo")'
+      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
       timeout: 10000
     - tipo: click
-      seletor: 'button:has-text("Novo")'
-    - tipo: wait_for
-      seletor: 'label:has-text("CNPJ")'
-      timeout: 10000
-    - tipo: fill
-      seletor: 'input[name="cnpj"], label:has-text("CNPJ") ~ input'
-      valor_from_dataset: "empresa.cnpj"
-    - tipo: fill
-      seletor: 'input[name="razao_social"], label:has-text("Razao Social") ~ input'
-      valor_from_dataset: "empresa.razao_social"
-    - tipo: click
-      seletor: 'button:has-text("Salvar")'
-    - tipo: wait_for
-      seletor: 'a:has-text("DEMO"), .empresa-card:has-text("DEMO")'
-      timeout: 15000
-    - tipo: click
-      seletor: 'a:has-text("DEMO"), .empresa-card:has-text("DEMO")'
-    - tipo: wait_for
-      seletor: 'a[href*="/empresa"], .nav-item-label:has-text("Empresa")'
-      timeout: 10000
-    - tipo: click
-      seletor: 'a[href*="/empresa"], .nav-item-label:has-text("Empresa")'
+      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
+      timeout: 5000
     - tipo: wait_for
       seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
       timeout: 15000
