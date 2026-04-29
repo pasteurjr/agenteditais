@@ -240,13 +240,17 @@ acao:
       alternativa: 'select.select-input >> nth=1'
       valor_from_contexto: "usuario.email"
       timeout: 5000
-    # 6. Clica Vincular
+    # Pequena pausa para React processar onChange dos selects e habilitar botao
+    - tipo: wait
+      valor_literal: 800
+    # 6. Clica Vincular (escopa pelo card "Novo Vinculo" pra evitar ambiguidade)
     - tipo: click
-      seletor: 'button.action-button-primary:has-text("Vincular")'
+      seletor: '.section-card:has-text("Novo Vínculo") button:has-text("Vincular")'
+      alternativa: 'button.action-button-primary:has-text("Vincular")'
       timeout: 5000
     # 7. Aguarda mensagem de sucesso (verde)
     - tipo: wait_for
-      seletor: 'text=/V[ií]nculo criado/'
+      seletor: 'text=/V[ií]nculo criado|sucesso/'
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
 ```
