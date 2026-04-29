@@ -54,6 +54,41 @@ Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 > Esses menus não aparecem para usuários normais (super=False). O tutorial a seguir assume que a empresa RP3X já está associada a valida2.
 
+---
+
+## Pré-requisito CRÍTICO — Vinculação usuário↔empresa após criação (UC-F18)
+
+Se o usuário for criado sem vínculo prévio em `usuario_empresa`, ao logar ele cai em **"Você não tem empresas vinculadas"**. Após criar empresa via FA-07.A (CRUD), o vínculo NÃO é criado automaticamente — empresa fica órfã. Acessar `/app/empresa` redireciona de volta pra tela de bloqueio.
+
+**Solução: executar FA-07.B (Vincular Empresa a Usuário) imediatamente após criar empresa.**
+
+Sequência Playwright:
+
+```typescript
+// Após FA-07.A (criar empresa via CRUD):
+
+// Navegar para AssociarEmpresaUsuario
+await page.click('button[data-action="associar-empresa"]');
+// OU via sidebar (super):  await page.click('.nav-item-label:has-text("Associar Empresa/Usuario")');
+
+await expect(page.locator('h1:has-text("Associar Empresa / Usuário")')).toBeVisible();
+
+// Selecionar empresa criada (option label = "{razao_social} — {cnpj}")
+await page.locator('label:has-text("Empresa") + select').selectOption({ label: /RP3X|DEMO/ });
+
+// Selecionar usuário corrente (option label = "{name} ({email})")
+await page.locator('label:has-text("Usuário") + select').selectOption({ label: /valida2/ });
+
+// Papel default Operador (não precisa mexer)
+// Clicar Vincular
+await page.click('button.action-button-primary:has-text("Vincular")');
+
+// Aguardar feedback
+await expect(page.locator('text=/Vínculo criado/')).toBeVisible();
+```
+
+**Implementa UC-F18 (Vincular empresa a usuário)** — UC autônomo da Sprint 1, referenciado por UC-F01 via `<<uses>>` UML. Pós-condição: registro ativo em `usuario_empresa` permite ao user acessar rotas protegidas em sessões futuras.
+
 ### Dicas de navegação
 
 - Para cadastro completo da empresa (incluindo redes sociais e endereço), acesse **Configurações > Empresa**

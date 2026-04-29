@@ -36,6 +36,53 @@ O helper `login(page)` em `tests/e2e/playwright/helpers.ts`:
 
 ---
 
+## Pré-requisito CRÍTICO — Vinculação usuário↔empresa após criação
+
+**Cenário "user novo sem vínculo" (FA-07 do UC-F01):**
+
+Quando o usuário (super) é criado sem nenhum vínculo em `usuario_empresa`, ao logar ele cai na tela **"Você não tem empresas vinculadas"** com 3 botões: Criar Nova Empresa, Vincular Empresa a Usuário, Entrar no Sistema.
+
+Após executar **FA-07.A — Criar Nova Empresa via CRUD** (botão azul → CRUD genérico → preencher → salvar), a empresa fica **órfã**: existe em `empresas`, mas NÃO existe registro em `usuario_empresa` ligando o usuário criador a ela. Resultado: ao tentar navegar para qualquer rota protegida (`/app/empresa`, `/app/dashboard`, etc.), o `RequireEmpresa` do React redireciona de volta para "Sem empresa vinculada".
+
+**Por isso o tutorial DEVE incluir a vinculação imediatamente após criar empresa**, executando **FA-07.B — Vincular Empresa a Usuário** (botão roxo → página `AssociarEmpresaUsuario`):
+
+```typescript
+// Após salvar empresa via CRUD (FA-07.A passos 1-4):
+
+// 1. Voltar para tela "Sem empresa vinculada" OU navegar via sidebar para "Associar Empresa/Usuario"
+await page.click('button[data-action="associar-empresa"]');
+// OU se já estiver no shell:
+await page.click('.nav-item-label:has-text("Associar Empresa/Usuario")');
+
+// 2. Esperar página AssociarEmpresaUsuario carregar
+await expect(page.locator('h1:has-text("Associar Empresa / Usuário")')).toBeVisible();
+
+// 3. Selecionar a empresa recém-criada no select "Empresa"
+//    Cada option tem formato "{razao_social} — {cnpj}"
+await page.locator('label:has-text("Empresa") + select').selectOption({ label: /DEMO|CH Hospitalar/ });
+
+// 4. Selecionar o usuário corrente no select "Usuário"
+//    Cada option tem formato "{name} ({email})"
+await page.locator('label:has-text("Usuário") + select').selectOption({ label: /valida1/ });
+
+// 5. Selecionar papel (default: Operador)
+//    await page.locator('label:has-text("Papel") + select').selectOption({ value: 'operador' });
+
+// 6. Clicar "Vincular"
+await page.click('button.action-button-primary:has-text("Vincular")');
+
+// 7. Aguardar mensagem de sucesso (verde)
+await expect(page.locator('text=/Vínculo criado/')).toBeVisible();
+```
+
+**Endpoint chamado:** `POST /api/admin/associar-empresa` com `{user_id, empresa_id, papel: "operador", acao: "vincular"}` → cria registro em `editais.usuario_empresa(user_id, empresa_id, papel, ativo=True)`.
+
+**Pós-condição:** próximo login do mesmo usuário retorna a empresa em `vinculadas` no endpoint `/api/auth/minhas-empresas`. Usuário entra direto em rotas protegidas sem cair em "Sem empresa vinculada".
+
+> **Observação:** este passo corresponde ao **UC-F18 — Vincular empresa a usuário** (extraído do FA-07.B do UC-F01 V6 e elevado a caso de uso autônomo em V7). Relação UML: `UC-F01 <<uses>> UC-F18`. Tutoriais subsequentes (UC-F02, F03, F04, F05) assumem que esta vinculação já foi feita.
+
+---
+
 ## Índice
 
 1. [UC-F01 — Cadastro Principal da Empresa](#uc-f01)

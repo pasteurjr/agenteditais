@@ -132,7 +132,20 @@ def _executar_acao(
             raise ValueError("select sem seletor")
         if valor is None:
             raise ValueError("select sem valor")
-        page.select_option(seletor, valor, timeout=acao.timeout)
+        # Tenta value primeiro (UUID/codigo); se falhar, tenta label (texto visivel);
+        # se falhar, tenta match parcial via regex no label.
+        try:
+            page.select_option(seletor, value=valor, timeout=acao.timeout)
+        except Exception:
+            try:
+                page.select_option(seletor, label=valor, timeout=acao.timeout)
+            except Exception:
+                # Match parcial: pega primeira option cujo texto contenha valor
+                opcoes = page.locator(f"{seletor} option").all_text_contents()
+                idx = next((i for i, t in enumerate(opcoes) if valor in t), None)
+                if idx is None:
+                    raise ValueError(f"select: nenhuma option contem '{valor}'. Opcoes: {opcoes[:5]}")
+                page.select_option(seletor, index=idx, timeout=acao.timeout)
     elif acao.tipo == "wait_for":
         if not seletor:
             raise ValueError("wait_for sem seletor")
@@ -169,18 +182,14 @@ def _executar_acao(
 
         # NAO usa page.context.request — Playwright Python tem bug que sobrescreve
         # Content-Type pra text/plain quando data=bytes/str, ignorando o header.
-        # Solucao: requests Python externo + JWT do localStorage + base_url do browser.
+        # Solucao: requests Python externo + JWT do localStorage + URL do BACKEND direto.
+        # IMPORTANTE: nao usar a URL do frontend (5180/5181) — o Vite proxy pode engolir
+        # o body em chamadas server-side fora do contexto do browser. Usa porta do backend
+        # editais (:5007) diretamente. Configuravel via env BACKEND_EDITAIS_URL.
+        import os as _os
         import requests as _req
-        # base_url: pega da primeira parte da URL atual do browser
-        try:
-            current_url = page.url  # ex: http://localhost:5180/app/empresa
-            # extrai scheme://host:port
-            from urllib.parse import urlparse
-            u = urlparse(current_url)
-            base_url = f"{u.scheme}://{u.netloc}"
-        except Exception:
-            base_url = "http://localhost:5180"
-        url_completa = url_full if url_full.startswith("http") else f"{base_url}{url_full}"
+        backend_url = _os.environ.get("BACKEND_EDITAIS_URL", "http://localhost:5007")
+        url_completa = url_full if url_full.startswith("http") else f"{backend_url}{url_full}"
 
         headers = {"Content-Type": "application/json"}
         if jwt_token:

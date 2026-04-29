@@ -190,33 +190,45 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_salvar_no_crud"
 ```
 
-## Passo 04b — Vincular empresa ao usuário (UC-F18 via API)
+## Passo 04b — Vincular empresa ao usuário via UI (UC-F18 / FA-07.B)
 
-**Crítico:** este passo executa imediatamente após criar a empresa, **antes** de navegar pra qualquer rota protegida. Sem o vínculo em `usuario_empresa`, o frontend redireciona pra "Sem empresa vinculada" ao tentar acessar `/app/empresa`.
+**Crítico:** após criar empresa via CRUD (passo 04), o usuário ainda **não tem vínculo** em `usuario_empresa`. O sistema continua tratando o user como "sem empresa vinculada" — qualquer rota protegida redireciona pra tela de bloqueio.
 
-Implementa a relação UML `UC-F01 <<uses>> UC-F18` via chamada API direta ao endpoint `POST /api/admin/associar-empresa` (que aceita CNPJ desde V7).
+Este passo navega para a página **"Associar Empresa / Usuário"** (acessível via sidebar do super) e cria o vínculo manualmente. Implementa **UC-F18 (Vincular empresa a usuário)**, referenciado por UC-F01 via `<<uses>>` UML.
 
 **Observe criticamente:**
-- Network tab mostra POST `/api/admin/associar-empresa` com status 200
-- Response retorna `{"message": "Vínculo criado/atualizado"}`
-- Browser não navega — chamada acontece em background
-- Após este passo, o user pode acessar `/app/empresa` sem ser bloqueado
+- Sidebar tem item "Associar Empresa/Usuario" (só super vê)
+- Após clicar, página `/app/admin/associar-empresa` carrega com cabeçalho "Associar Empresa / Usuário"
+- Select "Empresa" lista a empresa recém-criada (formato "Razao Social — CNPJ")
+- Select "Usuário" lista o usuário corrente (formato "Nome (email)")
+- Papel default = Operador
+- Após clicar "Vincular", mensagem verde "Vínculo criado/atualizado" aparece
+- Tabela "Vínculos Existentes" abaixo mostra o novo vínculo
 
 ```yaml
 id: passo_04b_vincular_empresa_ao_user
 acao:
   sequencia:
-    - tipo: chamar_api
-      url: "/api/admin/associar-empresa"
-      metodo: POST
-      payload_json:
-        user_id: "from:contexto.usuario.id"
-        cnpj: "from:dataset.empresa.cnpj"
-        papel: "operador"
-        acao: "vincular"
+    - tipo: click
+      seletor: '.nav-item-label:has-text("Associar Empresa/Usuario"), .nav-item-label:has-text("Associar Empresa")'
       timeout: 10000
-    - tipo: wait
-      valor_literal: 1500
+    - tipo: wait_for
+      seletor: 'h1:has-text("Associar Empresa")'
+      timeout: 10000
+    - tipo: select
+      seletor: 'label:has-text("Empresa") ~ select, label:has-text("Empresa") + select'
+      valor_from_dataset: "empresa.razao_social"
+      timeout: 5000
+    - tipo: select
+      seletor: 'label:has-text("Usuário") ~ select, label:has-text("Usuario") ~ select, label:has-text("Usuário") + select'
+      valor_from_contexto: "usuario.email"
+      timeout: 5000
+    - tipo: click
+      seletor: 'button.action-button-primary:has-text("Vincular")'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'text=/V[ií]nculo criado/'
+      timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
 ```
 
