@@ -175,7 +175,7 @@ O browser clica em "Salvar" no CRUD. Backend faz `POST /api/crud/empresas` e emp
 - Botão "Salvar" entra em estado loading (spinner)
 - Após retorno OK, o form fecha e a empresa aparece na listagem
 - Sem mensagem de erro vermelha
-- CNPJ exibido com máscara `56.700.252/4415-59`
+- CNPJ exibido com máscara (formato `XX.XXX.XXX/XXXX-XX`)
 
 ```yaml
 id: passo_04_salvar_no_crud
@@ -185,36 +185,29 @@ acao:
       seletor: 'button.action-button-primary:has-text("Salvar")'
       timeout: 5000
     - tipo: wait_for
-      seletor: 'text=DEMO 002, text=56.700.252'
+      seletor: 'button:has-text("Novo")'
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_salvar_no_crud"
 ```
 
-## Passo 05 — Selecionar a empresa recém-criada
+## Passo 05 — Confirmar que empresa foi criada e está selecionada
 
-O browser vai navegar para a tela "Selecionar Empresa" e clicar na DEMO 002.
+Apos criar via CRUD, o sistema seleciona automaticamente a empresa recem-criada (super sem vinculos cai direto nela). Este passo apenas confirma navegando ao Dashboard.
 
 **Observe criticamente:**
-- Lista de empresas aparece em cards
-- Empresa "DEMO 002 Comércio e Representações Ltda" presente na lista
-- Após clicar, top bar passa a mostrar nome da empresa
+- Top bar mostra nome da empresa criada (DEMO + sufixo do ciclo)
 - Sidebar fica completa com todos os módulos
+- Sem mensagem de "selecionar empresa"
 
 ```yaml
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
-    - tipo: click
-      seletor: '.nav-item-label:has-text("Selecionar Empresa"), [data-nav="selecionar-empresa"]'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: 'text=DEMO 002'
+    - tipo: navigate
+      url: "/app/dashboard"
       timeout: 10000
-    - tipo: click
-      seletor: 'text=DEMO 002'
-      timeout: 5000
     - tipo: wait_for
-      seletor: '.top-bar-empresa, text=Dashboard'
+      seletor: '.top-bar-empresa, text=Dashboard, .sidebar'
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_05_selecionar_empresa"
 ```

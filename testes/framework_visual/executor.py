@@ -160,9 +160,19 @@ def _executar_acao(
         payload = acao.payload_json
         if payload is not None and (dataset is not None or contexto is not None):
             payload = _resolver_payload(payload, dataset or {}, contexto, trilha)
-        # Usa request context do browser — cookies httponly da sessao Flask sao enviados
+        # JWT do app editais fica no localStorage (chave editais_ia_access_token).
+        # Extrai e envia como Bearer token — endpoints @require_auth precisam dele.
+        try:
+            jwt_token = page.evaluate("() => localStorage.getItem('editais_ia_access_token')")
+        except Exception:
+            jwt_token = None
+
+        # Usa request context do browser — cookies sao enviados automaticamente
         ctx_req = page.context.request
-        kwargs = {"timeout": acao.timeout}
+        headers = {}
+        if jwt_token:
+            headers["Authorization"] = f"Bearer {jwt_token}"
+        kwargs = {"timeout": acao.timeout, "headers": headers}
         if payload is not None:
             kwargs["data"] = payload
         if metodo == "POST":
