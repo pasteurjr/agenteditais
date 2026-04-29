@@ -89,6 +89,31 @@ await expect(page.locator('text=/Vínculo criado/')).toBeVisible();
 
 **Implementa UC-F18 (Vincular empresa a usuário)** — UC autônomo da Sprint 1, referenciado por UC-F01 via `<<uses>>` UML. Pós-condição: registro ativo em `usuario_empresa` permite ao user acessar rotas protegidas em sessões futuras.
 
+### Pré-requisito CRÍTICO — Selecionar empresa ativa para a sessão
+
+**Vincular ≠ Selecionar.** Após criar o registro `usuario_empresa` (passo anterior), é necessário **definir a empresa ativa** na sessão. Sem isso, o frontend continua sem contexto de empresa e pode redirecionar para "Sem empresa vinculada" mesmo com o vínculo já criado.
+
+Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa**.
+
+```typescript
+// Expandir secao Configuracoes (se colapsada)
+await page.click('button.nav-section-header:has-text("Configuracoes")');
+
+// Clicar item "Selecionar Empresa"
+await page.click('.nav-item-label:has-text("Selecionar Empresa")');
+
+// Aguardar pagina
+await expect(page.locator('h1:has-text("Selecionar Empresa")')).toBeVisible();
+
+// Clicar no card RP3X (ou empresa do ciclo)
+await page.click('button:has(strong:has-text("RP3X"))');
+
+// Confirmar empresa ativa
+await expect(page.locator('button:has-text("ATIVA")')).toBeVisible();
+```
+
+**Endpoint:** `AuthContext.selecionarEmpresa(id)` atualiza JWT com `empresa_id`, salva em localStorage, re-renderiza shell. Top-bar passa a mostrar a empresa ativa.
+
 ### Dicas de navegação
 
 - Para cadastro completo da empresa (incluindo redes sociais e endereço), acesse **Configurações > Empresa**

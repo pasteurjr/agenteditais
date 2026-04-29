@@ -269,6 +269,49 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
 ```
 
+## Passo 04c — Selecionar empresa ativa para a sessão
+
+**Crítico:** vincular ≠ selecionar. O passo 04b criou o registro `usuario_empresa` (a empresa **pode** ser usada pelo user). Agora é preciso **definir qual empresa está ATIVA** na sessão atual — sem isso, o backend não sabe qual contexto carregar e o frontend continua mostrando "Sem empresa vinculada".
+
+Caminho via UI: **Configurações → Selecionar Empresa → clicar no card da empresa criada**.
+
+**Observe criticamente:**
+- Sidebar: seção "Configurações" expande, item "Selecionar Empresa" aparece
+- Página `Selecionar Empresa` exibe cards das empresas vinculadas (1 só, a recém-criada)
+- Card mostra razão social, CNPJ e papel
+- Após clicar, badge "ATIVA" aparece no card selecionado
+- A empresa fica como `empresa atual` no AuthContext (top-bar mostra o nome)
+
+```yaml
+id: passo_04c_selecionar_empresa_ativa
+acao:
+  sequencia:
+    # 1. Expande secao Configuracoes (caso colapsada)
+    - tipo: click
+      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
+      timeout: 10000
+    - tipo: wait_for
+      seletor: '.nav-item-label:has-text("Selecionar Empresa")'
+      timeout: 5000
+    # 2. Clica no item "Selecionar Empresa"
+    - tipo: click
+      seletor: '.nav-item-label:has-text("Selecionar Empresa")'
+      timeout: 5000
+    # 3. Aguarda pagina carregar
+    - tipo: wait_for
+      seletor: 'h1:has-text("Selecionar Empresa")'
+      timeout: 10000
+    # 4. Clica no card da empresa criada (matching pelo razao_social)
+    - tipo: click
+      seletor: 'button:has-text("DEMO"), button:has-text("Comércio")'
+      alternativa: '.page-container button:has(strong)'
+      timeout: 5000
+    # 5. Aguarda processamento (selecionarEmpresa atualiza AuthContext)
+    - tipo: wait
+      valor_literal: 1500
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04c_selecionar_empresa_ativa"
+```
+
 ## Passo 05 — Navegar para EmpresaPage
 
 Após vincular no passo 04b, a empresa fica acessível ao usuário. Este passo navega para a página `/app/empresa` para iniciar o cadastro completo.

@@ -81,6 +81,39 @@ await expect(page.locator('text=/Vínculo criado/')).toBeVisible();
 
 > **Observação:** este passo corresponde ao **UC-F18 — Vincular empresa a usuário** (extraído do FA-07.B do UC-F01 V6 e elevado a caso de uso autônomo em V7). Relação UML: `UC-F01 <<uses>> UC-F18`. Tutoriais subsequentes (UC-F02, F03, F04, F05) assumem que esta vinculação já foi feita.
 
+### Pré-requisito CRÍTICO — Selecionar empresa ativa para a sessão
+
+**Vincular ≠ Selecionar.** O passo anterior criou o registro em `usuario_empresa` (a empresa pode ser usada). Mas o frontend ainda **não sabe qual empresa está ativa** na sessão. Sem isso:
+- Top-bar não mostra a empresa
+- Backend não tem `empresa_id` no contexto JWT
+- Algumas chamadas (`/api/auth/me/contexto`) retornam dados vazios
+- Frontend pode redirecionar para "Sem empresa vinculada" mesmo após vincular (cache desatualizado)
+
+Após vincular, navegue até **Configurações → Selecionar Empresa** e clique no card da empresa criada:
+
+```typescript
+// 1. Expandir secao Configuracoes na sidebar (se colapsada)
+await page.click('button.nav-section-header:has-text("Configuracoes")');
+
+// 2. Clicar item "Selecionar Empresa"
+await page.click('.nav-item-label:has-text("Selecionar Empresa")');
+
+// 3. Aguardar pagina carregar (cards das empresas vinculadas)
+await expect(page.locator('h1:has-text("Selecionar Empresa")')).toBeVisible();
+
+// 4. Clicar no card da empresa recem-vinculada
+await page.click('button:has(strong:has-text("CH Hospitalar"))');
+// OU pra DEMO em ciclos automatizados:
+// await page.click('button:has(strong:has-text("DEMO"))');
+
+// 5. Aguardar empresa ficar ATIVA (badge no card)
+await expect(page.locator('button:has-text("ATIVA")')).toBeVisible();
+```
+
+**Endpoint chamado:** `selecionarEmpresa(id)` do `AuthContext` chama `POST /api/auth/switch-empresa` ou similar, atualiza JWT com `empresa_id`, salva em localStorage e re-renderiza shell autenticado com a empresa ativa.
+
+**Pós-condição:** top-bar mostra nome da empresa, backend usa `empresa_id` em todas as chamadas seguintes, navegação para `/app/empresa`, `/app/dashboard` funciona sem cair em "Sem empresa vinculada".
+
 ---
 
 ## Índice
