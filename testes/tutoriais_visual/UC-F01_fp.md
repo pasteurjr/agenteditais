@@ -252,6 +252,20 @@ acao:
     - tipo: wait_for
       seletor: 'text=/V[ií]nculo criado|sucesso/'
       timeout: 10000
+    # 8. Confirma visualmente: filtra "Vinculos Existentes" pela empresa criada
+    #    e ve o vinculo aparecer na tabela abaixo.
+    #    Filtro eh o ultimo select.select-input da pagina (4o no DOM: Empresa, Usuario, Papel, Filtrar).
+    - tipo: wait
+      valor_literal: 500
+    - tipo: select
+      seletor: '.section-card:has-text("Vínculos Existentes") select.select-input'
+      alternativa: 'select.select-input >> nth=3'
+      valor_from_dataset: "empresa.razao_social"
+      timeout: 5000
+    # 9. Aguarda tabela de vinculos exibir o registro criado
+    - tipo: wait_for
+      seletor: '.section-card:has-text("Vínculos Existentes") table tbody tr'
+      timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
 ```
 
