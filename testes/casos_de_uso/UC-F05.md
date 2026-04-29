@@ -28,7 +28,7 @@ split_gerado_em: "2026-04-24T19:19:04"
 **Ator:** Usuario administrador/compliance
 
 ### Pre-condicoes
-1. Empresa existente.
+1. Empresa existente **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
 2. CRUD de `empresa-responsaveis` disponivel.
 
 ### UCs predecessores

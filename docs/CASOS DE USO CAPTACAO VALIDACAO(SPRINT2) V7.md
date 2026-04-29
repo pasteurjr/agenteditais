@@ -1438,7 +1438,7 @@ Na aba `Lotes`:
 
 ### Pre-condicoes
 1. Edital selecionado.
-2. Empresa e documentacao da empresa cadastradas.
+2. Empresa **vinculada ao usuario corrente** (registro ativo em `usuario_empresa`) e documentacao da empresa cadastradas.
 3. Endpoint `/api/editais/{id}/documentacao-necessaria` disponivel.
 
 ### UCs predecessores

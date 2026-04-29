@@ -28,7 +28,7 @@ split_gerado_em: "2026-04-24T19:19:04"
 **Ator:** Usuario administrador/compliance
 
 ### Pre-condicoes
-1. Empresa cadastrada com CNPJ.
+1. Empresa cadastrada com CNPJ **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
 2. Fontes de certidao configuradas ou sincronizadas. (**V5 correcao: fontes devem ser inicializadas ANTES de buscar — ver FA-01 e FE-01**)
 3. Endpoints de certidoes operacionais.
 

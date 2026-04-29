@@ -28,7 +28,7 @@ split_gerado_em: "2026-04-24T19:19:04"
 **Ator:** Usuario administrador/comercial
 
 ### Pre-condicoes
-1. Empresa em edicao.
+1. Empresa em edicao **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
 2. Lista de areas carregada de `/api/areas-produto`.
 
 ### UCs predecessores
