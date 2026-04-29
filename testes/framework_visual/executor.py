@@ -150,6 +150,13 @@ def _executar_acao(
         if not seletor:
             raise ValueError("wait_for sem seletor")
         page.wait_for_selector(seletor, timeout=acao.timeout)
+    elif acao.tipo == "evaluate":
+        # Executa JavaScript arbitrario na pagina (ex: localStorage.clear(), location.reload())
+        # valor_literal contem o codigo JS
+        if not (acao.valor_literal or valor):
+            raise ValueError("evaluate sem codigo JS")
+        codigo = acao.valor_literal or valor
+        page.evaluate(codigo)
     elif acao.tipo == "upload_arquivo":
         # valor = path absoluto do arquivo no disco do tester
         if not seletor:

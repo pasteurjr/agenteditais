@@ -209,23 +209,38 @@ Este passo navega para a página **"Associar Empresa / Usuário"** (acessível v
 id: passo_04b_vincular_empresa_ao_user
 acao:
   sequencia:
+    # 1. Expande secao CADASTROS (sidebar) caso esteja colapsada — clique idempotente
+    #    NOTE: se ja estiver expandida, este click colapsa; o segundo click reabre.
+    #    Pra evitar isso, usa wait_for: se nav-item-label "Associar Empresa" ja existe, pula.
+    - tipo: click
+      seletor: '.nav-section-label:has-text("Cadastros"), .nav-section-label:has-text("CADASTROS"), button.nav-section-header:has-text("Cadastros"), button.nav-section-header:has-text("CADASTROS")'
+      timeout: 10000
+    - tipo: wait_for
+      seletor: '.nav-item-label:has-text("Associar Empresa")'
+      timeout: 5000
+    # 2. Clica no item Associar Empresa/Usuario
     - tipo: click
       seletor: '.nav-item-label:has-text("Associar Empresa/Usuario"), .nav-item-label:has-text("Associar Empresa")'
-      timeout: 10000
+      timeout: 5000
+    # 3. Aguarda pagina AssociarEmpresaUsuario carregar
     - tipo: wait_for
       seletor: 'h1:has-text("Associar Empresa")'
       timeout: 10000
+    # 4. Seleciona empresa criada (option label = "{razao} — {cnpj}")
     - tipo: select
       seletor: 'label:has-text("Empresa") ~ select, label:has-text("Empresa") + select'
       valor_from_dataset: "empresa.razao_social"
       timeout: 5000
+    # 5. Seleciona usuario corrente (option label = "{name} ({email})")
     - tipo: select
-      seletor: 'label:has-text("Usuário") ~ select, label:has-text("Usuario") ~ select, label:has-text("Usuário") + select'
+      seletor: 'label:has-text("Usuário") ~ select, label:has-text("Usuario") ~ select, label:has-text("Usuário") + select, label:has-text("Usuario") + select'
       valor_from_contexto: "usuario.email"
       timeout: 5000
+    # 6. Clica Vincular
     - tipo: click
       seletor: 'button.action-button-primary:has-text("Vincular")'
       timeout: 5000
+    # 7. Aguarda mensagem de sucesso (verde)
     - tipo: wait_for
       seletor: 'text=/V[ií]nculo criado/'
       timeout: 10000
