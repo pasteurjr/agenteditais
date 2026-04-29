@@ -1,18 +1,16 @@
 ---
 uc_id: UC-F13
-nome: "Consultar classificacao e funil de monitoramento"
+nome: "Gerir e consultar classificacao Area/Classe/Subclasse"
 sprint: "Sprint 1"
-versao_uc: "5.0"
-doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md"
-linha_inicio_no_doc: 1747
-split_gerado_em: "2026-04-24T19:19:04"
+versao_uc: "8.0"
+doc_origem: "CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V7.md"
+extraido_em: "2026-04-29"
+mudanca_v8: "UC reescrito: era 'Consultar classificacao e funil de monitoramento' (V5/V7 — apenas visualizar). Agora cobre criacao via 3 CRUDs + visualizacao."
 ---
 
-# UC-F13 — Consultar classificacao e funil de monitoramento
+# UC-F13 — Gerir e consultar classificacao Area/Classe/Subclasse
 
-> Caso de uso extraído automaticamente de `docs/CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V5.md` (linha 1747).
-> Sprint origem: **Sprint 1**.
-> Para regerar: `python3 scripts/split-uc-v5.py`.
+> **V8 (29/04/2026):** UC reescrito. Antes era so "Consultar..." (apenas visualizar). Agora cobre tambem a **criacao** da hierarquia Area→Classe→Subclasse via 3 CRUDs (`areas-produto`, `classes-produto-v2`, `subclasses-produto`), porque cada empresa tem sua propria hierarquia (`empresa_scoped=True`) e empresa nova nasce sem nenhuma. Sprint 1 (UC-F02, F06, F08) e Sprint 2 (UC-CV01..09) dependem dessa hierarquia ja existir.
 
 ---
 
@@ -25,95 +23,130 @@ split_gerado_em: "2026-04-24T19:19:04"
 - Faltantes: RN-040 [FALTANTE]
 - Referencia completa: secao 13 de `requisitos_completosv8.md`
 
-**Ator:** Usuario de portfolio/gestor
+**Ator:** Usuario administrador/gestor de portfolio
 
 ### Pre-condicoes
-1. Areas, classes e subclasses cadastradas.
-2. Monitoramentos existentes ou nao.
+1. Empresa em edicao **e vinculada ao usuario corrente** (registro ativo em `usuario_empresa`).
+2. CRUDs `areas-produto`, `classes-produto-v2`, `subclasses-produto` operacionais.
+3. PortfolioPage acessivel para visualizacao da arvore consolidada.
 
 ### UCs predecessores
 
-**UC raiz** — nao depende de execucao previa de outros UCs.
+Estado satisfeito por execucao previa de:
+
+- **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- `[infra]` — endpoint/servico operacional (nao eh UC)
 
 
 ### Pos-condicoes
-1. Usuario visualiza a arvore de classificacao parametrizada.
-2. Usuario entende como a classificacao alimenta o monitoramento de mercado.
+1. Existem registros em `areas_produto`, `classes_produto_v2`, `subclasses_produto` para a empresa do usuario corrente.
+2. Hierarquia visualizavel na aba "Classificacao" da PortfolioPage com expand/collapse funcional.
+3. UCs subsequentes (UC-F02, UC-F06, UC-F08, UC-CV01) podem usar a hierarquia em selects e filtros.
 
 ### Botoes e acoes observadas
-- aba `Classificacao`
+
+**Criacao (3 CRUDs):**
+- Cadastros > Areas de Produto: `[Botao: Novo]`, `[Botao: Salvar]`
+- Cadastros > Classes de Produto: `[Botao: Novo]`, `[Select: Area]`, `[Botao: Salvar]`
+- Cadastros > Subclasses de Produto: `[Botao: Novo]`, `[Select: Classe]`, `[Campo: NCM]`, `[Botao: Salvar]`
+
+**Visualizacao:**
+- aba `Classificacao` na PortfolioPage
 - expand/collapse em Area e Classe
 
-### Sequencia de eventos
-1. Usuario acessa a [Aba: "Classificacao"] [Icone: ClipboardList] na PortfolioPage.
-2. Sistema lista areas no [Card: "Estrutura de Classificacao"] como itens expansiveis.
-3. Usuario clica para expandir uma [Lista: Area] [Icone: ChevronRight -> ChevronDown] e depois uma [Lista: Classe].
-4. Sistema exibe [Lista: Subclasse] com [Badge: NCM] e contagem de campos da mascara.
-5. O [Card: "Funil de Monitoramento"] exibe 3 etapas: "Monitoramento Continuo" (com contagem de ativos), "Filtro Inteligente" (com [Tag: categorias de classes]) e "Classificacao Automatica" (contagem de classes). O [Badge: StatusBadge] mostra "Agente Ativo" ou "Agente Inativo" com data da ultima verificacao.
+### Sequencia de eventos (Fluxo Principal — cria 3 hierarquias completas)
+
+Para cada hierarquia do dataset (3 ciclos sequenciais):
+
+**Ciclo de criacao (executado 3x):**
+1. Usuario navega via Sidebar para Cadastros > Areas de Produto.
+2. Clica `[Botao: Novo]`, preenche `[Campo: Nome]` (ex: "Equipamentos Medico-Hospitalares") e `[Botao: Salvar]`. Sistema faz `POST /api/crud/areas-produto`.
+3. Navega para Cadastros > Classes de Produto.
+4. Clica `[Botao: Novo]`, seleciona `[Select: Area]` (a area criada no passo 2), preenche `[Campo: Nome]` (ex: "Monitoracao") e `[Botao: Salvar]`. Sistema faz `POST /api/crud/classes-produto-v2` com `area_id`.
+5. Navega para Cadastros > Subclasses de Produto.
+6. Clica `[Botao: Novo]`, seleciona `[Select: Classe]` (a classe criada no passo 4), preenche `[Campo: Nome]` (ex: "Monitor Multiparametrico") e `[Campo: NCM]` (ex: "9018.19.90") e `[Botao: Salvar]`. Sistema faz `POST /api/crud/subclasses-produto` com `classe_id` e `ncm`.
+
+**Apos os 3 ciclos:**
+7. Usuario navega para PortfolioPage > `[Aba: Classificacao]`.
+8. Sistema lista as 3 areas no `[Card: Estrutura de Classificacao]`. Usuario expande cada area e classes para verificar que subclasses e NCMs aparecem corretamente.
+9. `[Card: Funil de Monitoramento]` exibe contagens atualizadas (3 areas, N classes, N subclasses).
+
+### Hierarquias canonicas (CT-F13-FP)
+
+```yaml
+hierarquias:
+  - area: "Equipamentos Medico-Hospitalares"
+    classes:
+      - nome: "Monitoracao"
+        subclasses:
+          - nome: "Monitor Multiparametrico"
+            ncm: "9018.19.90"
+
+  - area: "Diagnostico in Vitro e Laboratorio"
+    classes:
+      - nome: "Reagentes Bioquimicos"
+        subclasses:
+          - nome: "Reagente para Glicose"
+            ncm: "3822.19.90"
+      - nome: "Reagentes e Kits Diagnosticos"
+        subclasses:
+          - nome: "Kit de Hematologia"
+            ncm: "3822.19.90"
+```
+
+Total: **2 areas, 3 classes, 3 subclasses**.
 
 ### Fluxos Alternativos
 
-**FA-01 — Nenhuma area cadastrada**
-1. No Passo 2, lista de areas esta vazia.
-2. Card exibe mensagem informativa: "Nenhuma classificacao cadastrada".
+**FA-01 — Hierarquia ja existe (idempotencia)**
+1. Usuario abre Cadastros > Areas de Produto.
+2. Listagem ja contem as areas esperadas (sessao anterior do mesmo user/empresa).
+3. Usuario pula criacao e vai direto para passo 7 (visualizar).
 
-**FA-02 — Agente de monitoramento inativo**
-1. No Passo 5, badge mostra "Agente Inativo".
-2. Comportamento esperado se monitoramento nao foi configurado.
+**FA-02 — Criar 1 hierarquia minima (1+1+1)**
+1. Para teste rapido: criar so 1 area > 1 classe > 1 subclasse em vez de 3.
+2. Util para CTs de fronteira/limite.
+
+**FA-03 — Adicionar subclasse a classe pre-existente**
+1. Usuario navega para Cadastros > Subclasses de Produto.
+2. Cria nova subclasse vinculada a uma classe ja existente (sem precisar criar area/classe novas).
+
+**FA-04 — Visualizar sem criar**
+1. Hierarquia ja existe (FA-01 ou criada por outro user).
+2. Usuario navega direto para PortfolioPage > Classificacao.
+3. Confirma estrutura visualmente.
 
 ### Fluxos de Excecao
 
-**FE-01 — Erro ao carregar hierarquia**
+**FE-01 — Tentar criar classe sem selecionar area**
+1. No CRUD de Classes, usuario clica `[Novo]` e nao seleciona `[Select: Area]`.
+2. Backend retorna 400: campo `area_id` obrigatorio.
+
+**FE-02 — Tentar criar subclasse sem selecionar classe**
+1. Idem FE-01 mas com `classe_id`.
+
+**FE-03 — NCM em formato invalido**
+1. Usuario informa NCM com formato errado (ex: `382` em vez de `3822.19.90`).
+2. Sistema valida via RN-040 e exibe erro.
+
+**FE-04 — Duplicar nome de area na mesma empresa**
+1. Usuario tenta criar area com nome ja existente para mesma empresa.
+2. Backend retorna 409 Conflict.
+
+**FE-05 — Erro ao carregar hierarquia na visualizacao**
 1. Endpoint de areas/classes retorna erro.
-2. Card exibe mensagem de erro.
+2. Aba Classificacao exibe mensagem de erro.
 
-### Tela(s) Representativa(s)
-
-**Pagina:** PortfolioPage (`/app/portfolio`)
-**Posicao:** Tab 3 de 3 — "Classificacao"
-
-#### Layout da Tela
-
-```
-[Aba: "Classificacao"] [Icone: ClipboardList]
-
-[Card: "Estrutura de Classificacao"]
-  [Subtitulo: "Area > Classe > Subclasse (com mascaras de especificacao)"]
-  [Lista: Areas] (expansivel)
-    [Icone: ChevronRight/Down] [Icone: FolderOpen] [Texto: nome da area] [Badge: "N classe(s)"] [ref: Passo 3]
-    [Lista: Classes] (expansivel, aninhada)
-      [Icone: ChevronRight/Down] [Texto: nome da classe] [Badge: "N subclasse(s)"] [ref: Passo 3]
-      [Lista: Subclasses]
-        [Texto: nome] [Badge: "NCM: XXXX.XX.XX"] [Badge: "N campo(s)"] [ref: Passo 4]
-  [Texto: nota IA] — "A estrutura e gerenciada nos CRUDs..."
-
-[Card: "Funil de Monitoramento"] [Icone: Radio]
-  [Subtitulo: "O Agente Autonomo que Monitora o Mercado por Voce"]
-  [Secao: funil 3 etapas]
-    [Texto: "Monitoramento Continuo"] — contagem de ativos [ref: Passo 5]
-    [Texto: "Filtro Inteligente"] + [Tag: categorias] [ref: Passo 5]
-    [Texto: "Classificacao Automatica"] — N classes [ref: Passo 5]
-  [Badge: StatusBadge] — "Agente Ativo" ou "Agente Inativo" [ref: Passo 5]
-  [Texto: "Ultima verificacao"] — data/hora [ref: Passo 5]
-```
-
-#### Mapeamento Tela <-> Sequencia
-
-| Elemento de Tela | Passo(s) |
-|---|---|
-| [Aba: "Classificacao"] | 1 |
-| [Card: "Estrutura de Classificacao"] | 2 |
-| [Lista: Area expand/collapse] | 3 |
-| [Lista: Classe expand/collapse] | 3 |
-| [Lista: Subclasse + NCM + campos] | 4 |
-| [Card: "Funil de Monitoramento"] | 5 |
-| [Badge: StatusBadge agente] | 5 |
+### Persistencia observada
+- `areas_produto(id, empresa_id, nome, ...)` — `empresa_scoped=True`
+- `classes_produto_v2(id, empresa_id, area_id, nome, ...)` — `empresa_scoped=True`, FK area_id
+- `subclasses_produto(id, empresa_id, classe_id, nome, ncm, mascara_campos_json, ...)` — `empresa_scoped=True`, FK classe_id
 
 ### Implementacao atual
-**IMPLEMENTADO**
+**IMPLEMENTADO** (3 CRUDs + Aba Classificacao). V8 documenta o uso conjunto.
 
 ---

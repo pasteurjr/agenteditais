@@ -33,7 +33,9 @@ split_gerado_em: "2026-04-24T19:19:04"
 
 ### UCs predecessores
 
-**UC raiz** — nao depende de execucao previa de outros UCs.
+Estado satisfeito por execucao previa de:
+
+- **UC-F18 (uses)**
 
 Pre-requisitos nao-UC:
 

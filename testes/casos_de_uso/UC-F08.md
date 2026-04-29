@@ -36,10 +36,7 @@ split_gerado_em: "2026-04-24T19:19:04"
 Estado satisfeito por execucao previa de:
 
 - **UC-F07 OU UC-F08**
-
-Pre-requisitos nao-UC:
-
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- **UC-F13**
 
 
 ### Pos-condicoes

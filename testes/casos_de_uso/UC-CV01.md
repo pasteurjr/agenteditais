@@ -39,6 +39,7 @@ Estado satisfeito por execucao previa de:
 - **UC-F14**
 - **UC-F15**
 - **UC-F16**
+- **UC-F13**
 
 Pre-requisitos nao-UC:
 

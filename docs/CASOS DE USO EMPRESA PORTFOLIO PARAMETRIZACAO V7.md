@@ -448,10 +448,7 @@ Estado satisfeito por execucao previa de:
 
 - **UC-F01**
 - **UC-F18**
-
-Pre-requisitos nao-UC:
-
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- **UC-F13**
 
 
 ### Pos-condicoes
@@ -1093,11 +1090,11 @@ Tabela `empresa_responsaveis`: `empresa_id`, `nome`, `cargo`, `cpf`, `email`, `t
 Estado satisfeito por execucao previa de:
 
 - **UC-F07 OU UC-F08**
+- **UC-F13**
 
 Pre-requisitos nao-UC:
 
 - `[login]` — autenticacao basica do usuario
-- `[seed]` — dado pre-cadastrado no banco (seed)
 
 
 ### Pos-condicoes
@@ -1431,10 +1428,7 @@ Pre-requisitos nao-UC:
 Estado satisfeito por execucao previa de:
 
 - **UC-F07 OU UC-F08**
-
-Pre-requisitos nao-UC:
-
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- **UC-F13**
 
 
 ### Pos-condicoes
@@ -1970,11 +1964,14 @@ Pre-requisitos nao-UC:
 
 ### UCs predecessores
 
-**UC raiz** — nao depende de execucao previa de outros UCs.
+Estado satisfeito por execucao previa de:
+
+- **UC-F01**
+- **UC-F18**
 
 Pre-requisitos nao-UC:
 
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- `[infra]` — endpoint/servico operacional (nao eh UC)
 
 
 ### Pos-condicoes
