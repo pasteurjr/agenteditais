@@ -25,26 +25,29 @@ PREDECESSORES = {
     "UC-F01": ["[login]", "[infra]", "UC-F18 (uses)"],
     # UCs que precisam de empresa VINCULADA ao user corrente:
     # UC-F01 cria a empresa, UC-F18 vincula. Ambos sao predecessores AND.
-    # UC-F02 tambem precisa de hierarquia Area/Classe/Subclasse criada (UC-F13 V8).
-    "UC-F02": ["UC-F01", "UC-F18", "UC-F13"],
+    # UC-F02 idealmente precisa de hierarquia Area/Classe/Subclasse criada (UC-F13 V8),
+    # mas como UC-F13 V8 ainda nao tem tutorial visual cadastrado, mantem [seed]
+    # ate que o tutorial automatizado de UC-F13 seja criado. Doc canonica V7 ja
+    # menciona UC-F13 — atualizar este predecessor quando o tutorial visual for entregue.
+    "UC-F02": ["UC-F01", "UC-F18", "[seed]"],
     "UC-F03": ["UC-F01", "UC-F18", "[infra]", "[seed]"],
     "UC-F04": ["UC-F01", "UC-F18", "[seed]", "[infra]"],
     "UC-F05": ["UC-F01", "UC-F18", "[infra]"],
-    "UC-F06": ["[login]", "UC-F07 OU UC-F08", "UC-F13"],  # hierarquia Area/Classe/Subclasse criada em UC-F13 V8
+    "UC-F06": ["[login]", "UC-F07 OU UC-F08", "[seed]"],  # hierarquia em UC-F13 V8 (sem tutorial visual ainda) — fallback p/ seed
     "UC-F07": ["[login]", "[infra]"],
-    "UC-F08": ["UC-F07 OU UC-F08", "UC-F13"],  # subclasse com mascara criada em UC-F13 V8
+    "UC-F08": ["UC-F07 OU UC-F08", "[seed]"],  # subclasse com mascara em UC-F13 V8 (sem tutorial visual ainda) — fallback p/ seed
     "UC-F09": ["UC-F07 OU UC-F08", "[infra]"],
     "UC-F10": ["UC-F06", "[infra]"],
     "UC-F11": ["UC-F07 OU UC-F08", "[infra]"],
     "UC-F12": ["UC-F06", "[infra]"],
-    "UC-F13": ["UC-F01", "UC-F18", "[infra]"],  # V8: cria hierarquia (precisa empresa vinculada)
+    "UC-F13": ["UC-F01", "UC-F18", "[infra]"],  # V8: cria hierarquia (precisa empresa vinculada). Sem tutorial visual ainda — outros UCs nao podem usar UC-F13 como predecessor `depends` agora.
     "UC-F14": ["[infra]"],
     "UC-F15": ["[infra]", "[seed]"],
     "UC-F16": ["[infra]", "[seed]"],
     "UC-F17": ["[seed]"],
     "UC-F18": ["[login]", "UC-F01", "[infra]"],  # vincular empresa a user — usa UC-F01 como predecessor (a empresa deve existir)
     # Sprint 2
-    "UC-CV01": ["[login]", "UC-F14", "UC-F15", "UC-F16", "UC-F13"],  # filtros cascata Area/Classe/Subclasse exigem hierarquia (UC-F13 V8)
+    "UC-CV01": ["[login]", "UC-F14", "UC-F15", "UC-F16"],  # filtros cascata exigem hierarquia (UC-F13 V8) — predecessor formal sera adicionado quando tutorial visual UC-F13 estiver pronto.
     "UC-CV02": ["UC-CV01"],
     "UC-CV03": ["UC-CV01", "[infra]"],
     "UC-CV04": ["UC-CV02", "UC-CV03"],
