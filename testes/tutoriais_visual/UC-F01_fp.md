@@ -190,19 +190,72 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_salvar_no_crud"
 ```
 
-## Passo 05 — Navegar diretamente para EmpresaPage
+## Passo 04b — Vincular empresa ao usuário (UC-F18 via API)
 
-Apos criar via CRUD, o sistema seleciona automaticamente a empresa recem-criada e libera o shell autenticado. Em vez de passar pela tela "Selecionar Empresa", o tutorial navega direto pra EmpresaPage (rota `/app/empresa`).
+**Crítico:** este passo executa imediatamente após criar a empresa, **antes** de navegar pra qualquer rota protegida. Sem o vínculo em `usuario_empresa`, o frontend redireciona pra "Sem empresa vinculada" ao tentar acessar `/app/empresa`.
+
+Implementa a relação UML `UC-F01 <<uses>> UC-F18` via chamada API direta ao endpoint `POST /api/admin/associar-empresa` (que aceita CNPJ desde V7).
 
 **Observe criticamente:**
-- URL muda pra /app/empresa
-- Cabecalho "Dados da Empresa" aparece
-- Sem mensagem de "selecionar empresa"
+- Network tab mostra POST `/api/admin/associar-empresa` com status 200
+- Response retorna `{"message": "Vínculo criado/atualizado"}`
+- Browser não navega — chamada acontece em background
+- Após este passo, o user pode acessar `/app/empresa` sem ser bloqueado
+
+```yaml
+id: passo_04b_vincular_empresa_ao_user
+acao:
+  sequencia:
+    - tipo: chamar_api
+      url: "/api/admin/associar-empresa"
+      metodo: POST
+      payload_json:
+        user_id: "from:contexto.usuario.id"
+        cnpj: "from:dataset.empresa.cnpj"
+        papel: "operador"
+        acao: "vincular"
+      timeout: 10000
+    - tipo: wait
+      valor_literal: 1500
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
+```
+
+## Passo 05 — Re-login para refresh do AuthContext + navegar para EmpresaPage
+
+**Crítico:** o frontend mantém a lista `vinculadas` em `localStorage` que foi populada no passo 0 (login original) — naquele momento o user não tinha empresas vinculadas. Após o vínculo via API no passo 4b, o `localStorage` continua **desatualizado**. Se simplesmente navegarmos para `/app/empresa`, o `RequireEmpresa` do React continua redirecionando para "Sem empresa vinculada" porque consulta `vinculadas` cacheado.
+
+Solução: limpa localStorage e re-loga. O novo login chama `GET /api/auth/minhas-empresas` que retorna o vínculo recém-criado.
+
+**Observe criticamente:**
+- Navegação para `/login` limpa estado anterior
+- Re-login com mesmas credenciais
+- Após login, redirecionamento direto pra EmpresaPage (sem cair em "Sem empresa vinculada")
+- URL final: /app/empresa
+- Cabeçalho "Dados da Empresa" aparece
 
 ```yaml
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
+    - tipo: navigate
+      url: "/login"
+      timeout: 10000
+    - tipo: wait_for
+      seletor: 'input[type="email"]'
+      timeout: 10000
+    - tipo: fill
+      seletor: 'input[type="email"]'
+      valor_from_contexto: "usuario.email"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'input[type="password"]'
+      valor_from_contexto: "usuario.senha"
+      timeout: 5000
+    - tipo: click
+      seletor: 'button[type="submit"]'
+      timeout: 5000
+    - tipo: wait
+      valor_literal: 2000
     - tipo: navigate
       url: "/app/empresa"
       timeout: 10000
@@ -308,30 +361,3 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_salvar_e_confirmar"
 ```
 
-## Passo 10 — Vincular empresa ao usuário (FA-07.B via API)
-
-Após criar e salvar a empresa, é necessário criar o vínculo formal `usuario_empresa` para que o user seja considerado "com empresa vinculada" em sessões futuras (próximos UCs do mesmo teste e próximos testes). Sem este vínculo, o user (mesmo super) cai na tela "Você não tem empresas vinculadas" no próximo login.
-
-Este passo executa **FA-07.B do UC-F01** via API direta (`POST /api/admin/associar-empresa`), sem precisar navegar pela tela de Admin → Associar Empresa.
-
-**Observe criticamente:**
-- Network tab mostra POST `/api/admin/associar-empresa` com status 200
-- Response retorna `{"message": "Vínculo criado/atualizado", "vinculo": {...}}`
-- Browser não navega — chamada acontece em background
-- Próximo login do user vai cair direto na EmpresaPage (não em "Sem empresa vinculada")
-
-```yaml
-id: passo_10_vincular_empresa_ao_user
-acao:
-  sequencia:
-    - tipo: chamar_api
-      url: "/api/admin/associar-empresa"
-      metodo: POST
-      payload_json:
-        user_id: "from:contexto.usuario.id"
-        cnpj: "from:dataset.empresa.cnpj"
-        papel: "operador"
-        acao: "vincular"
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_vincular_empresa"
-```
