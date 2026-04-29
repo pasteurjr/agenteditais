@@ -117,6 +117,13 @@ def _executar_acao(
     elif acao.tipo == "click":
         if not seletor:
             raise ValueError("click sem seletor")
+        # Garante que elemento esta visivel no viewport antes de clicar.
+        # Sem isso, elementos abaixo da dobra recebem o click em coordenada
+        # fora da area visivel — onClick do React nao dispara.
+        try:
+            page.locator(seletor).first.scroll_into_view_if_needed(timeout=acao.timeout)
+        except Exception:
+            pass  # se falhar, tenta clicar direto
         page.click(seletor, timeout=acao.timeout)
     elif acao.tipo == "fill":
         if not seletor:
@@ -375,7 +382,7 @@ def main():
         browser: Browser = p.chromium.launch(headless=False, slow_mo=args.slow_mo)
         context = browser.new_context(
             base_url=tut.base_url,
-            viewport={"width": 1400, "height": 900},
+            viewport={"width": 1600, "height": 1000},
         )
         page = context.new_page()
 

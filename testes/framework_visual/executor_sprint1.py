@@ -548,7 +548,7 @@ def main():
             browser: Browser = p.chromium.launch(headless=False, slow_mo=args.slow_mo)
             context = browser.new_context(
                 base_url="http://localhost:5180",
-                viewport={"width": 1400, "height": 900},
+                viewport={"width": 1600, "height": 1000},
             )
             page = context.new_page()
 
