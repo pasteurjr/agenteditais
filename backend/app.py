@@ -1299,7 +1299,7 @@ def minhas_empresas():
         vinculadas = []
         for ue in ues:
             e = ue.empresa
-            if e and e.ativo:  # filtra empresas inativas tambem
+            if e:  # NAO filtra por e.ativo — vinculo ativo eh suficiente
                 vinculadas.append({
                     "id": e.id,
                     "razao_social": e.razao_social,
