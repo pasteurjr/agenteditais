@@ -139,26 +139,50 @@ def _executar_acao(
             raise ValueError("select sem seletor")
         if valor is None:
             raise ValueError("select sem valor")
-        # Pega o locator do select (suporta sintaxe Playwright "X >> nth=N")
         select_loc = page.locator(seletor).first
-        # Tenta value primeiro (UUID/codigo); se falhar, label exato;
-        # se falhar, match parcial nas options.
-        try:
-            select_loc.select_option(value=valor, timeout=acao.timeout)
-        except Exception:
+        # Estrategia: enumera todas as options e busca match.
+        # Ordem: 1) value exato, 2) label/text exato, 3) match parcial.
+        # Tudo em UMA leitura do DOM — sem retries que custam timeout.
+        opcoes = select_loc.locator("option").element_handles()
+        idx_match = None
+        for i, opt in enumerate(opcoes):
             try:
-                select_loc.select_option(label=valor, timeout=acao.timeout)
+                v = opt.get_attribute("value") or ""
+                t = (opt.text_content() or "").strip()
             except Exception:
-                # Match parcial: pega primeira option cujo texto contenha valor
-                opcoes = select_loc.locator("option").all_text_contents()
-                idx = next((i for i, t in enumerate(opcoes) if valor in t), None)
-                if idx is None:
-                    raise ValueError(f"select: nenhuma option contem '{valor}'. Opcoes: {opcoes[:8]}")
-                select_loc.select_option(index=idx, timeout=acao.timeout)
+                continue
+            if v == valor or t == valor:
+                idx_match = i
+                break
+        if idx_match is None:
+            # Match parcial: primeira option cujo texto contenha valor
+            for i, opt in enumerate(opcoes):
+                try:
+                    t = (opt.text_content() or "").strip()
+                except Exception:
+                    continue
+                if valor and valor in t:
+                    idx_match = i
+                    break
+        if idx_match is None:
+            todos = []
+            for opt in opcoes[:8]:
+                try: todos.append((opt.text_content() or "").strip())
+                except: pass
+            raise ValueError(f"select: nenhuma option casa com '{valor}'. Opcoes: {todos}")
+        select_loc.select_option(index=idx_match, timeout=acao.timeout)
     elif acao.tipo == "wait_for":
         if not seletor:
             raise ValueError("wait_for sem seletor")
         page.wait_for_selector(seletor, timeout=acao.timeout)
+    elif acao.tipo == "wait":
+        # Pausa pura em milissegundos — valor_literal (string ou int)
+        ms = acao.valor_literal or valor or 1000
+        try:
+            ms_int = int(ms)
+        except (TypeError, ValueError):
+            ms_int = 1000
+        page.wait_for_timeout(ms_int)
     elif acao.tipo == "evaluate":
         # Executa JavaScript arbitrario na pagina (ex: localStorage.clear(), location.reload())
         # valor_literal contem o codigo JS
