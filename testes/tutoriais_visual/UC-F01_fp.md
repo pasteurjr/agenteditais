@@ -326,18 +326,32 @@ App nao usa rotas URL (React Router) — navegacao eh via estado interno (`curre
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
-    # Garante que secao Configuracoes esta expandida (idempotente — se ja estiver, click reabre)
-    - tipo: wait_for
-      seletor: '.nav-item-label:has-text("Empresa")'
-      timeout: 5000
-    # Clica no item "Empresa" (Configuracoes > Empresa)
+    # IMPORTANTE: a sidebar tem 4 itens contendo a palavra "Empresa":
+    #   - "Associar Empresa/Usuario" (CADASTROS, button.nav-item, superOnly)
+    #   - "Empresa" (CADASTROS, button.nav-subsection-header — abre subsecao com Documentos/Certidoes/etc)
+    #   - "Empresa" (CONFIGURACOES, button.nav-item — navega pra EmpresaPage)  <-- ESTE
+    #   - "Selecionar Empresa" (CONFIGURACOES, button.nav-item)
+    # Por isso o seletor precisa: (a) usar button.nav-item (nao nav-subsection-header)
+    # e (b) usar match exato ":text-is" pra evitar "Associar Empresa/..." ou "Selecionar Empresa".
+    #
+    # A secao Configuracoes pode nao estar expandida agora — o passo 04c expandiu, mas se
+    # estava expandida antes, o click colapsou. wait_for com timeout curto detecta isso e
+    # o click subsequente em '.nav-section-label:has-text("Configuracoes")' garante expansao.
+    #
+    # Estrategia: tenta clicar direto. Se item nao visivel, abre Configuracoes primeiro.
     - tipo: click
-      seletor: '.nav-item-label:has-text("Empresa")'
-      alternativa: 'button.nav-item:has(.nav-item-label:has-text("Empresa"))'
+      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
+      timeout: 5000
+    - tipo: wait_for
+      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
+      timeout: 5000
+    # Clica no item "Empresa" da seccao Configuracoes (text-is = match exato)
+    - tipo: click
+      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
       timeout: 5000
     # Aguarda EmpresaPage carregar
     - tipo: wait_for
-      seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+      seletor: 'h1:has-text("Dados da Empresa")'
       timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_05_selecionar_empresa"
 ```
