@@ -167,37 +167,44 @@ def _executar_acao(
         except Exception:
             jwt_token = None
 
-        # Usa request context do browser — cookies sao enviados automaticamente
-        ctx_req = page.context.request
-        headers = {}
+        # NAO usa page.context.request — Playwright Python tem bug que sobrescreve
+        # Content-Type pra text/plain quando data=bytes/str, ignorando o header.
+        # Solucao: requests Python externo + JWT do localStorage + base_url do browser.
+        import requests as _req
+        # base_url: pega da primeira parte da URL atual do browser
+        try:
+            current_url = page.url  # ex: http://localhost:5180/app/empresa
+            # extrai scheme://host:port
+            from urllib.parse import urlparse
+            u = urlparse(current_url)
+            base_url = f"{u.scheme}://{u.netloc}"
+        except Exception:
+            base_url = "http://localhost:5180"
+        url_completa = url_full if url_full.startswith("http") else f"{base_url}{url_full}"
+
+        headers = {"Content-Type": "application/json"}
         if jwt_token:
             headers["Authorization"] = f"Bearer {jwt_token}"
 
-        # Playwright Python: param 'data' (str/bytes) -> serializa raw com Content-Type da escolha do header.
-        # Param 'form' -> application/x-www-form-urlencoded.
-        # Param 'multipart' -> multipart/form-data.
-        # Pra JSON: use bytes serializados + header Content-Type explicito. NUNCA passe dict em 'data='.
-        kwargs = {"timeout": acao.timeout}
-        if payload is not None:
-            import json as _json
-            headers["Content-Type"] = "application/json"
-            kwargs["data"] = _json.dumps(payload).encode("utf-8")
-        kwargs["headers"] = headers
+        timeout_s = acao.timeout / 1000.0  # ms -> segundos
 
-        if metodo == "POST":
-            resp = ctx_req.post(url_full, **kwargs)
-        elif metodo == "PUT":
-            resp = ctx_req.put(url_full, **kwargs)
-        elif metodo == "DELETE":
-            resp = ctx_req.delete(url_full, **kwargs)
-        elif metodo == "GET":
-            resp = ctx_req.get(url_full, **kwargs)
-        else:
-            raise ValueError(f"Metodo HTTP nao suportado: {metodo}")
-        if resp.status >= 400:
-            try: body = resp.text()
-            except: body = "<no body>"
-            raise RuntimeError(f"chamar_api {metodo} {url_full} -> {resp.status}: {body[:300]}")
+        try:
+            if metodo == "POST":
+                resp = _req.post(url_completa, json=payload, headers=headers, timeout=timeout_s)
+            elif metodo == "PUT":
+                resp = _req.put(url_completa, json=payload, headers=headers, timeout=timeout_s)
+            elif metodo == "DELETE":
+                resp = _req.delete(url_completa, json=payload, headers=headers, timeout=timeout_s)
+            elif metodo == "GET":
+                resp = _req.get(url_completa, headers=headers, timeout=timeout_s)
+            else:
+                raise ValueError(f"Metodo HTTP nao suportado: {metodo}")
+        except _req.exceptions.RequestException as e:
+            raise RuntimeError(f"chamar_api {metodo} {url_completa} -> erro de rede: {e}")
+
+        if resp.status_code >= 400:
+            body = resp.text[:300] if resp.text else "<no body>"
+            raise RuntimeError(f"chamar_api {metodo} {url_completa} -> {resp.status_code}: {body}")
     else:
         raise ValueError(f"Tipo de acao nao suportado: {acao.tipo}")
 
