@@ -344,8 +344,19 @@ export function CrudPage({ config }: CrudPageProps) {
     setSuccessMsg(null);
     const emptyForm: Record<string, unknown> = {};
     fields.forEach((f) => {
-      if (f.type === "boolean") emptyForm[f.name] = false;
-      else emptyForm[f.name] = "";
+      if (f.type === "boolean") {
+        // Campo "ativo" (e flags semelhantes de visibilidade) deve nascer TRUE.
+        // Antes, todos os booleans nasciam false, fazendo CRUD criar empresa
+        // com ativo=0 (sumia da listagem em telas que filtram por ativo=1).
+        const nomeLower = f.name.toLowerCase();
+        if (nomeLower === "ativo" || nomeLower === "active" || nomeLower === "is_active") {
+          emptyForm[f.name] = true;
+        } else {
+          emptyForm[f.name] = false;
+        }
+      } else {
+        emptyForm[f.name] = "";
+      }
     });
     // Auto-fill parent FK when creating child record
     if (parentFk && selectedParentId) {
