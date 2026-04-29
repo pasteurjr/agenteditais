@@ -190,13 +190,13 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04_salvar_no_crud"
 ```
 
-## Passo 05 — Confirmar que empresa foi criada e está selecionada
+## Passo 05 — Navegar diretamente para EmpresaPage
 
-Apos criar via CRUD, o sistema seleciona automaticamente a empresa recem-criada (super sem vinculos cai direto nela). Este passo apenas confirma navegando ao Dashboard.
+Apos criar via CRUD, o sistema seleciona automaticamente a empresa recem-criada e libera o shell autenticado. Em vez de passar pela tela "Selecionar Empresa", o tutorial navega direto pra EmpresaPage (rota `/app/empresa`).
 
 **Observe criticamente:**
-- Top bar mostra nome da empresa criada (DEMO + sufixo do ciclo)
-- Sidebar fica completa com todos os módulos
+- URL muda pra /app/empresa
+- Cabecalho "Dados da Empresa" aparece
 - Sem mensagem de "selecionar empresa"
 
 ```yaml
@@ -204,37 +204,30 @@ id: passo_05_selecionar_empresa
 acao:
   sequencia:
     - tipo: navigate
-      url: "/app/dashboard"
+      url: "/app/empresa"
       timeout: 10000
     - tipo: wait_for
-      seletor: '.top-bar-empresa, text=Dashboard, .sidebar'
-      timeout: 10000
+      seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+      timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_05_selecionar_empresa"
 ```
 
-## Passo 06 — Navegar até EmpresaPage (Configurações > Empresa)
+## Passo 06 — Confirmar EmpresaPage carregada
 
-O browser clica no menu lateral Configurações → Empresa para acessar a EmpresaPage completa.
+A EmpresaPage ja foi alcancada no passo 5. Este passo apenas confirma visualmente os elementos esperados.
 
 **Observe criticamente:**
-- Cabeçalho exibe ícone Building + título "Dados da Empresa"
-- Subtítulo: "Cadastro de informações e documentos da empresa"
-- Card "Informações Cadastrais" carregado com Razão e CNPJ já preenchidos (vieram do CRUD)
-- Form com 4 seções: Dados Básicos, Presença Digital, Endereço, Emails/Telefones
+- Cabecalho exibe titulo "Dados da Empresa"
+- Card "Informacoes Cadastrais" carregado com Razao e CNPJ ja preenchidos (vieram do CRUD)
+- Form com 4 secoes: Dados Basicos, Presenca Digital, Endereco, Emails/Telefones
 
 ```yaml
 id: passo_06_navegar_empresa_page
 acao:
   sequencia:
-    - tipo: click
-      seletor: '.nav-section-header:has-text("Configuracoes"), .nav-section-header:has-text("Configurações")'
-      timeout: 5000
-    - tipo: click
-      seletor: '.nav-item-label:has-text("Empresa")'
-      timeout: 5000
     - tipo: wait_for
-      seletor: 'label:has-text("Razao Social")'
-      timeout: 10000
+      seletor: 'label:has-text("Razão Social"), label:has-text("Razao Social")'
+      timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_06_navegar_empresa_page"
 ```
 
