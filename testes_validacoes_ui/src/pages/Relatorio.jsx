@@ -34,9 +34,18 @@ export default function Relatorio() {
               <tr><th>Concluído em</th><td>{teste.concluido_em || '-'}</td></tr>
             </tbody>
           </table>
-          <div className="actions">
+          <div className="actions" style={{flexWrap:'wrap', gap:'0.5em'}}>
             <Link to="/"><button className="secondary">← Home</button></Link>
             <Link to={`/teste/${id}`}><button>Ver Teste</button></Link>
+            <a href={api.relatorioMdUrl(id)} download>
+              <button title="Markdown (texto)">📝 .md</button>
+            </a>
+            <a href={api.relatorioDocxUrl(id)} download>
+              <button title="Word (com screenshots)">📄 .docx</button>
+            </a>
+            <a href={api.relatorioPdfUrl(id)} download>
+              <button title="PDF (com screenshots)">📑 .pdf</button>
+            </a>
           </div>
         </div>
 

@@ -46,6 +46,9 @@ export const api = {
   iniciarTeste:  (id)          => req(`/api/testes/${id}/iniciar`, {method: "POST"}),
   cancelarTeste: (id)          => req(`/api/testes/${id}/cancelar`, {method: "POST"}),
   relatorio:     (id)          => req(`/api/testes/${id}/relatorio`),
+  relatorioMdUrl:   (id)        => `/api/testes/${id}/relatorio.md`,
+  relatorioPdfUrl:  (id)        => `/api/testes/${id}/relatorio.pdf`,
+  relatorioDocxUrl: (id)        => `/api/testes/${id}/relatorio.docx`,
 
   // helper
   screenshotUrl: (path)        => `/api/screenshot?path=${encodeURIComponent(path)}`,

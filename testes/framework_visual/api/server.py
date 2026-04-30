@@ -23,6 +23,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 import sys
@@ -963,63 +964,144 @@ def api_teste_cancelar(teste_id):
         db.close()
 
 
+def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
+    """Monta o dict do relatorio a partir do banco. Retorna None se teste nao encontrado.
+    Usa em /relatorio (JSON) e nos exporters (md/docx/pdf)."""
+    t = db.query(Teste).filter_by(id=teste_id).first()
+    if not t:
+        return None
+    execs = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id).order_by(ExecucaoCasoDeTeste.ordem).all()
+    result_execs = []
+    for e in execs:
+        ct = e.caso_de_teste
+        passos = db.query(PassoExecucao).filter_by(execucao_id=e.id).order_by(PassoExecucao.ordem).all()
+        passos_view = []
+        for p in passos:
+            obs = db.query(Observacao).filter_by(passo_execucao_id=p.id).order_by(Observacao.criado_em).all()
+            passos_view.append({
+                "ordem": p.ordem,
+                "passo_id": p.passo_id,
+                "passo_titulo": p.passo_titulo,
+                "veredito_automatico": p.veredito_automatico,
+                "veredicto_po": p.veredicto_po,
+                "duracao_ms": p.duracao_ms,
+                "screenshot_antes_path": p.screenshot_antes_path,
+                "screenshot_depois_path": p.screenshot_depois_path,
+                "correcao_necessaria": bool(p.correcao_necessaria),
+                "correcao_descricao": p.correcao_descricao,
+                "observacoes": [{"texto": o.texto, "criado_em": o.criado_em.isoformat()} for o in obs],
+            })
+        result_execs.append({
+            "ordem": e.ordem,
+            "ct_id": ct.ct_id if ct else "?",
+            "ct_descricao": ct.descricao if ct else "",
+            "uc_id": ct.caso_de_uso.uc_id if ct and ct.caso_de_uso else "?",
+            "uc_nome": ct.caso_de_uso.nome if ct and ct.caso_de_uso else "",
+            "estado": e.estado,
+            "veredito_automatico": e.veredito_automatico,
+            "veredicto_po": e.veredicto_po,
+            "duracao_ms": e.duracao_ms,
+            "passos": passos_view,
+        })
+    rel = db.query(Relatorio).filter_by(teste_id=t.id).order_by(desc(Relatorio.gerado_em)).first()
+    return {
+        "teste": {
+            "id": t.id, "titulo": t.titulo, "estado": t.estado,
+            "ciclo_id": t.ciclo_id,
+            "sprint_nome": t.sprint.nome if t.sprint else "-",
+            "tester": t.user.email if t.user else "-",
+            "iniciado_em": t.iniciado_em.isoformat() if t.iniciado_em else None,
+            "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
+            "user_id": t.user_id,
+        },
+        "execucoes": result_execs,
+        "relatorio_md": rel.conteudo_md if rel else None,
+    }
+
+
+def _slug_titulo(s: str) -> str:
+    import re
+    s = re.sub(r"[^A-Za-z0-9_-]+", "_", (s or "relatorio").strip())
+    return s[:80].strip("_") or "relatorio"
+
+
 @app.route("/api/testes/<teste_id>/relatorio")
 @login_required
 def api_teste_relatorio(teste_id):
     db = get_db()
     try:
-        t = db.query(Teste).filter_by(id=teste_id).first()
-        if not t:
+        d = _montar_relatorio_dict(db, teste_id)
+        if d is None:
             return jsonify({"error": "nao encontrado"}), 404
-        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
             return jsonify({"error": "acesso negado"}), 403
+        # Nao expor user_id no JSON publico
+        d["teste"].pop("user_id", None)
+        return jsonify(d)
+    finally:
+        db.close()
 
-        execs = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id).order_by(ExecucaoCasoDeTeste.ordem).all()
-        result_execs = []
-        for e in execs:
-            ct = e.caso_de_teste
-            passos = db.query(PassoExecucao).filter_by(execucao_id=e.id).order_by(PassoExecucao.ordem).all()
-            passos_view = []
-            for p in passos:
-                obs = db.query(Observacao).filter_by(passo_execucao_id=p.id).order_by(Observacao.criado_em).all()
-                passos_view.append({
-                    "ordem": p.ordem,
-                    "passo_id": p.passo_id,
-                    "passo_titulo": p.passo_titulo,
-                    "veredito_automatico": p.veredito_automatico,
-                    "veredicto_po": p.veredicto_po,
-                    "duracao_ms": p.duracao_ms,
-                    "screenshot_antes_path": p.screenshot_antes_path,
-                    "screenshot_depois_path": p.screenshot_depois_path,
-                    "correcao_necessaria": bool(p.correcao_necessaria),
-                    "correcao_descricao": p.correcao_descricao,
-                    "observacoes": [{"texto": o.texto, "criado_em": o.criado_em.isoformat()} for o in obs],
-                })
-            result_execs.append({
-                "ordem": e.ordem,
-                "ct_id": ct.ct_id if ct else "?",
-                "ct_descricao": ct.descricao if ct else "",
-                "uc_id": ct.caso_de_uso.uc_id if ct and ct.caso_de_uso else "?",
-                "uc_nome": ct.caso_de_uso.nome if ct and ct.caso_de_uso else "",
-                "estado": e.estado,
-                "veredito_automatico": e.veredito_automatico,
-                "veredicto_po": e.veredicto_po,
-                "duracao_ms": e.duracao_ms,
-                "passos": passos_view,
-            })
-        rel = db.query(Relatorio).filter_by(teste_id=t.id).order_by(desc(Relatorio.gerado_em)).first()
-        return jsonify({
-            "teste": {
-                "id": t.id, "titulo": t.titulo, "estado": t.estado,
-                "ciclo_id": t.ciclo_id,
-                "sprint_nome": t.sprint.nome if t.sprint else "-",
-                "tester": t.user.email if t.user else "-",
-                "iniciado_em": t.iniciado_em.isoformat() if t.iniciado_em else None,
-                "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
-            },
-            "execucoes": result_execs,
-            "relatorio_md": rel.conteudo_md if rel else None,
-        })
+
+@app.route("/api/testes/<teste_id>/relatorio.md")
+@login_required
+def api_teste_relatorio_md(teste_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api")); from exporters import gerar_md
+    db = get_db()
+    try:
+        d = _montar_relatorio_dict(db, teste_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_md(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_{teste_id[:8]}.md"
+        return send_file(io.BytesIO(body), mimetype="text/markdown; charset=utf-8",
+                         as_attachment=True, download_name=nome)
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/relatorio.docx")
+@login_required
+def api_teste_relatorio_docx(teste_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api")); from exporters import gerar_docx
+    db = get_db()
+    try:
+        d = _montar_relatorio_dict(db, teste_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_docx(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_{teste_id[:8]}.docx"
+        return send_file(io.BytesIO(body),
+                         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                         as_attachment=True, download_name=nome)
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/relatorio.pdf")
+@login_required
+def api_teste_relatorio_pdf(teste_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api")); from exporters import gerar_pdf
+    db = get_db()
+    try:
+        d = _montar_relatorio_dict(db, teste_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_pdf(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_{teste_id[:8]}.pdf"
+        return send_file(io.BytesIO(body), mimetype="application/pdf",
+                         as_attachment=True, download_name=nome)
     finally:
         db.close()
 
