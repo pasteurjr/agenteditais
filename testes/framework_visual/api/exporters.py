@@ -13,6 +13,77 @@ from typing import Any
 _PROJECT = Path(__file__).resolve().parents[3]
 
 
+def _resumir_acao(a: dict) -> str:
+    """Gera linha humana de uma acao do tutorial.
+
+    Ex: {"tipo":"click","seletor":"button:has-text('Salvar')"} ->
+        'CLICK em "button:has-text(...)"'
+    """
+    if not isinstance(a, dict):
+        return str(a)
+    tipo = (a.get("tipo") or "?").upper()
+    seletor = a.get("seletor")
+    alt = a.get("alternativa")
+    valor = a.get("valor_literal")
+    valor_ds = a.get("valor_from_dataset")
+    valor_ctx = a.get("valor_from_contexto")
+    url = a.get("url") or a.get("destino")
+    timeout = a.get("timeout")
+    sub = a.get("sequencia")
+
+    partes = [tipo]
+    if sub and isinstance(sub, list):
+        # Acao composta: lista cada subacao
+        partes.append(f"(sequencia de {len(sub)} sub-acoes)")
+        return " ".join(partes)
+
+    if tipo in ("CLICK", "WAIT_FOR") and seletor:
+        partes.append(f'em "{seletor[:120]}"')
+    elif tipo == "FILL" and seletor:
+        v_str = valor if valor is not None else (
+            f"<dataset:{valor_ds}>" if valor_ds else
+            f"<contexto:{valor_ctx}>" if valor_ctx else "?"
+        )
+        partes.append(f'"{seletor[:80]}" com "{v_str}"')
+    elif tipo == "SELECT" and seletor:
+        v_str = valor if valor is not None else (
+            f"<dataset:{valor_ds}>" if valor_ds else "?"
+        )
+        partes.append(f'"{seletor[:80]}" -> "{v_str}"')
+    elif tipo in ("NAVIGATE", "NAVEGACAO", "GOTO") and url:
+        partes.append(f"url={url}")
+    elif tipo == "WAIT":
+        partes.append(f"{valor or '?'} ms")
+    elif tipo == "EVALUATE":
+        # JS arbitrario - so mostra primeiras linhas
+        codigo = valor or ""
+        primeira = next((l.strip() for l in codigo.splitlines() if l.strip()), "")
+        partes.append(f"JS: {primeira[:100]}")
+    elif tipo == "UPLOAD_ARQUIVO" and seletor:
+        partes.append(f'em "{seletor[:80]}"')
+    elif tipo == "CHAMAR_API" and url:
+        metodo = a.get("metodo", "POST")
+        partes.append(f"{metodo} {url}")
+    elif seletor:
+        partes.append(f'em "{seletor[:120]}"')
+    if alt and seletor:
+        partes.append(f"(alternativa: \"{alt[:60]}\")")
+    if timeout:
+        partes.append(f"[t={timeout}ms]")
+    return " ".join(partes)
+
+
+def _limpar_descricao_painel(s: str | None) -> str:
+    """Remove o cabecalho '## Passo NN — titulo' (redundante com h4) e mantem o resto."""
+    if not s:
+        return ""
+    linhas = s.strip().splitlines()
+    # Pula primeira linha se for "## Passo ..."
+    while linhas and (linhas[0].strip().startswith("## ") or not linhas[0].strip()):
+        linhas.pop(0)
+    return "\n".join(linhas).strip()
+
+
 # ============================================================
 # Markdown
 # ============================================================
@@ -85,6 +156,37 @@ def gerar_md(rel: dict, screenshot_url_fn=None) -> bytes:
             if p.get("correcao_necessaria"):
                 lines.append(f"- ⚠ Correcao necessaria: {p.get('correcao_descricao','(sem descricao)')}")
             lines.append("")
+
+            # === Instrucao do passo (descricao_painel) ===
+            descricao = _limpar_descricao_painel(p.get("descricao_painel"))
+            if descricao:
+                lines.append("**Instrucao do passo (o que o tester vai ver):**")
+                lines.append("")
+                lines.append("> " + descricao.replace("\n", "\n> "))
+                lines.append("")
+
+            # === O que foi feito (acoes do tutorial) ===
+            acoes = p.get("acoes") or []
+            if acoes:
+                lines.append("**O que foi clicado/digitado neste passo:**")
+                lines.append("")
+                for i, a in enumerate(acoes, 1):
+                    if isinstance(a, dict) and isinstance(a.get("sequencia"), list):
+                        lines.append(f"{i}. **{(a.get('tipo') or 'sequencia').upper()}** — sequencia de {len(a['sequencia'])} sub-acoes:")
+                        for j, sub in enumerate(a["sequencia"], 1):
+                            lines.append(f"   {i}.{j}. {_resumir_acao(sub)}")
+                    else:
+                        lines.append(f"{i}. {_resumir_acao(a)}")
+                lines.append("")
+
+            # === Pontos a observar na tela ===
+            pontos = p.get("pontos_observacao") or []
+            if pontos:
+                lines.append("**Pontos a observar na tela:**")
+                lines.append("")
+                for ponto in pontos:
+                    lines.append(f"- {ponto}")
+                lines.append("")
 
             # Screenshots
             for label, key in [("Antes", "screenshot_antes_path"), ("Depois", "screenshot_depois_path")]:
@@ -213,6 +315,34 @@ def gerar_docx(rel: dict) -> bytes:
                 p = doc.add_paragraph()
                 p.add_run(f"⚠ Correcao: {pp.get('correcao_descricao','-')}").bold = True
 
+            # === Instrucao do passo ===
+            descricao = _limpar_descricao_painel(pp.get("descricao_painel"))
+            if descricao:
+                p = doc.add_paragraph()
+                p.add_run("Instrucao do passo:").bold = True
+                doc.add_paragraph(descricao, style="Intense Quote")
+
+            # === O que foi feito (acoes) ===
+            acoes = pp.get("acoes") or []
+            if acoes:
+                p = doc.add_paragraph()
+                p.add_run("O que foi clicado/digitado:").bold = True
+                for i, a in enumerate(acoes, 1):
+                    if isinstance(a, dict) and isinstance(a.get("sequencia"), list):
+                        doc.add_paragraph(f"{i}. {(a.get('tipo') or 'sequencia').upper()} — {len(a['sequencia'])} sub-acoes:", style="List Number")
+                        for j, sub in enumerate(a["sequencia"], 1):
+                            doc.add_paragraph(f"  {i}.{j}. {_resumir_acao(sub)}", style="List Bullet 2")
+                    else:
+                        doc.add_paragraph(f"{i}. {_resumir_acao(a)}", style="List Number")
+
+            # === Pontos a observar ===
+            pontos = pp.get("pontos_observacao") or []
+            if pontos:
+                p = doc.add_paragraph()
+                p.add_run("Pontos a observar na tela:").bold = True
+                for ponto in pontos:
+                    doc.add_paragraph(ponto, style="List Bullet")
+
             # Screenshots — embutidos
             for label, key in [("Antes", "screenshot_antes_path"), ("Depois", "screenshot_depois_path")]:
                 ss = pp.get(key)
@@ -306,6 +436,14 @@ def gerar_pdf(rel: dict) -> bytes:
   .ss-label { font-size: 8pt; color: #666; font-weight: bold; }
   .obs { background: #f0f4ff; border-left: 3px solid #4a6aaa; padding: 4px 8px; margin: 4px 0; font-size: 9pt; }
   .obs-when { color: #888; font-size: 8pt; margin-right: 6px; }
+  .bloco-label { font-weight: bold; color: #1a1a40; margin: 6px 0 2px 0; font-size: 9pt; }
+  .instrucao { background: #fafafa; border-left: 3px solid #888; padding: 4px 10px; margin: 6px 0; font-size: 9pt; }
+  .instrucao p { margin: 4px 0; }
+  .acoes { background: #f4f7f4; border-left: 3px solid #4a8a4a; padding: 4px 10px; margin: 6px 0; font-size: 8.5pt; }
+  .acoes ol { padding-left: 20px; margin: 4px 0; }
+  .acoes code { background: #fff; border: 1px solid #ddd; padding: 0 4px; font-size: 8pt; }
+  .pontos { background: #fff8f0; border-left: 3px solid #c08040; padding: 4px 10px; margin: 6px 0; font-size: 9pt; }
+  .pontos ul { padding-left: 20px; margin: 4px 0; }
   .passo-block { page-break-inside: avoid; margin-bottom: 1em; padding: 6px; border-left: 3px solid #ccc; }
   .passo-aprovado { border-left-color: #4a8a4a; }
   .passo-reprovado { border-left-color: #8a4a4a; }
@@ -372,6 +510,43 @@ def gerar_pdf(rel: dict) -> bytes:
             )
             if pp.get("correcao_necessaria"):
                 html_parts.append(f"<p><strong>⚠ Correcao:</strong> {_esc(pp.get('correcao_descricao'))}</p>")
+
+            # === Instrucao do passo ===
+            descricao = _limpar_descricao_painel(pp.get("descricao_painel"))
+            if descricao:
+                html_parts.append('<div class="instrucao">')
+                html_parts.append('<div class="bloco-label">Instrucao do passo:</div>')
+                # Converte \n em <br> e preserva markdown leve
+                desc_html = _esc(descricao).replace("\n\n", "</p><p>").replace("\n", "<br>")
+                html_parts.append(f"<p>{desc_html}</p>")
+                html_parts.append("</div>")
+
+            # === O que foi feito ===
+            acoes = pp.get("acoes") or []
+            if acoes:
+                html_parts.append('<div class="acoes">')
+                html_parts.append('<div class="bloco-label">O que foi clicado/digitado:</div>')
+                html_parts.append("<ol>")
+                for a in acoes:
+                    if isinstance(a, dict) and isinstance(a.get("sequencia"), list):
+                        html_parts.append(f"<li><strong>{_esc((a.get('tipo') or 'sequencia').upper())}</strong> — sequencia de {len(a['sequencia'])} sub-acoes:")
+                        html_parts.append("<ol>")
+                        for sub in a["sequencia"]:
+                            html_parts.append(f"<li><code>{_esc(_resumir_acao(sub))}</code></li>")
+                        html_parts.append("</ol></li>")
+                    else:
+                        html_parts.append(f"<li><code>{_esc(_resumir_acao(a))}</code></li>")
+                html_parts.append("</ol></div>")
+
+            # === Pontos a observar ===
+            pontos = pp.get("pontos_observacao") or []
+            if pontos:
+                html_parts.append('<div class="pontos">')
+                html_parts.append('<div class="bloco-label">Pontos a observar na tela:</div>')
+                html_parts.append("<ul>")
+                for ponto in pontos:
+                    html_parts.append(f"<li>{_esc(ponto)}</li>")
+                html_parts.append("</ul></div>")
 
             # Screenshots
             ss_a = _img_src(pp.get("screenshot_antes_path"))

@@ -967,6 +967,7 @@ def api_teste_cancelar(teste_id):
 def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
     """Monta o dict do relatorio a partir do banco. Retorna None se teste nao encontrado.
     Usa em /relatorio (JSON) e nos exporters (md/docx/pdf)."""
+    import json as _json
     t = db.query(Teste).filter_by(id=teste_id).first()
     if not t:
         return None
@@ -975,9 +976,41 @@ def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
     for e in execs:
         ct = e.caso_de_teste
         passos = db.query(PassoExecucao).filter_by(execucao_id=e.id).order_by(PassoExecucao.ordem).all()
+        # Mapa de passo_tutorial por (ct_id, passo_id) pra incluir descricao_painel + pontos + acoes
+        tut_map = {}
+        if ct:
+            for pt in db.query(PassoTutorial).filter_by(caso_de_teste_id=ct.id).all():
+                tut_map[pt.passo_id] = pt
         passos_view = []
         for p in passos:
             obs = db.query(Observacao).filter_by(passo_execucao_id=p.id).order_by(Observacao.criado_em).all()
+            tut = tut_map.get(p.passo_id)
+            # pontos_observacao e acoes_json: SQLAlchemy ja deserializa colunas JSON
+            # automaticamente (vem como list/dict). Mas se o type da coluna for TEXT
+            # podem vir como string. Trata os dois casos.
+            pontos_list = []
+            acoes_list = []
+            descricao_painel = None
+            if tut:
+                descricao_painel = tut.descricao_painel
+                raw_pontos = tut.pontos_observacao
+                if isinstance(raw_pontos, list):
+                    pontos_list = raw_pontos
+                elif isinstance(raw_pontos, str) and raw_pontos.strip():
+                    try:
+                        v = _json.loads(raw_pontos)
+                        pontos_list = v if isinstance(v, list) else []
+                    except Exception:
+                        pontos_list = []
+                raw_acoes = tut.acoes_json
+                if isinstance(raw_acoes, list):
+                    acoes_list = raw_acoes
+                elif isinstance(raw_acoes, str) and raw_acoes.strip():
+                    try:
+                        v = _json.loads(raw_acoes)
+                        acoes_list = v if isinstance(v, list) else []
+                    except Exception:
+                        acoes_list = []
             passos_view.append({
                 "ordem": p.ordem,
                 "passo_id": p.passo_id,
@@ -990,6 +1023,10 @@ def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
                 "correcao_necessaria": bool(p.correcao_necessaria),
                 "correcao_descricao": p.correcao_descricao,
                 "observacoes": [{"texto": o.texto, "criado_em": o.criado_em.isoformat()} for o in obs],
+                # Novo: instrucoes do tutorial
+                "descricao_painel": descricao_painel,
+                "pontos_observacao": pontos_list,
+                "acoes": acoes_list,
             })
         result_execs.append({
             "ordem": e.ordem,
