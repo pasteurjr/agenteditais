@@ -123,6 +123,16 @@ O browser abre o select "Area de Atuacao Padrao" (populado pelas areas criadas e
 id: passo_03_selecionar_area_padrao
 acao:
   sequencia:
+    # Scroll pra label "Area de Atuacao Padrao" ficar visivel no viewport
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const labels = [...document.querySelectorAll('label')]
+            .filter(l => /Area de Atuacao Padrao|Área de Atuação Padrão/.test(l.textContent));
+          if (labels.length === 0) throw new Error('label Area de Atuacao Padrao nao encontrada');
+          labels[0].scrollIntoView({block: 'center', behavior: 'instant'});
+          return 'scrolled';
+        }
     - tipo: wait_for
       seletor: 'label:has-text("Area de Atuacao Padrao") ~ select, label:has-text("Area de Atuacao Padrao") + select, label:has-text("Área de Atuação Padrão") ~ select, label:has-text("Área de Atuação Padrão") + select'
       timeout: 5000
@@ -130,6 +140,20 @@ acao:
       seletor: 'label:has-text("Area de Atuacao Padrao") ~ select, label:has-text("Area de Atuacao Padrao") + select, label:has-text("Área de Atuação Padrão") ~ select, label:has-text("Área de Atuação Padrão") + select'
       valor_literal: "Equipamentos Médico-Hospitalares"
       timeout: 5000
+    # Verifica que o select tem a area certa selecionada (texto da option ativa)
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const labels = [...document.querySelectorAll('label')]
+            .filter(l => /Area de Atuacao Padrao|Área de Atuação Padrão/.test(l.textContent));
+          const sel = labels[0].parentElement.querySelector('select') || labels[0].nextElementSibling;
+          const opt = sel.options[sel.selectedIndex];
+          const txt = (opt && opt.textContent || '').trim();
+          if (!/Equipamentos Médico-Hospitalares|Equipamentos Medico-Hospitalares/.test(txt)) {
+            throw new Error('select area_padrao NAO esta com Equipamentos Medico-Hospitalares — esta com: ' + txt);
+          }
+          return 'area selecionada: ' + txt;
+        }
 validacao_ref: "testes/casos_de_teste/UC-F02_visual_fp.yaml#passo_03_selecionar_area_padrao"
 ```
 
