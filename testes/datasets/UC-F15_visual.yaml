@@ -1,0 +1,28 @@
+uc_id: UC-F15
+trilha: visual
+ciclo_id_default: piloto-ucf15
+
+# UC-F15 — Configurar parametros comerciais, regioes e modalidades
+# Aba "Comercial" da ParametrizacoesPage. 5 cards com Salvar individual.
+# Tutorial cobre: Tempo de Entrega + Mercado TAM/SAM/SOM + Custos e Margens.
+# (NAO cobre estados nem modalidades para manter tutorial sucinto)
+#
+# Pre-condicoes:
+#  - parametros_score empresa-scoped (frontend cria via ensureParamScore)
+#  - modalidades_licitacao (7 seed) GLOBAL ja existe
+#  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
+
+prazo_maximo: "30"
+frequencia: "semanal"
+
+tam: "5000000"
+sam: "2000000"
+som: "500000"
+
+markup: "30"
+custos_fixos: "15000"
+frete_base: "500"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

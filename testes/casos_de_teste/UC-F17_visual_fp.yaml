@@ -1,0 +1,22 @@
+uc_id: UC-F17
+variacao: fp
+trilha: visual
+descricao: "Configura notificacoes (email, canais, frequencia) e preferencias (tema, idioma, fuso)"
+
+passos:
+  - id: passo_00_setup_navegar_aba_notificacoes
+    asserts_dom:
+      - selector: 'h1:has-text("Parametrizacoes")'
+      - selector: 'button.tab-panel-tab.active:has(.tab-label:has-text("Notificacoes"))'
+
+  - id: passo_01_preencher_e_salvar_notificacoes
+    asserts_dom:
+      - selector: '.card-title:has-text("Configuracoes de Notificacao"), h3:has-text("Configuracoes de Notificacao")'
+
+  - id: passo_02_navegar_aba_preferencias
+    asserts_dom:
+      - selector: 'button.tab-panel-tab.active:has(.tab-label:has-text("Preferencias"))'
+
+  - id: passo_03_preencher_e_salvar_preferencias
+    asserts_dom:
+      - selector: '.card-title:has-text("Preferencias do Sistema"), h3:has-text("Preferencias do Sistema")'

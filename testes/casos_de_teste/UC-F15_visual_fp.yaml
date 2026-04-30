@@ -1,0 +1,22 @@
+uc_id: UC-F15
+variacao: fp
+trilha: visual
+descricao: "Configura parametros comerciais aba Comercial: prazo/frequencia + mercado (TAM/SAM/SOM) + custos e margens"
+
+passos:
+  - id: passo_00_setup_navegar_aba_comercial
+    asserts_dom:
+      - selector: 'h1:has-text("Parametrizacoes")'
+      - selector: 'button.tab-panel-tab.active:has(.tab-label:has-text("Comercial"))'
+
+  - id: passo_01_preencher_e_salvar_tempo_entrega
+    asserts_dom:
+      - selector: '.card-title:has-text("Tempo de Entrega"), h3:has-text("Tempo de Entrega")'
+
+  - id: passo_02_preencher_e_salvar_mercado
+    asserts_dom:
+      - selector: '.card-title:has-text("Mercado"), h3:has-text("Mercado")'
+
+  - id: passo_03_preencher_e_salvar_custos
+    asserts_dom:
+      - selector: '.card-title:has-text("Custos"), h3:has-text("Custos")'

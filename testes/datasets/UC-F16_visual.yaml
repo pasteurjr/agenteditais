@@ -1,0 +1,19 @@
+uc_id: UC-F16
+trilha: visual
+ciclo_id_default: piloto-ucf16
+
+# UC-F16 — Configurar fontes, palavras-chave e NCMs de busca
+# Aba "Fontes de Busca" da ParametrizacoesPage. 3 cards.
+# Tutorial cobre: Palavras-chave + NCMs. (Fontes Editais sao apenas leitura/toggle)
+#
+# Pre-condicoes:
+#  - parametros_score empresa-scoped (criado pelo F14 OU via ensureParamScore)
+#  - fontes_editais (17 seed) GLOBAL ja existe
+#  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
+
+palavras_chave: "microscopio, centrifuga, autoclave, monitor multiparametrico"
+ncms: "9018.19.90, 3822.19.90"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

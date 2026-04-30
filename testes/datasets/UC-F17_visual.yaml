@@ -1,0 +1,24 @@
+uc_id: UC-F17
+trilha: visual
+ciclo_id_default: piloto-ucf17
+
+# UC-F17 — Configurar notificacoes e preferencias
+# Abas "Notificacoes" e "Preferencias" da ParametrizacoesPage. 1 card cada.
+#
+# Pre-condicoes:
+#  - parametros_score empresa-scoped (criado pelo F14 OU via ensureParamScore)
+#  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
+
+email_notif: "alertas+{{SUFIXO_CICLO}}@demo.com.br"
+notif_email: true
+notif_sistema: true
+notif_sms: false  # SMS opcional
+frequencia_resumo_value: "diario"
+
+tema: "escuro"
+idioma_value: "pt-BR"
+fuso_value: "America/Sao_Paulo"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

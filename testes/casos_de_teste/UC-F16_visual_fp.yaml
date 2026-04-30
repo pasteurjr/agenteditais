@@ -1,0 +1,18 @@
+uc_id: UC-F16
+variacao: fp
+trilha: visual
+descricao: "Configura palavras-chave e NCMs de busca na aba Fontes de Busca"
+
+passos:
+  - id: passo_00_setup_navegar_aba_fontes
+    asserts_dom:
+      - selector: 'h1:has-text("Parametrizacoes")'
+      - selector: 'button.tab-panel-tab.active:has(.tab-label:has-text("Fontes de Busca"))'
+
+  - id: passo_01_editar_e_salvar_palavras_chave
+    asserts_dom:
+      - selector: '.card-title:has-text("Palavras-chave"), h3:has-text("Palavras-chave")'
+
+  - id: passo_02_editar_e_salvar_ncms
+    asserts_dom:
+      - selector: '.card-title:has-text("NCMs"), h3:has-text("NCMs")'
