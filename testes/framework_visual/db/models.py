@@ -154,6 +154,10 @@ class Teste(Base):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     titulo = Column(String(255), nullable=False)
     descricao = Column(Text, nullable=True)
+    # Lista canonica de uc_ids (UUIDs no banco testesvalidacoes) que define o teste.
+    # Persistente entre rodadas — quando "Reiniciar do zero", a nova rodada usa esta
+    # lista para criar suas execucoes_caso_de_teste.
+    uc_ids_canonicos = Column(JSON, nullable=True)
     ciclo_id = Column(String(120), nullable=True)
     estado = Column(
         Enum("criado", "em_andamento", "pausado", "concluido", "cancelado"),
@@ -172,10 +176,60 @@ class Teste(Base):
     sprint = relationship("Sprint")
     execucoes = relationship("ExecucaoCasoDeTeste", back_populates="teste", cascade="all, delete-orphan")
     relatorios = relationship("Relatorio", back_populates="teste", cascade="all, delete-orphan")
+    runs = relationship("RunTeste", back_populates="teste", cascade="all, delete-orphan",
+                        order_by="RunTeste.numero")
 
     __table_args__ = (
         Index("ix_testes_user_estado", "user_id", "estado"),
         Index("ix_testes_sprint", "sprint_id"),
+    )
+
+
+# ============================================================
+# 6b. RunTeste (rodada de execucao de um teste)
+# ============================================================
+class RunTeste(Base):
+    """Cada teste tem N rodadas. Cada rodada eh uma execucao completa
+    com ciclo isolado proprio (novo usuario sintetico + nova empresa DEMO).
+
+    Quando o usuario clica "Reiniciar do zero", uma nova rodada eh criada
+    com numero = max(numero_anterior) + 1 e novo ciclo_id provisionado.
+
+    Quando "Adicionar UCs" eh chamado em rodada pausada/concluida, novos
+    ExecucaoCasoDeTeste sao inseridos APONTANDO PARA A RODADA ATUAL — a
+    rodada NAO eh duplicada.
+
+    Estado da rodada eh independente do estado do teste, mas o estado do
+    teste = estado da rodada atual (a com maior numero).
+    """
+    __tablename__ = "runs_teste"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    teste_id = Column(String(36), ForeignKey("testes.id", ondelete="CASCADE"), nullable=False)
+    numero = Column(Integer, nullable=False)
+    ciclo_id = Column(String(120), nullable=False)
+    user_sintetico_id = Column(String(36), nullable=True)
+    user_sintetico_email = Column(String(255), nullable=True)
+    empresa_demo_cnpj = Column(String(18), nullable=True)
+    empresa_demo_razao = Column(String(255), nullable=True)
+    estado = Column(
+        Enum("criado", "em_andamento", "pausado", "concluido", "cancelado"),
+        nullable=False, default="criado"
+    )
+    pid_executor = Column(Integer, nullable=True)
+    iniciado_em = Column(DateTime, nullable=True)
+    concluido_em = Column(DateTime, nullable=True)
+    criado_em = Column(DateTime, nullable=False, default=datetime.now)
+    atualizado_em = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    teste = relationship("Teste", back_populates="runs")
+    execucoes = relationship("ExecucaoCasoDeTeste", back_populates="run", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("teste_id", "numero", name="uq_run_teste_numero"),
+        Index("idx_run_teste", "teste_id"),
+        Index("idx_run_estado", "estado"),
+        Index("idx_run_ciclo", "ciclo_id"),
     )
 
 
@@ -187,6 +241,10 @@ class ExecucaoCasoDeTeste(Base):
 
     id = Column(String(36), primary_key=True, default=_uuid)
     teste_id = Column(String(36), ForeignKey("testes.id", ondelete="CASCADE"), nullable=False)
+    # run_id eh nullable em data legado (testes pre-migration 007), mas para
+    # qualquer execucao nova deve ser preenchido. Migration 007 popula run_id
+    # apontando para a rodada 1 de cada teste legado.
+    run_id = Column(String(36), ForeignKey("runs_teste.id", ondelete="CASCADE"), nullable=True)
     caso_de_teste_id = Column(String(36), ForeignKey("casos_de_teste.id"), nullable=False)
     ordem = Column(Integer, nullable=False)
     estado = Column(
@@ -206,13 +264,17 @@ class ExecucaoCasoDeTeste(Base):
     detalhes_validacao_json = Column(JSON, nullable=True)
 
     teste = relationship("Teste", back_populates="execucoes")
+    run = relationship("RunTeste", back_populates="execucoes")
     caso_de_teste = relationship("CasoDeTeste")
     passos = relationship("PassoExecucao", back_populates="execucao", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("teste_id", "caso_de_teste_id", name="uq_exec_teste_ct"),
-        UniqueConstraint("teste_id", "ordem", name="uq_exec_teste_ordem"),
+        # Multipla execucao do mesmo CT em rodadas diferentes do mesmo teste
+        # eh permitida, por isso uniqueness inclui run_id (nullable em legado).
+        UniqueConstraint("run_id", "caso_de_teste_id", name="uq_exec_run_ct"),
+        UniqueConstraint("run_id", "ordem", name="uq_exec_run_ordem"),
         Index("ix_exec_estado", "estado"),
+        Index("idx_exec_run", "run_id"),
     )
 
 
