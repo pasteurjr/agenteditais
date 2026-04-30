@@ -608,11 +608,18 @@ def main():
                     break
                 _executar_um_ct(page, db, teste, exec_obj, estado, evid_dir, ciclo_contexto, args)
 
+            # Sinaliza para o painel que terminou — frontend mostra tela de conclusao
+            estado.estado = "terminado"
+
             # Mantem browser 3s pra ver
             try:
                 page.wait_for_timeout(3000)
             except: pass
             browser.close()
+
+            # Mantem painel HTTP vivo por 30s para usuario ver tela de conclusao
+            print(f"[exec] Mantendo painel :{args.porta} vivo por 30s para visualizacao final...")
+            time.sleep(30)
 
         # Estado final da rodada e do teste (sincronizados)
         if estado.evento_parar.is_set():
