@@ -1,0 +1,46 @@
+uc_id: UC-F05
+variacao: fp
+trilha: visual
+descricao: "Cadastro de 3 responsaveis (Representante Legal, Preposto, Responsavel Tecnico) na EmpresaPage Card Responsaveis"
+
+passos:
+  - id: passo_00_setup_navegar_responsaveis
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+      - selector: 'h3:has-text("Responsaveis"), .card-title:has-text("Responsaveis")'
+
+  - id: passo_01_abrir_modal_resp1
+    asserts_dom:
+      - selector: 'div.modal h2:has-text("Adicionar Responsavel")'
+
+  - id: passo_02_preencher_resp1_representante
+    asserts_rede:
+      - url_contem: "/api/crud/empresa-responsaveis"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_03_abrir_modal_resp2
+    asserts_dom:
+      - selector: 'div.modal h2:has-text("Adicionar Responsavel")'
+
+  - id: passo_04_preencher_resp2_preposto
+    asserts_rede:
+      - url_contem: "/api/crud/empresa-responsaveis"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_05_abrir_modal_resp3
+    asserts_dom:
+      - selector: 'div.modal h2:has-text("Adicionar Responsavel")'
+
+  - id: passo_06_preencher_resp3_tecnico
+    asserts_rede:
+      - url_contem: "/api/crud/empresa-responsaveis"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_07_verificar_lista_3_responsaveis
+    asserts_dom:
+      - selector: 'text=Marcos Antonio Ferreira'
+      - selector: 'text=Carla Regina Souza'
+      - selector: 'text=Paulo Roberto Menezes'

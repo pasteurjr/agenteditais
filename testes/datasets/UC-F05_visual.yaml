@@ -1,0 +1,43 @@
+uc_id: UC-F05
+trilha: visual
+ciclo_id_default: piloto-ucf05
+
+# UC-F05 — Gerir responsaveis da empresa
+# Cadastra 3 responsaveis via Modal "Adicionar Responsavel" na EmpresaPage:
+#  1. Representante Legal: Marcos Antonio Ferreira
+#  2. Preposto: Carla Regina Souza
+#  3. Responsavel Tecnico: Dr. Paulo Roberto Menezes
+#
+# Pre-condicoes de DADOS:
+#  - empresa criada (UC-F01) e vinculada (UC-F18)
+#  - valida<N> selecionou empresa ativa (UC-F01 passo 04c)
+#  - empresa_responsaveis comeca vazia (escopo da empresa)
+#
+# IMPORTANTE: O frontend usa value internos (representante_legal, preposto, tecnico)
+# mas exibe labels (Representante Legal, Preposto, Responsavel Tecnico).
+# select_visual no executor faz match parcial em label OU value.
+
+resp1_tipo_value: "representante_legal"
+resp1_tipo_label: "Representante Legal"
+resp1_nome: "Marcos Antonio Ferreira"
+resp1_cargo: "Diretor Executivo"
+resp1_email: "diretor+{{SUFIXO_CICLO}}@demo.com.br"
+resp1_telefone: "(11) 98765-4321"
+
+resp2_tipo_value: "preposto"
+resp2_tipo_label: "Preposto"
+resp2_nome: "Carla Regina Souza"
+resp2_cargo: "Gerente de Licitacoes"
+resp2_email: "preposto+{{SUFIXO_CICLO}}@demo.com.br"
+resp2_telefone: "(11) 3456-7891"
+
+resp3_tipo_value: "tecnico"
+resp3_tipo_label: "Responsavel Tecnico"
+resp3_nome: "Dr. Paulo Roberto Menezes"
+resp3_cargo: "Engenheiro Biomedico"
+resp3_email: "tecnico+{{SUFIXO_CICLO}}@demo.com.br"
+resp3_telefone: "(11) 3456-7892"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
