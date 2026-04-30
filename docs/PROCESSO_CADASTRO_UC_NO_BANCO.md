@@ -39,8 +39,162 @@ Antes de começar a cadastrar um UC, certifique-se de que:
 | O UC tem ao menos 1 CT cadastrado em `casos_de_teste` | seed |
 | Existe documento normativo IEEE 829 dos CTs do UC | `docs/CASOS DE TESTE PARA VALIDACAO SPRINT1 CONJUNTO1 V7.md` |
 | O fluxo está implementado no app | rodar manualmente para confirmar antes de automatizar |
+| **Dependências de dados mapeadas** | ver seção 1.1 abaixo — CRUDs `empresa_scoped=True` nascem vazios |
 
 Se algo falta, **pare e gere o que falta primeiro**. Não tente cadastrar passos para um UC ainda não implementado no app.
+
+---
+
+## 1.1. Dependências de dados (hierarquias e seeds por empresa)
+
+**Regra crítica:** muitos CRUDs do projeto são `empresa_scoped=True` — empresa nova nasce **sem nenhum dado** nessas tabelas. Tutorial visual de UC que **consulta** esses dados (em selects, listas, filtros) **vai falhar silenciosamente** se o UC que **cria** os dados não tiver rodado antes.
+
+**Antes de escrever o tutorial visual de qualquer UC, responder 4 perguntas:**
+
+1. **Quais dados (DB) o UC consulta?** Selects, listas, dropdowns, tabelas pré-populadas. Ex: UC-F02 consulta lista de Áreas em `/api/areas-produto`.
+2. **Quem cria esses dados?** Outro UC? Seed? Ex: hierarquia Área→Classe→Subclasse vem de UC-F13 V8 (3 CRUDs separados).
+3. **O UC criador tem tutorial visual?** Se não, **criar tutorial dele primeiro** ou avisar usuário antes de começar. Caso contrário, pre-flight do app testesvalidacoes vai bloquear ou tutorial vai falhar em select vazio.
+4. **Adicionar predecessor formal** no dict `PREDECESSORES` em `scripts/gerar_ucs_v7.py`:
+   ```python
+   "UC-F02": ["UC-F01", "UC-F18", "UC-F13"],  # UC-F13 cria a hierarquia que UC-F02 usa
+   ```
+
+**Tabela de dependências conhecidas (Sprint 1):**
+
+| Dado consultado | UC criador | UCs consumidores |
+|---|---|---|
+| Lista de áreas (`areas_produto`) | UC-F13 V8 | UC-F02, UC-F06, UC-F08, UC-CV01 |
+| Hierarquia Área→Classe→Subclasse | UC-F13 V8 | UC-F02, UC-F06, UC-F08, UC-CV01..09 |
+| Empresa criada | UC-F01 | UC-F02, F03, F04, F05, F13, F18 |
+| Vínculo `usuario_empresa` | UC-F18 (`<<uses>>` UC-F01) | UC-F02..F13 (todas que precisam de empresa selecionável) |
+| Pesos/limiares score | UC-F14 | UC-CV01 |
+| Parâmetros comerciais | UC-F15 | UC-CV01 |
+| Fontes/NCMs busca | UC-F16 | UC-CV01 |
+| Fontes de certidão | UC-F04 FA-01 (ou seed) | UC-F04 FP |
+| Produto cadastrado | UC-F07 OU UC-F08 | UC-F06, F09, F10, F11, F12, P02 |
+
+**Pra UCs com selects que dependem de dados do banco, usar nomes canônicos** (não inventar):
+
+- Áreas: `Equipamentos Médico-Hospitalares`, `Diagnóstico in Vitro e Laboratório`
+- Classes: `Monitoração`, `Reagentes Bioquímicos`, `Reagentes e Kits Diagnósticos`
+- Subclasses: `Monitor Multiparamétrico`, `Reagente para Glicose`, `Kit de Hematologia`
+- NCMs: `9018.19.90`, `3822.19.90`
+
+Esses nomes vêm dos datasets canônicos `dadosempportpar-1 V2.md` e `dadosempportpar-2 V2.md`. **Sprint 2 também espera esses nomes** (filtros cascata), então alterar quebra cross-sprint.
+
+**Sintomas de pré-requisito faltando:**
+- Select fica vazio no passo de seleção
+- Tutorial passa silenciosamente (apenas `wait_for` no select sem selecionar valor) — falsa cobertura
+- Pre-flight do app testesvalidacoes bloqueia: "UC-X precisa de UC-Y"
+- Validador humano (Arnaldo) reclama: "não tem o dado X cadastrado"
+
+**Ver `feedback_dependencias_hierarquia.md` na memória do projeto** para histórico do incidente UC-F02 + UC-F13 V8 (30/04/2026).
+
+---
+
+## 1.2. Navegação na sidebar — SEMPRE idempotente (regra GENÉRICA, sem exceção)
+
+**REGRA UNIVERSAL: TODA navegação na sidebar, em QUALQUER passo de QUALQUER UC, em QUALQUER tutorial visual, DEVE verificar o estado expand/collapse antes de clicar em seção ou subseção.** Não é específico de uma seção. Não é específico de um UC. **É padrão obrigatório de qualquer tutorial que toque a sidebar.**
+
+**Por que é sempre necessário:**
+
+Toda seção/subseção colapsável da sidebar é um **toggle** — click cego pode tanto **expandir** (se estava colapsada) quanto **COLAPSAR** (se estava expandida). O estado herda do passo anterior, do UC anterior, do CT anterior, da sessão anterior. **Você nunca sabe** em que estado a sidebar chega no início de um passo. Click sem verificar o estado quebra o fluxo silenciosamente em metade dos casos.
+
+**Estrutura genérica da sidebar do Facilicita.IA:**
+
+- `button.nav-section-header` — TOGGLE (Cadastros, Configurações, Indicadores, Governança, Fluxo Comercial, ou qualquer outra seção atual ou futura)
+- `button.nav-subsection-header` — TOGGLE (Empresa, Portfolio, Editais, Análises, Concorrência, Alertas, ou qualquer outra subseção atual ou futura)
+- `button.nav-item` — navegação direta, NÃO é toggle
+
+Toda vez que o tutorial precisa chegar a um `nav-item`, ele tem que **garantir** que **a seção que o contém está expandida** e (se aplicável) **a subseção que o contém está expandida**. Isso vale pra:
+
+- Sair do Dashboard pra qualquer item
+- Sair de uma página pra outra dentro da mesma seção
+- Sair de uma seção pra outra (ex: Cadastros → Configurações)
+- Voltar pra uma seção que você já visitou no mesmo teste
+- **Qualquer combinação acima**
+
+Não importa o nome da seção, da subseção ou do item. Não importa o UC. Não importa o passo. **Sempre tem que verificar o estado.**
+
+**Padrão obrigatório (genérico, parametrizado pelos nomes da seção/subseção/item desejados):**
+
+```yaml
+- tipo: evaluate
+  valor_literal: |
+    () => {
+      // Parametros: nome_secao, nome_subsecao (opcional, null se nao tem)
+      const NOME_SECAO    = 'XXXX';   // ex: "Cadastros", "Configurações", "Indicadores"...
+      const NOME_SUBSECAO = 'YYYY';   // ex: "Portfolio", "Empresa", "Editais"... ou null
+
+      // 1. Garante secao expandida (idempotente — so clica se NAO estiver expanded)
+      const sec = [...document.querySelectorAll('button.nav-section-header')]
+        .find(b => b.querySelector('.nav-section-label')?.textContent.trim() === NOME_SECAO);
+      if (!sec) throw new Error('secao "' + NOME_SECAO + '" nao encontrada na sidebar');
+      if (!sec.classList.contains('expanded')) sec.click();
+
+      // 2. Garante subsecao expandida (so se houver subsecao no caminho)
+      if (NOME_SUBSECAO) {
+        const sub = [...document.querySelectorAll('button.nav-subsection-header')]
+          .find(b => b.querySelector('.nav-item-label')?.textContent.trim() === NOME_SUBSECAO);
+        if (!sub) throw new Error('subsecao "' + NOME_SUBSECAO + '" nao encontrada');
+        if (!sub.classList.contains('expanded')) sub.click();
+      }
+
+      return 'sidebar_pronta';
+    }
+
+# Espera o item alvo aparecer e clica nele (item nao eh toggle, click direto)
+- tipo: wait_for
+  seletor: '<seletor_estrito_do_item>'
+  timeout: 5000
+
+- tipo: click
+  seletor: '<seletor_estrito_do_item>'
+  timeout: 5000
+```
+
+**Seletor estrito do item-alvo (regra genérica, sempre):**
+
+- Item dentro de subseção: `div.nav-subsection-items button.nav-item:has(.nav-item-label:text-is("ZZZ"))`
+- Item direto da seção (sem subseção): `div.nav-section-items > button.nav-item:has(.nav-item-label:text-is("ZZZ"))`
+
+**Por quê estrito:** evita pegar `nav-section-header` ou `nav-subsection-header` ambíguos, que também contêm `.nav-item-label` em alguns casos.
+
+**A classe `.expanded` é o sinal:**
+
+```tsx
+// frontend/src/components/Sidebar.tsx — vale para QUALQUER seção/subseção
+className={`nav-section-header ${expandedSections.has(section.id) ? 'expanded' : ''}`}
+className={`nav-subsection-header ${expandedSubSections.has(item.id) ? 'expanded' : ''}`}
+```
+
+JS verifica `classList.contains('expanded')` antes de `.click()`. Se já expandido, no-op. Se colapsado, expande. **Idempotente.**
+
+**Padrão ANTI: NUNCA fazer click cego em seção/subseção, sob NENHUMA circunstância:**
+
+```yaml
+# ERRADO — click cego pode COLAPSAR. Vale pra QUALQUER seção/subseção.
+- tipo: click
+  seletor: 'button.nav-section-header:has-text("X")'
+- tipo: click
+  seletor: 'button.nav-subsection-header:has-text("Y")'
+```
+
+Esse anti-padrão **só funciona no passo_00 do primeiro UC do teste** (sidebar virgem, tudo colapsado). Em **qualquer outro contexto** ele quebra. Não escreva isso em nenhum tutorial novo. Se ver em tutorial existente, refatore.
+
+**Histórico:** 30/04/2026: incidente UC-F13. Click cego em "Cadastros" colapsou a seção que UC-F01 já tinha deixado expandida. `wait_for "Portfolio subsection"` passou enganado (seletor existia em DOM cached), executor seguiu para passo_01 e tentou criar área na EmpresaPage. 4 ciclos de teste perdidos antes de identificar a causa raiz como **toggle cego em seção da sidebar**.
+
+**Aplicar onde:** TODO passo de TODO tutorial visual que toque na sidebar. Setup, renavegação, mudança de seção, retorno a seção visitada. Sempre.
+
+**Não aplicar em:** click em botões de página (Novo, Salvar, Cancelar, abas, modais). Esses não tocam sidebar.
+
+**Gerador de tutorial (humano ou LLM) deve, para cada passo de navegação:**
+
+1. Identificar **(seção, subseção opcional, item-alvo)** do destino na sidebar
+2. Inserir bloco `evaluate` idempotente parametrizado com esses 3 nomes
+3. Seguir com `wait_for` + `click` no seletor estrito do item
+
+**Ver `feedback_navegacao_sidebar_idempotente.md` na memória do projeto** — regra genérica documentada como feedback de processo, aplicável a qualquer UC futuro.
 
 ---
 

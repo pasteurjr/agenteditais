@@ -209,18 +209,22 @@ Este passo navega para a página **"Associar Empresa / Usuário"** (acessível v
 id: passo_04b_vincular_empresa_ao_user
 acao:
   sequencia:
-    # 1. Expande secao CADASTROS (sidebar) caso esteja colapsada — clique idempotente
-    #    NOTE: se ja estiver expandida, este click colapsa; o segundo click reabre.
-    #    Pra evitar isso, usa wait_for: se nav-item-label "Associar Empresa" ja existe, pula.
-    - tipo: click
-      seletor: '.nav-section-label:has-text("Cadastros"), .nav-section-label:has-text("CADASTROS"), button.nav-section-header:has-text("Cadastros"), button.nav-section-header:has-text("CADASTROS")'
-      timeout: 10000
+    # 1. IDEMPOTENTE — expand-if-collapsed da secao Cadastros
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const cad = [...document.querySelectorAll('button.nav-section-header')]
+            .find(b => b.querySelector('.nav-section-label')?.textContent.trim() === 'Cadastros');
+          if (!cad) throw new Error('secao Cadastros nao encontrada');
+          if (!cad.classList.contains('expanded')) cad.click();
+          return 'ok';
+        }
     - tipo: wait_for
-      seletor: '.nav-item-label:has-text("Associar Empresa")'
+      seletor: 'button.nav-item:has(.nav-item-label:has-text("Associar Empresa"))'
       timeout: 5000
-    # 2. Clica no item Associar Empresa/Usuario
+    # 2. Clica no item Associar Empresa/Usuario (nav-item direto, NAO toggle)
     - tipo: click
-      seletor: '.nav-item-label:has-text("Associar Empresa/Usuario"), .nav-item-label:has-text("Associar Empresa")'
+      seletor: 'button.nav-item:has(.nav-item-label:has-text("Associar Empresa"))'
       timeout: 5000
     # 3. Aguarda pagina AssociarEmpresaUsuario carregar
     - tipo: wait_for
@@ -286,16 +290,25 @@ Caminho via UI: **Configurações → Selecionar Empresa → clicar no card da e
 id: passo_04c_selecionar_empresa_ativa
 acao:
   sequencia:
-    # 1. Expande secao Configuracoes (caso colapsada)
-    - tipo: click
-      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
-      timeout: 10000
+    # 1. IDEMPOTENTE — expand-if-collapsed da secao Configuracoes
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const cfg = [...document.querySelectorAll('button.nav-section-header')]
+            .find(b => {
+              const t = b.querySelector('.nav-section-label')?.textContent.trim();
+              return t === 'Configuracoes' || t === 'Configurações';
+            });
+          if (!cfg) throw new Error('secao Configuracoes nao encontrada');
+          if (!cfg.classList.contains('expanded')) cfg.click();
+          return 'ok';
+        }
     - tipo: wait_for
-      seletor: '.nav-item-label:has-text("Selecionar Empresa")'
+      seletor: 'button.nav-item:has(.nav-item-label:text-is("Selecionar Empresa"))'
       timeout: 5000
     # 2. Clica no item "Selecionar Empresa"
     - tipo: click
-      seletor: '.nav-item-label:has-text("Selecionar Empresa")'
+      seletor: 'button.nav-item:has(.nav-item-label:text-is("Selecionar Empresa"))'
       timeout: 5000
     # 3. Aguarda pagina carregar
     - tipo: wait_for
@@ -326,22 +339,31 @@ App nao usa rotas URL (React Router) — navegacao eh via estado interno (`curre
 id: passo_05_selecionar_empresa
 acao:
   sequencia:
-    # No passo 04c o user clicou em "Selecionar Empresa" e em seguida no card da empresa.
-    # Isso popula 'empresa' no AuthContext (via /api/auth/switch-empresa). A secao
-    # "Configuracoes" continua expandida no menu.
-    #
+    # IDEMPOTENTE — expand-if-collapsed Configuracoes (pode ter colapsado entre passos)
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const cfg = [...document.querySelectorAll('button.nav-section-header')]
+            .find(b => {
+              const t = b.querySelector('.nav-section-label')?.textContent.trim();
+              return t === 'Configuracoes' || t === 'Configurações';
+            });
+          if (!cfg) throw new Error('secao Configuracoes nao encontrada');
+          if (!cfg.classList.contains('expanded')) cfg.click();
+          return 'ok';
+        }
     # IMPORTANTE: na sidebar, o texto "Empresa" exato so aparece em:
     #   - secao CADASTROS, button.nav-subsection-header  (subsecao Documentos/Certidoes/etc)
     #   - secao CONFIGURACOES, button.nav-item  <-- ALVO
     # Outros itens contem "Empresa" mas NAO como texto exato:
     #   - "Associar Empresa/Usuario"
     #   - "Selecionar Empresa"
-    # Pra desambiguar: button.nav-item (exclui subsecao) + :text-is (match exato).
+    # Pra desambiguar: button.nav-item:not(...) + :text-is (match exato).
     - tipo: wait_for
-      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 10000
     - tipo: click
-      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 5000
     # Aguarda EmpresaPage carregar
     - tipo: wait_for

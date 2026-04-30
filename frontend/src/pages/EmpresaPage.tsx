@@ -398,8 +398,11 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       setError("");
       setEmpresaSalva(true);
       setTimeout(() => setEmpresaSalva(false), 2000);
+      window.alert("Dados da empresa salvos com sucesso!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar empresa");
+      const msg = err instanceof Error ? err.message : "Erro ao salvar empresa";
+      setError(msg);
+      window.alert("Erro ao salvar empresa: " + msg);
     } finally {
       setSaving(false);
     }

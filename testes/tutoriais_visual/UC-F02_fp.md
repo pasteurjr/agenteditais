@@ -27,20 +27,28 @@ UC-F02 **assume UC-F01 ja foi executado no mesmo teste** (ou em sessao previa do
 id: passo_00_setup_empresa_e_login
 acao:
   sequencia:
-    # Garante secao Configuracoes expandida (idempotente — se ja estiver, click colapsa
-    # e o wait_for falha rapido; defesa: tenta abrir e re-tenta wait).
-    - tipo: click
-      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
-      timeout: 10000
-    # Espera item "Empresa" da Configuracoes (button.nav-item, text-is exato)
+    # IDEMPOTENTE — expand-if-collapsed Configuracoes (NAO toggle cego).
+    # Se a secao ja estava expandida (UC-F01 deixou assim), nao toca; senao, expande.
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const cfg = [...document.querySelectorAll('button.nav-section-header')]
+            .find(b => {
+              const t = b.querySelector('.nav-section-label')?.textContent.trim();
+              return t === 'Configuracoes' || t === 'Configurações';
+            });
+          if (!cfg) throw new Error('secao Configuracoes nao encontrada');
+          if (!cfg.classList.contains('expanded')) cfg.click();
+          return 'ok';
+        }
+    # Item "Empresa" — tem que ser nav-item de Configuracoes (NAO subsection-header
+    # de Cadastros que tambem se chama "Empresa"). :not filtra a ambiguidade.
     - tipo: wait_for
-      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 10000
-    # Click no item Empresa
     - tipo: click
-      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 5000
-    # Aguarda EmpresaPage carregar
     - tipo: wait_for
       seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
       timeout: 15000

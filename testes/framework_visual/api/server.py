@@ -675,11 +675,39 @@ def api_teste_criar():
             ucs = (
                 db.query(CasoDeUso)
                 .filter(CasoDeUso.id.in_(uc_ids), CasoDeUso.ativo == 1)
-                .order_by(CasoDeUso.uc_id)
                 .all()
             )
             if not ucs:
                 return jsonify({"error": "nenhum UC valido encontrado"}), 400
+
+            # Ordenacao topologica: predecessores (depends) sempre antes dos sucessores.
+            # Quando ha empate (mesmo nivel), desempate por uc_id alfabetico.
+            preds_rows = (
+                db.query(UcPredecessor)
+                .filter(UcPredecessor.uc_id.in_([u.id for u in ucs]),
+                        UcPredecessor.tipo == "depends",
+                        UcPredecessor.predecessor_id.isnot(None))
+                .all()
+            )
+            uc_id_set = {u.id for u in ucs}
+            deps = {u.id: set() for u in ucs}
+            for r in preds_rows:
+                if r.predecessor_id in uc_id_set:
+                    deps[r.uc_id].add(r.predecessor_id)
+            uc_by_id = {u.id: u for u in ucs}
+            ordenados = []
+            visitados = set()
+            def visitar(uid):
+                if uid in visitados:
+                    return
+                visitados.add(uid)
+                for d in sorted(deps[uid], key=lambda x: uc_by_id[x].uc_id):
+                    visitar(d)
+                ordenados.append(uc_by_id[uid])
+            for uid in sorted(uc_by_id, key=lambda x: uc_by_id[x].uc_id):
+                visitar(uid)
+            ucs = ordenados
+
             cts_ordenados = []
             for uc in ucs:
                 cts_uc = (

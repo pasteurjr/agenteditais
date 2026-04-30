@@ -45,14 +45,17 @@ classe_3_nome: "Reagentes e Kits Diagnósticos"
 classe_3_area: "Diagnóstico in Vitro e Laboratório"
 
 subclasse_1_nome: "Monitor Multiparamétrico"
+subclasse_1_area: "Equipamentos Médico-Hospitalares"
 subclasse_1_classe: "Monitoração"
 subclasse_1_ncm: "9018.19.90"
 
 subclasse_2_nome: "Reagente para Glicose"
+subclasse_2_area: "Diagnóstico in Vitro e Laboratório"
 subclasse_2_classe: "Reagentes Bioquímicos"
 subclasse_2_ncm: "3822.19.90"
 
 subclasse_3_nome: "Kit de Hematologia"
+subclasse_3_area: "Diagnóstico in Vitro e Laboratório"
 subclasse_3_classe: "Reagentes e Kits Diagnósticos"
 subclasse_3_ncm: "3822.19.90"
 

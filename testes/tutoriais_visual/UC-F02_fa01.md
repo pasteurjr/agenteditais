@@ -24,14 +24,23 @@ UC-F02 **assume UC-F01 ja foi executado no mesmo teste**. Empresa ja existe, est
 id: passo_00_setup_empresa_e_login
 acao:
   sequencia:
-    - tipo: click
-      seletor: '.nav-section-label:has-text("Configuracoes"), .nav-section-label:has-text("Configurações"), button.nav-section-header:has-text("Configuracoes"), button.nav-section-header:has-text("Configurações")'
-      timeout: 10000
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const cfg = [...document.querySelectorAll('button.nav-section-header')]
+            .find(b => {
+              const t = b.querySelector('.nav-section-label')?.textContent.trim();
+              return t === 'Configuracoes' || t === 'Configurações';
+            });
+          if (!cfg) throw new Error('secao Configuracoes nao encontrada');
+          if (!cfg.classList.contains('expanded')) cfg.click();
+          return 'ok';
+        }
     - tipo: wait_for
-      seletor: 'button.nav-item .nav-item-label:text-is("Empresa")'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 10000
     - tipo: click
-      seletor: 'button.nav-item:has(.nav-item-label:text-is("Empresa"))'
+      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Empresa"))'
       timeout: 5000
     - tipo: wait_for
       seletor: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
