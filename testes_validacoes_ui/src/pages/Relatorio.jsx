@@ -1,21 +1,32 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import Topbar from './Topbar'
 
 export default function Relatorio() {
   const { id } = useParams()
+  const [params, setParams] = useSearchParams()
+  const runIdParam = params.get('run')
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(null)
 
   useEffect(() => {
-    api.relatorio(id).then(setData).catch(e => setErro(e.message))
-  }, [id])
+    setData(null); setErro(null)
+    const fetchData = runIdParam
+      ? api.runRelatorio(runIdParam)
+      : api.relatorio(id)
+    fetchData.then(setData).catch(e => setErro(e.message))
+  }, [id, runIdParam])
 
   if (erro) return <><Topbar title="Erro" /><div className="content"><div className="flash flash-erro">{erro}</div></div></>
   if (!data) return <><Topbar title="Carregando..." /><div className="content empty">Carregando...</div></>
 
-  const { teste, execucoes } = data
+  const { teste, execucoes, rodadas, rodada_atual } = data
+  const ehRunEspecifica = !!runIdParam
+  // URL de download: se runIdParam, usa endpoints de run; senao usa endpoints de teste (rodada atual)
+  const mdUrl   = ehRunEspecifica ? api.runRelatorioMdUrl(runIdParam)   : api.relatorioMdUrl(id)
+  const docxUrl = ehRunEspecifica ? api.runRelatorioDocxUrl(runIdParam) : api.relatorioDocxUrl(id)
+  const pdfUrl  = ehRunEspecifica ? api.runRelatorioPdfUrl(runIdParam)  : api.relatorioPdfUrl(id)
 
   return (
     <>
@@ -23,12 +34,36 @@ export default function Relatorio() {
       <div className="content">
         <div className="section">
           <h2>Sumário</h2>
+          {(rodadas?.length || 0) > 1 && (
+            <div style={{marginBottom:'1em', padding:'0.5em', background:'rgba(74,138,138,0.1)', borderLeft:'3px solid #4a8a8a'}}>
+              <strong>Rodada exibida:</strong>
+              <select
+                value={runIdParam || (rodada_atual?.id || '')}
+                onChange={e => {
+                  const v = e.target.value
+                  if (v === (rodada_atual?.id || '')) {
+                    // Default: limpa param
+                    setParams({})
+                  } else {
+                    setParams({run: v})
+                  }
+                }}
+                style={{marginLeft:'0.5em', padding:'0.3em', width:'auto'}}
+              >
+                {rodadas.map(r => (
+                  <option key={r.id} value={r.id}>
+                    Rodada {r.numero} — {r.estado} — {r.user_sintetico_email || 'legado'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <table style={{marginBottom:'1em'}}>
             <tbody>
               <tr><th>ID</th><td><code>{teste.id}</code></td></tr>
               <tr><th>Sprint</th><td>{teste.sprint_nome}</td></tr>
               <tr><th>Tester</th><td>{teste.tester}</td></tr>
-              <tr><th>Ciclo</th><td>{teste.ciclo_id || '—'}</td></tr>
+              <tr><th>Ciclo (rodada)</th><td>{teste.ciclo_id || '—'}</td></tr>
               <tr><th>Estado</th><td><span className={'tag tag-' + teste.estado}>{teste.estado}</span></td></tr>
               <tr><th>Iniciado em</th><td>{teste.iniciado_em || '-'}</td></tr>
               <tr><th>Concluído em</th><td>{teste.concluido_em || '-'}</td></tr>
@@ -37,13 +72,13 @@ export default function Relatorio() {
           <div className="actions" style={{flexWrap:'wrap', gap:'0.5em'}}>
             <Link to="/"><button className="secondary">← Home</button></Link>
             <Link to={`/teste/${id}`}><button>Ver Teste</button></Link>
-            <a href={api.relatorioMdUrl(id)} download>
+            <a href={mdUrl} download>
               <button title="Markdown (texto)">📝 .md</button>
             </a>
-            <a href={api.relatorioDocxUrl(id)} download>
+            <a href={docxUrl} download>
               <button title="Word (com screenshots)">📄 .docx</button>
             </a>
-            <a href={api.relatorioPdfUrl(id)} download>
+            <a href={pdfUrl} download>
               <button title="PDF (com screenshots)">📑 .pdf</button>
             </a>
           </div>

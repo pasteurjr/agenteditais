@@ -742,7 +742,12 @@ def api_teste_detalhe(teste_id):
             return jsonify({"error": "nao encontrado"}), 404
         if not (session.get("is_admin") or t.user_id == session["user_id"]):
             return jsonify({"error": "acesso negado"}), 403
-        execs = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id).order_by(ExecucaoCasoDeTeste.ordem).all()
+        # Filtra execucoes pela rodada atual (default = ultima rodada)
+        run = _rodada_atual(db, t)
+        q = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id)
+        if run:
+            q = q.filter_by(run_id=run.id)
+        execs = q.order_by(ExecucaoCasoDeTeste.ordem).all()
         execs_view = []
         for e in execs:
             ct = e.caso_de_teste
@@ -762,13 +767,18 @@ def api_teste_detalhe(teste_id):
             "teste": {
                 "id": t.id, "titulo": t.titulo, "descricao": t.descricao,
                 "estado": t.estado, "ciclo_id": t.ciclo_id,
+                "sprint_id": t.sprint_id,
                 "sprint_nome": t.sprint.nome if t.sprint else "-",
                 "projeto_nome": t.projeto.nome if t.projeto else "-",
                 "tester": t.user.email if t.user else "-",
                 "iniciado_em": t.iniciado_em.isoformat() if t.iniciado_em else None,
                 "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
                 "pid_executor": t.pid_executor,
+                "uc_ids_canonicos": t.uc_ids_canonicos or [],
             },
+            "rodada_atual": {
+                "id": run.id, "numero": run.numero, "estado": run.estado,
+            } if run else None,
             "execucoes": execs_view,
         })
     finally:
