@@ -1,0 +1,37 @@
+uc_id: UC-F03
+trilha: visual
+ciclo_id_default: piloto-ucf03
+
+# UC-F03 — Gerir documentos da empresa
+# Cria 3 documentos via Modal "Upload de Documento" na EmpresaPage:
+#  1. Contrato Social (sem validade) -> badge OK
+#  2. CRF FGTS (validade 2026-12-31) -> badge OK
+#  3. Alvara de Funcionamento (validade 2025-12-31, ja vencida) -> badge "Vence"
+#
+# Pre-condicoes de DADOS:
+#  - categorias_documento (6 seed) e documentos_necessarios (21 seed) JA EXISTEM no banco editais (GLOBAL).
+#  - Empresa vinculada e ativa: vem de UC-F01 + UC-F18 (predecessores).
+#
+# Pre-condicoes de ARQUIVOS:
+#  - users.pasta_documentos_teste deve apontar para diretorio que contenha:
+#      sprint1/UC-F03/contrato_social.pdf
+#      sprint1/UC-F03/fgts.pdf
+#      sprint1/UC-F03/alvara.pdf
+#  - Default no setup do tester: /home/pasteurjr/Documentos/documentos_sintetizados
+
+# Documentos a inserir (3 items, ordem importa: doc1 -> doc2 -> doc3)
+doc1_tipo_nome: "Contrato Social"
+doc1_arquivo: "sprint1/UC-F03/contrato_social.pdf"
+doc1_validade: ""  # vazio = sem validade -> badge OK
+
+doc2_tipo_nome: "CRF - Certificado de Regularidade do FGTS"
+doc2_arquivo: "sprint1/UC-F03/fgts.pdf"
+doc2_validade: "2026-12-31"  # futura -> badge OK
+
+doc3_tipo_nome: "Alvará de Funcionamento"
+doc3_arquivo: "sprint1/UC-F03/alvara.pdf"
+doc3_validade: "2025-12-31"  # passada -> badge "Vence"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

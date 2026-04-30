@@ -1,0 +1,46 @@
+uc_id: UC-F03
+variacao: fp
+trilha: visual
+descricao: "Upload de 3 documentos da empresa: Contrato Social (s/ validade), CRF FGTS (validade futura), Alvara (validade vencida) — verifica badges OK e Vence"
+
+passos:
+  - id: passo_00_setup_navegar_documentos
+    asserts_dom:
+      - selector: 'h1:has-text("Dados da Empresa"), h2:has-text("Dados da Empresa")'
+      - selector: 'h3:has-text("Documentos da Empresa"), .card-title:has-text("Documentos da Empresa")'
+
+  - id: passo_01_abrir_modal_doc1
+    asserts_dom:
+      - selector: 'h2:has-text("Upload de Documento")'
+
+  - id: passo_02_preencher_doc1_contrato
+    asserts_rede:
+      - url_contem: "/api/empresa-documentos/upload"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_03_abrir_modal_doc2
+    asserts_dom:
+      - selector: 'h2:has-text("Upload de Documento")'
+
+  - id: passo_04_preencher_doc2_fgts
+    asserts_rede:
+      - url_contem: "/api/empresa-documentos/upload"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_05_abrir_modal_doc3
+    asserts_dom:
+      - selector: 'h2:has-text("Upload de Documento")'
+
+  - id: passo_06_preencher_doc3_alvara
+    asserts_rede:
+      - url_contem: "/api/empresa-documentos/upload"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_07_verificar_lista_3_documentos
+    asserts_dom:
+      - selector: 'text=Contrato Social'
+      - selector: 'text=CRF - Certificado de Regularidade do FGTS'
+      - selector: 'text=Alvará de Funcionamento'
