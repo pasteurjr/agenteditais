@@ -48,7 +48,7 @@ from parser import Acao  # type: ignore
 from executor import _executar_acao, _validar_dom, _login  # type: ignore
 from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
-    User, Teste, ExecucaoCasoDeTeste, CasoDeTeste, CasoDeUso,
+    User, Teste, RunTeste, ExecucaoCasoDeTeste, CasoDeTeste, CasoDeUso,
     Dataset, PassoTutorial, PassoExecucao, Observacao, Relatorio,
 )
 from dados.placeholders import (  # type: ignore
@@ -408,6 +408,7 @@ def _criar_teste_novo(db, args) -> str:
 def main():
     parser_arg = argparse.ArgumentParser(description="Executor Sprint 1 — DB-aware")
     parser_arg.add_argument("--teste_id", help="UUID do teste existente (modo retomada)")
+    parser_arg.add_argument("--run_id", help="UUID da rodada especifica (default = ultima rodada do teste)")
     parser_arg.add_argument("--user_email", help="Para criar teste novo")
     parser_arg.add_argument("--titulo", help="Titulo do teste novo")
     parser_arg.add_argument("--ct_ids", help="CSV de ct_ids para teste novo (ex: CT-F01-FP)")
@@ -423,6 +424,7 @@ def main():
 
     db = get_db()
     teste_id_global: str | None = None  # pra usar no cleanup
+    run_id_global: str | None = None
 
     def _cleanup_pid():
         """Garante que pid_executor=NULL e estado coerente no banco, mesmo em crash/SIGTERM."""
@@ -437,7 +439,15 @@ def main():
                     t.pid_executor = None
                     if t.estado == "em_andamento":
                         t.estado = "pausado"
-                    db_clean.commit()
+                # Sincroniza rodada
+                if run_id_global:
+                    r = db_clean.query(RunTeste).filter_by(id=run_id_global).first()
+                    if r:
+                        r.pid_executor = None
+                        if r.estado == "em_andamento":
+                            r.estado = "pausado"
+                db_clean.commit()
+                if t:
                     print(f"[exec] cleanup: pid_executor=NULL, estado={t.estado}", file=sys.stderr)
             finally:
                 db_clean.close()
@@ -467,52 +477,68 @@ def main():
         if not teste:
             raise SystemExit(f"Teste {teste_id} nao encontrado")
 
-        # Reset CTs que ficaram em em_execucao (executor caiu/foi morto antes de concluir)
-        # — voltam pra pendente, apagam passos parciais e sao re-executados do passo 0
+        # Determina rodada alvo: --run_id ou rodada com maior numero
+        if args.run_id:
+            run = db.query(RunTeste).filter_by(id=args.run_id, teste_id=teste.id).first()
+            if not run:
+                raise SystemExit(f"Rodada {args.run_id} nao encontrada para teste {teste_id}")
+        else:
+            run = (
+                db.query(RunTeste).filter_by(teste_id=teste.id)
+                .order_by(RunTeste.numero.desc()).first()
+            )
+            if not run:
+                raise SystemExit(f"Teste {teste_id} sem rodadas")
+        run_id_global = run.id
+        print(f"[exec] Rodada {run.numero} (id={run.id[:8]}.., ciclo={run.ciclo_id})")
+
+        # Reset CTs que ficaram em em_execucao na rodada alvo
         execs_em_curso = (
             db.query(ExecucaoCasoDeTeste)
-            .filter_by(teste_id=teste.id, estado="em_execucao")
+            .filter_by(run_id=run.id, estado="em_execucao")
             .all()
         )
         if execs_em_curso:
             for e in execs_em_curso:
-                # Apaga passos_execucao parciais (cascade leva observacoes junto)
                 db.query(PassoExecucao).filter_by(execucao_id=e.id).delete()
                 e.estado = "pendente"
                 e.iniciado_em = None
             db.commit()
             print(f"[exec] {len(execs_em_curso)} CT(s) em_execucao resetados (retomada)")
 
-        # Carrega execucoes pendentes (em ordem)
+        # Carrega execucoes pendentes da RODADA (em ordem)
         execs = (
             db.query(ExecucaoCasoDeTeste)
-            .filter_by(teste_id=teste.id, estado="pendente")
+            .filter_by(run_id=run.id, estado="pendente")
             .order_by(ExecucaoCasoDeTeste.ordem)
             .all()
         )
         if not execs:
-            print(f"[exec] Nada pendente em '{teste.titulo}'.")
+            print(f"[exec] Nada pendente em '{teste.titulo}' rodada {run.numero}.")
             return 0
 
-        print(f"[exec] === Teste: {teste.titulo} ===")
+        print(f"[exec] === Teste: {teste.titulo} (Rodada {run.numero}) ===")
         print(f"[exec] User: {teste.user.email if teste.user else '?'}")
         print(f"[exec] Sprint: {teste.sprint.nome if teste.sprint else '?'}")
         print(f"[exec] {len(execs)} CT(s) pendente(s)")
 
-        # Marca teste em_andamento
+        # Marca teste e rodada em_andamento
         teste.estado = "em_andamento"
         teste.iniciado_em = teste.iniciado_em or datetime.now()
         teste.pid_executor = os.getpid()
+        run.estado = "em_andamento"
+        run.iniciado_em = run.iniciado_em or datetime.now()
+        run.pid_executor = os.getpid()
         db.commit()
 
-        # Diretorio de evidencias
+        # Diretorio de evidencias (inclui numero da rodada)
         ts_safe = datetime.now().isoformat(timespec="seconds").replace(":", "-")
-        evid_dir = PROJECT_ROOT / "testes" / "relatorios" / "visual" / f"teste_{teste.id[:8]}_{ts_safe}"
+        evid_dir = PROJECT_ROOT / "testes" / "relatorios" / "visual" / f"teste_{teste.id[:8]}_r{run.numero}_{ts_safe}"
         evid_dir.mkdir(parents=True, exist_ok=True)
         print(f"[exec] Evidencias: {evid_dir}")
 
-        # Carrega contexto do ciclo (opcional, pra resolver valor_from_contexto: usuario.email)
-        ciclo_contexto = _carregar_ciclo_contexto(teste.ciclo_id or args.ciclo) or {}
+        # Carrega contexto do ciclo da rodada (cada rodada tem seu proprio ciclo_id)
+        ciclo_contexto = _carregar_ciclo_contexto(run.ciclo_id or teste.ciclo_id or args.ciclo) or {}
 
         # Injeta pasta_documentos_teste do user (usado por valor_from_pasta_docs em uploads)
         if teste.user and teste.user.pasta_documentos_teste:
@@ -588,13 +614,16 @@ def main():
             except: pass
             browser.close()
 
-        # Estado final do teste
+        # Estado final da rodada e do teste (sincronizados)
         if estado.evento_parar.is_set():
+            run.estado = "pausado"
             teste.estado = "pausado"
         else:
-            ainda_pendente = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=teste.id, estado="pendente").count()
-            teste.estado = "concluido" if ainda_pendente == 0 else "pausado"
-            if teste.estado == "concluido":
+            ainda_pendente = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run.id, estado="pendente").count()
+            if ainda_pendente == 0:
+                run.estado = "concluido"
+                run.concluido_em = datetime.now()
+                teste.estado = "concluido"
                 teste.concluido_em = datetime.now()
                 # Gera relatorio
                 rel_md = _gerar_relatorio(db, teste)
@@ -606,8 +635,12 @@ def main():
                     conteudo_md=rel_md,
                     path_arquivo=str(rel_path.relative_to(PROJECT_ROOT)),
                 ))
+            else:
+                run.estado = "pausado"
+                teste.estado = "pausado"
 
         teste.pid_executor = None
+        run.pid_executor = None
         db.commit()
 
         print(f"\n[exec] === FIM: teste estado={teste.estado} ===")

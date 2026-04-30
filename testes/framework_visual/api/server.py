@@ -27,6 +27,7 @@ import io
 import os
 import subprocess
 import sys
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
@@ -56,7 +57,7 @@ _load_env()
 from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     User, Projeto, Sprint, CasoDeUso, CasoDeTeste,
-    Teste, ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
+    Teste, RunTeste, ExecucaoCasoDeTeste, PassoExecucao, Observacao, Relatorio,
     PassoTutorial, UcPredecessor, UcExecucaoSatisfatoria,
 )
 from sqlalchemy import desc
@@ -680,50 +681,11 @@ def api_teste_criar():
             )
             if not ucs:
                 return jsonify({"error": "nenhum UC valido encontrado"}), 400
-
-            # Ordenacao topologica: predecessores (depends) sempre antes dos sucessores.
-            # Quando ha empate (mesmo nivel), desempate por uc_id alfabetico.
-            preds_rows = (
-                db.query(UcPredecessor)
-                .filter(UcPredecessor.uc_id.in_([u.id for u in ucs]),
-                        UcPredecessor.tipo == "depends",
-                        UcPredecessor.predecessor_id.isnot(None))
-                .all()
-            )
-            uc_id_set = {u.id for u in ucs}
-            deps = {u.id: set() for u in ucs}
-            for r in preds_rows:
-                if r.predecessor_id in uc_id_set:
-                    deps[r.uc_id].add(r.predecessor_id)
-            uc_by_id = {u.id: u for u in ucs}
-            ordenados = []
-            visitados = set()
-            def visitar(uid):
-                if uid in visitados:
-                    return
-                visitados.add(uid)
-                for d in sorted(deps[uid], key=lambda x: uc_by_id[x].uc_id):
-                    visitar(d)
-                ordenados.append(uc_by_id[uid])
-            for uid in sorted(uc_by_id, key=lambda x: uc_by_id[x].uc_id):
-                visitar(uid)
-            ucs = ordenados
-
-            cts_ordenados = []
-            for uc in ucs:
-                cts_uc = (
-                    db.query(CasoDeTeste)
-                    .filter_by(caso_de_uso_id=uc.id, ativo=1,
-                               categoria="Cenário", trilha_sugerida="visual")
-                    .order_by(CasoDeTeste.ct_id)
-                    .all()
-                )
-                # so pega os com passos cadastrados
-                for c in cts_uc:
-                    if c.passos_tutorial:
-                        cts_ordenados.append(c)
+            ucs = _ordenar_ucs_topologico(db, ucs)
+            cts_ordenados = _expandir_uc_em_cts(db, ucs)
             if not cts_ordenados:
                 return jsonify({"error": "Nenhum CT executavel nos UCs selecionados (precisam de passos cadastrados)"}), 400
+            uc_ids_canonicos = [u.id for u in ucs]
         else:
             # Modo legacy: ct_ids diretos
             cts_raw = db.query(CasoDeTeste).filter(CasoDeTeste.id.in_(ct_ids), CasoDeTeste.ativo == 1).all()
@@ -731,48 +693,36 @@ def api_teste_criar():
                 return jsonify({"error": "nenhum CT valido encontrado"}), 400
             ct_map = {c.id: c for c in cts_raw}
             cts_ordenados = [ct_map[cid] for cid in ct_ids if cid in ct_map]
+            uc_ids_canonicos = list({c.caso_de_uso_id for c in cts_ordenados})
 
-        # 1. Cria registro Teste com ciclo_id ainda vazio
+        # 1. Cria registro Teste
         teste = Teste(
             projeto_id=sprint.projeto_id, sprint_id=sprint.id,
             user_id=session["user_id"], titulo=titulo,
-            descricao=descricao, ciclo_id=None, estado="criado",
+            descricao=descricao, uc_ids_canonicos=uc_ids_canonicos,
+            ciclo_id=None, estado="criado",
         )
         db.add(teste)
         db.flush()
 
-        # 2. Provisiona ciclo unico (CNPJ + valida<N> sequencial)
-        ciclo_id = f"teste-{teste.id[:8]}"
-        try:
-            sys.path.insert(0, str(_PROJECT / "testes" / "framework_provisionamento"))
-            from context_manager import criar_ciclo  # type: ignore
-            ctx = criar_ciclo(
-                ciclo_id=ciclo_id,
-                ambiente="agenteditais",
-                precisa_editais=False,
-                sprints_no_ciclo=[sprint.numero],
-            )
-            print(f"[api] ciclo {ciclo_id} provisionado: {ctx['trilhas']['visual']['empresa']['cnpj_pretendido']}")
-        except FileExistsError:
-            print(f"[api] ciclo {ciclo_id} ja existia — reusando")
-        except Exception as e:
-            print(f"[api] WARN: falha ao provisionar ciclo: {e}")
-            # Nao bloqueia — cai pra ciclo nulo, executor usa default
-            ciclo_id = None
+        # 2. Provisiona rodada 1 (cria ciclo, aloca user, gera CNPJ, renderiza docs)
+        run = _provisionar_rodada(db, teste, numero=1, sprint_numero=sprint.numero)
+        teste.ciclo_id = run.ciclo_id  # mantem campo legado em testes pra compat
 
-        teste.ciclo_id = ciclo_id
-
-        # 3. Cria execucoes_caso_de_teste em ordem
+        # 3. Cria execucoes_caso_de_teste apontando para a rodada 1
         for ordem, ct in enumerate(cts_ordenados, start=1):
             db.add(ExecucaoCasoDeTeste(
-                teste_id=teste.id, caso_de_teste_id=ct.id,
+                teste_id=teste.id, run_id=run.id,
+                caso_de_teste_id=ct.id,
                 ordem=ordem, estado="pendente",
             ))
         db.commit()
         return jsonify({
             "ok": True,
             "teste_id": teste.id,
-            "ciclo_id": ciclo_id,
+            "run_id": run.id,
+            "run_numero": run.numero,
+            "ciclo_id": run.ciclo_id,
             "n_cts": len(cts_ordenados),
         }), 201
     except Exception as e:
@@ -872,6 +822,19 @@ def api_teste_iniciar(teste_id):
         if _is_pid_alive(t.pid_executor):
             return jsonify({"ok": False, "msg": f"executor ja rodando pid={t.pid_executor}"}), 409
 
+        # Determina rodada atual
+        run_atual = _rodada_atual(db, t)
+        if not run_atual:
+            return jsonify({"error": "teste sem rodada — estado inconsistente"}), 500
+        if run_atual.estado in ("cancelado",):
+            return jsonify({"ok": False, "msg": f"rodada atual esta '{run_atual.estado}'. Use /reiniciar para criar nova rodada."}), 409
+        # Rodadas concluidas com pendentes (apos adicionar UCs) viram pausado automaticamente
+        if run_atual.estado == "concluido":
+            tem_pendente = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run_atual.id, estado="pendente").count()
+            if tem_pendente == 0:
+                return jsonify({"ok": False, "msg": "rodada ja concluida sem CTs pendentes. Use /adicionar-ucs ou /reiniciar."}), 409
+            run_atual.estado = "pausado"
+
         # Checagem global: painel :9876 e unico por maquina, so 1 teste pode estar rodando
         outro = (
             db.query(Teste)
@@ -918,11 +881,12 @@ def api_teste_iniciar(teste_id):
                 "pendencias": det_pred.get("pendencias", []),
             }), 409
 
-        # Spawn executor_sprint1.py
+        # Spawn executor_sprint1.py — passa run_id pra ele filtrar execucoes da rodada atual
         cmd = [
             sys.executable,
             str(_FW_VISUAL / "executor_sprint1.py"),
             "--teste_id", t.id,
+            "--run_id", run_atual.id,
         ]
         log = open(f"/tmp/executor_{teste_id}.log", "w")
         proc = subprocess.Popen(
@@ -930,13 +894,20 @@ def api_teste_iniciar(teste_id):
             stdout=log, stderr=subprocess.STDOUT,
             env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0")},
         )
+        # Atualiza pid+estado tanto no Teste (compat) quanto na RunTeste (canonico)
         t.pid_executor = proc.pid
+        run_atual.pid_executor = proc.pid
+        run_atual.estado = "em_andamento"
+        if not run_atual.iniciado_em:
+            run_atual.iniciado_em = datetime.now()
         db.commit()
         return jsonify({
             "ok": True,
             "pid": proc.pid,
             "painel_url": "http://localhost:9876",
             "log_path": f"/tmp/executor_{teste_id}.log",
+            "run_id": run_atual.id,
+            "run_numero": run_atual.numero,
         })
     finally:
         db.close()
@@ -958,20 +929,660 @@ def api_teste_cancelar(teste_id):
             except Exception: pass
         t.estado = "cancelado"
         t.pid_executor = None
+        # Cancela rodada atual junto
+        run = _rodada_atual(db, t)
+        if run:
+            run.estado = "cancelado"
+            run.pid_executor = None
         db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()
 
 
-def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
+# ============================================================
+# Endpoints novos de gestao de rodadas (Modelo A)
+# ============================================================
+
+@app.route("/api/testes/<teste_id>/pausar", methods=["POST"])
+@login_required
+def api_teste_pausar(teste_id):
+    """Pausa o teste enviando sinal pro painel parar gracioso.
+    Diferente de cancelar: rodada vai pra 'pausado' e CTs pendentes ficam intactos."""
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        run = _rodada_atual(db, t)
+        if not run or run.estado != "em_andamento":
+            return jsonify({"ok": False, "msg": f"rodada nao esta em_andamento (estado atual={run.estado if run else 'nenhuma'})"}), 409
+        # Manda sinal de parar no painel (ele seta evento_parar; executor termina CT atual e sai)
+        try:
+            import urllib.request as _ur
+            req = _ur.Request("http://localhost:9876/parar", data=b"{}", method="POST",
+                              headers={"Content-Type":"application/json"})
+            _ur.urlopen(req, timeout=2)
+        except Exception as e:
+            print(f"[api] WARN: nao conseguiu falar com painel:9876: {e}")
+        # Marca rodada como pausado IMEDIATAMENTE (executor confirma depois)
+        run.estado = "pausado"
+        t.estado = "pausado"
+        db.commit()
+        return jsonify({"ok": True, "run_id": run.id, "msg": "Sinal de pausa enviado. Executor termina o CT atual e para."})
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/retomar", methods=["POST"])
+@login_required
+def api_teste_retomar(teste_id):
+    """Retoma teste pausado (continua de onde parou na MESMA rodada).
+    Reusa o mesmo ciclo_id, mesmo usuario sintetico, mesma empresa.
+    Internamente eh como /iniciar mas com guarda de estado mais permissiva."""
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        run = _rodada_atual(db, t)
+        if not run:
+            return jsonify({"error": "teste sem rodada"}), 500
+        if run.estado not in ("pausado", "concluido"):
+            return jsonify({"ok": False, "msg": f"so pode retomar rodada pausada/concluida (estado atual={run.estado})"}), 409
+        tem_pendente = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run.id, estado="pendente").count()
+        if tem_pendente == 0:
+            return jsonify({"ok": False, "msg": "rodada nao tem CTs pendentes. Use /adicionar-ucs ou /reiniciar."}), 409
+    finally:
+        db.close()
+    # Delega para api_teste_iniciar (mesmo fluxo)
+    return api_teste_iniciar(teste_id)
+
+
+@app.route("/api/testes/<teste_id>/adicionar-ucs", methods=["POST"])
+@login_required
+def api_teste_adicionar_ucs(teste_id):
+    """Adiciona UCs ao teste (nova rodada NAO eh criada — insere ExecucaoCasoDeTeste
+    apontando para a rodada atual). So permitido se rodada atual NAO esta em_andamento.
+    Body: {uc_ids: ["uuid1", ...]}"""
+    data = request.get_json(silent=True) or {}
+    novos_uc_ids = data.get("uc_ids") or []
+    if not novos_uc_ids:
+        return jsonify({"error": "uc_ids[] obrigatorio"}), 400
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        run = _rodada_atual(db, t)
+        if not run:
+            return jsonify({"error": "teste sem rodada"}), 500
+        if run.estado == "em_andamento":
+            return jsonify({"ok": False, "msg": "rodada em_andamento — pause antes de adicionar UCs"}), 409
+
+        # Filtra UCs ja existentes na rodada atual
+        ucs_existentes_ids = set(
+            r[0] for r in
+            db.query(CasoDeTeste.caso_de_uso_id)
+            .join(ExecucaoCasoDeTeste, ExecucaoCasoDeTeste.caso_de_teste_id == CasoDeTeste.id)
+            .filter(ExecucaoCasoDeTeste.run_id == run.id)
+            .distinct().all()
+        )
+        novos_uc_ids = [u for u in novos_uc_ids if u not in ucs_existentes_ids]
+        if not novos_uc_ids:
+            return jsonify({"ok": False, "msg": "todos os UCs ja estao na rodada atual"}), 400
+
+        ucs = db.query(CasoDeUso).filter(CasoDeUso.id.in_(novos_uc_ids), CasoDeUso.ativo == 1).all()
+        if not ucs:
+            return jsonify({"error": "nenhum UC valido encontrado"}), 400
+        # Resolve dependencias considerando UCs JA existentes na rodada como satisfeitos
+        # Seleciona TODOS os UCs (existentes + novos) e ordena, mas insere so os novos.
+        todos_ucs_ids = list(ucs_existentes_ids) + [u.id for u in ucs]
+        todos_ucs = db.query(CasoDeUso).filter(CasoDeUso.id.in_(todos_ucs_ids)).all()
+        ordenados = _ordenar_ucs_topologico(db, todos_ucs)
+        # Filtra so os novos preservando ordem topologica
+        novos_set = {u.id for u in ucs}
+        ucs_novos_ord = [u for u in ordenados if u.id in novos_set]
+        cts_novos = _expandir_uc_em_cts(db, ucs_novos_ord)
+        if not cts_novos:
+            return jsonify({"error": "Nenhum CT executavel nos UCs adicionados"}), 400
+
+        # Proximo numero de ordem na rodada
+        max_ord = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run.id).count()
+        for i, ct in enumerate(cts_novos, start=1):
+            db.add(ExecucaoCasoDeTeste(
+                teste_id=t.id, run_id=run.id, caso_de_teste_id=ct.id,
+                ordem=max_ord + i, estado="pendente",
+            ))
+
+        # Atualiza uc_ids_canonicos do teste
+        canonicos = list(t.uc_ids_canonicos or [])
+        for uc_id in novos_uc_ids:
+            if uc_id not in canonicos:
+                canonicos.append(uc_id)
+        t.uc_ids_canonicos = canonicos
+
+        # Se rodada estava concluida, volta pra pausado
+        if run.estado == "concluido":
+            run.estado = "pausado"
+            t.estado = "pausado"
+            run.concluido_em = None
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "run_id": run.id,
+            "uc_ids_adicionados": novos_uc_ids,
+            "n_cts_adicionados": len(cts_novos),
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/reiniciar", methods=["POST"])
+@login_required
+def api_teste_reiniciar(teste_id):
+    """Cria uma NOVA rodada para o teste, com novo ciclo_id, novo usuario sintetico,
+    nova empresa DEMO. Reaproveita uc_ids_canonicos do teste para criar execucoes pendentes.
+    Rodada anterior eh preservada como historico."""
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+
+        run_atual = _rodada_atual(db, t)
+        if run_atual and run_atual.estado == "em_andamento":
+            return jsonify({"ok": False, "msg": "rodada atual em_andamento — pause/cancele antes de reiniciar"}), 409
+
+        # Marca rodada anterior como concluida (se estava pausado/criado) — fica no historico
+        if run_atual and run_atual.estado in ("pausado", "criado"):
+            run_atual.estado = "concluido"
+            run_atual.concluido_em = run_atual.concluido_em or datetime.now()
+
+        # Cria nova rodada com numero+1
+        novo_numero = (run_atual.numero if run_atual else 0) + 1
+        sprint = db.query(Sprint).filter_by(id=t.sprint_id).first()
+        nova_run = _provisionar_rodada(db, t, numero=novo_numero, sprint_numero=sprint.numero if sprint else 1)
+
+        # Recupera UCs canônicos e cria execucoes pendentes na nova rodada
+        ucs_canonicos = t.uc_ids_canonicos or []
+        if not ucs_canonicos:
+            return jsonify({"error": "teste sem uc_ids_canonicos — nada para recriar"}), 500
+        ucs = db.query(CasoDeUso).filter(CasoDeUso.id.in_(ucs_canonicos), CasoDeUso.ativo == 1).all()
+        if not ucs:
+            return jsonify({"error": "nenhum UC canonico ativo"}), 400
+        ucs_ord = _ordenar_ucs_topologico(db, ucs)
+        cts = _expandir_uc_em_cts(db, ucs_ord)
+        if not cts:
+            return jsonify({"error": "nenhum CT executavel nos UCs canonicos"}), 400
+        for ordem, ct in enumerate(cts, start=1):
+            db.add(ExecucaoCasoDeTeste(
+                teste_id=t.id, run_id=nova_run.id, caso_de_teste_id=ct.id,
+                ordem=ordem, estado="pendente",
+            ))
+
+        # Sincroniza estado do teste com a nova rodada
+        t.estado = "criado"
+        t.ciclo_id = nova_run.ciclo_id
+        t.pid_executor = None
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "run_id": nova_run.id,
+            "run_numero": nova_run.numero,
+            "ciclo_id": nova_run.ciclo_id,
+            "user_sintetico_email": nova_run.user_sintetico_email,
+            "empresa_demo_cnpj": nova_run.empresa_demo_cnpj,
+            "n_cts": len(cts),
+        }), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/runs")
+@login_required
+def api_teste_runs(teste_id):
+    """Lista todas as rodadas de um teste com sumario de cada uma."""
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        runs = db.query(RunTeste).filter_by(teste_id=t.id).order_by(RunTeste.numero).all()
+        result = []
+        for r in runs:
+            execs = db.query(ExecucaoCasoDeTeste).filter_by(run_id=r.id).all()
+            n_total = len(execs)
+            n_aprov = sum(1 for e in execs if e.veredicto_po == "APROVADO")
+            n_reprov = sum(1 for e in execs if e.veredicto_po == "REPROVADO")
+            n_pend = sum(1 for e in execs if e.estado == "pendente")
+            # Conta passos+observacoes
+            n_passos = (
+                db.query(PassoExecucao)
+                .join(ExecucaoCasoDeTeste, ExecucaoCasoDeTeste.id == PassoExecucao.execucao_id)
+                .filter(ExecucaoCasoDeTeste.run_id == r.id).count()
+            )
+            n_obs = (
+                db.query(Observacao)
+                .join(PassoExecucao, PassoExecucao.id == Observacao.passo_execucao_id)
+                .join(ExecucaoCasoDeTeste, ExecucaoCasoDeTeste.id == PassoExecucao.execucao_id)
+                .filter(ExecucaoCasoDeTeste.run_id == r.id).count()
+            )
+            result.append({
+                "id": r.id, "numero": r.numero, "ciclo_id": r.ciclo_id,
+                "estado": r.estado,
+                "user_sintetico_email": r.user_sintetico_email,
+                "empresa_demo_cnpj": r.empresa_demo_cnpj,
+                "empresa_demo_razao": r.empresa_demo_razao,
+                "iniciado_em": r.iniciado_em.isoformat() if r.iniciado_em else None,
+                "concluido_em": r.concluido_em.isoformat() if r.concluido_em else None,
+                "n_cts": n_total,
+                "n_cts_aprovados": n_aprov,
+                "n_cts_reprovados": n_reprov,
+                "n_cts_pendentes": n_pend,
+                "n_passos": n_passos,
+                "n_observacoes": n_obs,
+            })
+        return jsonify({"teste_id": t.id, "rodadas": result})
+    finally:
+        db.close()
+
+
+@app.route("/api/testes/<teste_id>/ciclo")
+@login_required
+def api_teste_ciclo(teste_id):
+    """Retorna informacoes do contexto do ciclo da rodada atual (ou rodada especifica via ?run_id=...)."""
+    db = get_db()
+    try:
+        t = db.query(Teste).filter_by(id=teste_id).first()
+        if not t:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or t.user_id == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        run_id = request.args.get("run_id")
+        if run_id:
+            run = db.query(RunTeste).filter_by(id=run_id, teste_id=t.id).first()
+        else:
+            run = _rodada_atual(db, t)
+        if not run:
+            return jsonify({"error": "rodada nao encontrada"}), 404
+        ctx = _ler_contexto_yaml(run.ciclo_id) or {}
+        # Prefixo da empresa DEMO pra buscar no banco editais
+        # Empresas seguem o padrao: "DEMO <ciclo_short> Comercio e Representacoes Ltda"
+        # onde ciclo_short = primeira parte do ciclo_id (ex: teste-f425e4dd -> f425e4dd)
+        razao_prefix = None
+        if run.empresa_demo_razao:
+            razao_prefix = run.empresa_demo_razao.split(" Comércio")[0].split(" Comercio")[0]
+        elif run.ciclo_id:
+            # Fallback para testes legados sem empresa_demo_razao gravada
+            ciclo_short = run.ciclo_id.split("_")[0].replace("-", "")
+            # Tira o "teste" prefixo para ficar igual ao usado em renderizar_todos
+            ciclo_short = ciclo_short.replace("teste", "")
+            razao_prefix = f"DEMO {ciclo_short}"
+        dados_editais = _coletar_dados_ciclo_no_editais(razao_prefix)
+        evid_dirs = []
+        try:
+            rel_dir = _PROJECT / "testes" / "relatorios" / "visual"
+            if rel_dir.exists():
+                prefix = f"teste_{t.id[:8]}_"
+                for d in rel_dir.iterdir():
+                    if d.is_dir() and d.name.startswith(prefix):
+                        evid_dirs.append(str(d.relative_to(_PROJECT)))
+        except Exception:
+            pass
+        return jsonify({
+            "rodada": {
+                "id": run.id, "numero": run.numero, "ciclo_id": run.ciclo_id,
+                "estado": run.estado,
+                "iniciado_em": run.iniciado_em.isoformat() if run.iniciado_em else None,
+                "concluido_em": run.concluido_em.isoformat() if run.concluido_em else None,
+            },
+            "usuario_sintetico": {
+                "email": run.user_sintetico_email,
+                "id": run.user_sintetico_id,
+            },
+            "empresa_planejada": {
+                "cnpj": run.empresa_demo_cnpj,
+                "razao": run.empresa_demo_razao,
+            },
+            "empresa_real_no_editais": dados_editais,
+            "contexto_yaml_path": f"testes/contextos/{run.ciclo_id}/contexto.yaml",
+            "evidencias_dirs": evid_dirs,
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/runs/<run_id>/relatorio")
+@login_required
+def api_run_relatorio(run_id):
+    """Relatorio JSON escopado a uma rodada especifica."""
+    db = get_db()
+    try:
+        run = db.query(RunTeste).filter_by(id=run_id).first()
+        if not run:
+            return jsonify({"error": "nao encontrado"}), 404
+        d = _montar_relatorio_dict(db, run.teste_id, run_id=run_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        return jsonify(d)
+    finally:
+        db.close()
+
+
+@app.route("/api/runs/<run_id>/relatorio.md")
+@login_required
+def api_run_relatorio_md(run_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api"))
+    from exporters import gerar_md
+    db = get_db()
+    try:
+        run = db.query(RunTeste).filter_by(id=run_id).first()
+        if not run:
+            return jsonify({"error": "nao encontrado"}), 404
+        d = _montar_relatorio_dict(db, run.teste_id, run_id=run_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_md(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_r{run.numero}_{run_id[:8]}.md"
+        return send_file(io.BytesIO(body), mimetype="text/markdown; charset=utf-8",
+                         as_attachment=True, download_name=nome)
+    finally:
+        db.close()
+
+
+@app.route("/api/runs/<run_id>/relatorio.docx")
+@login_required
+def api_run_relatorio_docx(run_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api"))
+    from exporters import gerar_docx
+    db = get_db()
+    try:
+        run = db.query(RunTeste).filter_by(id=run_id).first()
+        if not run:
+            return jsonify({"error": "nao encontrado"}), 404
+        d = _montar_relatorio_dict(db, run.teste_id, run_id=run_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_docx(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_r{run.numero}_{run_id[:8]}.docx"
+        return send_file(io.BytesIO(body),
+                         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                         as_attachment=True, download_name=nome)
+    finally:
+        db.close()
+
+
+@app.route("/api/runs/<run_id>/relatorio.pdf")
+@login_required
+def api_run_relatorio_pdf(run_id):
+    from flask import send_file
+    sys.path.insert(0, str(_FW_VISUAL / "api"))
+    from exporters import gerar_pdf
+    db = get_db()
+    try:
+        run = db.query(RunTeste).filter_by(id=run_id).first()
+        if not run:
+            return jsonify({"error": "nao encontrado"}), 404
+        d = _montar_relatorio_dict(db, run.teste_id, run_id=run_id)
+        if d is None:
+            return jsonify({"error": "nao encontrado"}), 404
+        if not (session.get("is_admin") or d["teste"].get("user_id") == session["user_id"]):
+            return jsonify({"error": "acesso negado"}), 403
+        d["teste"].pop("user_id", None)
+        body = gerar_pdf(d)
+        nome = f"relatorio_{_slug_titulo(d['teste'].get('titulo'))}_r{run.numero}_{run_id[:8]}.pdf"
+        return send_file(io.BytesIO(body), mimetype="application/pdf",
+                         as_attachment=True, download_name=nome)
+    finally:
+        db.close()
+
+
+# ============================================================
+# Helpers de rodadas (runs)
+# ============================================================
+
+def _provisionar_rodada(db, teste: "Teste", numero: int, sprint_numero: int) -> "RunTeste":
+    """Provisiona uma nova rodada para um teste:
+    - Define ciclo_id = teste-<8chars>-r<numero> (ou teste-<8chars> se numero==1, compat)
+    - Chama criar_ciclo() para alocar usuario sintetico + CNPJ + renderizar docs
+    - Cria registro RunTeste e salva infos do contexto
+
+    Retorna o RunTeste criado (ainda nao commited — caller faz commit).
+    """
+    if numero == 1:
+        ciclo_id = f"teste-{teste.id[:8]}"
+    else:
+        ciclo_id = f"teste-{teste.id[:8]}-r{numero}"
+
+    user_email = None
+    user_id_sintetico = None
+    cnpj = None
+    razao = None
+    try:
+        sys.path.insert(0, str(_PROJECT / "testes" / "framework_provisionamento"))
+        from context_manager import criar_ciclo  # type: ignore
+        ctx = criar_ciclo(
+            ciclo_id=ciclo_id,
+            ambiente="agenteditais",
+            precisa_editais=False,
+            sprints_no_ciclo=[sprint_numero],
+        )
+        v = ctx.get("trilhas", {}).get("visual", {})
+        user_email = v.get("usuario", {}).get("email")
+        user_id_sintetico = v.get("usuario", {}).get("id")
+        emp = v.get("empresa", {})
+        cnpj = emp.get("cnpj_pretendido")
+        razao = emp.get("razao_social_pretendida")
+        print(f"[api] rodada {numero} ciclo {ciclo_id}: user={user_email} cnpj={cnpj}")
+    except FileExistsError:
+        print(f"[api] ciclo {ciclo_id} ja existia — reusando")
+    except Exception as e:
+        print(f"[api] WARN: falha ao provisionar ciclo {ciclo_id}: {e}")
+
+    run = RunTeste(
+        teste_id=teste.id, numero=numero, ciclo_id=ciclo_id,
+        user_sintetico_email=user_email, user_sintetico_id=user_id_sintetico,
+        empresa_demo_cnpj=cnpj, empresa_demo_razao=razao,
+        estado="criado",
+    )
+    db.add(run)
+    db.flush()
+    return run
+
+
+def _rodada_atual(db, teste: "Teste") -> "RunTeste | None":
+    """Retorna a rodada atual (maior numero) do teste, ou None se nao houver."""
+    return (
+        db.query(RunTeste)
+        .filter_by(teste_id=teste.id)
+        .order_by(RunTeste.numero.desc())
+        .first()
+    )
+
+
+def _ordenar_ucs_topologico(db, ucs):
+    """Ordena UCs topologicamente por predecessores depends. Empate = uc_id alfabetico."""
+    preds_rows = (
+        db.query(UcPredecessor)
+        .filter(UcPredecessor.uc_id.in_([u.id for u in ucs]),
+                UcPredecessor.tipo == "depends",
+                UcPredecessor.predecessor_id.isnot(None))
+        .all()
+    )
+    uc_id_set = {u.id for u in ucs}
+    deps = {u.id: set() for u in ucs}
+    for r in preds_rows:
+        if r.predecessor_id in uc_id_set:
+            deps[r.uc_id].add(r.predecessor_id)
+    uc_by_id = {u.id: u for u in ucs}
+    ordenados = []
+    visitados = set()
+    def visitar(uid):
+        if uid in visitados:
+            return
+        visitados.add(uid)
+        for d in sorted(deps[uid], key=lambda x: uc_by_id[x].uc_id):
+            visitar(d)
+        ordenados.append(uc_by_id[uid])
+    for uid in sorted(uc_by_id, key=lambda x: uc_by_id[x].uc_id):
+        visitar(uid)
+    return ordenados
+
+
+def _expandir_uc_em_cts(db, ucs):
+    """Para cada UC, expande em CTs Cenário+visual com passos cadastrados.
+    Mantém ordem dos UCs (caller deve passar topologicamente ordenados)."""
+    cts_ordenados = []
+    for uc in ucs:
+        cts_uc = (
+            db.query(CasoDeTeste)
+            .filter_by(caso_de_uso_id=uc.id, ativo=1,
+                       categoria="Cenário", trilha_sugerida="visual")
+            .order_by(CasoDeTeste.ct_id)
+            .all()
+        )
+        for c in cts_uc:
+            if c.passos_tutorial:
+                cts_ordenados.append(c)
+    return cts_ordenados
+
+
+def _ler_contexto_yaml(ciclo_id: str) -> dict | None:
+    """Le testes/contextos/<ciclo_id>/contexto.yaml. Retorna None se nao existe."""
+    if not ciclo_id:
+        return None
+    path = _PROJECT / "testes" / "contextos" / ciclo_id / "contexto.yaml"
+    if not path.exists():
+        return None
+    try:
+        import yaml as _yaml
+        with open(path, "r", encoding="utf-8") as f:
+            return _yaml.safe_load(f)
+    except Exception as e:
+        print(f"[api] erro lendo {path}: {e}")
+        return None
+
+
+def _coletar_dados_ciclo_no_editais(razao_demo_prefix: str | None) -> dict:
+    """Vai no banco editais (aplicacao) e coleta empresa/hierarquia/vinculos.
+    Retorna dict vazio se nao achar."""
+    if not razao_demo_prefix:
+        return {}
+    try:
+        import mysql.connector
+        host = os.getenv("MYSQL_HOST", "camerascasas.no-ip.info")
+        port = int(os.getenv("MYSQL_PORT", "3308"))
+        user = os.getenv("MYSQL_USER", "producao")
+        password = os.getenv("MYSQL_PASSWORD", "")
+        conn = mysql.connector.connect(
+            host=host, port=port, user=user, password=password, database="editais"
+        )
+        c = conn.cursor()
+        # Empresas no banco editais nao tem timestamp de criacao — busca a ultima
+        # criada via id descendente (UUIDs costumam ordenar aproximadamente por tempo)
+        c.execute("SELECT id, razao_social, cnpj, area_padrao_id, emails, telefone "
+                  "FROM empresas WHERE razao_social LIKE %s ORDER BY id DESC LIMIT 1",
+                  (f"{razao_demo_prefix}%",))
+        r = c.fetchone()
+        if not r:
+            conn.close()
+            return {}
+        emp_id, razao, cnpj, area_padrao_id, emails, telefone = r
+        # Conta hierarquia
+        c.execute("""
+            SELECT COUNT(DISTINCT a.id), COUNT(DISTINCT cl.id), COUNT(DISTINCT sc.id)
+            FROM areas_produto a
+            LEFT JOIN classes_produto_v2 cl ON cl.area_id = a.id
+            LEFT JOIN subclasses_produto sc ON sc.classe_id = cl.id
+            WHERE a.empresa_id = %s
+        """, (emp_id,))
+        n_areas, n_classes, n_subclasses = c.fetchone() or (0, 0, 0)
+        # Conta vinculos
+        c.execute("SELECT COUNT(*) FROM usuario_empresa WHERE empresa_id=%s", (emp_id,))
+        n_vinculos = (c.fetchone() or [0])[0]
+        # Area padrao nome
+        area_padrao_nome = None
+        if area_padrao_id:
+            c.execute("SELECT nome FROM areas_produto WHERE id=%s", (area_padrao_id,))
+            ap = c.fetchone()
+            area_padrao_nome = ap[0] if ap else None
+        conn.close()
+        return {
+            "empresa_id_no_editais": emp_id,
+            "razao_social": razao,
+            "cnpj": cnpj,
+            "area_padrao_id": area_padrao_id,
+            "area_padrao_nome": area_padrao_nome,
+            "emails": emails,
+            "telefone": telefone,
+            "hierarquia": {"areas": n_areas, "classes": n_classes, "subclasses": n_subclasses},
+            "vinculos_usuario_empresa": n_vinculos,
+        }
+    except Exception as e:
+        print(f"[api] erro consultando banco editais: {e}")
+        return {}
+
+
+def _montar_relatorio_dict(db, teste_id: str, run_id: str | None = None) -> dict | None:
     """Monta o dict do relatorio a partir do banco. Retorna None se teste nao encontrado.
-    Usa em /relatorio (JSON) e nos exporters (md/docx/pdf)."""
+    Usa em /relatorio (JSON) e nos exporters (md/docx/pdf).
+
+    Se run_id for None, devolve relatorio da rodada ATUAL (maior numero).
+    Se for "todos", devolve execucoes de TODAS as rodadas (modo consolidado).
+    Caso contrario, escopa pela rodada especifica.
+    """
     import json as _json
     t = db.query(Teste).filter_by(id=teste_id).first()
     if not t:
         return None
-    execs = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id).order_by(ExecucaoCasoDeTeste.ordem).all()
+    # Define run-alvo
+    rodada_alvo = None
+    if run_id == "todos":
+        rodada_alvo = "todos"
+    elif run_id:
+        rodada_alvo = db.query(RunTeste).filter_by(id=run_id, teste_id=t.id).first()
+        if not rodada_alvo:
+            return None
+    else:
+        rodada_alvo = _rodada_atual(db, t)
+    # Carrega execucoes
+    q = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=t.id)
+    if isinstance(rodada_alvo, RunTeste):
+        q = q.filter_by(run_id=rodada_alvo.id)
+    elif rodada_alvo == "todos":
+        pass  # sem filtro adicional
+    # Sem rodada (caso impossivel apos migration mas defensivo): retorna sem execucoes
+    execs = q.order_by(ExecucaoCasoDeTeste.ordem).all()
     result_execs = []
     for e in execs:
         ct = e.caso_de_teste
@@ -1041,6 +1652,26 @@ def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
             "passos": passos_view,
         })
     rel = db.query(Relatorio).filter_by(teste_id=t.id).order_by(desc(Relatorio.gerado_em)).first()
+    # Lista de rodadas pra navegacao no frontend
+    rodadas = (
+        db.query(RunTeste).filter_by(teste_id=t.id)
+        .order_by(RunTeste.numero).all()
+    )
+    rodadas_resumo = [
+        {
+            "id": r.id, "numero": r.numero, "ciclo_id": r.ciclo_id,
+            "estado": r.estado,
+            "user_sintetico_email": r.user_sintetico_email,
+            "empresa_demo_cnpj": r.empresa_demo_cnpj,
+            "iniciado_em": r.iniciado_em.isoformat() if r.iniciado_em else None,
+            "concluido_em": r.concluido_em.isoformat() if r.concluido_em else None,
+        } for r in rodadas
+    ]
+    rodada_corrente_id = None
+    rodada_corrente_numero = None
+    if isinstance(rodada_alvo, RunTeste):
+        rodada_corrente_id = rodada_alvo.id
+        rodada_corrente_numero = rodada_alvo.numero
     return {
         "teste": {
             "id": t.id, "titulo": t.titulo, "estado": t.estado,
@@ -1051,6 +1682,11 @@ def _montar_relatorio_dict(db, teste_id: str) -> dict | None:
             "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
             "user_id": t.user_id,
         },
+        "rodada_atual": {
+            "id": rodada_corrente_id,
+            "numero": rodada_corrente_numero,
+        },
+        "rodadas": rodadas_resumo,
         "execucoes": result_execs,
         "relatorio_md": rel.conteudo_md if rel else None,
     }
