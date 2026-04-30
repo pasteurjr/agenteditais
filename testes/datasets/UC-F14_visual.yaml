@@ -1,0 +1,37 @@
+uc_id: UC-F14
+trilha: visual
+ciclo_id_default: piloto-ucf14
+
+# UC-F14 — Configurar pesos e limiares de score
+# Aba "Score" da ParametrizacoesPage. 2 cards:
+#  1. Pesos das Dimensoes (6 campos number, devem somar 1.00)
+#  2. Limiares de Decisao GO/NO-GO (6 campos: score_final, tecnico, juridico)
+#
+# Pre-condicoes de DADOS:
+#  - parametros_score eh empresa-scoped (3 registros legados, 0 pra empresas DEMO).
+#    Frontend chama ensureParamScore() no 1o save -> cria registro automaticamente.
+#  - empresa criada (UC-F01) e vinculada (UC-F18) e selecionada como ativa
+#    (predecessores ja registrados no banco testesvalidacoes em 30/04/2026 19h)
+
+# Pesos (devem somar 1.00)
+peso_tecnico: "0.30"
+peso_documental: "0.15"
+peso_complexidade: "0.15"
+peso_juridico: "0.20"
+peso_logistico: "0.10"
+peso_comercial: "0.10"
+# Total: 1.00 -> indicator deve ficar verde
+
+# Limiares Score Final
+limiar_final_go: "70"
+limiar_final_nogo: "40"
+# Limiares Score Tecnico
+limiar_tecnico_go: "60"
+limiar_tecnico_nogo: "30"
+# Limiares Score Juridico
+limiar_juridico_go: "60"
+limiar_juridico_nogo: "30"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

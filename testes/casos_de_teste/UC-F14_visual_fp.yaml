@@ -1,0 +1,30 @@
+uc_id: UC-F14
+variacao: fp
+trilha: visual
+descricao: "Configura pesos das dimensoes (somando 1.00) e limiares GO/NO-GO de Score Final, Tecnico e Juridico"
+
+passos:
+  - id: passo_00_setup_navegar_parametrizacoes
+    asserts_dom:
+      - selector: 'h1:has-text("Parametrizacoes")'
+      - selector: 'button.tab-panel-tab.active:has(.tab-label:has-text("Score"))'
+
+  - id: passo_01_preencher_pesos
+    asserts_dom:
+      - selector: 'h3:has-text("Pesos das Dimensoes"), .card-title:has-text("Pesos das Dimensoes")'
+
+  - id: passo_02_salvar_pesos
+    asserts_rede:
+      - url_contem: "/api/crud/parametros-score"
+        metodo: ""
+        status_in: [200, 201]
+
+  - id: passo_03_preencher_limiares
+    asserts_dom:
+      - selector: 'h3:has-text("Limiares de Decisao"), .card-title:has-text("Limiares de Decisao")'
+
+  - id: passo_04_salvar_limiares
+    asserts_rede:
+      - url_contem: "/api/crud/parametros-score"
+        metodo: ""
+        status_in: [200, 201]
