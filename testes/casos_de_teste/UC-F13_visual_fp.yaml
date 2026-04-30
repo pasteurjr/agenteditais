@@ -1,0 +1,69 @@
+uc_id: UC-F13
+variacao: fp
+trilha: visual
+descricao: "Cria 2 areas + 3 classes + 3 subclasses na empresa do ciclo, depois visualiza arvore"
+passos:
+  - id: passo_00_setup_navegar_areas
+    asserts_dom:
+      - selector: 'h1:has-text("Áreas de Produto"), h2:has-text("Áreas de Produto"), h1:has-text("Areas de Produto"), h2:has-text("Areas de Produto")'
+
+  - id: passo_01_criar_area_1
+    asserts_rede:
+      - url_contem: "/api/crud/areas-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_02_criar_area_2
+    asserts_rede:
+      - url_contem: "/api/crud/areas-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_03_navegar_classes
+    asserts_dom:
+      - selector: 'h1:has-text("Classes"), h2:has-text("Classes")'
+
+  - id: passo_04_criar_classe_1
+    asserts_rede:
+      - url_contem: "/api/crud/classes-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_05_criar_classe_2
+    asserts_rede:
+      - url_contem: "/api/crud/classes-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_06_criar_classe_3
+    asserts_rede:
+      - url_contem: "/api/crud/classes-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_07_navegar_subclasses
+    asserts_dom:
+      - selector: 'h1:has-text("Subclasses"), h2:has-text("Subclasses")'
+
+  - id: passo_08_criar_subclasse_1
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_09_criar_subclasse_2
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_10_criar_subclasse_3
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_11_visualizar_arvore
+    asserts_dom:
+      - selector: 'text=Equipamentos Médico-Hospitalares'
+      - selector: 'text=Diagnóstico in Vitro'

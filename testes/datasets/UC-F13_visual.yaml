@@ -1,0 +1,61 @@
+uc_id: UC-F13
+trilha: visual
+ciclo_id_default: piloto-ucf13
+
+# UC-F13 V8: cria hierarquia Area/Classe/Subclasse pra empresa do ciclo.
+# Cada CRUD eh empresa_scoped — empresa nova nasce sem nada.
+# Tutorial cria 2 areas + 3 classes + 3 subclasses na ordem certa
+# (classe precisa de area_id, subclasse precisa de classe_id).
+
+hierarquia:
+  areas:
+    - nome: "Equipamentos Médico-Hospitalares"
+    - nome: "Diagnóstico in Vitro e Laboratório"
+
+  classes:
+    - nome: "Monitoração"
+      area_nome: "Equipamentos Médico-Hospitalares"
+    - nome: "Reagentes Bioquímicos"
+      area_nome: "Diagnóstico in Vitro e Laboratório"
+    - nome: "Reagentes e Kits Diagnósticos"
+      area_nome: "Diagnóstico in Vitro e Laboratório"
+
+  subclasses:
+    - nome: "Monitor Multiparamétrico"
+      classe_nome: "Monitoração"
+      ncm: "9018.19.90"
+    - nome: "Reagente para Glicose"
+      classe_nome: "Reagentes Bioquímicos"
+      ncm: "3822.19.90"
+    - nome: "Kit de Hematologia"
+      classe_nome: "Reagentes e Kits Diagnósticos"
+      ncm: "3822.19.90"
+
+# Atalhos pra acoes individuais (sem aninhamento, pra valor_from_dataset funcionar)
+area_1_nome: "Equipamentos Médico-Hospitalares"
+area_2_nome: "Diagnóstico in Vitro e Laboratório"
+
+classe_1_nome: "Monitoração"
+classe_1_area: "Equipamentos Médico-Hospitalares"
+
+classe_2_nome: "Reagentes Bioquímicos"
+classe_2_area: "Diagnóstico in Vitro e Laboratório"
+
+classe_3_nome: "Reagentes e Kits Diagnósticos"
+classe_3_area: "Diagnóstico in Vitro e Laboratório"
+
+subclasse_1_nome: "Monitor Multiparamétrico"
+subclasse_1_classe: "Monitoração"
+subclasse_1_ncm: "9018.19.90"
+
+subclasse_2_nome: "Reagente para Glicose"
+subclasse_2_classe: "Reagentes Bioquímicos"
+subclasse_2_ncm: "3822.19.90"
+
+subclasse_3_nome: "Kit de Hematologia"
+subclasse_3_classe: "Reagentes e Kits Diagnósticos"
+subclasse_3_ncm: "3822.19.90"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

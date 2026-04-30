@@ -104,10 +104,11 @@ validacao_ref: "testes/casos_de_teste/UC-F02_visual_fp.yaml#passo_02_adicionar_t
 
 ## Passo 03 — Selecionar area de atuacao padrao
 
-O browser abre o select "Area de Atuacao Padrao" e escolhe a primeira opcao disponivel (ignorando "Selecione uma area..."). Se a lista estiver vazia, registra observacao.
+O browser abre o select "Area de Atuacao Padrao" (populado pelas areas criadas em UC-F13 V8 que rodou antes) e seleciona "Equipamentos Médico-Hospitalares".
 
 **Observe criticamente:**
-- Select "Area de Atuacao Padrao" tem ao menos 1 opcao alem de "Selecione..."
+- Select "Area de Atuacao Padrao" tem ao menos 2 opcoes (vindas do UC-F13)
+- "Equipamentos Médico-Hospitalares" aparece como opcao
 - Apos selecionar, valor aparece no select
 
 ```yaml
@@ -115,7 +116,11 @@ id: passo_03_selecionar_area_padrao
 acao:
   sequencia:
     - tipo: wait_for
-      seletor: 'label:has-text("Area de Atuacao Padrao") ~ select, label:has-text("Area de Atuacao Padrao") + select'
+      seletor: 'label:has-text("Area de Atuacao Padrao") ~ select, label:has-text("Area de Atuacao Padrao") + select, label:has-text("Área de Atuação Padrão") ~ select, label:has-text("Área de Atuação Padrão") + select'
+      timeout: 5000
+    - tipo: select
+      seletor: 'label:has-text("Area de Atuacao Padrao") ~ select, label:has-text("Area de Atuacao Padrao") + select, label:has-text("Área de Atuação Padrão") ~ select, label:has-text("Área de Atuação Padrão") + select'
+      valor_literal: "Equipamentos Médico-Hospitalares"
       timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F02_visual_fp.yaml#passo_03_selecionar_area_padrao"
 ```

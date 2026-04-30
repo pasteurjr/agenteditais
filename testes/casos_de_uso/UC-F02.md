@@ -37,10 +37,7 @@ Estado satisfeito por execucao previa de:
 
 - **UC-F01**
 - **UC-F18**
-
-Pre-requisitos nao-UC:
-
-- `[seed]` — dado pre-cadastrado no banco (seed)
+- **UC-F13**
 
 
 ### Pos-condicoes
