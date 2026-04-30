@@ -25,19 +25,19 @@ passos:
 
   - id: passo_04_criar_classe_1
     asserts_rede:
-      - url_contem: "/api/crud/classes-produto"
+      - url_contem: "/api/crud/classes-produto-v2"
         metodo: POST
         status_in: [200, 201]
 
   - id: passo_05_criar_classe_2
     asserts_rede:
-      - url_contem: "/api/crud/classes-produto"
+      - url_contem: "/api/crud/classes-produto-v2"
         metodo: POST
         status_in: [200, 201]
 
   - id: passo_06_criar_classe_3
     asserts_rede:
-      - url_contem: "/api/crud/classes-produto"
+      - url_contem: "/api/crud/classes-produto-v2"
         metodo: POST
         status_in: [200, 201]
 
