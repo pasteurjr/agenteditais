@@ -1,6 +1,6 @@
 # Índice de Casos de Uso (V5)
 
-**Gerado em:** 2026-04-24T19:14:51
+**Gerado em:** 2026-04-24T19:19:04
 **Total de UCs canônicos:** 86
 **UCs legacy preservados:** 3 (versões antigas de UCs duplicados em docs diferentes)
 **Origem:** 5 documentos V5 em `docs/`.
