@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from painel import EstadoSessao, ResultadoPasso, iniciar_painel_em_thread  # type: ignore
 from parser import Acao  # type: ignore
-from executor import _executar_acao, _validar_dom, _login  # type: ignore
+from executor import _executar_acao, _validar_dom, _validar_rede, _login  # type: ignore
 from db.engine import get_db  # type: ignore
 from db.models import (  # type: ignore
     User, Teste, RunTeste, ExecucaoCasoDeTeste, CasoDeTeste, CasoDeUso,
@@ -148,7 +148,7 @@ def _carregar_ciclo_contexto(ciclo_id: str | None):
 
 def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
                    estado: EstadoSessao, evid_dir: Path, ciclo_contexto: dict | None,
-                   args) -> str:
+                   args, capturas_rede: list[dict] | None = None) -> str:
     """Roda 1 CT do teste. Retorna estado final."""
     ct = exec_obj.caso_de_teste
     uc = ct.caso_de_uso
@@ -224,6 +224,10 @@ def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
         estado.passo_atual_idx = idx
         resultado = estado.resultados[idx]
 
+        # Reset captura de rede pro escopo deste passo
+        if capturas_rede is not None:
+            capturas_rede.clear()
+
         # Cria registro PassoExecucao no banco
         passo_exec = PassoExecucao(
             execucao_id=exec_obj.id,
@@ -276,20 +280,37 @@ def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
         passo_exec.duracao_ms = duracao_passo
         resultado.duracao_ms = duracao_passo
 
-        # Validacao automatica DOM (asserts_json)
+        # Validacao automatica (asserts DOM + asserts rede)
         if erro_acao:
             resultado.veredito_automatico = "REPROVADO"
             resultado.detalhes_validacao = {"acao_erro": erro_acao}
             passo_exec.veredito_automatico = "REPROVADO"
             passo_exec.detalhes_validacao_json = {"acao_erro": erro_acao}
         else:
-            asserts_dom = [a for a in (passo_db.asserts_json or []) if a.get("tipo") == "dom"]
+            asserts_all = passo_db.asserts_json or []
+            asserts_dom = [a for a in asserts_all if a.get("tipo") == "dom"]
+            asserts_rede = [a for a in asserts_all if a.get("tipo") == "rede"]
+            detalhes: dict = {}
+            ok_total = True
+            tem_assert = False
             if asserts_dom:
-                ok, msg, detalhe = _validar_dom(page, asserts_dom)
-                resultado.veredito_automatico = "APROVADO" if ok else "REPROVADO"
-                resultado.detalhes_validacao = {"dom": {"ok": ok, "mensagem": msg, "asserts": detalhe}}
-                passo_exec.veredito_automatico = "APROVADO" if ok else "REPROVADO"
-                passo_exec.detalhes_validacao_json = {"dom": {"ok": ok, "mensagem": msg, "asserts": detalhe}}
+                tem_assert = True
+                ok_d, msg_d, det_d = _validar_dom(page, asserts_dom)
+                detalhes["dom"] = {"ok": ok_d, "mensagem": msg_d, "asserts": det_d}
+                if not ok_d:
+                    ok_total = False
+            if asserts_rede:
+                tem_assert = True
+                ok_r, msg_r, det_r = _validar_rede(capturas_rede or [], asserts_rede)
+                detalhes["rede"] = {"ok": ok_r, "mensagem": msg_r, "asserts": det_r}
+                if not ok_r:
+                    ok_total = False
+            if tem_assert:
+                veredito = "APROVADO" if ok_total else "REPROVADO"
+                resultado.veredito_automatico = veredito
+                resultado.detalhes_validacao = detalhes
+                passo_exec.veredito_automatico = veredito
+                passo_exec.detalhes_validacao_json = detalhes
             else:
                 resultado.veredito_automatico = "INCONCLUSIVO"
                 passo_exec.veredito_automatico = "INCONCLUSIVO"
@@ -586,6 +607,20 @@ def main():
                 except: pass
             page.on("dialog", _on_dialog)
 
+            # Captura de responses para asserts_rede.
+            # _capturas_rede_atuais eh resetado no inicio de cada passo.
+            _capturas_rede_atuais: list[dict] = []
+            def _on_response(resp):
+                try:
+                    _capturas_rede_atuais.append({
+                        "url": resp.url,
+                        "metodo": resp.request.method,
+                        "status": resp.status,
+                    })
+                except Exception:
+                    pass
+            page.on("response", _on_response)
+
             # Login opcional
             if args.auto_login:
                 email = EMAIL_DEFAULT
@@ -607,7 +642,7 @@ def main():
             for exec_obj in execs:
                 if estado.evento_parar.is_set():
                     break
-                _executar_um_ct(page, db, teste, exec_obj, estado, evid_dir, ciclo_contexto, args)
+                _executar_um_ct(page, db, teste, exec_obj, estado, evid_dir, ciclo_contexto, args, _capturas_rede_atuais)
 
             # Sinaliza para o painel que terminou — frontend mostra tela de conclusao
             estado.estado = "terminado"

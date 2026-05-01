@@ -353,6 +353,53 @@ def _validar_dom(page: Page, asserts: list[dict]) -> tuple[bool, str, list[dict]
     return ok_geral, msg_primeiro_erro, detalhe
 
 
+def _validar_rede(capturas: list[dict], asserts: list[dict]) -> tuple[bool, str, list[dict]]:
+    """Validacoes de rede contra responses capturadas durante o passo.
+
+    capturas: lista de dicts {url, metodo, status} coletados via page.on('response').
+    asserts: lista de dicts {url_contem, metodo (opcional), status_in: [int]}.
+    Retorna (ok, msg_primeiro_erro, detalhe_por_assert).
+    """
+    detalhe: list[dict] = []
+    if not asserts:
+        return True, "sem asserts rede", detalhe
+    ok_geral = True
+    msg_primeiro_erro = ""
+    for a in asserts:
+        url_contem = a.get("url_contem", "")
+        metodo_esperado = (a.get("metodo") or "").upper()
+        status_in = a.get("status_in") or []
+        item: dict = {"url_contem": url_contem, "metodo": metodo_esperado,
+                      "status_in": status_in, "ok": False, "info": ""}
+        candidatos = [
+            c for c in capturas
+            if url_contem in (c.get("url") or "")
+            and (not metodo_esperado or (c.get("metodo") or "").upper() == metodo_esperado)
+        ]
+        if not candidatos:
+            item["info"] = f"nenhuma request casou ({metodo_esperado or 'qq metodo'} {url_contem})"
+            detalhe.append(item)
+            if ok_geral:
+                ok_geral = False
+                msg_primeiro_erro = item["info"]
+            continue
+        # Pega o ultimo (response final, evita preflight)
+        c = candidatos[-1]
+        status = c.get("status")
+        item["status_visto"] = status
+        if status_in and status not in status_in:
+            item["info"] = f"status {status} nao em {status_in}"
+            detalhe.append(item)
+            if ok_geral:
+                ok_geral = False
+                msg_primeiro_erro = item["info"]
+            continue
+        item["ok"] = True
+        item["info"] = "OK"
+        detalhe.append(item)
+    return ok_geral, msg_primeiro_erro, detalhe
+
+
 def main():
     parser = argparse.ArgumentParser(description="Executor da trilha visual")
     parser.add_argument("uc_id")
