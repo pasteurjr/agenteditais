@@ -368,7 +368,10 @@ def _validar_rede(capturas: list[dict], asserts: list[dict]) -> tuple[bool, str,
     for a in asserts:
         url_contem = a.get("url_contem", "")
         metodo_esperado = (a.get("metodo") or "").upper()
+        # Aceita 'status_in: [200, 201]' OU 'status: 200' (forma curta).
         status_in = a.get("status_in") or []
+        if not status_in and a.get("status") is not None:
+            status_in = [a.get("status")]
         item: dict = {"url_contem": url_contem, "metodo": metodo_esperado,
                       "status_in": status_in, "ok": False, "info": ""}
         candidatos = [

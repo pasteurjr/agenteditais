@@ -7760,9 +7760,11 @@ def upload_manual():
     file.save(filepath)
 
     # Processar
+    empresa_id_atual = get_current_empresa_id()
     resultado = tool_processar_upload(
         filepath=filepath,
         user_id=user_id,
+        empresa_id=empresa_id_atual,
         nome_produto=nome_produto,
         categoria=categoria,
         fabricante=fabricante,
@@ -7965,9 +7967,11 @@ ANÁLISE:"""
 
         # ========== AÇÃO: CADASTRAR (padrão) ==========
         else:
+            empresa_id_atual = get_current_empresa_id()
             resultado = tool_processar_upload(
                 filepath=filepath,
                 user_id=user_id,
+                empresa_id=empresa_id_atual,
                 nome_produto=nome_produto,
                 categoria=None,
                 fabricante=None,
@@ -8099,9 +8103,11 @@ def upload_chat():
             categoria = "equipamento"
 
         # Processar arquivo
+        empresa_id_atual = get_current_empresa_id()
         resultado = tool_processar_upload(
             filepath=filepath,
             user_id=user_id,
+            empresa_id=empresa_id_atual,
             nome_produto=nome_produto,
             categoria=categoria,
             fabricante=None,
