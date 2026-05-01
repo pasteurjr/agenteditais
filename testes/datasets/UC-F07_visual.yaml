@@ -1,0 +1,26 @@
+uc_id: UC-F07
+trilha: visual
+variacao: fp
+descricao: |
+  Cadastro de produto via IA a partir de manual tecnico em PDF.
+  DeepSeek processa o PDF e cria/atualiza produto no portfolio.
+
+# Tipo do documento (id interno do select; label exibido = "Manual Tecnico")
+tipo_documento_value: "manual"
+tipo_documento_label: "Manual Tecnico"
+
+# Path relativo dentro de pasta_documentos_teste
+arquivo_pasta_relativo: "sprint1/UC-F07/manual_tecnico.pdf"
+
+# Nome opcional do produto (a IA pode extrair do PDF mesmo sem este campo)
+nome_produto: "Monitor Multiparametrico de Sinais Vitais"
+
+# Classificacao opcional — vazia (IA extrai). Quando preenchida, melhora extracao.
+# Mantemos vazia neste FP pra teste basico; FA usa classificacao.
+area_value: ""
+classe_value: ""
+subclasse_value: ""
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

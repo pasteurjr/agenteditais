@@ -1,0 +1,16 @@
+uc_id: UC-F09
+variacao: fp
+trilha: visual
+descricao: "Reprocessar especificacoes IA — chama chat e DeepSeek processa"
+
+passos:
+  - id: passo_00_setup_navegar_portfolio
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+      - selector: 'button.ptab.active:has-text("Meus Produtos")'
+
+  - id: passo_01_acionar_reprocessar
+    asserts_rede:
+      - url_contem: "/api/chat"
+        metodo: POST
+        status_in: [200, 201]

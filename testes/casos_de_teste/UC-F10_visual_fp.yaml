@@ -1,0 +1,22 @@
+uc_id: UC-F10
+variacao: fp
+trilha: visual
+descricao: "Buscar registros ANVISA via IA"
+
+passos:
+  - id: passo_00_setup_navegar_portfolio
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+
+  - id: passo_01_abrir_modal_anvisa
+    asserts_dom:
+      - selector: 'div.modal h2:has-text("ANVISA")'
+
+  - id: passo_02_preencher_e_buscar_anvisa
+    asserts_rede:
+      - url_contem: "/api/sessions"
+        metodo: POST
+        status_in: [200, 201]
+      - url_contem: "/api/chat"
+        metodo: POST
+        status_in: [200, 201]

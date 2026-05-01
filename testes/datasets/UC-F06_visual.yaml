@@ -1,0 +1,12 @@
+uc_id: UC-F06
+trilha: visual
+variacao: fp
+descricao: |
+  Listar, filtrar e inspecionar produtos. Area "Equipamentos Medico-Hospitalares" criada pelo F13.
+
+# label do filtro Area (texto da option do select)
+filtro_area_label: "Equipamentos"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

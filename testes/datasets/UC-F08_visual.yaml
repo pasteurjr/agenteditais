@@ -1,0 +1,17 @@
+uc_id: UC-F08
+trilha: visual
+variacao: fp
+descricao: |
+  Edicao de dados basicos de produto existente. Pre-requisito: produto criado pelo F07.
+
+# Novos valores que vamos digitar nos campos basicos
+novo_nome: "Monitor MultiParam Pro Edicao Visual"
+novo_fabricante: "Quantica MedTech"
+novo_modelo: "QM-MP-2026"
+novo_codigo: "SKU-QMMP-2026"
+novo_ncm: "9018.19.90"
+nova_descricao: "Monitor multiparametrico atualizado via UC-F08 (FP)"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

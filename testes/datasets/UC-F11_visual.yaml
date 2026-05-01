@@ -1,0 +1,9 @@
+uc_id: UC-F11
+trilha: visual
+variacao: fp
+descricao: |
+  Verificar completude tecnica de produto existente. Pre-requisito: produto criado pelo F07/F08.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

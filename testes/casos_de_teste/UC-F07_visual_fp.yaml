@@ -1,0 +1,32 @@
+uc_id: UC-F07
+variacao: fp
+trilha: visual
+descricao: "Cadastro de produto via IA a partir de manual tecnico em PDF (DeepSeek)"
+
+passos:
+  - id: passo_00_setup_navegar_cadastro_ia
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+      - selector: 'button.ptab.active:has-text("Cadastro por IA")'
+      - selector: '.card-title:has-text("Cadastro por IA"), h3:has-text("Cadastro por IA")'
+
+  - id: passo_01_selecionar_tipo_e_anexar_arquivo
+    asserts_dom:
+      - selector: 'div.upload-file-info:has-text("manual_tecnico.pdf")'
+
+  - id: passo_02_processar_com_ia
+    asserts_rede:
+      - url_contem: "/api/sessions"
+        metodo: POST
+        status_in: [200, 201]
+      - url_contem: "/api/chat-upload"
+        metodo: POST
+        status_in: [200, 201]
+
+  - id: passo_03_verificar_produto_na_grade
+    asserts_dom:
+      - selector: 'button.ptab.active:has-text("Meus Produtos")'
+    asserts_rede:
+      - url_contem: "/api/produtos"
+        metodo: GET
+        status_in: [200]

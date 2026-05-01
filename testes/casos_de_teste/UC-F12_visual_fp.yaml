@@ -1,0 +1,20 @@
+uc_id: UC-F12
+variacao: fp
+trilha: visual
+descricao: "Reprocessar metadados de captacao via IA"
+
+passos:
+  - id: passo_00_setup_navegar_portfolio
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+      - selector: 'button.ptab.active:has-text("Meus Produtos")'
+
+  - id: passo_01_selecionar_produto
+    asserts_dom:
+      - selector: '.card-title:has-text("Detalhes:"), h3:has-text("Detalhes:")'
+
+  - id: passo_02_reprocessar_metadados
+    asserts_rede:
+      - url_contem: "/reprocessar-metadados"
+        metodo: POST
+        status_in: [200, 201]

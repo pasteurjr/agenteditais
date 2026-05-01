@@ -1,0 +1,21 @@
+uc_id: UC-F11
+variacao: fp
+trilha: visual
+descricao: "Verificar completude tecnica de produto existente"
+
+passos:
+  - id: passo_00_setup_navegar_meus_produtos
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+      - selector: 'button.ptab.active:has-text("Meus Produtos")'
+
+  - id: passo_01_verificar_completude
+    asserts_dom:
+      - selector: 'div.modal h2:has-text("Completude")'
+    asserts_rede:
+      - url_contem: "/completude"
+        metodo: GET
+        status_in: [200]
+
+  - id: passo_02_fechar_modal
+    # nenhum assert: wait_for_hidden ja garante fechamento

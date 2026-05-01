@@ -1,0 +1,26 @@
+uc_id: UC-F06
+variacao: fp
+trilha: visual
+descricao: "Listar, filtrar e inspecionar produtos"
+
+passos:
+  - id: passo_00_setup_navegar_meus_produtos
+    asserts_dom:
+      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
+      - selector: 'button.ptab.active:has-text("Meus Produtos")'
+    asserts_rede:
+      - url_contem: "/api/produtos"
+        metodo: GET
+        status_in: [200]
+
+  - id: passo_01_filtrar_area
+    # Filtro eh client-side; sem assert dom/rede critico, INCONCLUSIVO ok
+    asserts_dom: []
+
+  - id: passo_02_inspecionar_produto
+    asserts_dom:
+      - selector: '.card-title:has-text("Detalhes:"), h3:has-text("Detalhes:")'
+    asserts_rede:
+      - url_contem: "/api/produtos/"
+        metodo: GET
+        status_in: [200]

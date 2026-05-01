@@ -1,0 +1,12 @@
+uc_id: UC-F10
+trilha: visual
+variacao: fp
+descricao: |
+  Buscar registros ANVISA via IA. DeepSeek pesquisa e retorna texto.
+
+# Numero ficticio (a IA pode nao achar — aceita qualquer resposta)
+anvisa_registro: "80149420001"
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

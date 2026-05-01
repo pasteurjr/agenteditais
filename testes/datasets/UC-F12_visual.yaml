@@ -1,0 +1,9 @@
+uc_id: UC-F12
+trilha: visual
+variacao: fp
+descricao: |
+  Reprocessar metadados de captacao do produto via IA. DeepSeek processa.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

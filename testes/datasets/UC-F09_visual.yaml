@@ -1,0 +1,9 @@
+uc_id: UC-F09
+trilha: visual
+variacao: fp
+descricao: |
+  Reprocessa especificacoes do produto via IA. DeepSeek demora 30-120s.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

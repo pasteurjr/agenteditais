@@ -1,0 +1,9 @@
+uc_id: UC-F04
+trilha: visual
+variacao: fp
+descricao: |
+  Buscar certidoes via scraping de portais oficiais. Streaming endpoint.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
