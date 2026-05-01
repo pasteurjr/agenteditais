@@ -568,10 +568,12 @@ def main():
             print(f"[exec] pasta_documentos_teste = {teste.user.pasta_documentos_teste}")
 
         # Estado compartilhado com painel
+        # ciclo_id vem da RODADA atual (run.ciclo_id), nao do teste —
+        # teste.ciclo_id pode ficar stale apos rodadas canceladas.
         estado = EstadoSessao(
             uc_id=teste.titulo,
             variacao=f"{len(execs)} CTs",
-            ciclo_id=teste.ciclo_id or "",
+            ciclo_id=(run.ciclo_id if run else None) or teste.ciclo_id or "",
             base_url="http://localhost:5180",
             ambiente="agenteditais",
             total_passos=0,

@@ -892,6 +892,13 @@ def api_teste_iniciar(teste_id):
                 "pendencias": det_pred.get("pendencias", []),
             }), 409
 
+        # Sincroniza testes.ciclo_id com a rodada que vai rodar — evita label
+        # stale (ex: testes.ciclo_id apontava para r6 cancelada, mas estamos
+        # rodando r5).
+        if run_atual.ciclo_id and t.ciclo_id != run_atual.ciclo_id:
+            t.ciclo_id = run_atual.ciclo_id
+            db.commit()
+
         # Spawn executor_sprint1.py — passa run_id pra ele filtrar execucoes da rodada atual
         # Auto-login: se a rodada ja tem CTs aprovados (eh retomada apos sessao anterior
         # que ja fez login+criou empresa), passa --auto-login para o executor logar
