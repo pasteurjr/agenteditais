@@ -9,6 +9,8 @@ export default function Teste() {
   const [data, setData] = useState(null)
   const [ciclo, setCiclo] = useState(null)
   const [runs, setRuns] = useState([])
+  // Rodada ativa selecionada (default = null = rodada atual = maior numero)
+  const [selectedRunId, setSelectedRunId] = useState(null)
   const [erro, setErro] = useState(null)
   const [busy, setBusy] = useState(false)
   const [busyMsg, setBusyMsg] = useState('')
@@ -19,7 +21,7 @@ export default function Teste() {
     try {
       const [d, c, r] = await Promise.all([
         api.testeDetalhe(id),
-        api.testeCiclo(id).catch(() => null),
+        api.testeCiclo(id, selectedRunId).catch(() => null),
         api.testeRuns(id).catch(() => ({rodadas: []})),
       ])
       setData(d)
@@ -34,7 +36,7 @@ export default function Teste() {
     carregar()
     const i = setInterval(carregar, 5000)
     return () => clearInterval(i)
-  }, [id])
+  }, [id, selectedRunId])
 
   const tratarErro = (e) => {
     const body = e.body || {}
@@ -70,24 +72,33 @@ export default function Teste() {
     }
   }
 
-  const iniciar  = () => acao('Iniciando...', () => api.iniciarTeste(id), true)
-  const retomar  = () => acao('Retomando...', () => api.retomarTeste(id), true)
-  const pausar   = () => acao('Pausando...',  () => api.pausarTeste(id))
+  const iniciar  = () => acao('Iniciando...', () => api.iniciarTeste(id, selectedRunId), true)
+  const retomar  = () => acao('Retomando...', () => api.retomarTeste(id, selectedRunId), true)
+  const pausar   = () => acao('Pausando...',  () => api.pausarTeste(id, selectedRunId))
   const cancelar = async () => {
     if (!confirm('Cancelar este teste? Os CTs já executados ficam no histórico.')) return
-    await acao('Cancelando...', () => api.cancelarTeste(id))
+    await acao('Cancelando...', () => api.cancelarTeste(id, selectedRunId))
   }
 
   if (erro) return <><Topbar title="Erro" /><div className="content"><div className="flash flash-erro" style={{whiteSpace:'pre-wrap'}}>{erro}</div></div></>
   if (!data) return <><Topbar title="Carregando..." /><div className="content empty">Carregando...</div></>
 
   const { teste, execucoes } = data
-  const podeIniciar  = teste.estado === 'criado' && !teste.pid_executor
-  const podePausar   = teste.estado === 'em_andamento' && teste.pid_executor
-  const podeRetomar  = teste.estado === 'pausado' && !teste.pid_executor
-  const podeCancelar = ['em_andamento', 'pausado'].includes(teste.estado)
-  const podeAdicionar = ['pausado','concluido','cancelado','criado'].includes(teste.estado) && !teste.pid_executor
-  const podeReiniciar = ['pausado','concluido','cancelado'].includes(teste.estado) && !teste.pid_executor
+  // Rodada efetiva: a selecionada explicitamente OU a atual (maior numero)
+  const rodadaEfetiva = selectedRunId
+    ? (runs.find(r => r.id === selectedRunId) || null)
+    : (runs.length > 0 ? runs[runs.length - 1] : null)
+  const estadoRodada = rodadaEfetiva?.estado || teste.estado
+  const pidExecutorRodada = rodadaEfetiva?.pid_executor || teste.pid_executor
+  // Para Adicionar UCs preciso verificar se a RODADA tem CTs pendentes ou nao
+  // (so importa pra exibir o botao Retomar quando concluida ainda tem pend)
+  const rodadaTemPendentes = (rodadaEfetiva?.n_cts_pendentes || 0) > 0
+  const podeIniciar  = estadoRodada === 'criado' && !pidExecutorRodada
+  const podePausar   = estadoRodada === 'em_andamento' && pidExecutorRodada
+  const podeRetomar  = (estadoRodada === 'pausado' || (estadoRodada === 'concluido' && rodadaTemPendentes)) && !pidExecutorRodada
+  const podeCancelar = ['em_andamento', 'pausado'].includes(estadoRodada)
+  const podeAdicionar = ['pausado','concluido','cancelado','criado'].includes(estadoRodada) && !pidExecutorRodada
+  const podeReiniciar = ['pausado','concluido','cancelado'].includes(estadoRodada) && !pidExecutorRodada
 
   return (
     <>
@@ -102,10 +113,35 @@ export default function Teste() {
               <tr><th>Sprint</th><td>{teste.sprint_nome}</td></tr>
               <tr><th>Tester</th><td>{teste.tester}</td></tr>
               <tr><th>Estado</th><td><span className={'tag tag-' + teste.estado}>{teste.estado}</span></td></tr>
-              <tr><th>Rodada atual</th><td>{ciclo?.rodada?.numero ? `#${ciclo.rodada.numero}` : '—'} de {runs.length}</td></tr>
               <tr><th>PID executor</th><td>{teste.pid_executor || '—'}</td></tr>
             </tbody>
           </table>
+
+          {/* Seletor de rodada ativa */}
+          {runs.length > 0 && (
+            <div style={{marginBottom:'1em', padding:'0.7em', background:'rgba(74,138,138,0.1)', borderLeft:'3px solid #4a8a8a', borderRadius:4}}>
+              <strong>🎯 Rodada ativa:</strong>
+              <select
+                value={selectedRunId || ''}
+                onChange={e => setSelectedRunId(e.target.value || null)}
+                style={{marginLeft:'0.5em', padding:'0.3em', width:'auto', minWidth:'400px'}}
+              >
+                <option value="">— Rodada atual (mais recente: #{runs[runs.length-1]?.numero}) —</option>
+                {runs.map(r => (
+                  <option key={r.id} value={r.id}>
+                    Rodada #{r.numero} — {r.estado} — {r.user_sintetico_email || 'legado'} — {r.n_cts_aprovados}/{r.n_cts} aprov{(r.n_cts_pendentes || 0) > 0 ? `, ${r.n_cts_pendentes} pendentes` : ''}
+                  </option>
+                ))}
+              </select>
+              {selectedRunId && (
+                <button onClick={() => setSelectedRunId(null)} style={{marginLeft:'0.5em', padding:'0.2em 0.5em'}} className="secondary">Limpar (usar rodada atual)</button>
+              )}
+              <div style={{fontSize:'9pt', color:'#aaa', marginTop:'0.4em'}}>
+                Todas as ações (Iniciar/Pausar/Retomar/Cancelar/Adicionar UCs) operam sobre a rodada ativa selecionada.
+                Selecione uma rodada antiga para retomá-la ou adicionar UCs nela.
+              </div>
+            </div>
+          )}
 
           <div className="actions" style={{flexWrap:'wrap', gap:'0.5em'}}>
             {podeIniciar && (
@@ -188,9 +224,12 @@ export default function Teste() {
                 </tr>
               </thead>
               <tbody>
-                {runs.map(r => (
-                  <tr key={r.id}>
-                    <td>{r.numero}</td>
+                {runs.map(r => {
+                  const isAtual = !selectedRunId && runs.indexOf(r) === runs.length - 1
+                  const isAtiva = selectedRunId === r.id || isAtual
+                  return (
+                  <tr key={r.id} style={isAtiva ? {background:'rgba(74,138,138,0.08)'} : {}}>
+                    <td>{r.numero} {isAtiva && <span style={{color:'#4a8a8a', fontSize:'8pt'}}>★ ativa</span>}</td>
                     <td><span className={'tag tag-' + r.estado}>{r.estado}</span></td>
                     <td style={{fontSize:'9pt'}}>{r.iniciado_em ? r.iniciado_em.slice(0,16).replace('T',' ') : '—'}</td>
                     <td style={{fontSize:'9pt'}}>{r.concluido_em ? r.concluido_em.slice(0,16).replace('T',' ') : '—'}</td>
@@ -200,9 +239,15 @@ export default function Teste() {
                     <td>{r.n_observacoes}</td>
                     <td style={{fontSize:'9pt'}}>{r.empresa_demo_cnpj || '—'}</td>
                     <td style={{fontSize:'9pt'}}>{r.user_sintetico_email?.split('@')[0] || '—'}</td>
-                    <td><Link to={`/relatorio/${id}?run=${r.id}`}><button className="btn-sm">Relatório</button></Link></td>
+                    <td>
+                      {!isAtiva && (
+                        <button className="btn-sm" onClick={() => setSelectedRunId(r.id)} title="Ativar esta rodada para operar nela">🎯 Ativar</button>
+                      )}
+                      <Link to={`/relatorio/${id}?run=${r.id}`}><button className="btn-sm">Relatório</button></Link>
+                    </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -238,6 +283,8 @@ export default function Teste() {
       {showAddUcs && (
         <ModalAdicionarUcs
           testeId={id}
+          runId={selectedRunId}
+          rodadaNumero={rodadaEfetiva?.numero}
           sprintId={teste.sprint_id}
           ucsExistentes={execucoes.map(e => e.uc_id)}
           onClose={() => setShowAddUcs(false)}
@@ -259,7 +306,7 @@ export default function Teste() {
 }
 
 
-function ModalAdicionarUcs({ testeId, sprintId, ucsExistentes, onClose, onSuccess }) {
+function ModalAdicionarUcs({ testeId, runId, rodadaNumero, sprintId, ucsExistentes, onClose, onSuccess }) {
   const [ucs, setUcs] = useState([])
   const [sel, setSel] = useState({})
   const [erro, setErro] = useState(null)
@@ -283,7 +330,7 @@ function ModalAdicionarUcs({ testeId, sprintId, ucsExistentes, onClose, onSucces
     }
     setBusy(true); setErro(null)
     try {
-      await api.adicionarUcs(testeId, ids)
+      await api.adicionarUcs(testeId, ids, runId)
       onSuccess()
     } catch (e) {
       setErro(e.body?.msg || e.message)
@@ -296,8 +343,8 @@ function ModalAdicionarUcs({ testeId, sprintId, ucsExistentes, onClose, onSucces
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'700px'}}>
         <h3>➕ Adicionar UCs ao teste</h3>
-        <p style={{color:'#aaa', fontSize:'9pt'}}>UCs novos serão inseridos como pendentes na rodada atual.
-        Predecessores serão respeitados (ordem topológica).</p>
+        <p style={{color:'#aaa', fontSize:'9pt'}}>UCs novos serão inseridos como pendentes na rodada{rodadaNumero ? ` #${rodadaNumero}` : ' atual'}.
+        Predecessores serão respeitados (ordem topológica). Mesmo usuário sintético e mesma empresa serão usados.</p>
         {erro && <div className="flash flash-erro">{erro}</div>}
         {ucs.length === 0 ? (
           <p>Nenhum UC executável disponível (todos já estão no teste).</p>

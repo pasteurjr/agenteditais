@@ -832,17 +832,18 @@ def api_teste_iniciar(teste_id):
         if _is_pid_alive(t.pid_executor):
             return jsonify({"ok": False, "msg": f"executor ja rodando pid={t.pid_executor}"}), 409
 
-        # Determina rodada atual
-        run_atual = _rodada_atual(db, t)
+        # Resolve rodada alvo: ?run_id= ou rodada atual (maior numero)
+        run_id_param = request.args.get("run_id") or (request.get_json(silent=True) or {}).get("run_id")
+        run_atual = _resolver_rodada(db, t, run_id_param)
         if not run_atual:
-            return jsonify({"error": "teste sem rodada — estado inconsistente"}), 500
+            return jsonify({"error": f"rodada nao encontrada (run_id={run_id_param}) ou teste sem rodadas"}), 404
         if run_atual.estado in ("cancelado",):
-            return jsonify({"ok": False, "msg": f"rodada atual esta '{run_atual.estado}'. Use /reiniciar para criar nova rodada."}), 409
+            return jsonify({"ok": False, "msg": f"rodada {run_atual.numero} esta '{run_atual.estado}'. Use /reiniciar para criar nova rodada."}), 409
         # Rodadas concluidas com pendentes (apos adicionar UCs) viram pausado automaticamente
         if run_atual.estado == "concluido":
             tem_pendente = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run_atual.id, estado="pendente").count()
             if tem_pendente == 0:
-                return jsonify({"ok": False, "msg": "rodada ja concluida sem CTs pendentes. Use /adicionar-ucs ou /reiniciar."}), 409
+                return jsonify({"ok": False, "msg": f"rodada {run_atual.numero} ja concluida sem CTs pendentes. Use /adicionar-ucs ou /reiniciar."}), 409
             run_atual.estado = "pausado"
 
         # Checagem global: painel :9876 e unico por maquina, so 1 teste pode estar rodando
@@ -939,13 +940,14 @@ def api_teste_cancelar(teste_id):
             except Exception: pass
         t.estado = "cancelado"
         t.pid_executor = None
-        # Cancela rodada atual junto
-        run = _rodada_atual(db, t)
+        # Cancela rodada alvo (ou atual se nao especificado)
+        run_id_param = request.args.get("run_id") or (request.get_json(silent=True) or {}).get("run_id")
+        run = _resolver_rodada(db, t, run_id_param)
         if run:
             run.estado = "cancelado"
             run.pid_executor = None
         db.commit()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "run_id": run.id if run else None})
     finally:
         db.close()
 
@@ -966,7 +968,8 @@ def api_teste_pausar(teste_id):
             return jsonify({"error": "nao encontrado"}), 404
         if not (session.get("is_admin") or t.user_id == session["user_id"]):
             return jsonify({"error": "acesso negado"}), 403
-        run = _rodada_atual(db, t)
+        run_id_param = request.args.get("run_id") or (request.get_json(silent=True) or {}).get("run_id")
+        run = _resolver_rodada(db, t, run_id_param)
         if not run or run.estado != "em_andamento":
             return jsonify({"ok": False, "msg": f"rodada nao esta em_andamento (estado atual={run.estado if run else 'nenhuma'})"}), 409
         # Manda sinal de parar no painel (ele seta evento_parar; executor termina CT atual e sai)
@@ -991,6 +994,7 @@ def api_teste_pausar(teste_id):
 def api_teste_retomar(teste_id):
     """Retoma teste pausado (continua de onde parou na MESMA rodada).
     Reusa o mesmo ciclo_id, mesmo usuario sintetico, mesma empresa.
+    Aceita ?run_id= para escolher rodada especifica (default = rodada atual).
     Internamente eh como /iniciar mas com guarda de estado mais permissiva."""
     db = get_db()
     try:
@@ -999,9 +1003,10 @@ def api_teste_retomar(teste_id):
             return jsonify({"error": "nao encontrado"}), 404
         if not (session.get("is_admin") or t.user_id == session["user_id"]):
             return jsonify({"error": "acesso negado"}), 403
-        run = _rodada_atual(db, t)
+        run_id_param = request.args.get("run_id") or (request.get_json(silent=True) or {}).get("run_id")
+        run = _resolver_rodada(db, t, run_id_param)
         if not run:
-            return jsonify({"error": "teste sem rodada"}), 500
+            return jsonify({"error": f"rodada nao encontrada (run_id={run_id_param}) ou teste sem rodadas"}), 404
         if run.estado not in ("pausado", "concluido"):
             return jsonify({"ok": False, "msg": f"so pode retomar rodada pausada/concluida (estado atual={run.estado})"}), 409
         tem_pendente = db.query(ExecucaoCasoDeTeste).filter_by(run_id=run.id, estado="pendente").count()
@@ -1017,12 +1022,15 @@ def api_teste_retomar(teste_id):
 @login_required
 def api_teste_adicionar_ucs(teste_id):
     """Adiciona UCs ao teste (nova rodada NAO eh criada — insere ExecucaoCasoDeTeste
-    apontando para a rodada atual). So permitido se rodada atual NAO esta em_andamento.
-    Body: {uc_ids: ["uuid1", ...]}"""
+    apontando para a rodada atual ou rodada especificada).
+    So permitido se rodada NAO esta em_andamento.
+    Body: {uc_ids: ["uuid1", ...], run_id?: "uuid"}
+    Tambem aceita ?run_id= via query string."""
     data = request.get_json(silent=True) or {}
     novos_uc_ids = data.get("uc_ids") or []
     if not novos_uc_ids:
         return jsonify({"error": "uc_ids[] obrigatorio"}), 400
+    run_id_param = request.args.get("run_id") or data.get("run_id")
     db = get_db()
     try:
         t = db.query(Teste).filter_by(id=teste_id).first()
@@ -1030,11 +1038,11 @@ def api_teste_adicionar_ucs(teste_id):
             return jsonify({"error": "nao encontrado"}), 404
         if not (session.get("is_admin") or t.user_id == session["user_id"]):
             return jsonify({"error": "acesso negado"}), 403
-        run = _rodada_atual(db, t)
+        run = _resolver_rodada(db, t, run_id_param)
         if not run:
-            return jsonify({"error": "teste sem rodada"}), 500
+            return jsonify({"error": f"rodada nao encontrada (run_id={run_id_param}) ou teste sem rodadas"}), 404
         if run.estado == "em_andamento":
-            return jsonify({"ok": False, "msg": "rodada em_andamento — pause antes de adicionar UCs"}), 409
+            return jsonify({"ok": False, "msg": f"rodada {run.numero} em_andamento — pause antes de adicionar UCs"}), 409
 
         # Filtra UCs ja existentes na rodada atual
         ucs_existentes_ids = set(
@@ -1081,8 +1089,11 @@ def api_teste_adicionar_ucs(teste_id):
         # Se rodada estava concluida, volta pra pausado
         if run.estado == "concluido":
             run.estado = "pausado"
-            t.estado = "pausado"
             run.concluido_em = None
+            # Sincroniza estado do teste APENAS se a rodada modificada eh a atual
+            rodada_atual = _rodada_atual(db, t)
+            if rodada_atual and rodada_atual.id == run.id:
+                t.estado = "pausado"
 
         db.commit()
         return jsonify({
@@ -1438,6 +1449,17 @@ def _rodada_atual(db, teste: "Teste") -> "RunTeste | None":
         .order_by(RunTeste.numero.desc())
         .first()
     )
+
+
+def _resolver_rodada(db, teste: "Teste", run_id_opcional: str | None = None) -> "RunTeste | None":
+    """Resolve qual rodada o caller quer operar.
+    Se run_id_opcional for passado: valida que pertence ao teste e retorna.
+    Se nao: retorna a rodada atual (maior numero) — compat com comportamento antigo.
+    Retorna None se nao houver rodada ou se run_id passado nao pertence ao teste.
+    """
+    if run_id_opcional:
+        return db.query(RunTeste).filter_by(id=run_id_opcional, teste_id=teste.id).first()
+    return _rodada_atual(db, teste)
 
 
 def _ordenar_ucs_topologico(db, ucs):
