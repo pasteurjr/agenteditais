@@ -130,10 +130,14 @@ def _executar_acao(
             raise ValueError("fill sem seletor")
         if valor is None:
             raise ValueError("fill sem valor")
-        # Digita tecla-por-tecla (humano) em vez de paste instantaneo (page.fill)
         loc = page.locator(seletor).first
         loc.click(timeout=acao.timeout)
-        loc.press_sequentially(valor, delay=delay_por_tecla_ms, timeout=acao.timeout)
+        input_type = (loc.get_attribute("type") or "").lower()
+        if input_type in ("date", "time", "datetime-local", "number", "month", "week"):
+            loc.fill(valor, timeout=acao.timeout)
+        else:
+            loc.fill("", timeout=acao.timeout)
+            loc.press_sequentially(valor, delay=delay_por_tecla_ms, timeout=acao.timeout)
     elif acao.tipo == "select":
         if not seletor:
             raise ValueError("select sem seletor")
@@ -171,10 +175,20 @@ def _executar_acao(
                 except: pass
             raise ValueError(f"select: nenhuma option casa com '{valor}'. Opcoes: {todos}")
         select_loc.select_option(index=idx_match, timeout=acao.timeout)
+        # Defensive: garante que onChange do React dispara mesmo em <select>
+        # controlado (alguns componentes de teste headless precisam disso).
+        try:
+            select_loc.dispatch_event("change")
+        except Exception:
+            pass
     elif acao.tipo == "wait_for":
         if not seletor:
             raise ValueError("wait_for sem seletor")
         page.wait_for_selector(seletor, timeout=acao.timeout)
+    elif acao.tipo == "wait_for_hidden":
+        if not seletor:
+            raise ValueError("wait_for_hidden sem seletor")
+        page.wait_for_selector(seletor, state="hidden", timeout=acao.timeout)
     elif acao.tipo == "wait":
         # Pausa pura em milissegundos — valor_literal (string ou int)
         ms = acao.valor_literal or valor or 1000

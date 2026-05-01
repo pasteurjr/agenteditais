@@ -122,6 +122,9 @@ acao:
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Tipo de Documento")) select'
       valor_from_dataset: "doc1_tipo_nome"
       timeout: 5000
+    # Pausa para React reagir ao onChange do select e habilitar botao Enviar
+    - tipo: wait
+      valor_literal: 500
     # 2. Anexa arquivo Contrato Social via input[type=file]
     - tipo: upload_arquivo
       seletor: 'div.modal-body input[type="file"]'
@@ -131,13 +134,14 @@ acao:
     - tipo: click
       seletor: 'div.modal-footer button.btn-primary:has-text("Enviar")'
       timeout: 5000
-    # 4. Aguarda salvamento (modal fecha via setShowDocModal(false))
-    - tipo: wait
-      valor_literal: 2500
+    # 4. Aguarda modal fechar (handleSalvarDocumento -> setShowDocModal(false))
+    - tipo: wait_for_hidden
+      seletor: 'div.modal-overlay'
+      timeout: 8000
     # 5. Confirma que linha "Contrato Social" apareceu na tabela
     - tipo: wait_for
-      seletor: 'text=Contrato Social'
-      timeout: 8000
+      seletor: 'table tbody tr:has-text("Contrato Social")'
+      timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F03_visual_fp.yaml#passo_02_preencher_doc1_contrato"
 ```
 
@@ -177,6 +181,8 @@ acao:
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Tipo de Documento")) select'
       valor_from_dataset: "doc2_tipo_nome"
       timeout: 5000
+    - tipo: wait
+      valor_literal: 500
     - tipo: upload_arquivo
       seletor: 'div.modal-body input[type="file"]'
       valor_from_pasta_docs: "sprint1/UC-F03/fgts.pdf"
@@ -189,11 +195,12 @@ acao:
     - tipo: click
       seletor: 'div.modal-footer button.btn-primary:has-text("Enviar")'
       timeout: 5000
-    - tipo: wait
-      valor_literal: 1500
-    - tipo: wait_for
-      seletor: 'text=CRF - Certificado de Regularidade do FGTS'
+    - tipo: wait_for_hidden
+      seletor: 'div.modal-overlay'
       timeout: 8000
+    - tipo: wait_for
+      seletor: 'table tbody tr:has-text("FGTS")'
+      timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F03_visual_fp.yaml#passo_04_preencher_doc2_fgts"
 ```
 
@@ -229,6 +236,8 @@ acao:
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Tipo de Documento")) select'
       valor_from_dataset: "doc3_tipo_nome"
       timeout: 5000
+    - tipo: wait
+      valor_literal: 500
     - tipo: upload_arquivo
       seletor: 'div.modal-body input[type="file"]'
       valor_from_pasta_docs: "sprint1/UC-F03/alvara.pdf"
@@ -240,11 +249,12 @@ acao:
     - tipo: click
       seletor: 'div.modal-footer button.btn-primary:has-text("Enviar")'
       timeout: 5000
-    - tipo: wait
-      valor_literal: 1500
-    - tipo: wait_for
-      seletor: 'text=Alvará de Funcionamento'
+    - tipo: wait_for_hidden
+      seletor: 'div.modal-overlay'
       timeout: 8000
+    - tipo: wait_for
+      seletor: 'table tbody tr:has-text("Alvará")'
+      timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F03_visual_fp.yaml#passo_06_preencher_doc3_alvara"
 ```
 
@@ -271,13 +281,13 @@ acao:
           return 'ok';
         }
     - tipo: wait_for
-      seletor: 'text=Contrato Social'
+      seletor: 'table tbody tr:has-text("Contrato Social")'
       timeout: 5000
     - tipo: wait_for
-      seletor: 'text=CRF - Certificado de Regularidade do FGTS'
+      seletor: 'table tbody tr:has-text("FGTS")'
       timeout: 5000
     - tipo: wait_for
-      seletor: 'text=Alvará de Funcionamento'
+      seletor: 'table tbody tr:has-text("Alvará")'
       timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F03_visual_fp.yaml#passo_07_verificar_lista_3_documentos"
 ```

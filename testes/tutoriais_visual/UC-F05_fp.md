@@ -139,6 +139,11 @@ acao:
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Cargo")) input.text-input'
       valor_from_dataset: "resp1_cargo"
       timeout: 5000
+    # CPF
+    - tipo: fill
+      seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("CPF")) input.text-input'
+      valor_from_dataset: "resp1_cpf"
+      timeout: 5000
     # Email (obrigatorio)
     - tipo: fill
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Email")) input.text-input'
@@ -219,6 +224,10 @@ acao:
       valor_from_dataset: "resp2_cargo"
       timeout: 5000
     - tipo: fill
+      seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("CPF")) input.text-input'
+      valor_from_dataset: "resp2_cpf"
+      timeout: 5000
+    - tipo: fill
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Email")) input.text-input'
       valor_from_dataset: "resp2_email"
       timeout: 5000
@@ -292,6 +301,10 @@ acao:
     - tipo: fill
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Cargo")) input.text-input'
       valor_from_dataset: "resp3_cargo"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("CPF")) input.text-input'
+      valor_from_dataset: "resp3_cpf"
       timeout: 5000
     - tipo: fill
       seletor: 'div.modal-body div.form-field:has(.form-field-label:has-text("Email")) input.text-input'

@@ -10341,11 +10341,23 @@ def upload_empresa_documento():
     empresa_id = request.form.get('empresa_id')
     documento_necessario_id = request.form.get('documento_necessario_id')
 
+    # Tipos validos no ENUM da tabela empresa_documentos.tipo no MySQL.
     _tipos_validos = {
         'contrato_social', 'atestado_capacidade', 'balanco', 'alvara',
         'registro_conselho', 'procuracao', 'certidao_negativa',
         'habilitacao_fiscal', 'habilitacao_economica', 'qualificacao_tecnica',
         'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
+    }
+    # tipo_chave em documentos_necessarios pode usar nomes mais especificos
+    # (ex: "fgts", "cnd_federal") que nao existem no enum. Mapa de
+    # consolidacao para o tipo enum equivalente.
+    _tipo_chave_map = {
+        'fgts': 'habilitacao_fiscal',
+        'cnd_federal': 'habilitacao_fiscal',
+        'cnd_estadual': 'habilitacao_fiscal',
+        'cnd_municipal': 'habilitacao_fiscal',
+        'sicaf': 'habilitacao_fiscal',
+        'estatuto_social': 'contrato_social',
     }
 
     tipo = 'outro'
@@ -10357,8 +10369,12 @@ def upload_empresa_documento():
             doc_nec = db_tmp.query(DocumentoNecessario).filter(
                 DocumentoNecessario.id == documento_necessario_id
             ).first()
-            if doc_nec and doc_nec.tipo_chave in _tipos_validos:
-                tipo = doc_nec.tipo_chave
+            if doc_nec:
+                chave = doc_nec.tipo_chave or ''
+                if chave in _tipos_validos:
+                    tipo = chave
+                elif chave in _tipo_chave_map:
+                    tipo = _tipo_chave_map[chave]
         finally:
             db_tmp.close()
 
@@ -10440,6 +10456,9 @@ def upload_empresa_documento():
 
     except Exception as e:
         db.rollback()
+        import traceback
+        traceback.print_exc()
+        print(f"[upload_empresa_documento] ERRO: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
