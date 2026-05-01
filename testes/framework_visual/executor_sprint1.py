@@ -85,6 +85,7 @@ def _dict_para_acao(d: dict) -> Acao:
         valor_literal=d.get("valor_literal"),
         valor_from_dataset=d.get("valor_from_dataset"),
         valor_from_contexto=d.get("valor_from_contexto"),
+        valor_from_pasta_docs=d.get("valor_from_pasta_docs"),
         destino=d.get("destino"),
         url=d.get("url"),
         timeout=int(d.get("timeout", 10000)),

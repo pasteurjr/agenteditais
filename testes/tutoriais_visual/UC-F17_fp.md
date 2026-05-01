@@ -10,9 +10,17 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F17_visual_fp.yaml
 
 # UC-F17 — Configurar notificacoes e preferencias (Fluxo Principal)
 
+> **PO:** acompanhe a execucao. Cada parada eh um marco logico — voce decide aprovar/reprovar e opcionalmente comenta.
+>
 > **Cenario:** apos UC-F01+UC-F18, navega aba "Notificacoes" e preenche email + 3 checkboxes + frequencia, salva. Depois aba "Preferencias", configura tema/idioma/fuso, salva.
 
 ## Passo 00 — Setup: navegar Parametrizacoes aba "Notificacoes"
+
+Sidebar -> Parametrizacoes -> click tab "Notificacoes".
+
+**Observe criticamente:**
+- Tab "Notificacoes" ativa
+- Card "Configuracoes de Notificacao" aparece com inputs: Email, checkboxes (notificar por email/push/sms), Frequencia (select: diario/semanal/mensal)
 
 ```yaml
 id: passo_00_setup_navegar_aba_notificacoes
@@ -54,6 +62,14 @@ validacao_ref: "testes/casos_de_teste/UC-F17_visual_fp.yaml#passo_00_setup_naveg
 
 ## Passo 01 — Preencher e salvar notificacoes
 
+Preenche email de notificacao + select de frequencia + click Salvar.
+
+**Observe criticamente:**
+- Input email aceita formato valido (validacao no submit)
+- Select Frequencia: opcoes Diario / Semanal / Mensal
+- Botao Salvar dispara POST -> backend persiste preferencias do user
+- Apos salvar, feedback de sucesso
+
 ```yaml
 id: passo_01_preencher_e_salvar_notificacoes
 acao:
@@ -78,6 +94,14 @@ validacao_ref: "testes/casos_de_teste/UC-F17_visual_fp.yaml#passo_01_preencher_e
 
 ## Passo 02 — Navegar aba "Preferencias"
 
+Click na tab "Preferencias". Card "Preferencias do Sistema" aparece com radios (tema), select (idioma), select (fuso).
+
+**Observe criticamente:**
+- Tab "Preferencias" ativa
+- Card "Preferencias do Sistema" presente
+- Radios de tema: Claro / Escuro
+- Selects: Idioma (pt-BR/en-US) e Fuso (America/Sao_Paulo etc.)
+
 ```yaml
 id: passo_02_navegar_aba_preferencias
 acao:
@@ -95,6 +119,14 @@ validacao_ref: "testes/casos_de_teste/UC-F17_visual_fp.yaml#passo_02_navegar_aba
 ```
 
 ## Passo 03 — Preencher e salvar preferencias
+
+Click no radio "Escuro", select Idioma e Fuso, depois Salvar.
+
+**Observe criticamente:**
+- Apos click no radio Escuro, tema muda visualmente (background escuro)
+- Idioma e Fuso persistidos
+- Botao Salvar persiste em users.preferences (ou similar)
+- Mudanca de tema pode aplicar imediatamente (live)
 
 ```yaml
 id: passo_03_preencher_e_salvar_preferencias

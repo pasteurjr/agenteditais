@@ -131,13 +131,9 @@ acao:
     - tipo: click
       seletor: 'div.modal-footer button.btn-primary:has-text("Enviar")'
       timeout: 5000
-    # 4. Aguarda modal fechar (handleSalvarDocumento fecha via setShowDocModal(false))
-    - tipo: wait_for
-      seletor: 'div.modal h2:has-text("Upload de Documento")'
-      timeout: 8000
-      # Espera modal SUMIR — usa wait com expressao negativa
+    # 4. Aguarda salvamento (modal fecha via setShowDocModal(false))
     - tipo: wait
-      valor_literal: 1500
+      valor_literal: 2500
     # 5. Confirma que linha "Contrato Social" apareceu na tabela
     - tipo: wait_for
       seletor: 'text=Contrato Social'

@@ -10,11 +10,21 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F05_visual_fp.yaml
 
 # UC-F05 — Gerir responsaveis da empresa (Fluxo Principal)
 
+> **PO:** acompanhe a execucao. Cada parada eh um marco logico — voce decide aprovar/reprovar e opcionalmente comenta.
+>
 > **Cenario:** apos UC-F01+UC-F18, navega para EmpresaPage > Card Responsaveis (ultimo card da pagina), abre o Modal "Adicionar Responsavel" 3 vezes e cadastra: Representante Legal, Preposto e Responsavel Tecnico. Confirma que os 3 aparecem na tabela.
 >
 > **Pre-requisitos:** UC-F01 + UC-F18 ja executados. Card Responsaveis acessivel.
 
 ## Passo 00 — Setup: navegar para EmpresaPage e localizar Card Responsaveis
+
+User esta logado, com empresa ativa. Sidebar expande Configuracoes -> Empresa, EmpresaPage carrega, scroll para o card "Responsaveis" (ultimo card da pagina).
+
+**Observe criticamente:**
+- Sidebar com secao "CONFIGURACOES" expandida (idempotente)
+- EmpresaPage carrega com cabecalho "Dados da Empresa"
+- Card "Responsaveis" visivel (ultimo da pagina) com botao "+ Adicionar Responsavel"
+- Tabela inicialmente vazia ("Nenhum responsavel cadastrado") OU com itens de execucoes anteriores
 
 ```yaml
 id: passo_00_setup_navegar_responsaveis
@@ -59,6 +69,16 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_00_setup_naveg
 
 ## Passo 01 — Abrir Modal "Adicionar Responsavel" (1a vez, para Resp 1)
 
+Click no botao "+ Adicionar Responsavel" do Card Responsaveis. Modal "Adicionar Responsavel" abre com campos: Tipo (select), Nome, CPF, Email, Telefone.
+
+**Observe criticamente:**
+- Modal aparece centralizado com overlay escurecido
+- Titulo "Adicionar Responsavel" no header do modal
+- Select "Tipo" com opcoes: Representante Legal, Preposto, Responsavel Tecnico, Outros
+- Campos vazios prontos pra preenchimento
+- Botoes "Salvar" (primary) e "Cancelar" no rodape
+
+
 Click no botao "+ Adicionar" do header do Card Responsaveis. Modal "Adicionar Responsavel" abre com 6 campos: Tipo, Nome (req), Cargo, CPF, Email (req), Telefone, e botoes Cancelar/Salvar.
 
 ```yaml
@@ -89,6 +109,16 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_01_abrir_modal
 ```
 
 ## Passo 02 — Preencher Resp 1 (Representante Legal) e Salvar
+
+Tipo = "Representante Legal", Nome/CPF/Email/Telefone vindos do dataset (Resp 1). Click Salvar. Modal fecha, primeira linha aparece na tabela.
+
+**Observe criticamente:**
+- Select "Tipo" muda para "Representante Legal"
+- Nome e demais campos digitados sem erro de mascara
+- Botao Salvar dispara POST -> backend cria registro em `empresa_responsaveis`
+- Modal fecha sozinho apos sucesso
+- Tabela ganha 1a linha com nome e tipo do responsavel
+
 
 ```yaml
 id: passo_02_preencher_resp1_representante
@@ -134,6 +164,13 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_02_preencher_r
 
 ## Passo 03 — Abrir Modal "Adicionar Responsavel" (2a vez, para Resp 2)
 
+Mesmo padrao do passo 01: click no botao "+ Adicionar Responsavel". Modal abre vazio.
+
+**Observe criticamente:**
+- Modal abre limpo (campos zerados)
+- Tabela continua mostrando o Resp 1 ja cadastrado em background
+
+
 ```yaml
 id: passo_03_abrir_modal_resp2
 acao:
@@ -157,6 +194,13 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_03_abrir_modal
 ```
 
 ## Passo 04 — Preencher Resp 2 (Preposto) e Salvar
+
+Tipo = "Preposto", restante vindo do dataset (Resp 2). Salvar. Tabela passa a ter 2 linhas.
+
+**Observe criticamente:**
+- Select "Tipo" muda para "Preposto"
+- Tabela apos salvar exibe 2 linhas: Representante Legal + Preposto
+
 
 ```yaml
 id: passo_04_preencher_resp2_preposto
@@ -195,6 +239,13 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_04_preencher_r
 
 ## Passo 05 — Abrir Modal "Adicionar Responsavel" (3a vez, para Resp 3)
 
+Click pela 3a vez. Modal abre limpo.
+
+**Observe criticamente:**
+- Modal abre limpo apos os 2 cadastros anteriores
+- Tabela com 2 linhas em background
+
+
 ```yaml
 id: passo_05_abrir_modal_resp3
 acao:
@@ -218,6 +269,13 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_05_abrir_modal
 ```
 
 ## Passo 06 — Preencher Resp 3 (Responsavel Tecnico) e Salvar
+
+Tipo = "Responsavel Tecnico", restante vindo do dataset (Resp 3). Salvar.
+
+**Observe criticamente:**
+- Select "Tipo" muda para "Responsavel Tecnico"
+- Apos salvar, tabela tem 3 linhas (todas as funcoes cobertas)
+
 
 ```yaml
 id: passo_06_preencher_resp3_tecnico
@@ -255,6 +313,15 @@ validacao_ref: "testes/casos_de_teste/UC-F05_visual_fp.yaml#passo_06_preencher_r
 ```
 
 ## Passo 07 — Verificar lista final com 3 responsaveis
+
+Asserts visuais que a tabela tem 3 linhas com Representante Legal + Preposto + Responsavel Tecnico.
+
+**Observe criticamente:**
+- Tabela com exatamente 3 linhas
+- Cada linha mostra Tipo + Nome
+- Botao "+ Adicionar Responsavel" continua disponivel pra futuras adicoes
+- Card pode mostrar contador "(3)" no titulo
+
 
 ```yaml
 id: passo_07_verificar_lista_3_responsaveis

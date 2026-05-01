@@ -10,11 +10,21 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F15_visual_fp.yaml
 
 # UC-F15 — Configurar parametros comerciais (Fluxo Principal — escopo reduzido)
 
+> **PO:** acompanhe a execucao. Cada parada eh um marco logico — voce decide aprovar/reprovar e opcionalmente comenta.
+>
 > **Cenario:** apos UC-F01+UC-F18, navega para Configuracoes>Parametrizacoes aba "Comercial" e preenche 3 cards (Tempo de Entrega, Mercado TAM/SAM/SOM, Custos e Margens). Cada card tem Salvar individual.
 >
 > **Pre-requisitos:** UC-F01+UC-F18, F14 ja rodou (ou parametros_score sera criado via ensureParamScore no 1o save).
 
 ## Passo 00 — Setup: navegar Parametrizacoes e abrir aba "Comercial"
+
+Sidebar expande Configuracoes -> Parametrizacoes -> click tab "Comercial".
+
+**Observe criticamente:**
+- Sidebar com "CONFIGURACOES" expandida
+- Tab "Comercial" fica destacada (active)
+- 4-5 cards aparecem na aba: Regiao de Atuacao, Tempo de Entrega, Mercado (TAM/SAM/SOM), Custos e Margens, Modalidades
+- Cada card tem inputs proprios + botao "Salvar" individual
 
 ```yaml
 id: passo_00_setup_navegar_aba_comercial
@@ -56,6 +66,14 @@ validacao_ref: "testes/casos_de_teste/UC-F15_visual_fp.yaml#passo_00_setup_naveg
 
 ## Passo 01 — Preencher e salvar Tempo de Entrega
 
+Card "Tempo de Entrega" — preenche prazo padrao (dias) e clica Salvar.
+
+**Observe criticamente:**
+- Card com inputs de prazo (numerico)
+- Botao "Salvar" do card persiste o valor
+- Feedback visual de sucesso apos salvar
+
+
 ```yaml
 id: passo_01_preencher_e_salvar_tempo_entrega
 acao:
@@ -77,6 +95,14 @@ validacao_ref: "testes/casos_de_teste/UC-F15_visual_fp.yaml#passo_01_preencher_e
 ```
 
 ## Passo 02 — Preencher e salvar Mercado (TAM/SAM/SOM)
+
+Card "Mercado" — TAM (total), SAM (servivel), SOM (obtenivel). Salvar.
+
+**Observe criticamente:**
+- 3 inputs numericos (R$ ou unidades)
+- TAM > SAM > SOM (nao validado, mas convencao)
+- Salvar persiste em parametros_score.tam/sam/som
+
 
 ```yaml
 id: passo_02_preencher_e_salvar_mercado
@@ -103,6 +129,13 @@ validacao_ref: "testes/casos_de_teste/UC-F15_visual_fp.yaml#passo_02_preencher_e
 ```
 
 ## Passo 03 — Preencher e salvar Custos e Margens
+
+Card "Custos e Margens" — custo fixo, custo variavel %, margem desejada %. Salvar.
+
+**Observe criticamente:**
+- Inputs com mascara percentual ou monetaria
+- Salvar persiste valores que servirao de base pro motor de precificacao (Sprint 8)
+
 
 ```yaml
 id: passo_03_preencher_e_salvar_custos

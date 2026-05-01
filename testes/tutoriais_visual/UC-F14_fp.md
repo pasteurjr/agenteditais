@@ -10,11 +10,22 @@ caso_de_teste_ref: testes/casos_de_teste/UC-F14_visual_fp.yaml
 
 # UC-F14 — Configurar pesos e limiares de score (Fluxo Principal)
 
+> **PO:** acompanhe a execucao. Cada parada eh um marco logico — voce decide aprovar/reprovar e opcionalmente comenta.
+>
 > **Cenario:** apos UC-F01+UC-F18 (empresa ativa selecionada), navega para Configuracoes > Parametrizacoes, aba "Score". Preenche os 6 pesos das dimensoes (somando 1.00), salva. Preenche os 6 limiares (final/tecnico/juridico GO/NO-GO), salva.
 >
 > **Pre-requisitos:** UC-F01+UC-F18 ja executados (predecessores registrados em 30/04/2026). parametros_score eh empresa-scoped — frontend cria registro automaticamente no 1o save via ensureParamScore().
 
 ## Passo 00 — Setup: navegar para Parametrizacoes (aba Score por default)
+
+Sidebar expande Configuracoes -> Parametrizacoes, ParametrizacoesPage carrega na aba "Score" por default.
+
+**Observe criticamente:**
+- Sidebar com "CONFIGURACOES" expandida (idempotente)
+- Cabecalho "Parametrizacoes" + 6 tabs: Score | Comercial | Fontes de Busca | Notificacoes | Preferencias | Classes
+- Tab "Score" ativa por default
+- Card "Pesos das Dimensoes" com 6 inputs (Tecnico, Documental, Complexidade, Juridico, Logistico, Comercial) que devem somar 1.00
+- Card "Limiares de Decisao GO / NO-GO" com 6 inputs (final-go/no-go, tecnico-go/no-go, juridico-go/no-go)
 
 ```yaml
 id: passo_00_setup_navegar_parametrizacoes
@@ -55,6 +66,14 @@ validacao_ref: "testes/casos_de_teste/UC-F14_visual_fp.yaml#passo_00_setup_naveg
 ```
 
 ## Passo 01 — Preencher os 6 pesos das dimensoes
+
+Digita os 6 pesos no card "Pesos das Dimensoes" (Tecnico, Documental, Complexidade, Juridico, Logistico, Comercial). Soma deve ser 1.00.
+
+**Observe criticamente:**
+- Cada input aceita decimal (formato 0.XX)
+- Soma final = 1.00 (regra de negocio: validacao no frontend antes do submit)
+- Pesos refletem a estrategia de avaliacao do edital (peso maior = dimensao mais importante)
+
 
 **Observe criticamente:**
 - 6 campos number visiveis: Peso Tecnico, Documental, Complexidade, Juridico, Logistico, Comercial
@@ -99,6 +118,15 @@ validacao_ref: "testes/casos_de_teste/UC-F14_visual_fp.yaml#passo_01_preencher_p
 
 ## Passo 02 — Salvar Pesos
 
+Click no botao "Salvar Pesos" do card. POST envia os 6 pesos pro backend.
+
+**Observe criticamente:**
+- Botao "Salvar Pesos" (variant primary) dentro do card
+- Apos click, feedback de sucesso aparece
+- `parametros_score.peso_*` no banco recebe os valores
+- 1a vez = backend cria o registro (ensureParamScore)
+
+
 Click no botao "Salvar Pesos". Backend recebe POST/PUT em /api/crud/parametros-score.
 
 ```yaml
@@ -115,6 +143,14 @@ validacao_ref: "testes/casos_de_teste/UC-F14_visual_fp.yaml#passo_02_salvar_peso
 ```
 
 ## Passo 03 — Preencher os 6 limiares (Final, Tecnico, Juridico)
+
+Card "Limiares de Decisao GO / NO-GO" — preenche 6 inputs (final go/no-go, tecnico go/no-go, juridico go/no-go) com valores entre 0 e 100.
+
+**Observe criticamente:**
+- Cada par "go > no-go" estabelece a faixa de aceitacao
+- Editais com score < no-go = rejeitados; > go = aprovados; entre = manual
+- Inputs aceitam inteiro 0-100
+
 
 **IMPORTANTE:** os 6 campos tem o MESMO label ("Minimo para GO" ou "Maximo para NO-GO") repetido 3 vezes (uma por secao). Tenho que diferenciar pela ORDEM de aparecimento no DOM:
 - nth=0: Score Final - Minimo para GO
@@ -161,6 +197,14 @@ validacao_ref: "testes/casos_de_teste/UC-F14_visual_fp.yaml#passo_03_preencher_l
 ```
 
 ## Passo 04 — Salvar Limiares
+
+Click "Salvar Limiares". `parametros_score.limiar_*` recebe os valores.
+
+**Observe criticamente:**
+- Apos click, feedback de sucesso
+- 6 limiares persistidos
+- Edital pos-salvar usa esses limiares pra classificar GO/NO-GO automaticamente
+
 
 ```yaml
 id: passo_04_salvar_limiares

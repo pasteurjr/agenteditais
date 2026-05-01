@@ -893,12 +893,22 @@ def api_teste_iniciar(teste_id):
             }), 409
 
         # Spawn executor_sprint1.py — passa run_id pra ele filtrar execucoes da rodada atual
+        # Auto-login: se a rodada ja tem CTs aprovados (eh retomada apos sessao anterior
+        # que ja fez login+criou empresa), passa --auto-login para o executor logar
+        # antes do 1o passo. Sem isso, browser abre vazio porque tutoriais como UC-F03
+        # comecam em "navegar para Configuracoes > Empresa" assumindo login feito.
+        ja_tem_aprovados = db.query(ExecucaoCasoDeTeste).filter_by(
+            run_id=run_atual.id, estado="aprovado"
+        ).count() > 0
         cmd = [
             sys.executable,
             str(_FW_VISUAL / "executor_sprint1.py"),
             "--teste_id", t.id,
             "--run_id", run_atual.id,
         ]
+        if ja_tem_aprovados:
+            cmd.append("--auto-login")
+            print(f"[api] rodada {run_atual.numero} tem CTs aprovados — passa --auto-login")
         log = open(f"/tmp/executor_{teste_id}.log", "w")
         proc = subprocess.Popen(
             cmd, cwd=str(_PROJECT),
