@@ -65,6 +65,9 @@ function Section({ title, testes, tipo }) {
               <th>Tester</th>
               <th>Estado</th>
               <th>Progresso</th>
+              <th>Criado em</th>
+              <th>Iniciado em</th>
+              <th>Concluído em</th>
               <th>Última atividade</th>
               <th></th>
             </tr>
@@ -77,7 +80,10 @@ function Section({ title, testes, tipo }) {
                 <td>{t.tester}</td>
                 <td><span className={'tag tag-' + t.estado}>{t.estado}</span></td>
                 <td>{t.n_concluidos}/{t.n_cts}</td>
-                <td>{t.atualizado_em}</td>
+                <td style={{fontSize:'9pt'}}>{t.criado_em || '—'}</td>
+                <td style={{fontSize:'9pt'}}>{t.iniciado_em || '—'}</td>
+                <td style={{fontSize:'9pt'}}>{t.concluido_em || '—'}</td>
+                <td style={{fontSize:'9pt'}}>{t.atualizado_em || '—'}</td>
                 <td>
                   {tipo === 'andamento' ? (
                     <Link to={`/teste/${t.id}`}><button className="primary btn-sm">Abrir</button></Link>
