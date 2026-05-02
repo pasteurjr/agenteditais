@@ -617,20 +617,38 @@ def api_sprint_ucs(sprint_id):
 @app.route("/api/testes")
 @login_required
 def api_testes_lista():
-    """Meus testes (admin ve todos via ?todos=1)."""
+    """Meus testes (admin ve todos via ?todos=1).
+
+    Query params opcionais:
+      ?sprint_anterior_a=<sprint_id> — filtra testes de Sprint estritamente
+        anterior (numero menor) ao sprint dado. Usado pra dropdown de teste base.
+      ?estado=<concluido> — filtra por estado.
+    """
     todos = request.args.get("todos") == "1" and session.get("is_admin")
+    sprint_anterior_a = request.args.get("sprint_anterior_a")
+    estado_filtro = request.args.get("estado")
     db = get_db()
     try:
         _gc_zumbis(db)  # garante que estado mostrado e real
         q = db.query(Teste)
         if not todos:
             q = q.filter(Teste.user_id == session["user_id"])
+        if estado_filtro:
+            q = q.filter(Teste.estado == estado_filtro)
+        if sprint_anterior_a:
+            sprint_alvo = db.query(Sprint).filter_by(id=sprint_anterior_a).first()
+            if sprint_alvo:
+                # Sprint do teste base deve ter numero < sprint alvo
+                from sqlalchemy.orm import aliased
+                S = aliased(Sprint)
+                q = q.join(S, Teste.sprint_id == S.id).filter(S.numero < sprint_alvo.numero)
         rows = q.order_by(desc(Teste.atualizado_em)).limit(200).all()
         return jsonify([
             {
                 "id": t.id, "titulo": t.titulo,
                 "estado": t.estado, "ciclo_id": t.ciclo_id,
                 "sprint_nome": t.sprint.nome if t.sprint else "-",
+                "sprint_numero": t.sprint.numero if t.sprint else None,
                 "tester": t.user.email if t.user else "-",
                 "criado_em": t.criado_em.strftime("%Y-%m-%d %H:%M") if t.criado_em else None,
                 "iniciado_em": t.iniciado_em.strftime("%Y-%m-%d %H:%M") if t.iniciado_em else None,
@@ -638,6 +656,8 @@ def api_testes_lista():
                 "concluido_em": t.concluido_em.strftime("%Y-%m-%d %H:%M") if t.concluido_em else None,
                 "n_cts": len(t.execucoes),
                 "n_concluidos": sum(1 for e in t.execucoes if e.estado in ("aprovado", "reprovado", "pulado")),
+                "teste_base_id": t.teste_base_id,
+                "teste_base_titulo": t.teste_base.titulo if t.teste_base else None,
             }
             for t in rows
         ])
@@ -663,6 +683,7 @@ def api_teste_criar():
     uc_ids = data.get("uc_ids") or []
     ct_ids = data.get("ct_ids") or []
     descricao = data.get("descricao") or None
+    teste_base_id = data.get("teste_base_id")  # FK para teste Sprint anterior (heranca)
 
     if not titulo or not sprint_id or (not uc_ids and not ct_ids):
         return jsonify({"error": "titulo, sprint_id e uc_ids[] (ou ct_ids[]) obrigatorios"}), 400
@@ -672,6 +693,27 @@ def api_teste_criar():
         sprint = db.query(Sprint).filter_by(id=sprint_id, ativo=1).first()
         if not sprint:
             return jsonify({"error": "sprint invalida"}), 400
+
+        # Validacao: Sprint > 1 obriga teste_base_id de Sprint anterior CONCLUIDO
+        teste_base = None
+        if sprint.numero > 1:
+            if not teste_base_id:
+                return jsonify({
+                    "error": f"Sprint {sprint.numero} requer teste_base_id (teste de Sprint < {sprint.numero} ja concluido).",
+                    "exige_teste_base": True,
+                }), 400
+            teste_base = db.query(Teste).filter_by(id=teste_base_id, user_id=session["user_id"]).first()
+            if not teste_base:
+                return jsonify({"error": "teste_base_id nao encontrado ou nao pertence ao usuario"}), 400
+            if teste_base.estado != "concluido":
+                return jsonify({
+                    "error": f"Teste base esta '{teste_base.estado}'. Conclua-o antes de criar Sprint {sprint.numero}.",
+                }), 400
+            base_sprint = db.query(Sprint).filter_by(id=teste_base.sprint_id).first()
+            if not base_sprint or base_sprint.numero >= sprint.numero:
+                return jsonify({
+                    "error": f"Teste base deve ser de Sprint anterior (< {sprint.numero}). Recebido: Sprint {base_sprint.numero if base_sprint else '?'}.",
+                }), 400
 
         # Modo UC: expande pra todos os CTs Cenario+visual+com_passos
         if uc_ids:
@@ -702,12 +744,22 @@ def api_teste_criar():
             user_id=session["user_id"], titulo=titulo,
             descricao=descricao, uc_ids_canonicos=uc_ids_canonicos,
             ciclo_id=None, estado="criado",
+            teste_base_id=teste_base_id if teste_base else None,
         )
         db.add(teste)
         db.flush()
 
         # 2. Provisiona rodada 1 (cria ciclo, aloca user, gera CNPJ, renderiza docs)
-        run = _provisionar_rodada(db, teste, numero=1, sprint_numero=sprint.numero)
+        # Se teste_base setado, herda ciclo do teste base (mesma empresa/user/dados).
+        ciclo_base = None
+        if teste_base:
+            run_base = (db.query(RunTeste)
+                .filter_by(teste_id=teste_base.id)
+                .order_by(RunTeste.numero.desc()).first())
+            if run_base:
+                ciclo_base = run_base.ciclo_id
+        run = _provisionar_rodada(db, teste, numero=1, sprint_numero=sprint.numero,
+                                   reusar_de=ciclo_base)
         teste.ciclo_id = run.ciclo_id  # mantem campo legado em testes pra compat
 
         # 3. Cria execucoes_caso_de_teste apontando para a rodada 1
@@ -770,6 +822,7 @@ def api_teste_detalhe(teste_id):
                 "estado": t.estado, "ciclo_id": t.ciclo_id,
                 "sprint_id": t.sprint_id,
                 "sprint_nome": t.sprint.nome if t.sprint else "-",
+                "sprint_numero": t.sprint.numero if t.sprint else None,
                 "projeto_nome": t.projeto.nome if t.projeto else "-",
                 "tester": t.user.email if t.user else "-",
                 "criado_em": t.criado_em.isoformat() if t.criado_em else None,
@@ -778,6 +831,9 @@ def api_teste_detalhe(teste_id):
                 "concluido_em": t.concluido_em.isoformat() if t.concluido_em else None,
                 "pid_executor": t.pid_executor,
                 "uc_ids_canonicos": t.uc_ids_canonicos or [],
+                "teste_base_id": t.teste_base_id,
+                "teste_base_titulo": t.teste_base.titulo if t.teste_base else None,
+                "teste_base_sprint_numero": t.teste_base.sprint.numero if (t.teste_base and t.teste_base.sprint) else None,
             },
             "rodada_atual": {
                 "id": run.id, "numero": run.numero, "estado": run.estado,
@@ -834,6 +890,17 @@ def api_teste_iniciar(teste_id):
             return jsonify({"error": "acesso negado"}), 403
         if _is_pid_alive(t.pid_executor):
             return jsonify({"ok": False, "msg": f"executor ja rodando pid={t.pid_executor}"}), 409
+
+        # Pre-flight: se teste tem teste_base_id, valida que base ainda esta concluido
+        if t.teste_base_id:
+            base = db.query(Teste).filter_by(id=t.teste_base_id).first()
+            if not base:
+                return jsonify({"ok": False, "msg": "Teste base referenciado nao encontrado."}), 409
+            if base.estado != "concluido":
+                return jsonify({
+                    "ok": False,
+                    "msg": f"Teste base '{base.titulo}' esta '{base.estado}'. Conclua-o antes de iniciar este teste."
+                }), 409
 
         # Resolve rodada alvo: ?run_id= ou rodada atual (maior numero)
         run_id_param = request.args.get("run_id") or (request.get_json(silent=True) or {}).get("run_id")
@@ -1412,11 +1479,13 @@ def api_run_relatorio_pdf(run_id):
 # Helpers de rodadas (runs)
 # ============================================================
 
-def _provisionar_rodada(db, teste: "Teste", numero: int, sprint_numero: int) -> "RunTeste":
+def _provisionar_rodada(db, teste: "Teste", numero: int, sprint_numero: int,
+                        reusar_de: str | None = None) -> "RunTeste":
     """Provisiona uma nova rodada para um teste:
-    - Define ciclo_id = teste-<8chars>-r<numero> (ou teste-<8chars> se numero==1, compat)
-    - Chama criar_ciclo() para alocar usuario sintetico + CNPJ + renderizar docs
-    - Cria registro RunTeste e salva infos do contexto
+    - Se reusar_de=<ciclo_id_base> setado: HERDA contexto do ciclo base (mesma
+      empresa/user/dados). Usado quando teste declara teste_base_id (Sprint > 1).
+    - Senao: cria ciclo novo (criar_ciclo aloca novo user sintetico + CNPJ).
+    - Cria registro RunTeste e salva infos do contexto.
 
     Retorna o RunTeste criado (ainda nao commited — caller faz commit).
     """
@@ -1429,26 +1498,47 @@ def _provisionar_rodada(db, teste: "Teste", numero: int, sprint_numero: int) -> 
     user_id_sintetico = None
     cnpj = None
     razao = None
-    try:
-        sys.path.insert(0, str(_PROJECT / "testes" / "framework_provisionamento"))
-        from context_manager import criar_ciclo  # type: ignore
-        ctx = criar_ciclo(
-            ciclo_id=ciclo_id,
-            ambiente="agenteditais",
-            precisa_editais=False,
-            sprints_no_ciclo=[sprint_numero],
-        )
-        v = ctx.get("trilhas", {}).get("visual", {})
-        user_email = v.get("usuario", {}).get("email")
-        user_id_sintetico = v.get("usuario", {}).get("id")
-        emp = v.get("empresa", {})
-        cnpj = emp.get("cnpj_pretendido")
-        razao = emp.get("razao_social_pretendida")
-        print(f"[api] rodada {numero} ciclo {ciclo_id}: user={user_email} cnpj={cnpj}")
-    except FileExistsError:
-        print(f"[api] ciclo {ciclo_id} ja existia — reusando")
-    except Exception as e:
-        print(f"[api] WARN: falha ao provisionar ciclo {ciclo_id}: {e}")
+    sys.path.insert(0, str(_PROJECT / "testes" / "framework_provisionamento"))
+
+    if reusar_de:
+        # HERANCA: le contexto.yaml do ciclo base. Mesmo user/empresa.
+        try:
+            from context_manager import carregar_ciclo  # type: ignore
+            ctx_base = carregar_ciclo(reusar_de)
+            v = ctx_base.get("trilhas", {}).get("visual", {})
+            user_email = v.get("usuario", {}).get("email")
+            user_id_sintetico = v.get("usuario", {}).get("id")
+            emp = v.get("empresa", {})
+            cnpj = emp.get("cnpj_pretendido")
+            razao = emp.get("razao_social_pretendida")
+            # Reusa o MESMO ciclo_id (aponta pro mesmo dir contextos/) — todos os
+            # testes que herdam compartilham o mesmo contexto fisicamente.
+            ciclo_id = reusar_de
+            print(f"[api] rodada {numero} HERDA ciclo {ciclo_id}: user={user_email} cnpj={cnpj}")
+        except Exception as e:
+            print(f"[api] ERRO ao herdar ciclo {reusar_de}: {e} — caindo pra criar_ciclo")
+            reusar_de = None  # forca fallback
+
+    if not reusar_de:
+        try:
+            from context_manager import criar_ciclo  # type: ignore
+            ctx = criar_ciclo(
+                ciclo_id=ciclo_id,
+                ambiente="agenteditais",
+                precisa_editais=False,
+                sprints_no_ciclo=[sprint_numero],
+            )
+            v = ctx.get("trilhas", {}).get("visual", {})
+            user_email = v.get("usuario", {}).get("email")
+            user_id_sintetico = v.get("usuario", {}).get("id")
+            emp = v.get("empresa", {})
+            cnpj = emp.get("cnpj_pretendido")
+            razao = emp.get("razao_social_pretendida")
+            print(f"[api] rodada {numero} ciclo {ciclo_id}: user={user_email} cnpj={cnpj}")
+        except FileExistsError:
+            print(f"[api] ciclo {ciclo_id} ja existia — reusando")
+        except Exception as e:
+            print(f"[api] WARN: falha ao provisionar ciclo {ciclo_id}: {e}")
 
     run = RunTeste(
         teste_id=teste.id, numero=numero, ciclo_id=ciclo_id,

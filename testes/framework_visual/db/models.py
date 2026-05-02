@@ -170,6 +170,9 @@ class Teste(Base):
     concluido_em = Column(DateTime, nullable=True)
     ativo = Column(TINYINT(1), nullable=False, default=1)
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
+    # FK para outro teste (sprint anterior) cuja empresa/user/dados sao herdados.
+    # NULL para testes Sprint 1 (raiz). Obrigatorio para Sprints > 1.
+    teste_base_id = Column(String(36), ForeignKey("testes.id", ondelete="SET NULL"), nullable=True)
 
     user = relationship("User", back_populates="testes")
     projeto = relationship("Projeto")
@@ -178,6 +181,7 @@ class Teste(Base):
     relatorios = relationship("Relatorio", back_populates="teste", cascade="all, delete-orphan")
     runs = relationship("RunTeste", back_populates="teste", cascade="all, delete-orphan",
                         order_by="RunTeste.numero")
+    teste_base = relationship("Teste", remote_side=[id], foreign_keys=[teste_base_id])
 
     __table_args__ = (
         Index("ix_testes_user_estado", "user_id", "estado"),

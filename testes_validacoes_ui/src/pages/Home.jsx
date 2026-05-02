@@ -75,7 +75,14 @@ function Section({ title, testes, tipo }) {
           <tbody>
             {testes.map(t => (
               <tr key={t.id}>
-                <td>{t.titulo}</td>
+                <td>
+                  {t.titulo}
+                  {t.teste_base_titulo && (
+                    <div style={{fontSize:'8pt', color:'#888', marginTop:'2px'}}>
+                      ↳ herda de: {t.teste_base_titulo}
+                    </div>
+                  )}
+                </td>
                 <td>{t.sprint_nome}</td>
                 <td>{t.tester}</td>
                 <td><span className={'tag tag-' + t.estado}>{t.estado}</span></td>

@@ -14,9 +14,15 @@ export default function NovoTeste() {
   const [projetoId, setProjetoId] = useState('')
   const [sprintId, setSprintId] = useState('')
   const [selUcs, setSelUcs] = useState({}) // {uc_id: true}
+  const [testesBaseDisponiveis, setTestesBaseDisponiveis] = useState([])
+  const [testeBaseId, setTesteBaseId] = useState('')
 
   const [busy, setBusy] = useState(false)
   const [erro, setErro] = useState(null)
+
+  const sprintObj = sprints.find(s => s.id === sprintId)
+  const sprintNumero = sprintObj?.numero || 0
+  const requerBase = sprintNumero > 1
 
   useEffect(() => {
     api.projetos().then(setProjetos).catch(e => setErro(e.message))
@@ -30,9 +36,14 @@ export default function NovoTeste() {
 
   useEffect(() => {
     setUcs([]); setSelUcs({})
+    setTestesBaseDisponiveis([]); setTesteBaseId('')
     if (!sprintId) return
     api.sprintUcsResumo(sprintId).then(d => setUcs(d.ucs)).catch(e => setErro(e.message))
-  }, [sprintId])
+    // Se Sprint > 1, carrega lista de testes base candidatos (Sprint < N, estado=concluido)
+    if (sprintNumero > 1) {
+      api.testesCandidatosBase(sprintId).then(setTestesBaseDisponiveis).catch(e => setErro(e.message))
+    }
+  }, [sprintId, sprintNumero])
 
   const ucsExecutaveis = ucs.filter(uc => uc.executavel)
   const ucsNaoExecutaveis = ucs.filter(uc => !uc.executavel)
@@ -42,7 +53,7 @@ export default function NovoTeste() {
     .filter(uc => selUcs[uc.id])
     .reduce((acc, uc) => acc + uc.n_cenario_visual_executavel, 0)
 
-  const podeSubmit = totalUcsSel > 0 && titulo.trim() && sprintId && !busy
+  const podeSubmit = totalUcsSel > 0 && titulo.trim() && sprintId && !busy && (!requerBase || testeBaseId)
 
   const toggleUc = (id) => setSelUcs(s => ({...s, [id]: !s[id]}))
 
@@ -59,12 +70,14 @@ export default function NovoTeste() {
     setErro(null); setBusy(true)
     try {
       const uc_ids = Object.entries(selUcs).filter(([_,v]) => v).map(([k]) => k)
-      const r = await api.criarTeste({
+      const payload = {
         titulo: titulo.trim(),
         descricao: descricao.trim() || null,
         sprint_id: sprintId,
         uc_ids,
-      })
+      }
+      if (testeBaseId) payload.teste_base_id = testeBaseId
+      const r = await api.criarTeste(payload)
       nav(`/teste/${r.teste_id}`)
     } catch (err) {
       setErro(err.message); setBusy(false)
@@ -97,6 +110,24 @@ export default function NovoTeste() {
                 {sprints.map(s => <option key={s.id} value={s.id}>Sprint {s.numero} — {s.nome}</option>)}
               </select>
             </div>
+            {requerBase && (
+              <div>
+                <label>Teste base (Sprint anterior) *</label>
+                <select value={testeBaseId} onChange={e=>setTesteBaseId(e.target.value)} required>
+                  <option value="">— selecione —</option>
+                  {testesBaseDisponiveis.map(t => (
+                    <option key={t.id} value={t.id}>
+                      [Sprint {t.sprint_numero}] {t.titulo} ({t.estado})
+                    </option>
+                  ))}
+                </select>
+                {testesBaseDisponiveis.length === 0 && (
+                  <small style={{color:'#e94560'}}>
+                    Nenhum teste de Sprint anterior concluído. Conclua um teste Sprint &lt; {sprintNumero} antes.
+                  </small>
+                )}
+              </div>
+            )}
             <div>
               <label>Descrição (opcional)</label>
               <textarea rows={1} value={descricao} onChange={e=>setDescricao(e.target.value)} />
@@ -104,10 +135,21 @@ export default function NovoTeste() {
           </div>
 
           <div className="flash flash-info" style={{marginTop:'1.5em'}}>
-            <strong>Como funciona:</strong> ao criar este teste, o sistema gera automaticamente
-            uma <strong>empresa nova com CNPJ único</strong> (ciclo isolado).
-            Para cada UC marcado, todos os CTs Cenário+visual com passos cadastrados serão
-            executados em ordem (FP → FAs → FEs).
+            {requerBase ? (
+              <>
+                <strong>Sprint {sprintNumero} herda do teste base:</strong> a empresa, usuário sintético,
+                produtos, parâmetros e demais dados criados na Sprint anterior são reutilizados.
+                Selecione um <strong>teste base concluído</strong> para herdar o ciclo. Os UCs desta sprint
+                vão criar dados novos sobre o estado existente (sem recriar empresa).
+              </>
+            ) : (
+              <>
+                <strong>Como funciona:</strong> ao criar este teste, o sistema gera automaticamente
+                uma <strong>empresa nova com CNPJ único</strong> (ciclo isolado).
+                Para cada UC marcado, todos os CTs Cenário+visual com passos cadastrados serão
+                executados em ordem (FP → FAs → FEs).
+              </>
+            )}
           </div>
 
           <h2 style={{color:'#e94560', marginTop:'2em'}}>Selecionar Casos de Uso</h2>

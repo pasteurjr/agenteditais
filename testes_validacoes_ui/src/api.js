@@ -41,6 +41,9 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return req(`/api/testes${q ? "?" + q : ""}`);
   },
+  // Lista testes que podem servir como teste base para um teste novo da sprint dada.
+  // Filtro: estado=concluido + sprint < numero da sprint dada.
+  testesCandidatosBase: (sprintId) => req(`/api/testes?sprint_anterior_a=${sprintId}&estado=concluido`),
   testeDetalhe:  (id)          => req(`/api/testes/${id}`),
   criarTeste:    (data)        => req("/api/testes", {method: "POST", body: JSON.stringify(data)}),
   iniciarTeste:  (id, runId)   => req(`/api/testes/${id}/iniciar${runId ? `?run_id=${runId}` : ''}`, {method: "POST"}),

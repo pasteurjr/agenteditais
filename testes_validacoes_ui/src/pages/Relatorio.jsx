@@ -65,6 +65,18 @@ export default function Relatorio() {
               <tr><th>Tester</th><td>{teste.tester}</td></tr>
               <tr><th>Ciclo (rodada)</th><td>{teste.ciclo_id || '—'}</td></tr>
               <tr><th>Estado</th><td><span className={'tag tag-' + teste.estado}>{teste.estado}</span></td></tr>
+              {teste.teste_base_id && (
+                <tr>
+                  <th>Herança</th>
+                  <td>
+                    Sprint {teste.sprint_numero} herda de
+                    <Link to={`/relatorio/${teste.teste_base_id}`} style={{marginLeft:'0.5em'}}>
+                      <strong>{teste.teste_base_titulo}</strong>
+                    </Link>
+                    {teste.teste_base_sprint_numero && <span style={{color:'#888'}}> (Sprint {teste.teste_base_sprint_numero})</span>}
+                  </td>
+                </tr>
+              )}
               <tr><th>Criado em</th><td>{teste.criado_em || '-'}</td></tr>
               <tr><th>Iniciado em</th><td>{teste.iniciado_em || '-'}</td></tr>
               <tr><th>Última atividade</th><td>{teste.atualizado_em || '-'}</td></tr>
