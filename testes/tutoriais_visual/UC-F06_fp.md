@@ -41,6 +41,9 @@ acao:
     - tipo: wait_for
       seletor: 'button.ptab.active:has-text("Meus Produtos")'
       timeout: 15000
+    - tipo: wait_for
+      seletor: 'table tbody tr button[title="Visualizar"]'
+      timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F06_visual_fp.yaml#passo_00_setup_navegar_meus_produtos"
 ```
 

@@ -43,6 +43,27 @@ acao:
     - tipo: wait_for
       seletor: 'button.ptab.active:has-text("Meus Produtos")'
       timeout: 15000
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const labels = [...document.querySelectorAll('label')];
+          for (const lbl of labels) {
+            const t = (lbl.textContent || '').trim();
+            if (/^(Área|Area|Classe|Subclasse)\s*:?$/i.test(t)) {
+              const sel = lbl.parentElement.querySelector('select');
+              if (sel && sel.value) {
+                sel.value = '';
+                sel.dispatchEvent(new Event('change', {bubbles: true}));
+              }
+            }
+          }
+          return 'filtros resetados';
+        }
+    - tipo: wait
+      valor_literal: 800
+    - tipo: wait_for
+      seletor: 'table tbody tr button[title="Visualizar"]'
+      timeout: 15000
 validacao_ref: "testes/casos_de_teste/UC-F12_visual_fp.yaml#passo_00_setup_navegar_portfolio"
 ```
 

@@ -224,9 +224,13 @@ def _executar_um_ct(page: Page, db, teste: Teste, exec_obj: ExecucaoCasoDeTeste,
         estado.passo_atual_idx = idx
         resultado = estado.resultados[idx]
 
-        # Reset captura de rede pro escopo deste passo
-        if capturas_rede is not None:
-            capturas_rede.clear()
+        # Captura de rede: NAO limpa (cumulativa). Asserts_rede olham todas
+        # as capturas ate aqui — necessario porque requests podem ocorrer no
+        # final do passo prévio (ex: GET /api/produtos disparado por
+        # fetchProdutos() apos navegar). Mantemos buffer com tamanho maximo
+        # pra evitar crescimento indefinido em testes longos.
+        if capturas_rede is not None and len(capturas_rede) > 500:
+            del capturas_rede[:-500]  # mantem so as 500 mais recentes
 
         # Cria registro PassoExecucao no banco
         passo_exec = PassoExecucao(
