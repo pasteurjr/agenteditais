@@ -70,23 +70,30 @@ function renderEstado(d) {
     $("btn-reprovar").disabled = (d.estado !== "pausado");
   } else {
     if (d.estado === "terminado") {
-      // Sumario de conclusao com tela verde celebratoria
-      const total = (d.resultados || []).length;
+      // Sumario de conclusao com tela verde celebratoria.
+      // NOTA: estado.resultados eh resetado a cada CT no executor —
+      // entao .length aqui corresponde APENAS aos passos do ultimo CT.
+      // Pra ver o agregado real do teste inteiro, abra :5181.
+      const totalUltimoCt = (d.resultados || []).length;
       const aprovados = (d.resultados || []).filter(r => r.veredicto_po === "APROVADO").length;
       const reprovados = (d.resultados || []).filter(r => r.veredicto_po === "REPROVADO").length;
       const inconclusivos = (d.resultados || []).filter(r => !r.veredicto_po).length;
       $("passo-titulo").innerHTML = "🎉 Teste concluído!";
       $("passo-descricao").innerHTML = `
         <div style="background: rgba(76,175,80,0.15); border: 2px solid #4caf50; border-radius: 8px; padding: 1.5em; text-align: center;">
-          <h2 style="color: #4caf50; margin-top: 0; font-size: 22pt;">✅ ${total} passos executados</h2>
-          <div style="font-size: 14pt; margin: 1em 0;">
-            <span style="color: #4caf50; margin-right: 1em;">✅ ${aprovados} APROVADOS</span>
-            ${reprovados > 0 ? `<span style="color: #f44336; margin-right: 1em;">❌ ${reprovados} REPROVADOS</span>` : ''}
-            ${inconclusivos > 0 ? `<span style="color: #ff9800;">⏸ ${inconclusivos} sem decisão</span>` : ''}
-          </div>
-          <p style="color: #aaa; font-size: 10pt; margin-top: 1.5em;">
-            Esta janela permanecerá aberta por 30 segundos para visualização.<br>
-            Acesse <strong>http://localhost:5181</strong> para ver o relatório completo.
+          <h2 style="color: #4caf50; margin-top: 0; font-size: 22pt;">✅ Execução do teste finalizada</h2>
+          <p style="color: #ccc; font-size: 12pt; margin: 0.5em 0;">
+            Último caso de teste (do total): <strong>${totalUltimoCt} passos</strong><br>
+            <span style="color: #4caf50;">✅ ${aprovados} APROVADOS</span>
+            ${reprovados > 0 ? `<span style="color: #f44336; margin-left: 1em;">❌ ${reprovados} REPROVADOS</span>` : ''}
+            ${inconclusivos > 0 ? `<span style="color: #ff9800; margin-left: 1em;">⏸ ${inconclusivos} sem decisão</span>` : ''}
+          </p>
+          <p style="color: #aaa; font-size: 11pt; margin-top: 1em; padding-top: 1em; border-top: 1px solid #333;">
+            Para o <strong>agregado total do teste</strong> (todos os CTs):<br>
+            Acesse <strong>http://localhost:5181</strong> e abra o relatório.
+          </p>
+          <p style="color: #888; font-size: 10pt; margin-top: 1em;">
+            Esta janela permanecerá aberta por 30 segundos.
           </p>
         </div>`;
       // Limpa screenshots e detalhes do passo
