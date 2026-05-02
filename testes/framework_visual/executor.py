@@ -131,7 +131,19 @@ def _executar_acao(
         if valor is None:
             raise ValueError("fill sem valor")
         loc = page.locator(seletor).first
-        loc.click(timeout=acao.timeout)
+        # Scroll defensivo — campos abaixo da dobra falham click silenciosamente
+        try:
+            loc.scroll_into_view_if_needed(timeout=acao.timeout)
+        except Exception:
+            pass
+        # Tenta click; se falhar (campo coberto/disabled), usa focus como fallback
+        try:
+            loc.click(timeout=acao.timeout)
+        except Exception:
+            try:
+                loc.focus(timeout=acao.timeout)
+            except Exception:
+                pass
         input_type = (loc.get_attribute("type") or "").lower()
         if input_type in ("date", "time", "datetime-local", "number", "month", "week"):
             loc.fill(valor, timeout=acao.timeout)

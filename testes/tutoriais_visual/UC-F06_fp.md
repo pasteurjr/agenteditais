@@ -93,19 +93,49 @@ Click no primeiro produto da grade filtrada para abrir card "Detalhes".
 id: passo_02_inspecionar_produto
 acao:
   sequencia:
+    # Reseta TODOS os selects de filtro com value preenchido — solucao
+    # robusta sem depender de match exato do label
     - tipo: evaluate
       valor_literal: |
         () => {
-          const rows = [...document.querySelectorAll('table tbody tr, .produto-card')];
-          if (!rows.length) throw new Error('Nenhum produto na grade filtrada');
-          rows[0].click();
+          // Pega selects que estao no header de filtros (geralmente proximos
+          // ao FilterBar/searchInput, antes do <table>)
+          const table = document.querySelector('table');
+          if (!table) return 'sem table';
+          const selects = [...document.querySelectorAll('select')].filter(s => {
+            // Apenas selects ANTES da table no DOM
+            return s.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING;
+          });
+          let resetados = 0;
+          for (const sel of selects) {
+            if (sel.value && sel.value !== '') {
+              sel.value = '';
+              sel.dispatchEvent(new Event('change', {bubbles: true}));
+              resetados++;
+            }
+          }
+          return `${resetados} filtros resetados`;
+        }
+    - tipo: wait
+      valor_literal: 800
+    # Aguarda grade renderizar
+    - tipo: wait_for
+      seletor: 'table tbody tr button[title="Visualizar"]'
+      timeout: 10000
+    # Click no botao "Visualizar" da primeira linha
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const buttons = [...document.querySelectorAll('table tbody tr button[title="Visualizar"]')];
+          if (!buttons.length) throw new Error('Nenhum botao Visualizar na grade');
+          buttons[0].scrollIntoView({block: 'center'});
+          buttons[0].click();
           return 'clicked';
         }
+    - tipo: wait
+      valor_literal: 1500
     - tipo: wait_for
       seletor: '.card-title:has-text("Detalhes:"), h3:has-text("Detalhes:")'
       timeout: 10000
-    # Confirma chamada GET ao detalhe
-    - tipo: wait
-      valor_literal: 1500
 validacao_ref: "testes/casos_de_teste/UC-F06_visual_fp.yaml#passo_02_inspecionar_produto"
 ```

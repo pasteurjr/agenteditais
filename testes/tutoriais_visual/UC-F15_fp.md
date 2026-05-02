@@ -108,6 +108,17 @@ Card "Mercado" — TAM (total), SAM (servivel), SOM (obtenivel). Salvar.
 id: passo_02_preencher_e_salvar_mercado
 acao:
   sequencia:
+    # Scroll ate o card Mercado pra garantir que inputs estao no viewport
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const titulos = [...document.querySelectorAll('.card-title, h3')];
+          const card = titulos.find(el => /Mercado.*TAM|Mercado.*Total/i.test(el.textContent || ''));
+          if (card) card.scrollIntoView({block: 'center'});
+          return 'scrolled';
+        }
+    - tipo: wait
+      valor_literal: 400
     - tipo: fill
       seletor: 'div.form-field:has(.form-field-label:has-text("TAM")) input.text-input'
       valor_from_dataset: "tam"

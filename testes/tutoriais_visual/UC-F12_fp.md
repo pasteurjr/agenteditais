@@ -80,15 +80,18 @@ Click no primeiro produto/linha da grade.
 id: passo_01_selecionar_produto
 acao:
   sequencia:
-    # Click na primeira linha/card de produto (table tr ou produto-card)
+    # Click no botao Visualizar do primeiro produto (mais explicito que clicar na linha)
     - tipo: evaluate
       valor_literal: |
         () => {
-          const rows = [...document.querySelectorAll('table tbody tr, .produto-card')];
-          if (!rows.length) throw new Error('Nenhum produto na grade');
-          rows[0].click();
+          const buttons = [...document.querySelectorAll('table tbody tr button[title="Visualizar"]')];
+          if (!buttons.length) throw new Error('Nenhum botao Visualizar na grade');
+          buttons[0].scrollIntoView({block: 'center'});
+          buttons[0].click();
           return 'clicked';
         }
+    - tipo: wait
+      valor_literal: 1500
     - tipo: wait_for
       seletor: '.card-title:has-text("Detalhes:"), h3:has-text("Detalhes:")'
       timeout: 10000
@@ -108,6 +111,23 @@ Botao "Reprocessar Metadados" no card de detalhes. POST /api/produtos/:id/reproc
 id: passo_02_reprocessar_metadados
 acao:
   sequencia:
+    # Expande secao "Metadados de Captacao" — botao Reprocessar so aparece dentro dela
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const headers = [...document.querySelectorAll('h4')];
+          const header = headers.find(h => /Metadados de Captacao/i.test(h.textContent || ''));
+          if (!header) throw new Error('Header "Metadados de Captacao" nao encontrado');
+          header.scrollIntoView({block: 'center'});
+          // Verifica se ja esta expandido (ChevronDown vs ChevronRight)
+          const svg = header.querySelector('svg');
+          const isExpanded = svg && svg.querySelector('polyline')?.getAttribute('points')?.includes('6 9');
+          if (!isExpanded) header.click();
+          return 'expanded';
+        }
+    - tipo: wait
+      valor_literal: 600
+    # Agora clica em Reprocessar Metadados
     - tipo: evaluate
       valor_literal: |
         () => {
