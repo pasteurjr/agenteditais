@@ -1,0 +1,10 @@
+uc_id: UC-CV05
+trilha: visual
+variacao: fp
+descricao: |
+  Exportar resultados da busca em CSV. Click no botao "Exportar CSV" — gera blob
+  client-side e dispara download. Sem chamada de rede.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

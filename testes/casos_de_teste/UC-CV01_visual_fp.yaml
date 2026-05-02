@@ -1,0 +1,22 @@
+uc_id: UC-CV01
+variacao: fp
+trilha: visual
+descricao: "Buscar editais por termo, classificacao e score"
+
+passos:
+  - id: passo_00_setup_navegar_captacao
+    asserts_dom:
+      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+      - selector: '.card-title:has-text("Buscar Editais"), h3:has-text("Buscar Editais")'
+
+  - id: passo_01_preencher_termo
+    # Sem assert (input ja preenchido — confirmacao no proximo passo)
+
+  - id: passo_02_buscar_editais
+    asserts_rede:
+      - url_contem: "/api/editais/buscar"
+        status_in: [200, 201]
+
+  - id: passo_03_confirmar_resultados
+    asserts_dom:
+      - selector: 'table tbody tr, .edital-card, [class*="empty"], [class*="no-results"]'

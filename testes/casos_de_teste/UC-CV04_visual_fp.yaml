@@ -1,0 +1,20 @@
+uc_id: UC-CV04
+variacao: fp
+trilha: visual
+descricao: "Definir estrategia, intencao e margem do edital"
+
+passos:
+  - id: passo_00_confirmar_painel
+    asserts_dom:
+      - selector: '.panel-section, h4:has-text("Intencao")'
+
+  - id: passo_01_selecionar_intencao
+    # Sem assert (radio sem feedback DOM imediato)
+
+  - id: passo_02_ajustar_margem
+    # Sem assert (slider sem feedback DOM imediato)
+
+  - id: passo_03_salvar_estrategia
+    asserts_rede:
+      - url_contem: "/api/crud/editais"
+        status_in: [200, 201]

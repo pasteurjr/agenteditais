@@ -1,0 +1,10 @@
+uc_id: UC-CV03
+trilha: visual
+variacao: fp
+descricao: |
+  Salvar edital, itens e scores da captacao. Click no botao "Salvar edital"
+  da primeira linha da grade para persistir em editais_salvos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

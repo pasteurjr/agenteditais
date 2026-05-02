@@ -1,0 +1,10 @@
+uc_id: UC-CV02
+trilha: visual
+variacao: fp
+descricao: |
+  Explorar painel lateral do edital. Click no botao "Ver detalhes" (icone Eye) da
+  primeira linha da grade pra abrir o painel lateral.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

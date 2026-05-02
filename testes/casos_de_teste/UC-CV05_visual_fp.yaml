@@ -1,0 +1,13 @@
+uc_id: UC-CV05
+variacao: fp
+trilha: visual
+descricao: "Exportar resultados em CSV (client-side)"
+
+passos:
+  - id: passo_00_confirmar_grade
+    asserts_dom:
+      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+      - selector: 'table tbody tr, .edital-card'
+
+  - id: passo_01_exportar_csv
+    # Sem assert (acao client-side, sem rede; click sem exception ja eh OK)

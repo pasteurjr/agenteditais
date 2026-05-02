@@ -1,0 +1,14 @@
+uc_id: UC-CV02
+variacao: fp
+trilha: visual
+descricao: "Explorar painel lateral do edital — click ver detalhes"
+
+passos:
+  - id: passo_00_confirmar_grade
+    asserts_dom:
+      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+      - selector: 'table tbody tr, .edital-card'
+
+  - id: passo_01_abrir_painel_lateral
+    asserts_dom:
+      - selector: '.captacao-layout.with-panel, [class*="panel"], aside'

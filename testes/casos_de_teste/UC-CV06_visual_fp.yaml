@@ -1,0 +1,18 @@
+uc_id: UC-CV06
+variacao: fp
+trilha: visual
+descricao: "Criar monitoramento automatico de busca"
+
+passos:
+  - id: passo_00_setup_navegar_monitoramentos
+    asserts_dom:
+      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+
+  - id: passo_01_abrir_form_novo
+    asserts_dom:
+      - selector: 'div.form-field:has(.form-field-label:has-text("Termo de busca")) input.text-input'
+
+  - id: passo_02_criar_monitoramento
+    asserts_rede:
+      - url_contem: "/api/crud/monitoramentos"
+        status_in: [200, 201]
