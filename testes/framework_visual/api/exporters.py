@@ -106,7 +106,9 @@ def gerar_md(rel: dict, screenshot_url_fn=None) -> bytes:
     lines.append(f"- **Tester:** {teste.get('tester','-')}")
     lines.append(f"- **Ciclo:** `{teste.get('ciclo_id','-')}`")
     lines.append(f"- **Estado:** **{teste.get('estado','-')}**")
+    lines.append(f"- **Criado em:** {teste.get('criado_em') or '-'}")
     lines.append(f"- **Iniciado em:** {teste.get('iniciado_em') or '-'}")
+    lines.append(f"- **Ultima atividade:** {teste.get('atualizado_em') or '-'}")
     lines.append(f"- **Concluido em:** {teste.get('concluido_em') or '-'}")
     lines.append("")
 
@@ -251,8 +253,14 @@ def gerar_docx(rel: dict) -> bytes:
     p.add_run("Estado: ").bold = True
     p.add_run(teste.get("estado", "-"))
     p = doc.add_paragraph()
+    p.add_run("Criado em: ").bold = True
+    p.add_run(teste.get("criado_em") or "-")
+    p = doc.add_paragraph()
     p.add_run("Iniciado em: ").bold = True
     p.add_run(teste.get("iniciado_em") or "-")
+    p = doc.add_paragraph()
+    p.add_run("Ultima atividade: ").bold = True
+    p.add_run(teste.get("atualizado_em") or "-")
     p = doc.add_paragraph()
     p.add_run("Concluido em: ").bold = True
     p.add_run(teste.get("concluido_em") or "-")
@@ -461,7 +469,9 @@ def gerar_pdf(rel: dict) -> bytes:
     html_parts.append(f"<p><strong>Tester:</strong> {_esc(teste.get('tester'))}</p>")
     html_parts.append(f"<p><strong>Ciclo:</strong> <code>{_esc(teste.get('ciclo_id'))}</code></p>")
     html_parts.append(f"<p><strong>Estado:</strong> {_esc(teste.get('estado'))}</p>")
+    html_parts.append(f"<p><strong>Criado em:</strong> {_esc(teste.get('criado_em'))}</p>")
     html_parts.append(f"<p><strong>Iniciado em:</strong> {_esc(teste.get('iniciado_em'))}</p>")
+    html_parts.append(f"<p><strong>Ultima atividade:</strong> {_esc(teste.get('atualizado_em'))}</p>")
     html_parts.append(f"<p><strong>Concluido em:</strong> {_esc(teste.get('concluido_em'))}</p>")
     html_parts.append("</div>")
 
