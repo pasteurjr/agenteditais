@@ -12669,6 +12669,13 @@ def buscar_certidoes_automatica():
             FonteCertidao.ativo == True
         ).all()
 
+        # Fallback: empresa nova herda fontes globais (empresa_id IS NULL)
+        if not fontes:
+            fontes = db.query(FonteCertidao).filter(
+                FonteCertidao.empresa_id.is_(None),
+                FonteCertidao.ativo == True
+            ).all()
+
         if not fontes:
             return jsonify({"error": "Nenhuma fonte de certidão cadastrada. Acesse Cadastros > Empresa > Fontes de Certidões para configurar."}), 400
 
@@ -12897,6 +12904,15 @@ def buscar_certidoes_stream():
                 FonteCertidao.empresa_id == empresa_id,
                 FonteCertidao.ativo == True
             ).all()
+
+            # Fallback: se a empresa nao tem fontes proprias, herda as globais
+            # (empresa_id IS NULL). Cobre empresas recem-criadas — evita exigir
+            # cadastro manual antes do primeiro uso.
+            if not fontes:
+                fontes = db.query(FonteCertidao).filter(
+                    FonteCertidao.empresa_id.is_(None),
+                    FonteCertidao.ativo == True
+                ).all()
 
             if not fontes:
                 yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Nenhuma fonte de certidão cadastrada.'})}\n\n"
