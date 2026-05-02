@@ -85,10 +85,10 @@ acao:
     - tipo: wait_for
       seletor: 'button:has-text("Buscando")'
       timeout: 10000
-    # AGUARDA termino — ate 180s; volta a aparecer "Buscar Certidoes" sem "Buscando"
+    # AGUARDA termino dos scrapers (varios portais oficiais) — timeout 240s
     - tipo: wait_for
       seletor: 'button:has-text("Buscar Certidoes"):not(:has-text("Buscando"))'
-      timeout: 200000
+      timeout: 240000
     - tipo: wait
       valor_literal: 2000
 validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_01_buscar_certidoes"

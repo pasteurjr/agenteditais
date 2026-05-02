@@ -122,13 +122,14 @@ acao:
     - tipo: wait_for
       seletor: 'button.btn-primary:has-text("Processando")'
       timeout: 5000
-    # AGUARDA processamento da IA — pode demorar ate 120s
+    # AGUARDA processamento da IA (DeepSeek) — timeout 240s pra dar
+    # tempo suficiente pro LLM processar o PDF inteiro e extrair specs
     - tipo: wait_for
       seletor: 'div.markdown-response, button.btn-primary:has-text("Processar com IA")'
-      timeout: 150000
-    # Aguarda mais 2s pra fetchProdutos() terminar
+      timeout: 240000
+    # Aguarda mais 3s pra fetchProdutos() terminar
     - tipo: wait
-      valor_literal: 2000
+      valor_literal: 3000
 validacao_ref: "testes/casos_de_teste/UC-F07_visual_fp.yaml#passo_02_processar_com_ia"
 ```
 

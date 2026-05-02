@@ -142,9 +142,9 @@ acao:
     - tipo: wait_for
       seletor: 'button:has-text("Reprocessando")'
       timeout: 5000
-    # AGUARDA processamento (ate 90s)
+    # AGUARDA processamento (DeepSeek) — timeout 180s
     - tipo: wait_for
       seletor: 'button:has-text("Reprocessar Metadados")'
-      timeout: 120000
+      timeout: 180000
 validacao_ref: "testes/casos_de_teste/UC-F12_visual_fp.yaml#passo_02_reprocessar_metadados"
 ```

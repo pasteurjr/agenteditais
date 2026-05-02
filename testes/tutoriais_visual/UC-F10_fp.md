@@ -101,8 +101,8 @@ acao:
     - tipo: wait_for_hidden
       seletor: 'div.modal-overlay'
       timeout: 8000
-    # Aguarda IA — pode demorar ate 90s
+    # Aguarda IA processar busca ANVISA (DeepSeek + busca web) — 180s
     - tipo: wait
-      valor_literal: 60000
+      valor_literal: 180000
 validacao_ref: "testes/casos_de_teste/UC-F10_visual_fp.yaml#passo_02_preencher_e_buscar_anvisa"
 ```

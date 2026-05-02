@@ -94,9 +94,9 @@ acao:
     # Chat abre — verifica que algum painel/sidebar de chat aparece
     - tipo: wait
       valor_literal: 1500
-    # AGUARDA resposta da IA — pode demorar ate 120s
-    # Espera nova mensagem aparecer no chat (resposta do assistant)
+    # AGUARDA resposta da IA (DeepSeek) — tempo generoso (180s)
+    # para garantir que o LLM processou e devolveu resposta completa
     - tipo: wait
-      valor_literal: 60000
+      valor_literal: 180000
 validacao_ref: "testes/casos_de_teste/UC-F09_visual_fp.yaml#passo_01_acionar_reprocessar"
 ```
