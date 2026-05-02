@@ -387,10 +387,27 @@ def _validar_predecessores(db, teste) -> tuple[bool, dict]:
     for r in preds_rows:
         predecessores_por_uc.setdefault(r.uc_id, []).append(r)
 
-    # 3. UCs incluidos no proprio teste — UNICA fonte de satisfacao.
-    # Cada teste e autocontido: o ciclo gera dados novos (CNPJ unico),
-    # entao predecessor de execucao passada NAO satisfaz UC novo deste teste.
+    # 3. UCs incluidos no proprio teste — fonte primaria de satisfacao.
     uc_ids_no_proprio_teste = set(uc_ids_no_teste)
+
+    # 3.1 HERANCA: se teste tem teste_base_id, herda UCs ja executados (estado
+    # aprovado) do teste base recursivamente. Isso permite que Sprint 2 declare
+    # UCs Sprint 1 como predecessores e satisfa-los via heranca.
+    base_id = getattr(teste, "teste_base_id", None)
+    visitados = set()
+    while base_id and base_id not in visitados:
+        visitados.add(base_id)
+        base = db.query(Teste).filter_by(id=base_id).first()
+        if not base:
+            break
+        # Pega UCs com pelo menos 1 execucao aprovada no teste base
+        execs_base = db.query(ExecucaoCasoDeTeste).filter_by(teste_id=base.id, estado="aprovado").all()
+        ct_ids_base = [e.caso_de_teste_id for e in execs_base]
+        if ct_ids_base:
+            ucs_base = db.query(CasoDeTeste).filter(CasoDeTeste.id.in_(ct_ids_base)).all()
+            for c in ucs_base:
+                uc_ids_no_proprio_teste.add(c.caso_de_uso_id)
+        base_id = base.teste_base_id
 
     # 3a. Fechamento transitivo via <<uses>>: se UC-A esta no teste e UC-A uses UC-B,
     # entao UC-B esta IMPLICITAMENTE satisfeito (rodara como subfluxo automatico do tutorial de UC-A).
@@ -977,15 +994,20 @@ def api_teste_iniciar(teste_id):
         ja_tem_aprovados = db.query(ExecucaoCasoDeTeste).filter_by(
             run_id=run_atual.id, estado="aprovado"
         ).count() > 0
+        # Heranca: se teste tem teste_base_id, herda contexto Sprint anterior
+        # (mesmo user/empresa). Auto-login obrigatorio porque o user ja existe
+        # e os tutoriais nao tem passo de "criar empresa via UI" (Sprint 1 ja fez).
+        herda_de_base = bool(getattr(t, "teste_base_id", None))
         cmd = [
             sys.executable,
             str(_FW_VISUAL / "executor_sprint1.py"),
             "--teste_id", t.id,
             "--run_id", run_atual.id,
         ]
-        if ja_tem_aprovados:
+        if ja_tem_aprovados or herda_de_base:
             cmd.append("--auto-login")
-            print(f"[api] rodada {run_atual.numero} tem CTs aprovados — passa --auto-login")
+            motivo = "ja tem aprovados" if ja_tem_aprovados else "herda de teste base"
+            print(f"[api] rodada {run_atual.numero} {motivo} — passa --auto-login")
         log = open(f"/tmp/executor_{teste_id}.log", "w")
         proc = subprocess.Popen(
             cmd, cwd=str(_PROJECT),
