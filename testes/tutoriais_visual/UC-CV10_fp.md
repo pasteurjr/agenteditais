@@ -28,7 +28,7 @@ acao:
     - tipo: evaluate
       valor_literal: |
         () => {
-          const tab = document.querySelector('button:has-text("Documentos"), button.tab-panel-tab');
+          const tab = [...document.querySelectorAll('button')].find(b => /Aderencia|Lotes|Documentos|Riscos|Mercado/i.test(b.textContent || ''));
           if (tab) return 'edital ja selecionado';
           const tr = document.querySelector('table tbody tr');
           if (!tr) throw new Error('Sem tabs nem linhas');

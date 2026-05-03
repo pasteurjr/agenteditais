@@ -1247,7 +1247,19 @@ def api_teste_reiniciar(teste_id):
         # Cria nova rodada com numero+1
         novo_numero = (run_atual.numero if run_atual else 0) + 1
         sprint = db.query(Sprint).filter_by(id=t.sprint_id).first()
-        nova_run = _provisionar_rodada(db, t, numero=novo_numero, sprint_numero=sprint.numero if sprint else 1)
+        # Se teste tem teste_base_id (Sprint > 1), HERDA ciclo do teste base
+        reusar_ciclo = None
+        if t.teste_base_id:
+            base = db.query(Teste).filter_by(id=t.teste_base_id).first()
+            if base:
+                run_base = (db.query(RunTeste)
+                            .filter_by(teste_id=base.id, estado="concluido")
+                            .order_by(RunTeste.numero.desc()).first())
+                if run_base:
+                    reusar_ciclo = run_base.ciclo_id
+        nova_run = _provisionar_rodada(db, t, numero=novo_numero,
+                                       sprint_numero=sprint.numero if sprint else 1,
+                                       reusar_de=reusar_ciclo)
 
         # Recupera UCs canônicos e cria execucoes pendentes na nova rodada
         ucs_canonicos = t.uc_ids_canonicos or []
