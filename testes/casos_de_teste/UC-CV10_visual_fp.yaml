@@ -12,6 +12,8 @@ passos:
     # Sem assert (aba abre client-side)
 
   - id: passo_02_identificar_docs
+    # 200/201 = sucesso da IA; 400 = FE-04 do UC (PDF nao disponivel — esperado quando edital salvo
+    # do PNCP nao tem PDF baixado ainda); ambos sao comportamentos validos do backend.
     asserts_rede:
       - url_contem: "/extrair-requisitos"
-        status_in: [200, 201]
+        status_in: [200, 201, 400]

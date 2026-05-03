@@ -10,9 +10,9 @@ caso_de_teste_ref: testes/casos_de_teste/UC-CV02_visual_fp.yaml
 
 # UC-CV02 — Explorar resultados e painel lateral do edital (Fluxo Principal)
 
-> **Cenario:** apos UC-CV01 ter buscado e a grade ter resultados, click no botao "Ver detalhes" (icone Eye) do primeiro edital. Painel lateral abre com numero do edital, orgao, UF, modalidade, fonte, data abertura, etc.
+> **Cenario:** apos UC-CV01 ter buscado com Score Hibrido (a grade vem ordenada por score desc), click no botao "Ver detalhes" (icone Eye) do **edital com maior score** (primeira linha). Painel lateral abre com numero do edital, orgao, UF, modalidade, fonte, data abertura, etc.
 >
-> **Pre-requisitos:** UC-CV01 ja executado (grade tem resultados).
+> **Pre-requisitos:** UC-CV01 ja executado (grade tem resultados, ordenada por score desc).
 
 ## Passo 00 — Setup: confirmar que estamos na CaptacaoPage com grade
 
@@ -30,12 +30,13 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-CV02_visual_fp.yaml#passo_00_confirmar_grade"
 ```
 
-## Passo 01 — Click "Ver detalhes" do primeiro edital
+## Passo 01 — Click "Ver detalhes" do edital com maior score
 
-Click no botao com title="Ver detalhes" (icone Eye) da primeira linha da grade. Painel lateral abre.
+Click no botao com title="Ver detalhes" (icone Eye) da primeira linha da grade. **Como a grade vem ordenada por score desc** (CV01 usou Score Hibrido), a primeira linha eh o edital com maior pontuacao. Painel lateral abre.
 
 **Observe criticamente:**
 - Botao "Ver detalhes" (icone olho) presente na coluna de acoes
+- Primeira linha = edital com maior score (coluna Score)
 - Apos click, painel lateral aparece a direita
 - Layout muda para "with-panel" (grade compacta + painel)
 - Card do painel mostra numero do edital + orgao no header

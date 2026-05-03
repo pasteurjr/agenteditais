@@ -2,10 +2,11 @@
 uc_id: UC-CV02
 nome: "Explorar resultados e painel lateral do edital"
 sprint: "Sprint 2"
-versao_uc: "5.0"
-doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
+versao_uc: "5.1"
+doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V8.md"
 linha_inicio_no_doc: 282
 split_gerado_em: "2026-04-24T19:19:04"
+revisao_v51: "2026-05-03 — Validacao automatizada seleciona o edital com maior score (primeira linha, pois CV01 usou Score Hibrido + ordenacao desc)"
 ---
 
 # UC-CV02 — Explorar resultados e painel lateral do edital

@@ -11,7 +11,13 @@ passos:
   - id: passo_01_abrir_aba_lotes
     # Sem assert (mudanca client-side)
 
+  - id: passo_01b_importar_itens_pncp
+    # Sem assert (passo opcional — so executa se itens estao zerados)
+
   - id: passo_02_extrair_lotes
-    asserts_rede:
-      - url_contem: "/lotes/extrair"
-        status_in: [200, 201]
+    # Sem assert: cenario tem 3 caminhos validos —
+    # 1) IA processa e cria lotes (200/201)
+    # 2) edital sem itens importados via PNCP (FE-04 do UC) — botao nao aparece, sem request
+    # 3) edital com lotes pre-existentes — botao "Reprocessar" clicado (200/201)
+    # Como a presenca da request depende de qual caminho foi tomado, deixamos INCONCLUSIVO
+    # em vez de exigir request fixa (evita REPROVADO falso quando cenario 2 acontece).

@@ -2,10 +2,11 @@
 uc_id: UC-CV07
 nome: "Listar editais salvos e selecionar edital para analise"
 sprint: "Sprint 2"
-versao_uc: "5.0"
-doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
+versao_uc: "5.1"
+doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V8.md"
 linha_inicio_no_doc: 908
 split_gerado_em: "2026-04-24T19:19:04"
+revisao_v51: "2026-05-03 — Validacao automatizada seleciona o edital com maior score (primeira linha — herdado da Sprint 2 Captacao com Score Hibrido)"
 ---
 
 # UC-CV07 — Listar editais salvos e selecionar edital para analise

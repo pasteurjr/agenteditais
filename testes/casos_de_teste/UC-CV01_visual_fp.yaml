@@ -12,6 +12,12 @@ passos:
   - id: passo_01_preencher_termo
     # Sem assert (input ja preenchido — confirmacao no proximo passo)
 
+  - id: passo_01b_selecionar_fonte_pncp
+    # Sem assert (mudanca client-side — confirmacao implicita no buscar)
+
+  - id: passo_01c_selecionar_score_hibrido
+    # Sem assert (mudanca client-side — confirmacao implicita no buscar)
+
   - id: passo_02_buscar_editais
     asserts_rede:
       - url_contem: "/api/editais/buscar"
@@ -20,3 +26,5 @@ passos:
   - id: passo_03_confirmar_resultados
     asserts_dom:
       - selector: 'table tbody tr, .edital-card, [class*="empty"], [class*="no-results"]'
+      # Coluna Score deve estar populada (tabela ordena por score desc quando hibrido)
+      - selector: 'th:has-text("Score")'

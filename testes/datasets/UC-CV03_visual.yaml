@@ -3,7 +3,9 @@ trilha: visual
 variacao: fp
 descricao: |
   Salvar edital, itens e scores da captacao. Click no botao "Salvar edital"
-  da primeira linha da grade para persistir em editais_salvos.
+  da primeira linha da grade. V8: Como CV01 usou Fonte=PNCP + Score Hibrido,
+  a primeira linha eh deterministicamente o edital com MAIOR score (melhor
+  candidato), garantindo que CV07/CV08 trabalhem com dados de qualidade.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

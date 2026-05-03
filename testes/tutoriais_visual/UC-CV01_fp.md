@@ -85,16 +85,81 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01_preencher_termo"
 ```
 
-## Passo 02 — Click "Buscar Editais" e aguardar PNCP
+## Passo 01b — Selecionar Fonte = "PNCP"
 
-Click no botao "Buscar Editais". Backend faz GET /api/editais/buscar com o termo + filtros e consulta PNCP. **Pode demorar 30-180s** dependendo do PNCP.
+Abre o SelectInput "Fonte" e escolhe a opcao com label "PNCP". Garante que a busca vai consultar **somente** PNCP, deixando a execucao deterministica.
+
+**Observe criticamente:**
+- Campo "Fonte" muda de "Todas as fontes" para "PNCP"
+- Sem erro visual
+
+```yaml
+id: passo_01b_selecionar_fonte_pncp
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          // Acha o select cujo label e "Fonte"
+          const fields = [...document.querySelectorAll('div.form-field')];
+          const field = fields.find(f => /^Fonte$/i.test(f.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!field) throw new Error('campo Fonte nao encontrado');
+          const select = field.querySelector('select');
+          if (!select) throw new Error('select de Fonte nao encontrado');
+          // Acha a option cujo label contem "PNCP"
+          const opt = [...select.options].find(o => /PNCP/i.test(o.textContent || ''));
+          if (!opt) throw new Error('opcao PNCP nao encontrada no select Fonte');
+          select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return 'fonte=' + opt.textContent;
+        }
+    - tipo: wait
+      valor_literal: 300
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01b_selecionar_fonte_pncp"
+```
+
+## Passo 01c — Selecionar Analise de Score = "Score Hibrido"
+
+Abre o SelectInput "Analise de Score" e escolhe "Score Hibrido". Isso faz o backend calcular score local + score profundo (DeepSeek) para os top N editais. Quando `tipoScore !== "nenhum"`, a tabela vem **ordenada por score desc** automaticamente — o primeiro `<tr>` sera sempre o edital com maior score.
+
+**Observe criticamente:**
+- Campo "Analise de Score" muda para "Score Hibrido"
+- Aparece o filtro auxiliar "Qtd editais profundo" (default 5/10)
+
+```yaml
+id: passo_01c_selecionar_score_hibrido
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const fields = [...document.querySelectorAll('div.form-field')];
+          const field = fields.find(f => /Analise de Score/i.test(f.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!field) throw new Error('campo Analise de Score nao encontrado');
+          const select = field.querySelector('select');
+          if (!select) throw new Error('select de Score nao encontrado');
+          const opt = [...select.options].find(o => /Score Hibrido/i.test(o.textContent || ''));
+          if (!opt) throw new Error('opcao Score Hibrido nao encontrada');
+          select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          return 'score=' + opt.textContent;
+        }
+    - tipo: wait
+      valor_literal: 300
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01c_selecionar_score_hibrido"
+```
+
+## Passo 02 — Click "Buscar Editais" e aguardar PNCP + Score Hibrido
+
+Click no botao "Buscar Editais". Backend faz GET /api/editais/buscar com termo + Fonte=PNCP + tipoScore=hibrido. PNCP responde primeiro (~30-60s) e depois o backend calcula score profundo dos top N (DeepSeek). **Total pode chegar a 180s**.
 
 **Observe criticamente:**
 - Botao muda para estado loading (spinner ou "Buscando...")
-- Apos retorno, grade de editais aparece (1 ou mais resultados)
-- Cada linha mostra: numero edital, orgao, valor estimado, prazo, etc
+- Apos retorno, grade de editais aparece **ordenada por score desc**
+- Coluna "Score" populada (nao mais "—")
+- Cada linha mostra: numero edital, orgao, valor estimado, prazo, score numerico
 - Sem erro vermelho na tela
-- POST /api/editais/buscar (ou GET) retorna 200
+- GET /api/editais/buscar retorna 200
 
 ```yaml
 id: passo_02_buscar_editais

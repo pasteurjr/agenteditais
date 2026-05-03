@@ -2,10 +2,11 @@
 uc_id: UC-CV01
 nome: "Buscar editais por termo, classificacao e score"
 sprint: "Sprint 2"
-versao_uc: "5.0"
-doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
+versao_uc: "5.1"
+doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V8.md"
 linha_inicio_no_doc: 135
 split_gerado_em: "2026-04-24T19:19:04"
+revisao_v51: "2026-05-03 — Validacao automatizada usa Fonte=PNCP + Analise de Score=Hibrido para garantir execucao deterministica e ordenacao por score desc"
 ---
 
 # UC-CV01 — Buscar editais por termo, classificacao e score
@@ -60,8 +61,8 @@ Pre-requisitos nao-UC:
 ### Sequencia de eventos
 1. Usuario preenche o [Campo: "Termo de busca / Produto"] com texto livre ou seleciona sugestao no autocomplete. [ref: Passo 1]
 2. Usuario navega pela cascata [Select: "Area"] -> [Select: "Classe"] -> [Select: "Subclasse"] para refinar a classificacao. [ref: Passo 2]
-3. Usuario ajusta filtros de [Select: "UF"], [Select: "Fonte"], [Select: "Modalidade"], [Select: "Origem"], [Campo: "NCM"] e [Campo: "Periodo (De/Ate)"]. [ref: Passo 3]
-4. Usuario define o modo de score no [Select: "Analise de Score"]: `Sem Score`, `Score Rapido`, `Score Hibrido` ou `Score Profundo`. [ref: Passo 4]
+3. Usuario ajusta filtros de [Select: "UF"], [Select: "Fonte"], [Select: "Modalidade"], [Select: "Origem"], [Campo: "NCM"] e [Campo: "Periodo (De/Ate)"]. **Para validacao automatizada deterministica, [Select: "Fonte"] = "PNCP" eh obrigatorio** (evita variabilidade de scrapers de outras fontes). [ref: Passo 3]
+4. Usuario define o modo de score no [Select: "Analise de Score"]: `Sem Score`, `Score Rapido`, `Score Hibrido` ou `Score Profundo`. **Para validacao automatizada, "Score Hibrido" eh obrigatorio** — quando `tipoScore !== "nenhum"` a tabela vem ordenada por score desc, e CV02/CV03/CV07 podem assumir que a primeira linha eh o edital de maior pontuacao. [ref: Passo 4]
 5. Usuario pode marcar [Checkbox: "Incluir editais encerrados"] e definir [Campo: "Qtd editais profundo"]. [ref: Passo 5]
 6. Usuario clica no [Botao: "Buscar Editais"]. [ref: Passo 6]
 7. Sistema chama a busca principal via `POST /api/editais/buscar`, normaliza o retorno para `EditalBusca` e recalcula dias restantes, score, potencial e gaps. [ref: Passo 7]

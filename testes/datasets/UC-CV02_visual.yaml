@@ -2,8 +2,9 @@ uc_id: UC-CV02
 trilha: visual
 variacao: fp
 descricao: |
-  Explorar painel lateral do edital. Click no botao "Ver detalhes" (icone Eye) da
-  primeira linha da grade pra abrir o painel lateral.
+  Explorar painel lateral do edital. Click no botao "Ver detalhes" (icone Eye)
+  da primeira linha da grade. V8: Como CV01 usou Fonte=PNCP + Score Hibrido,
+  a primeira linha eh deterministicamente o edital com MAIOR score.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

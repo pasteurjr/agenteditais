@@ -62,13 +62,14 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-CV07_visual_fp.yaml#passo_01_confirmar_lista"
 ```
 
-## Passo 02 — Selecionar primeiro edital
+## Passo 02 — Selecionar edital com maior score
 
-Click na primeira linha pra abrir o painel de analise (tabs Aderencia/Lotes/Documentos/etc).
+Click na primeira linha pra abrir o painel de analise (tabs Aderencia/Lotes/Documentos/etc). **Como CV03 salvou o edital com maior score** (oriundo do CV01 com Score Hibrido + ordenacao desc), e a lista "Meus Editais" reflete a ordem de salvamento, a primeira linha continua sendo o de maior pontuacao.
 
 **Observe criticamente:**
 - Apos click, tabs aparecem
 - Tab "Aderencia" ativa por default
+- Painel mostra o edital com maior score salvo
 
 ```yaml
 id: passo_02_selecionar_edital

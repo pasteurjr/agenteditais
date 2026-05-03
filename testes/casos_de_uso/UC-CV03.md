@@ -2,10 +2,11 @@
 uc_id: UC-CV03
 nome: "Salvar edital, itens e scores da captacao"
 sprint: "Sprint 2"
-versao_uc: "5.0"
-doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V5.md"
+versao_uc: "5.1"
+doc_origem: "CASOS DE USO CAPTACAO VALIDACAO(SPRINT2) V8.md"
 linha_inicio_no_doc: 456
 split_gerado_em: "2026-04-24T19:19:04"
+revisao_v51: "2026-05-03 — Validacao automatizada salva o edital com maior score (primeira linha, pois CV01 usou Score Hibrido + ordenacao desc)"
 ---
 
 # UC-CV03 — Salvar edital, itens e scores da captacao
