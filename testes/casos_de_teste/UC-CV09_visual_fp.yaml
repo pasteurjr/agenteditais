@@ -1,0 +1,17 @@
+uc_id: UC-CV09
+variacao: fp
+trilha: visual
+descricao: "Importar itens e extrair lotes via IA"
+
+passos:
+  - id: passo_00_confirmar_selecionado
+    asserts_dom:
+      - selector: 'h1:has-text("Validacao")'
+
+  - id: passo_01_abrir_aba_lotes
+    # Sem assert (mudanca client-side)
+
+  - id: passo_02_extrair_lotes
+    asserts_rede:
+      - url_contem: "/lotes/extrair"
+        status_in: [200, 201]

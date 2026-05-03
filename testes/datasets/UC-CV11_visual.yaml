@@ -1,0 +1,10 @@
+uc_id: UC-CV11
+trilha: visual
+variacao: fp
+descricao: |
+  Analisar riscos, recorrencia, atas e concorrentes do edital. Aba "Riscos" tem
+  botao "Analisar Riscos" que aciona IA.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

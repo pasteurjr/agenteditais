@@ -1,0 +1,17 @@
+uc_id: UC-CV10
+variacao: fp
+trilha: visual
+descricao: "Confrontar documentacao com empresa via IA"
+
+passos:
+  - id: passo_00_confirmar_selecionado
+    asserts_dom:
+      - selector: 'h1:has-text("Validacao")'
+
+  - id: passo_01_abrir_aba_documentos
+    # Sem assert (aba abre client-side)
+
+  - id: passo_02_identificar_docs
+    asserts_rede:
+      - url_contem: "/extrair-requisitos"
+        status_in: [200, 201]

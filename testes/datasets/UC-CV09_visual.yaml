@@ -1,0 +1,10 @@
+uc_id: UC-CV09
+trilha: visual
+variacao: fp
+descricao: |
+  Importar itens e extrair lotes por IA. Click "Extrair Lotes via IA" na aba Lotes.
+  DeepSeek processa PDF do edital e cria registros em editais_lotes.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

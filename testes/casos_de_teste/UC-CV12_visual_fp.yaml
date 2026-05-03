@@ -1,0 +1,16 @@
+uc_id: UC-CV12
+variacao: fp
+trilha: visual
+descricao: "Analisar mercado do orgao via IA"
+
+passos:
+  - id: passo_00_confirmar_selecionado
+    asserts_dom:
+      - selector: 'h1:has-text("Validacao")'
+
+  - id: passo_01_abrir_aba_mercado
+
+  - id: passo_02_analisar_mercado
+    asserts_rede:
+      - url_contem: "/analisar-mercado"
+        status_in: [200, 201]

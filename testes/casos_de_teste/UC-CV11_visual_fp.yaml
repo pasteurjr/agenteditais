@@ -1,0 +1,17 @@
+uc_id: UC-CV11
+variacao: fp
+trilha: visual
+descricao: "Analisar riscos do edital via IA"
+
+passos:
+  - id: passo_00_confirmar_selecionado
+    asserts_dom:
+      - selector: 'h1:has-text("Validacao")'
+
+  - id: passo_01_abrir_aba_riscos
+    # Sem assert (aba abre client-side)
+
+  - id: passo_02_analisar_riscos
+    asserts_rede:
+      - url_contem: "/analisar-riscos"
+        status_in: [200, 201]

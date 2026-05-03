@@ -1,0 +1,10 @@
+uc_id: UC-CV07
+trilha: visual
+variacao: fp
+descricao: |
+  Listar editais salvos na ValidacaoPage e selecionar 1 para analise.
+  Reusa edital salvo pelo Lote A CV03.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

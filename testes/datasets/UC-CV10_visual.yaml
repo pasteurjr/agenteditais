@@ -1,0 +1,11 @@
+uc_id: UC-CV10
+trilha: visual
+variacao: fp
+descricao: |
+  Confrontar documentacao necessaria com a empresa. Aba "Documentos" mostra
+  requisitos do edital + status (atende/nao atende) baseado nos documentos
+  cadastrados em UC-F03 da Sprint 1.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

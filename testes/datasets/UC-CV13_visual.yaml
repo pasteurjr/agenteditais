@@ -1,0 +1,10 @@
+uc_id: UC-CV13
+trilha: visual
+variacao: fp
+descricao: |
+  Usar IA na validacao: gerar resumo do edital. Aba "IA" tem botao "Gerar Resumo".
+  Backend chama /api/chat com prompt resumo.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"

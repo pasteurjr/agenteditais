@@ -658,7 +658,8 @@ def api_testes_lista():
                 # Sprint do teste base deve ter numero < sprint alvo
                 from sqlalchemy.orm import aliased
                 S = aliased(Sprint)
-                q = q.join(S, Teste.sprint_id == S.id).filter(S.numero < sprint_alvo.numero)
+                # <= permite encadear lotes da mesma Sprint (ex: Lote B herda Lote A)
+                q = q.join(S, Teste.sprint_id == S.id).filter(S.numero <= sprint_alvo.numero)
         rows = q.order_by(desc(Teste.atualizado_em)).limit(200).all()
         return jsonify([
             {
@@ -727,9 +728,11 @@ def api_teste_criar():
                     "error": f"Teste base esta '{teste_base.estado}'. Conclua-o antes de criar Sprint {sprint.numero}.",
                 }), 400
             base_sprint = db.query(Sprint).filter_by(id=teste_base.sprint_id).first()
-            if not base_sprint or base_sprint.numero >= sprint.numero:
+            # Aceita teste base de Sprint <= atual. Permite encadear lotes da
+            # mesma Sprint (ex: Lote B Validacao herda do Lote A Captacao).
+            if not base_sprint or base_sprint.numero > sprint.numero:
                 return jsonify({
-                    "error": f"Teste base deve ser de Sprint anterior (< {sprint.numero}). Recebido: Sprint {base_sprint.numero if base_sprint else '?'}.",
+                    "error": f"Teste base deve ser de Sprint atual ou anterior (<= {sprint.numero}). Recebido: Sprint {base_sprint.numero if base_sprint else '?'}.",
                 }), 400
 
         # Modo UC: expande pra todos os CTs Cenario+visual+com_passos

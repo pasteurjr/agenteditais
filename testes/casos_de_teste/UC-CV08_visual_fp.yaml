@@ -1,0 +1,14 @@
+uc_id: UC-CV08
+variacao: fp
+trilha: visual
+descricao: "Calcular scores GO/NO-GO via IA"
+
+passos:
+  - id: passo_00_confirmar_edital_selecionado
+    asserts_dom:
+      - selector: 'h1:has-text("Validacao")'
+
+  - id: passo_01_calcular_scores
+    asserts_rede:
+      - url_contem: "/scores-validacao"
+        status_in: [200, 201]
