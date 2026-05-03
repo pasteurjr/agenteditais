@@ -1,0 +1,16 @@
+uc_id: UC-P10
+trilha: visual
+variacao: fp
+descricao: |
+  Gestao de Comodato.
+  Predecessores: [login] — apenas autenticado
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+equipamento: "Monitor Multiparametrico"
+valor: "15000"
+prazo_meses: "24"
+amortizacao_esperada: "R$ 625,00/mes"

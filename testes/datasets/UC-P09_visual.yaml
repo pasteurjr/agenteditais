@@ -1,0 +1,13 @@
+uc_id: UC-P09
+trilha: visual
+variacao: fp
+descricao: |
+  Consultar Historico de Precos.
+  Predecessores: UC-F06 — fallback se nao tem F06, ainda funciona
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+termo_historico: "monitor"

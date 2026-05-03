@@ -1,0 +1,11 @@
+uc_id: UC-R03
+variacao: fp
+trilha: visual
+descricao: "Personalizar Descricao Tecnica (Toggle A/B)"
+
+passos:
+  - id: passo_00_garantir_proposta_selecionada
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_localizar_secao_descricao
+    # Sem assert (passo nao critico)

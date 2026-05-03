@@ -1,0 +1,13 @@
+uc_id: UC-R07
+trilha: visual
+variacao: fp
+descricao: |
+  Gerenciar Status e Submissao (Salvar Rascunho/Enviar Revisao/Aprovar).
+  Predecessores: UC-R01 OU UC-R02
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R07 valida botoes de gestao de status da proposta"

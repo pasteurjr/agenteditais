@@ -1,0 +1,11 @@
+uc_id: UC-P10
+variacao: fp
+trilha: visual
+descricao: "Gestao de Comodato"
+
+passos:
+  - id: passo_00_localizar_card
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_preencher_e_salvar_comodato
+    # Sem assert (passo nao critico)

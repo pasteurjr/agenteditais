@@ -1,0 +1,14 @@
+uc_id: UC-P01
+trilha: visual
+variacao: fp
+descricao: |
+  Organizar Edital por Lotes.
+  Predecessores: UC-CV03, UC-CV09 — herda da Sprint 2
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+termo_busca: "monitor"
+nota: "UC-P01 valida selecao de edital herdado Sprint 2 + criacao/validacao de lotes"

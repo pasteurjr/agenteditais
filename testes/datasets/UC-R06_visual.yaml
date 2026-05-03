@@ -1,0 +1,13 @@
+uc_id: UC-R06
+trilha: visual
+variacao: fp
+descricao: |
+  Exportar Dossie Completo (PDF/DOCX/ZIP).
+  Predecessores: UC-R01, UC-R04 OU UC-R05
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R06 valida presenca dos botoes de exportacao"

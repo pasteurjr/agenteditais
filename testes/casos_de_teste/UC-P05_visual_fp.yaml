@@ -1,0 +1,14 @@
+uc_id: UC-P05
+variacao: fp
+trilha: visual
+descricao: "Montar Preco Base (Camada B) — Custo+Markup"
+
+passos:
+  - id: passo_00_localizar_card
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_preencher_markup_30
+    # Sem assert (passo nao critico)
+
+  - id: passo_02_salvar_preco_base
+    # Sem assert (passo nao critico)

@@ -1,0 +1,13 @@
+uc_id: UC-R05
+trilha: visual
+variacao: fp
+descricao: |
+  Auditoria Documental + Smart Split.
+  Predecessores: UC-R01, UC-F03
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R05 audita documentos da empresa para a proposta"

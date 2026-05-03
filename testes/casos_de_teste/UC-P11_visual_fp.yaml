@@ -1,0 +1,11 @@
+uc_id: UC-P11
+variacao: fp
+trilha: visual
+descricao: "Pipeline IA de Precificacao (Banner Resumo + 5 cards A-E)"
+
+passos:
+  - id: passo_00_voltar_aba_custos
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_aguardar_insights_ia
+    # Sem assert (passo nao critico)

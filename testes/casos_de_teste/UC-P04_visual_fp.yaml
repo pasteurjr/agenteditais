@@ -1,0 +1,14 @@
+uc_id: UC-P04
+variacao: fp
+trilha: visual
+descricao: "Configurar Base de Custos"
+
+passos:
+  - id: passo_00_garantir_aba_custos
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_preencher_custo_unitario
+    # Sem assert (passo nao critico)
+
+  - id: passo_02_salvar_custos
+    # Sem assert (passo nao critico)

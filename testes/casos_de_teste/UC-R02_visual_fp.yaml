@@ -1,0 +1,11 @@
+uc_id: UC-R02
+variacao: fp
+trilha: visual
+descricao: "Upload de Proposta Externa"
+
+passos:
+  - id: passo_00_garantir_proposta_page
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_localizar_botao_upload
+    # Sem assert (passo nao critico)

@@ -1,0 +1,17 @@
+uc_id: UC-P07
+variacao: fp
+trilha: visual
+descricao: "Estruturar Lances (Camadas D e E) — minimo e maximo"
+
+passos:
+  - id: passo_00_abrir_aba_lances
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_preencher_valor_inicial
+    # Sem assert (passo nao critico)
+
+  - id: passo_02_preencher_valor_minimo
+    # Sem assert (passo nao critico)
+
+  - id: passo_03_salvar_lances
+    # Sem assert (passo nao critico)

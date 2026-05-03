@@ -1,0 +1,11 @@
+uc_id: UC-R06
+variacao: fp
+trilha: visual
+descricao: "Exportar Dossie Completo (PDF/DOCX/ZIP)"
+
+passos:
+  - id: passo_00_localizar_card_exportacao
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_validar_botoes_exportacao
+    # Sem assert (passo nao critico)

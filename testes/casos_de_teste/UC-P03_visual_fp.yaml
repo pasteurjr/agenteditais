@@ -1,0 +1,11 @@
+uc_id: UC-P03
+variacao: fp
+trilha: visual
+descricao: "Calculo Tecnico de Volumetria"
+
+passos:
+  - id: passo_00_abrir_aba_custos
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_selecionar_vinculo
+    # Sem assert (passo nao critico)

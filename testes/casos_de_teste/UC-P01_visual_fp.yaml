@@ -1,0 +1,16 @@
+uc_id: UC-P01
+variacao: fp
+trilha: visual
+descricao: "Organizar Edital por Lotes"
+
+passos:
+  - id: passo_00_navegar_precificacao
+    asserts_dom:
+      - selector: 'h1:has-text("Precifica"), h2:has-text("Precifica")'
+
+  - id: passo_01_selecionar_edital
+    asserts_dom:
+      - selector: 'button.tab-panel-tab, button[class*="tab"]'
+
+  - id: passo_02_criar_lotes_se_necessario
+    # Sem assert (passo nao critico)

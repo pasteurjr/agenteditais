@@ -1,0 +1,14 @@
+uc_id: UC-P08
+trilha: visual
+variacao: fp
+descricao: |
+  Definir Estrategia Competitiva.
+  Predecessores: UC-P07
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+perfil: "QUERO GANHAR"
+nota: "Estrategia agressiva: desce ate o lance minimo (R$ 115) se necessario para vencer"

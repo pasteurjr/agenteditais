@@ -1,0 +1,13 @@
+uc_id: UC-R02
+trilha: visual
+variacao: fp
+descricao: |
+  Upload de Proposta Externa.
+  Predecessores: [login]
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R02 valida presenca do botao Upload Proposta Externa (upload real exige arquivo)"

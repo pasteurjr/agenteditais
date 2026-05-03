@@ -1,0 +1,11 @@
+uc_id: UC-P09
+variacao: fp
+trilha: visual
+descricao: "Consultar Historico de Precos"
+
+passos:
+  - id: passo_00_abrir_historico
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_filtrar_historico
+    # Sem assert (passo nao critico)

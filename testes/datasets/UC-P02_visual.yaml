@@ -1,0 +1,13 @@
+uc_id: UC-P02
+trilha: visual
+variacao: fp
+descricao: |
+  Selecao Inteligente de Portfolio (Agente Assistido).
+  Predecessores: UC-P01
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-P02 chama vincular-ia (DeepSeek) — pode demorar ate 90s"

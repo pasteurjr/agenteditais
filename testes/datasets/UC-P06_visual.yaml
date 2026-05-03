@@ -1,0 +1,14 @@
+uc_id: UC-P06
+trilha: visual
+variacao: fp
+descricao: |
+  Definir Valor de Referencia (Camada C).
+  Predecessores: UC-P05
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+pct_referencia: "110"
+valor_referencia_esperado: "R$ 143,00 (= preco_base 130 * 1.10)"

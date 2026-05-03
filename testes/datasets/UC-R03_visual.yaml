@@ -1,0 +1,13 @@
+uc_id: UC-R03
+trilha: visual
+variacao: fp
+descricao: |
+  Personalizar Descricao Tecnica (Toggle A/B).
+  Predecessores: UC-R01
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R03 valida secao Descricao Tecnica de uma proposta"

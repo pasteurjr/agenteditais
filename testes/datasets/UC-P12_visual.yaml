@@ -1,0 +1,13 @@
+uc_id: UC-P12
+trilha: visual
+variacao: fp
+descricao: |
+  Relatorio de Custos e Precos (markdown nova aba).
+  Predecessores: UC-P04 OU UC-P05
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-P12 abre relatorio markdown em nova aba"

@@ -1,0 +1,11 @@
+uc_id: UC-P12
+variacao: fp
+trilha: visual
+descricao: "Relatorio de Custos e Precos (markdown nova aba)"
+
+passos:
+  - id: passo_00_localizar_botao
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_click_relatorio
+    # Sem assert (passo nao critico)

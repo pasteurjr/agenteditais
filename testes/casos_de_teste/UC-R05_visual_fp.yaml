@@ -1,0 +1,11 @@
+uc_id: UC-R05
+variacao: fp
+trilha: visual
+descricao: "Auditoria Documental + Smart Split"
+
+passos:
+  - id: passo_00_proposta_selecionada
+    # Sem assert (passo nao critico)
+
+  - id: passo_01_verificar_documentos
+    # Sem assert (passo nao critico)

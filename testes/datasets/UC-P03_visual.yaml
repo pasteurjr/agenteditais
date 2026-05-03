@@ -1,0 +1,13 @@
+uc_id: UC-P03
+trilha: visual
+variacao: fp
+descricao: |
+  Calculo Tecnico de Volumetria.
+  Predecessores: UC-P01, UC-P02
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-P03 abre Custos e Precos e seleciona vinculo (volumetria pode ser opcional)"

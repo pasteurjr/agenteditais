@@ -1,0 +1,13 @@
+uc_id: UC-R04
+trilha: visual
+variacao: fp
+descricao: |
+  Auditoria ANVISA (Semaforo Regulatorio).
+  Predecessores: UC-R01 OU UC-R02
+  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-R04 audita registros ANVISA do produto da proposta"
