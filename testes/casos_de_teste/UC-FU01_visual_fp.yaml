@@ -1,0 +1,12 @@
+uc_id: UC-FU01
+variacao: fp
+trilha: visual
+descricao: "Registrar Resultado (Vitoria/Derrota)"
+
+passos:
+  - id: passo_00_navegar_followup
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2'
+
+  - id: passo_01_validar_tabela_pendentes
+    # Sem assert (passo opcional/exploratorio)

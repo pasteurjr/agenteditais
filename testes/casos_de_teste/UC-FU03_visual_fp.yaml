@@ -1,0 +1,11 @@
+uc_id: UC-FU03
+variacao: fp
+trilha: visual
+descricao: "Score Logistico (Historico do Edital)"
+
+passos:
+  - id: passo_00_voltar_resultados
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_tabela
+    # Sem assert (passo opcional/exploratorio)

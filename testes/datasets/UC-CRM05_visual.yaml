@@ -1,0 +1,14 @@
+uc_id: UC-CRM05
+trilha: visual
+variacao: fp
+descricao: |
+  KPIs do CRM.
+  Predecessores: [infra]
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-CRM05: KPIs do CRM com cards expandiveis"

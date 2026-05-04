@@ -1,0 +1,14 @@
+uc_id: UC-CRM06
+trilha: visual
+variacao: fp
+descricao: |
+  Registrar Decisao de Nao-Participacao.
+  Predecessores: [infra]
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-CRM06: decisoes de declinar com motivo e justificativa"

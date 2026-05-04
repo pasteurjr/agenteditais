@@ -1,0 +1,14 @@
+uc_id: UC-FU01
+trilha: visual
+variacao: fp
+descricao: |
+  Registrar Resultado (Vitoria/Derrota).
+  Predecessores: UC-CV03 (edital salvo)
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-FU01: registra Vitoria/Derrota/Cancelado de edital. Modal exige Valor Final (R$). Cores: Vitoria=verde, Derrota=vermelho, Cancelado=cinza"

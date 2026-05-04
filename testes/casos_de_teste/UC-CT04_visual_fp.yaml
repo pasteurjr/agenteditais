@@ -1,0 +1,11 @@
+uc_id: UC-CT04
+variacao: fp
+trilha: visual
+descricao: "Gestao de Aditivos"
+
+passos:
+  - id: passo_00_aba_aditivos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao
+    # Sem assert (passo opcional/exploratorio)

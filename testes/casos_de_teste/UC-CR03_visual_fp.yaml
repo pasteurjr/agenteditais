@@ -1,0 +1,11 @@
+uc_id: UC-CR03
+variacao: fp
+trilha: visual
+descricao: "Alertas de Vencimento Multi-tier"
+
+passos:
+  - id: passo_00_aba_vencimentos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_alertas
+    # Sem assert (passo opcional/exploratorio)

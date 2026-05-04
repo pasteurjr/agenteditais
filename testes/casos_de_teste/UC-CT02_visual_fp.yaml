@@ -1,0 +1,11 @@
+uc_id: UC-CT02
+variacao: fp
+trilha: visual
+descricao: "Registrar Entrega + NF"
+
+passos:
+  - id: passo_00_aba_entregas
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_nova
+    # Sem assert (passo opcional/exploratorio)

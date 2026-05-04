@@ -1,0 +1,14 @@
+uc_id: UC-CR02
+trilha: visual
+variacao: fp
+descricao: |
+  Pedidos em Atraso.
+  Predecessores: UC-CT01
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-CR02: pedidos com prazo vencido em vermelho"

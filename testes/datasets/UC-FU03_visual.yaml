@@ -1,0 +1,14 @@
+uc_id: UC-FU03
+trilha: visual
+variacao: fp
+descricao: |
+  Score Logistico (Historico do Edital).
+  Predecessores: UC-FU01
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-FU03: score logistico baseado em UF, distancia, prazo, complexidade"

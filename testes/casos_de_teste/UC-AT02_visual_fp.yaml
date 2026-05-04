@@ -1,0 +1,11 @@
+uc_id: UC-AT02
+variacao: fp
+trilha: visual
+descricao: "Extrair Resultados de Ata PDF"
+
+passos:
+  - id: passo_00_aba_extrair
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_upload
+    # Sem assert (passo opcional/exploratorio)

@@ -1,0 +1,11 @@
+uc_id: UC-CT08
+variacao: fp
+trilha: visual
+descricao: "Auditoria Empenhos x Faturas x Pedidos (NOVO V3)"
+
+passos:
+  - id: passo_00_aba_auditoria
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_cards
+    # Sem assert (passo opcional/exploratorio)

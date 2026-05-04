@@ -1,0 +1,11 @@
+uc_id: UC-CR01
+variacao: fp
+trilha: visual
+descricao: "Dashboard Contratado X Realizado"
+
+passos:
+  - id: passo_00_garantir_producao
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_dashboard
+    # Sem assert (passo opcional/exploratorio)

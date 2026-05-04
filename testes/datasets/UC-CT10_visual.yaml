@@ -1,0 +1,14 @@
+uc_id: UC-CT10
+trilha: visual
+variacao: fp
+descricao: |
+  KPIs de Execucao (NOVO V3).
+  Predecessores: UC-CT01
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-CT10: KPIs de execucao contratual com filtro periodo"

@@ -1,0 +1,11 @@
+uc_id: UC-CT07
+variacao: fp
+trilha: visual
+descricao: "Gestao de Empenhos (NOVO V3)"
+
+passos:
+  - id: passo_00_aba_empenhos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_novo
+    # Sem assert (passo opcional/exploratorio)

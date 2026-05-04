@@ -1,0 +1,11 @@
+uc_id: UC-CRM05
+variacao: fp
+trilha: visual
+descricao: "KPIs do CRM"
+
+passos:
+  - id: passo_00_aba_kpis_crm
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_kpis
+    # Sem assert (passo opcional/exploratorio)

@@ -1,0 +1,14 @@
+uc_id: UC-CRM03
+trilha: visual
+variacao: fp
+descricao: |
+  Mapa Geografico de Processos (Leaflet/OSM).
+  Predecessores: [infra]
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-CRM03: mapa Leaflet com CircleMarker por UF"

@@ -1,0 +1,14 @@
+uc_id: UC-FU02
+trilha: visual
+variacao: fp
+descricao: |
+  Configurar Alertas de Prazo.
+  Predecessores: [infra]
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de uso canonicos.
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-FU02: regras D-30/D-15/D-5 com canais (email/whatsapp/sistema)"

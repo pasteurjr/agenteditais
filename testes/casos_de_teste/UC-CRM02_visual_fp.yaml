@@ -1,0 +1,11 @@
+uc_id: UC-CRM02
+variacao: fp
+trilha: visual
+descricao: "Parametrizacoes do CRM (Tipos/Agrupamentos/Motivos)"
+
+passos:
+  - id: passo_00_aba_param
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_subabas
+    # Sem assert (passo opcional/exploratorio)

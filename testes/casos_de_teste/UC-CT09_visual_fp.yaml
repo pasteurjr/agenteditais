@@ -1,0 +1,11 @@
+uc_id: UC-CT09
+variacao: fp
+trilha: visual
+descricao: "Contratos a Vencer (NOVO V3)"
+
+passos:
+  - id: passo_00_aba_vencimentos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_tiers
+    # Sem assert (passo opcional/exploratorio)

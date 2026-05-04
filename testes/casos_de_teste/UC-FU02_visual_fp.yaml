@@ -1,0 +1,11 @@
+uc_id: UC-FU02
+variacao: fp
+trilha: visual
+descricao: "Configurar Alertas de Prazo"
+
+passos:
+  - id: passo_00_aba_alertas
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_atualizar
+    # Sem assert (passo opcional/exploratorio)

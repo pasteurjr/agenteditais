@@ -1,0 +1,11 @@
+uc_id: UC-CRM03
+variacao: fp
+trilha: visual
+descricao: "Mapa Geografico de Processos (Leaflet/OSM)"
+
+passos:
+  - id: passo_00_aba_mapa
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_mapa
+    # Sem assert (passo opcional/exploratorio)

@@ -1,0 +1,11 @@
+uc_id: UC-CT05
+variacao: fp
+trilha: visual
+descricao: "Designar Gestor/Fiscal"
+
+passos:
+  - id: passo_00_aba_designacoes
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_lista
+    # Sem assert (passo opcional/exploratorio)

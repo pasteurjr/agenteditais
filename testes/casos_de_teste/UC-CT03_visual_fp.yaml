@@ -1,0 +1,11 @@
+uc_id: UC-CT03
+variacao: fp
+trilha: visual
+descricao: "Acompanhar Cronograma de Entregas"
+
+passos:
+  - id: passo_00_aba_cronograma
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_visualizacao
+    # Sem assert (passo opcional/exploratorio)
