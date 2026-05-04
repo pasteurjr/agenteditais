@@ -1,0 +1,13 @@
+uc_id: UC-RE03
+trilha: visual
+variacao: fp
+descricao: |
+  Chatbox de Analise.
+  Predecessores: UC-RE02
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-RE03 valida chatbox para refinar analise"

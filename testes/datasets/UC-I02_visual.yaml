@@ -1,0 +1,13 @@
+uc_id: UC-I02
+trilha: visual
+variacao: fp
+descricao: |
+  Sugerir Esclarecimento ou Impugnacao.
+  Predecessores: UC-I01
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-I02 valida que findings de I01 viraram sugestoes acionaveis"

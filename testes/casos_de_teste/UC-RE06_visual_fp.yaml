@@ -1,0 +1,11 @@
+uc_id: UC-RE06
+variacao: fp
+trilha: visual
+descricao: "Submissao Assistida no Portal"
+
+passos:
+  - id: passo_00_aba_laudos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_submissao
+    # Sem assert (passo opcional/exploratorio)

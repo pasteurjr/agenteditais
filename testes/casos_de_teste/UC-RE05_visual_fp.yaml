@@ -1,0 +1,11 @@
+uc_id: UC-RE05
+variacao: fp
+trilha: visual
+descricao: "Gerar Laudo de Contra-Razao"
+
+passos:
+  - id: passo_00_aba_laudos
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_dropdown_tipo
+    # Sem assert (passo opcional/exploratorio)

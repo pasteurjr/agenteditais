@@ -1,0 +1,13 @@
+uc_id: UC-I03
+trilha: visual
+variacao: fp
+descricao: |
+  Gerar Peticao de Impugnacao.
+  Predecessores: UC-I02
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-I03 valida presenca do botao Gerar Peticao via IA"

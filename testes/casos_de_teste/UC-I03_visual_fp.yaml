@@ -1,0 +1,11 @@
+uc_id: UC-I03
+variacao: fp
+trilha: visual
+descricao: "Gerar Peticao de Impugnacao"
+
+passos:
+  - id: passo_00_navegar_peticoes
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_gerar
+    # Sem assert (passo opcional/exploratorio)

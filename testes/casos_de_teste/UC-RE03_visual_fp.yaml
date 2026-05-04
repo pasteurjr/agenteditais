@@ -1,0 +1,11 @@
+uc_id: UC-RE03
+variacao: fp
+trilha: visual
+descricao: "Chatbox de Analise"
+
+passos:
+  - id: passo_00_garantir_aba_analise
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_chat
+    # Sem assert (passo opcional/exploratorio)

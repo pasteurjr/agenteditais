@@ -1,0 +1,13 @@
+uc_id: UC-I01
+trilha: visual
+variacao: fp
+descricao: |
+  Validacao Legal do Edital.
+  Predecessores: UC-CV03
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-I01 chama IA para validar legalmente o edital"

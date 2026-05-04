@@ -1,0 +1,13 @@
+uc_id: UC-RE01
+trilha: visual
+variacao: fp
+descricao: |
+  Monitorar Janela de Recurso.
+  Predecessores: [infra]
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-RE01 valida monitoramento de janela de recurso"

@@ -1,0 +1,13 @@
+uc_id: UC-RE05
+trilha: visual
+variacao: fp
+descricao: |
+  Gerar Laudo de Contra-Razao.
+  Predecessores: UC-R01 OU UC-R02 + UC-CV03
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-RE05 valida laudo de contra-razao"

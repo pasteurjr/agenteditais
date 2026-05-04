@@ -1,0 +1,13 @@
+uc_id: UC-RE06
+trilha: visual
+variacao: fp
+descricao: |
+  Submissao Assistida no Portal.
+  Predecessores: UC-I03 OU UC-RE04 OU UC-RE05
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-RE06 valida submissao do laudo"

@@ -1,0 +1,13 @@
+uc_id: UC-I05
+trilha: visual
+variacao: fp
+descricao: |
+  Controle de Prazo (impugnacao/esclarecimento).
+  Predecessores: UC-CV03 + UC-I03 OU UC-I04
+  Sprint 4 (Recursos e Impugnacoes), V7 dos casos de uso canonicos.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-I05 valida controle de prazos"
