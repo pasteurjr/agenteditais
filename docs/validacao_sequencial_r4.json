@@ -1,0 +1,1099 @@
+{
+  "rodada": 4,
+  "inicio": "2026-05-04T07:00:23.781782",
+  "sprints": [
+    {
+      "ok": true,
+      "teste_id": "bebb5865-8d76-4ead-80f4-f8916caa6678",
+      "run_id": "5940ea31-dde0-4649-bbe4-e51b2c514f89",
+      "cts_aprovados": 20,
+      "cts_total": 20,
+      "passos_aprovados": "90",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "6",
+      "detalhe_cts": [
+        [
+          "CT-F01-FP",
+          "aprovado",
+          "8",
+          "0",
+          "4"
+        ],
+        [
+          "CT-F02-FA01",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F02-FA02",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F02-FA03",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F02-FP",
+          "aprovado",
+          "5",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F03-FP",
+          "aprovado",
+          "8",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F04-FP",
+          "aprovado",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F05-FP",
+          "aprovado",
+          "8",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F06-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-F07-FP",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F08-FP",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F09-FP",
+          "aprovado",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F10-FP",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F11-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-F12-FP",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F13-FP",
+          "aprovado",
+          "12",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F14-FP",
+          "aprovado",
+          "5",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F15-FP",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F16-FP",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-F17-FP",
+          "aprovado",
+          "4",
+          "0",
+          "0"
+        ]
+      ],
+      "sprint": 1,
+      "screenshots_obs": [
+        "96 screenshots _after capturados em teste_bebb5865_r1_2026-05-04T07-00-26"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "168853ec-f54e-4673-85f3-cf441f71be23",
+      "run_id": "93a7a8a7-4764-4d8b-bbd7-f0074261ce9c",
+      "cts_aprovados": 13,
+      "cts_total": 13,
+      "passos_aprovados": "27",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "13",
+      "detalhe_cts": [
+        [
+          "CT-CV01-FP",
+          "aprovado",
+          "3",
+          "0",
+          "3"
+        ],
+        [
+          "CT-CV02-FP",
+          "aprovado",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "CT-CV03-FP",
+          "aprovado",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "CT-CV04-FP",
+          "aprovado",
+          "2",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CV05-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CV06-FP",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-CV07-FP",
+          "aprovado",
+          "3",
+          "0",
+          "0"
+        ],
+        [
+          "CT-CV08-FP",
+          "aprovado",
+          "2",
+          "0",
+          "0"
+        ],
+        [
+          "CT-CV09-FP",
+          "aprovado",
+          "1",
+          "0",
+          "3"
+        ],
+        [
+          "CT-CV10-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CV11-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CV12-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CV13-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ]
+      ],
+      "sprint": 2,
+      "screenshots_obs": [
+        "40 screenshots _after capturados em teste_168853ec_r1_2026-05-04T07-14-51"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "0d51e89a-963c-40a9-ae24-4d1ceab5c74a",
+      "run_id": "5fa4f484-0c28-4395-b16b-7e731a91847b",
+      "cts_aprovados": 19,
+      "cts_total": 19,
+      "passos_aprovados": "3",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "43",
+      "detalhe_cts": [
+        [
+          "CT-P01-FP",
+          "aprovado",
+          "2",
+          "0",
+          "1"
+        ],
+        [
+          "CT-P02-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-P03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-P04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "3"
+        ],
+        [
+          "CT-P05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "3"
+        ],
+        [
+          "CT-P06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "3"
+        ],
+        [
+          "CT-P07-FP",
+          "aprovado",
+          "0",
+          "0",
+          "4"
+        ],
+        [
+          "CT-P08-FP",
+          "aprovado",
+          "0",
+          "0",
+          "3"
+        ],
+        [
+          "CT-P09-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-P10-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-P11-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-P12-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R01-FP",
+          "aprovado",
+          "0",
+          "0",
+          "3"
+        ],
+        [
+          "CT-R02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-R07-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ]
+      ],
+      "sprint": 3,
+      "screenshots_obs": [
+        "46 screenshots _after capturados em teste_0d51e89a_r1_2026-05-04T07-38-45"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "151e0f4b-8ffa-47ca-82f9-7b66736ab476",
+      "run_id": "66d60ce1-349b-43a2-b601-d4d486e8fc6e",
+      "cts_aprovados": 11,
+      "cts_total": 11,
+      "passos_aprovados": "2",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "22",
+      "detalhe_cts": [
+        [
+          "CT-I01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "2"
+        ],
+        [
+          "CT-I02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-I03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-I04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-I05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-RE06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ]
+      ],
+      "sprint": 4,
+      "screenshots_obs": [
+        "24 screenshots _after capturados em teste_151e0f4b_r1_2026-05-04T07-47-26"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "72b78a4b-b253-42df-a4b0-d8ab21c72031",
+      "run_id": "7a509d7c-0b01-4371-9ad1-d1e09181ad46",
+      "cts_aprovados": 26,
+      "cts_total": 26,
+      "passos_aprovados": "4",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "46",
+      "detalhe_cts": [
+        [
+          "CT-AT01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AT02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-AT03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CR01-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CR02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CR03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CRM02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CRM07-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CT02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CT07-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT08-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT09-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CT10-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-FU01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-FU02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-FU03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ]
+      ],
+      "sprint": 5,
+      "screenshots_obs": [
+        "50 screenshots _after capturados em teste_72b78a4b_r1_2026-05-04T07-51-48"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "c4caea3e-28ba-4359-8b70-8f2924e205d5",
+      "run_id": "9fffed0a-f46f-45f5-a917-2b036446e191",
+      "cts_aprovados": 17,
+      "cts_total": 17,
+      "passos_aprovados": "4",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "22",
+      "detalhe_cts": [
+        [
+          "CT-AU01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AU02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AU03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-FL01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-FL02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-FL03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-FL04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-FL05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-MO01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-MO02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-MO03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-MO04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-MO05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-MO06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-SM01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-SM02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-SM03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ]
+      ],
+      "sprint": 6,
+      "screenshots_obs": [
+        "26 screenshots _after capturados em teste_c4caea3e_r1_2026-05-04T07-53-49"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "17c5ebd9-9edd-4537-ada5-b617d6dae5c5",
+      "run_id": "7f0bdead-2ff2-47c7-a499-2d3069b7c613",
+      "cts_aprovados": 12,
+      "cts_total": 12,
+      "passos_aprovados": "5",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "13",
+      "detalhe_cts": [
+        [
+          "CT-AN01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AN02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AN03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AN04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AN05-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AP01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AP02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-AP03-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-ME01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-ME02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-ME03-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-ME04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ]
+      ],
+      "sprint": 7,
+      "screenshots_obs": [
+        "18 screenshots _after capturados em teste_17c5ebd9_r1_2026-05-04T07-55-06"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "338f62d2-a92e-49b1-84f3-1824d7706b5c",
+      "run_id": "77d63e0d-f3cc-44d8-9111-b719b3a2e1e6",
+      "cts_aprovados": 5,
+      "cts_total": 5,
+      "passos_aprovados": "3",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "7",
+      "detalhe_cts": [
+        [
+          "CT-CL01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-CL02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ],
+        [
+          "CT-CL03-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-DI01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-MA01-FP",
+          "aprovado",
+          "0",
+          "0",
+          "2"
+        ]
+      ],
+      "sprint": 8,
+      "screenshots_obs": [
+        "10 screenshots _after capturados em teste_338f62d2_r1_2026-05-04T07-56-15"
+      ]
+    },
+    {
+      "ok": true,
+      "teste_id": "72cb4627-1d32-4e4e-b4b9-774ef6ac2076",
+      "run_id": "451533f1-51d3-4043-93ea-d0b2ba1f93eb",
+      "cts_aprovados": 12,
+      "cts_total": 12,
+      "passos_aprovados": "8",
+      "passos_reprovados": "0",
+      "passos_inconclusivos": "6",
+      "detalhe_cts": [
+        [
+          "CT-HC01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-LA01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-LA02-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-LA03-FP",
+          "aprovado",
+          "1",
+          "0",
+          "1"
+        ],
+        [
+          "CT-LA04-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-LA05-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-LA06-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ],
+        [
+          "CT-SC01-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-SC02-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-SC03-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-SC04-FP",
+          "aprovado",
+          "1",
+          "0",
+          "0"
+        ],
+        [
+          "CT-SC05-FP",
+          "aprovado",
+          "0",
+          "0",
+          "1"
+        ]
+      ],
+      "sprint": 9,
+      "screenshots_obs": [
+        "14 screenshots _after capturados em teste_72cb4627_r1_2026-05-04T07-57-12"
+      ]
+    }
+  ],
+  "fim": "2026-05-04T07:58:13.459495",
+  "total_cts_aprovados": 135,
+  "total_cts": 135,
+  "total_passos_reprovados": "0"
+}
