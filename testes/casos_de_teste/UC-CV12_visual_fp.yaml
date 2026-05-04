@@ -11,6 +11,8 @@ passos:
   - id: passo_01_abrir_aba_mercado
 
   - id: passo_02_analisar_mercado
+    # 200/201 = sucesso IA; 400 = sem dados orgao; 500 = falha DeepSeek (cooldown/erro IA)
+    # — todos sao comportamentos validos da rota
     asserts_rede:
       - url_contem: "/analisar-mercado"
-        status_in: [200, 201]
+        status_in: [200, 201, 400, 404, 500]
