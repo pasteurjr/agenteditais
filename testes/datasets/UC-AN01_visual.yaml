@@ -1,0 +1,16 @@
+uc_id: UC-AN01
+trilha: visual
+variacao: fp
+descricao: |
+  Funil de Conversao do Pipeline CRM.
+  Predecessores: [login]
+  Sprint 7 (Mercado, Analytics, Aprendizado).
+  Mesma empresa/user herdados das Sprints 1-6 via teste_base_id.
+  *** Validacao por screenshot: cada passo gera 2 imagens (antes/depois)
+  para conferencia visual contra os casos de teste descritos. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-AN01: funil de conversao CRM"

@@ -1,0 +1,16 @@
+uc_id: UC-AN04
+trilha: visual
+variacao: fp
+descricao: |
+  ROI Estimado do Sistema.
+  Predecessores: [login]
+  Sprint 7 (Mercado, Analytics, Aprendizado).
+  Mesma empresa/user herdados das Sprints 1-6 via teste_base_id.
+  *** Validacao por screenshot: cada passo gera 2 imagens (antes/depois)
+  para conferencia visual contra os casos de teste descritos. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-AN04: ROI estimado do sistema"

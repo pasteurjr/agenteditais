@@ -1,0 +1,16 @@
+uc_id: UC-ME04
+trilha: visual
+variacao: fp
+descricao: |
+  Detectar Itens Intrusos em Edital via IA.
+  Predecessores: UC-CV03
+  Sprint 7 (Mercado, Analytics, Aprendizado).
+  Mesma empresa/user herdados das Sprints 1-6 via teste_base_id.
+  *** Validacao por screenshot: cada passo gera 2 imagens (antes/depois)
+  para conferencia visual contra os casos de teste descritos. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-ME04: IA detecta itens intrusos no edital"

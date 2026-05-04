@@ -1,0 +1,12 @@
+uc_id: UC-AN05
+variacao: fp
+trilha: visual
+descricao: "Analise de Perdas com Recomendacoes IA"
+
+passos:
+  - id: passo_00_navegar_perdas
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2'
+
+  - id: passo_01_validar_recomendacoes
+    # Sem assert (validacao via screenshot pos-execucao)

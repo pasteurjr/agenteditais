@@ -1,0 +1,8 @@
+uc_id: UC-AN03
+variacao: fp
+trilha: visual
+descricao: "Tempo Medio entre Etapas do Pipeline"
+
+passos:
+  - id: passo_00_validar_tempos
+    # Sem assert (validacao via screenshot pos-execucao)

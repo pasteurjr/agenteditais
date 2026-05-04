@@ -1,0 +1,12 @@
+uc_id: UC-AP01
+variacao: fp
+trilha: visual
+descricao: "Consultar Feedbacks Registrados"
+
+passos:
+  - id: passo_00_navegar_aprendizado
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2'
+
+  - id: passo_01_validar_feedbacks
+    # Sem assert (validacao via screenshot pos-execucao)

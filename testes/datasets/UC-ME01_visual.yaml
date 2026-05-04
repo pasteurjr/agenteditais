@@ -1,0 +1,16 @@
+uc_id: UC-ME01
+trilha: visual
+variacao: fp
+descricao: |
+  Dashboard TAM/SAM/SOM.
+  Predecessores: [login]
+  Sprint 7 (Mercado, Analytics, Aprendizado).
+  Mesma empresa/user herdados das Sprints 1-6 via teste_base_id.
+  *** Validacao por screenshot: cada passo gera 2 imagens (antes/depois)
+  para conferencia visual contra os casos de teste descritos. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-ME01: dashboard TAM/SAM/SOM. Validar visualmente: 3 cards numericos"

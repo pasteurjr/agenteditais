@@ -1,0 +1,8 @@
+uc_id: UC-AP03
+variacao: fp
+trilha: visual
+descricao: "Padroes Detectados pela IA"
+
+passos:
+  - id: passo_00_aba_padroes
+    # Sem assert (validacao via screenshot pos-execucao)

@@ -1,0 +1,11 @@
+uc_id: UC-ME02
+variacao: fp
+trilha: visual
+descricao: "Distribuicao Geografica do Mercado (CRMPage aba Mapa)"
+
+passos:
+  - id: passo_00_navegar_crm_mapa
+    # Sem assert (validacao via screenshot pos-execucao)
+
+  - id: passo_01_aba_mapa
+    # Sem assert (validacao via screenshot pos-execucao)
