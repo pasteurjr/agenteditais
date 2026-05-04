@@ -1,0 +1,11 @@
+uc_id: UC-FL05
+variacao: fp
+trilha: visual
+descricao: "Ver Agenda de Disparos (Calendario)"
+
+passos:
+  - id: passo_00_aba_agenda
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_calendario
+    # Sem assert (passo opcional/exploratorio)

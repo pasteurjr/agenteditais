@@ -1,0 +1,14 @@
+uc_id: UC-MO01
+trilha: visual
+variacao: fp
+descricao: |
+  Visualizar Dashboard de Monitoramentos Ativos.
+  Predecessores: [login]
+  Sprint 6 (Alertas/Flags, Monitoramentos, Auditoria, SMTP).
+  Mesma empresa/user herdados das Sprints 1-5 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-MO01: dashboard com monitoramentos ativos do PNCP. Empresa demo tem 1 monitoramento de Sprint 2"

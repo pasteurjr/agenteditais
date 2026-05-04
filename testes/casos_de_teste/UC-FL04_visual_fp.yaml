@@ -1,0 +1,11 @@
+uc_id: UC-FL04
+variacao: fp
+trilha: visual
+descricao: "Cancelar/Silenciar Alerta"
+
+passos:
+  - id: passo_00_garantir_flags
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_acoes
+    # Sem assert (passo opcional/exploratorio)

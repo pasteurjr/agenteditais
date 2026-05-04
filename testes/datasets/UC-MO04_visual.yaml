@@ -1,0 +1,14 @@
+uc_id: UC-MO04
+trilha: visual
+variacao: fp
+descricao: |
+  Verificar Pendencias PNCP de Edital (sob demanda).
+  Predecessores: UC-CV03
+  Sprint 6 (Alertas/Flags, Monitoramentos, Auditoria, SMTP).
+  Mesma empresa/user herdados das Sprints 1-5 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-MO04: pendencias PNCP por edital"

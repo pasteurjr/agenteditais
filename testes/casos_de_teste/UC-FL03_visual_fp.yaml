@@ -1,0 +1,11 @@
+uc_id: UC-FL03
+variacao: fp
+trilha: visual
+descricao: "Listar e Filtrar Historico de Alertas"
+
+passos:
+  - id: passo_00_garantir_flags
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_filtros
+    # Sem assert (passo opcional/exploratorio)

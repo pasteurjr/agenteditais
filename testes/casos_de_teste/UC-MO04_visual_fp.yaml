@@ -1,0 +1,8 @@
+uc_id: UC-MO04
+variacao: fp
+trilha: visual
+descricao: "Verificar Pendencias PNCP de Edital (sob demanda)"
+
+passos:
+  - id: passo_00_validar_acao
+    # Sem assert (passo opcional/exploratorio)

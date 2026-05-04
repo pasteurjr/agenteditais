@@ -1,0 +1,11 @@
+uc_id: UC-FL02
+variacao: fp
+trilha: visual
+descricao: "Criar Alerta via IA (chatbox)"
+
+passos:
+  - id: passo_00_garantir_flags
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_botao_novo
+    # Sem assert (passo opcional/exploratorio)

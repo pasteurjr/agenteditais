@@ -1,0 +1,14 @@
+uc_id: UC-MO03
+trilha: visual
+variacao: fp
+descricao: |
+  Analisar Documentos da Empresa (sob demanda).
+  Predecessores: UC-F01 (docs cadastrados)
+  Sprint 6 (Alertas/Flags, Monitoramentos, Auditoria, SMTP).
+  Mesma empresa/user herdados das Sprints 1-5 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-MO03: analise IA de docs da empresa"

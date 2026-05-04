@@ -1,0 +1,11 @@
+uc_id: UC-MO02
+variacao: fp
+trilha: visual
+descricao: "Criar Monitoramento PNCP via IA"
+
+passos:
+  - id: passo_00_garantir_monitoria
+    # Sem assert (passo opcional/exploratorio)
+
+  - id: passo_01_validar_criacao
+    # Sem assert (passo opcional/exploratorio)

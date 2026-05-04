@@ -1,0 +1,8 @@
+uc_id: UC-AU03
+variacao: fp
+trilha: visual
+descricao: "Exportar Pacote de Compliance"
+
+passos:
+  - id: passo_00_validar_botao_export
+    # Sem assert (passo opcional/exploratorio)

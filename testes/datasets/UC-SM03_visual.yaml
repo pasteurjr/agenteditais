@@ -1,0 +1,14 @@
+uc_id: UC-SM03
+trilha: visual
+variacao: fp
+descricao: |
+  Consultar Fila de Envio e Reenviar Manualmente.
+  Predecessores: UC-SM01
+  Sprint 6 (Alertas/Flags, Monitoramentos, Auditoria, SMTP).
+  Mesma empresa/user herdados das Sprints 1-5 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-SM03: fila de envio + reenvio manual"

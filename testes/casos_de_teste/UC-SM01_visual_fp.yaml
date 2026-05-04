@@ -1,0 +1,12 @@
+uc_id: UC-SM01
+variacao: fp
+trilha: visual
+descricao: "Configurar Servidor SMTP"
+
+passos:
+  - id: passo_00_navegar_smtp
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2'
+
+  - id: passo_01_validar_form
+    # Sem assert (passo opcional/exploratorio)

@@ -1,0 +1,14 @@
+uc_id: UC-AU02
+trilha: visual
+variacao: fp
+descricao: |
+  Investigar Alteracoes Sensiveis em Parametrizacoes.
+  Predecessores: UC-AU01
+  Sprint 6 (Alertas/Flags, Monitoramentos, Auditoria, SMTP).
+  Mesma empresa/user herdados das Sprints 1-5 via teste_base_id.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-AU02: investigar alteracoes em parametros sensiveis"

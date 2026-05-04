@@ -1,0 +1,8 @@
+uc_id: UC-AU02
+variacao: fp
+trilha: visual
+descricao: "Investigar Alteracoes Sensiveis em Parametrizacoes"
+
+passos:
+  - id: passo_00_filtrar_sensiveis
+    # Sem assert (passo opcional/exploratorio)

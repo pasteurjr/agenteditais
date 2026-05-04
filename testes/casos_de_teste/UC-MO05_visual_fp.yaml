@@ -1,0 +1,8 @@
+uc_id: UC-MO05
+variacao: fp
+trilha: visual
+descricao: "Ver Eventos Capturados por Monitoramento"
+
+passos:
+  - id: passo_00_aba_eventos
+    # Sem assert (passo opcional/exploratorio)
