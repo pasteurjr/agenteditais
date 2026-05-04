@@ -2,11 +2,12 @@ uc_id: UC-CV03
 trilha: visual
 variacao: fp
 descricao: |
-  Salvar edital, itens e scores da captacao. Click no botao "Salvar edital"
-  da primeira linha da grade. V8: Como CV01 usou Fonte=PNCP + Score Hibrido,
-  a primeira linha eh deterministicamente o edital com MAIOR score (melhor
-  candidato), garantindo que CV07/CV08 trabalhem com dados de qualidade.
+  Salvar edital com maior score em editais_salvos.
+  Predecessores: UC-CV01
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV03 salva edital de maior score"

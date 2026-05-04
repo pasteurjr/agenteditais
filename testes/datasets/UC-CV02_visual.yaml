@@ -2,10 +2,12 @@ uc_id: UC-CV02
 trilha: visual
 variacao: fp
 descricao: |
-  Explorar painel lateral do edital. Click no botao "Ver detalhes" (icone Eye)
-  da primeira linha da grade. V8: Como CV01 usou Fonte=PNCP + Score Hibrido,
-  a primeira linha eh deterministicamente o edital com MAIOR score.
+  Explorar resultados e abrir painel lateral do edital com maior score.
+  Predecessores: UC-CV01
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV02 abre painel lateral edital de maior score"

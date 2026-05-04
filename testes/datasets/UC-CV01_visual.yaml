@@ -2,21 +2,15 @@ uc_id: UC-CV01
 trilha: visual
 variacao: fp
 descricao: |
-  Buscar editais por termo, classificacao e score na CaptacaoPage.
-  Reusa palavras-chave/area da empresa Sprint 1 (criadas em UC-F13/F16).
-  V8: Fonte=PNCP + Analise de Score=Hibrido obrigatorios para garantir
-  execucao deterministica e ordenacao por score desc.
-
-# Termo de busca generico (palavra-chave do dataset Sprint 1 UC-F16)
-termo_busca: "monitor"
-
-# UF default — generico (busca em todas se vazio, mas SP eh mais frequente)
-uf_filtro: ""
-
-# V8: filtros obrigatorios para validacao automatizada
-fonte_label: "PNCP"
-tipo_score_label: "Score Hibrido"
+  Buscar editais por termo + Fonte=PNCP + Score Hibrido.
+  Predecessores: Sprint 1 + UC-F14/F15/F16
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+termo: "monitor multiparametrico"
+fonte: "PNCP"
+modalidade: "Pregão Eletrônico"
+score: "Score Hibrido"

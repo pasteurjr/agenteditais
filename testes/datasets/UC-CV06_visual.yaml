@@ -2,12 +2,12 @@ uc_id: UC-CV06
 trilha: visual
 variacao: fp
 descricao: |
-  Gerir monitoramentos automaticos. Click "Novo Monitoramento" -> preenche termo
-  -> click "Criar". Backend cria registro em monitoramentos via crudCreate.
-
-# Termo unico por execucao para nao colidir
-monitor_termo: "monitor multiparametros 02-05"
+  Criar monitoramento automatico de busca (PNCP recorrente).
+  Predecessores: [infra]
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+termo_monitor: "monitor multiparametrico"

@@ -8,76 +8,52 @@ dataset_ref: testes/datasets/UC-CV11_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CV11_visual_fp.yaml
 ---
 
-# UC-CV11 — Analisar riscos (Fluxo Principal)
+# UC-CV11 — Analisar riscos do edital via IA (Fluxo Principal)
 
-> **PO:** IA processa ~30-180s.
->
-> **Cenario:** apos CV07 selecionar edital, abre aba "Riscos", click "Analisar Riscos do Edital". Backend chama IA.
+> **Predecessores:** UC-CV07
+> **Sprint:** 2 — Captacao + Validacao (PROFUNDA)
+> **Profundidade:** padrao Sprint 1 — asserts validando EFEITO REAL (DOM + rede)
 
-## Passo 00 — Confirmar edital selecionado
+## Passo 00 — Click aba 'Riscos'
 
-```yaml
-id: passo_00_confirmar_selecionado
-acao:
-  sequencia:
-    - tipo: wait_for
-      seletor: 'h1:has-text("Validacao")'
-      timeout: 10000
-    - tipo: evaluate
-      valor_literal: |
-        () => {
-          const tab = [...document.querySelectorAll('button')].find(b => /Aderencia|Lotes|Documentos|Riscos|Mercado/i.test(b.textContent || ''));
-          if (tab) return 'edital ja selecionado';
-          const tr = document.querySelector('table tbody tr');
-          if (!tr) throw new Error('Sem tabs nem linhas');
-          tr.click();
-          return 'selecionou primeiro';
-        }
-    - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CV11_visual_fp.yaml#passo_00_confirmar_selecionado"
-```
-
-## Passo 01 — Abrir aba "Riscos"
+Tab Riscos.
 
 ```yaml
-id: passo_01_abrir_aba_riscos
-acao:
-  sequencia:
-    - tipo: evaluate
-      valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button.tab-panel-tab, button')];
-          const btn = buttons.find(b => /^Riscos\s*$/i.test(b.textContent.trim() || ''));
-          if (!btn) throw new Error('Aba Riscos nao encontrada');
-          btn.scrollIntoView({block: 'center'});
-          btn.click();
-          return 'clicked';
-        }
-    - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CV11_visual_fp.yaml#passo_01_abrir_aba_riscos"
-```
-
-## Passo 02 — Click "Analisar Riscos" e aguardar IA
-
-POST /api/editais/<id>/analisar-riscos com timeout 240s.
-
-```yaml
-id: passo_02_analisar_riscos
+id: passo_00_aba_riscos
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
           const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Analisar Riscos|Reanalisar Riscos/i.test(b.textContent || ''));
-          if (!btn) throw new Error('Botao Analisar Riscos nao encontrado');
-          btn.scrollIntoView({block: 'center'});
+          const btn = buttons.find(b => /^Riscos/i.test((b.textContent||'').trim()));
+          if (!btn) throw new Error('Aba Riscos ausente');
           btn.click();
-          return 'clicked';
+          return 'aba_riscos';
         }
     - tipo: wait
-      valor_literal: 180000
-validacao_ref: "testes/casos_de_teste/UC-CV11_visual_fp.yaml#passo_02_analisar_riscos"
+      valor_literal: 2000
+validacao_ref: "testes/casos_de_teste/UC-CV11_visual_fp.yaml#passo_00_aba_riscos"
+```
+
+## Passo 01 — Click 'Analisar Riscos' — POST /analisar-riscos (IA)
+
+**EFEITO REAL:** POST retorna 200/201 com lista de riscos. Tela mostra cards/lista.
+
+```yaml
+id: passo_01_clicar_analisar_riscos
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const btn = [...document.querySelectorAll('button')].find(b => /Analisar Riscos|Reanalisar Riscos/i.test(b.textContent || ''));
+          if (!btn) throw new Error('Botao Analisar Riscos ausente');
+          btn.scrollIntoView({block: 'center'});
+          btn.click();
+          return 'clicked_analisar_riscos';
+        }
+    - tipo: wait
+      valor_literal: 120000
+validacao_ref: "testes/casos_de_teste/UC-CV11_visual_fp.yaml#passo_01_clicar_analisar_riscos"
 ```

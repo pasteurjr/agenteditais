@@ -1,23 +1,25 @@
 uc_id: UC-CV09
 variacao: fp
 trilha: visual
-descricao: "Importar itens e extrair lotes via IA"
+descricao: "Importar itens do PNCP + extrair lotes via IA — EFEITO REAL via SQL fetch backend"
 
 passos:
-  - id: passo_00_confirmar_selecionado
+  - id: passo_00_aba_lotes
     asserts_dom:
-      - selector: 'h1:has-text("Validacao")'
+      - selector: 'h4:has-text("Itens do Edital")'
 
-  - id: passo_01_abrir_aba_lotes
-    # Sem assert (mudanca client-side)
+  - id: passo_01_validar_estado_inicial_zero
+    # Sem assert (exploracao - estado inicial pode ser 0 ou >0)
 
-  - id: passo_01b_importar_itens_pncp
-    # Sem assert (passo opcional — so executa se itens estao zerados)
+  - id: passo_02_clicar_buscar_itens_pncp
+    # Sem assert de rede — passo idempotente. Validacao real em passo_03 via fetch SQL.
 
-  - id: passo_02_extrair_lotes
-    # Sem assert: cenario tem 3 caminhos validos —
-    # 1) IA processa e cria lotes (200/201)
-    # 2) edital sem itens importados via PNCP (FE-04 do UC) — botao nao aparece, sem request
-    # 3) edital com lotes pre-existentes — botao "Reprocessar" clicado (200/201)
-    # Como a presenca da request depende de qual caminho foi tomado, deixamos INCONCLUSIVO
-    # em vez de exigir request fixa (evita REPROVADO falso quando cenario 2 acontece).
+  - id: passo_03_validar_itens_importados
+    # SEM assert DOM — passo executa fetch /api/crud/editais-itens e da throw se 0 itens.
+    # APROVADO/INCONCLUSIVO via JS (throw -> REPROVADO; return -> INCONCLUSIVO/sucesso).
+
+  - id: passo_04_clicar_extrair_lotes_ia
+    # Sem assert de rede — idempotente. Validacao real em passo_05 via fetch SQL.
+
+  - id: passo_05_validar_lotes_extraidos
+    # SEM assert DOM — fetch /api/crud/lotes + throw se 0 lotes.

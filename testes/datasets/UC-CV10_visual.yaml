@@ -2,10 +2,12 @@ uc_id: UC-CV10
 trilha: visual
 variacao: fp
 descricao: |
-  Confrontar documentacao necessaria com a empresa. Aba "Documentos" mostra
-  requisitos do edital + status (atende/nao atende) baseado nos documentos
-  cadastrados em UC-F03 da Sprint 1.
+  Confrontar documentacao do edital com empresa via IA.
+  Predecessores: UC-CV07
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV10 IA confronta docs"

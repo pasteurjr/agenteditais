@@ -2,9 +2,12 @@ uc_id: UC-CV11
 trilha: visual
 variacao: fp
 descricao: |
-  Analisar riscos, recorrencia, atas e concorrentes do edital. Aba "Riscos" tem
-  botao "Analisar Riscos" que aciona IA.
+  Analisar riscos do edital via IA.
+  Predecessores: UC-CV07
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV11 IA analisa riscos"

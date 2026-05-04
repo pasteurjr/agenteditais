@@ -8,55 +8,45 @@ dataset_ref: testes/datasets/UC-CV05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CV05_visual_fp.yaml
 ---
 
-# UC-CV05 — Exportar resultados (Fluxo Principal)
+# UC-CV05 — Exportar resultados da busca em CSV (client-side) (Fluxo Principal)
 
-> **Cenario:** apos UC-CV01 ter buscado, click no botao "Exportar CSV". Frontend gera CSV client-side e dispara download (sem chamada de rede).
->
-> **Pre-requisitos:** UC-CV01.
+> **Predecessores:** UC-CV01
+> **Sprint:** 2 — Captacao + Validacao (PROFUNDA)
+> **Profundidade:** padrao Sprint 1 — asserts validando EFEITO REAL (DOM + rede)
 
-## Passo 00 — Confirmar grade na CaptacaoPage
+## Passo 00 — Garantir grade com resultados
+
+Tabela visivel.
 
 ```yaml
-id: passo_00_confirmar_grade
+id: passo_00_garantir_grade
 acao:
   sequencia:
     - tipo: wait_for
-      seletor: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+      seletor: 'table tbody tr'
       timeout: 10000
-    - tipo: wait_for
-      seletor: 'table tbody tr, .edital-card'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-CV05_visual_fp.yaml#passo_00_confirmar_grade"
+validacao_ref: "testes/casos_de_teste/UC-CV05_visual_fp.yaml#passo_00_garantir_grade"
 ```
 
-## Passo 01 — Click "Exportar CSV"
+## Passo 01 — Click 'Exportar CSV' (geração client-side)
 
-Sem rede. Sucesso = botao foi clicado e nao deu erro JS.
-
-**Observe criticamente:**
-- Botao "Exportar CSV" presente
-- Click nao dispara erro
+**EFEITO REAL:** botao executa download local (sem network call).
+Validacao: botao habilitado, click sem erro.
 
 ```yaml
-id: passo_01_exportar_csv
+id: passo_01_clicar_exportar_csv
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Exportar CSV/i.test(b.textContent || ''));
-          if (!btn) throw new Error('Botao Exportar CSV nao encontrado');
-          btn.scrollIntoView({block: 'center'});
-          // Mock anchor.click pra nao baixar arquivo de verdade
-          const origClick = HTMLAnchorElement.prototype.click;
-          HTMLAnchorElement.prototype.click = function() { console.log('CSV export click intercepted'); };
-          try { btn.click(); } finally {
-            setTimeout(() => { HTMLAnchorElement.prototype.click = origClick; }, 100);
-          }
-          return 'clicked';
+          const btn = [...document.querySelectorAll('button')].find(b => /Exportar CSV|Exportar.*CSV/i.test(b.textContent || ''));
+          if (!btn) throw new Error('botao Exportar CSV ausente');
+          if (btn.disabled) throw new Error('botao desabilitado');
+          btn.click();
+          return 'csv_clicado';
         }
     - tipo: wait
-      valor_literal: 1000
-validacao_ref: "testes/casos_de_teste/UC-CV05_visual_fp.yaml#passo_01_exportar_csv"
+      valor_literal: 1500
+validacao_ref: "testes/casos_de_teste/UC-CV05_visual_fp.yaml#passo_01_clicar_exportar_csv"
 ```

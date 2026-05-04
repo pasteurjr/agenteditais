@@ -2,9 +2,12 @@ uc_id: UC-CV09
 trilha: visual
 variacao: fp
 descricao: |
-  Importar itens e extrair lotes por IA. Click "Extrair Lotes via IA" na aba Lotes.
-  DeepSeek processa PDF do edital e cria registros em editais_lotes.
+  Importar itens do PNCP e extrair lotes via IA — EFEITO REAL.
+  Predecessores: UC-CV07
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV09 — IMPORTAR ITENS REAIS + EXTRAIR LOTES IA"

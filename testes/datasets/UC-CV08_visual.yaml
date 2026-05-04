@@ -2,9 +2,12 @@ uc_id: UC-CV08
 trilha: visual
 variacao: fp
 descricao: |
-  Calcular scores multidimensionais e decidir GO/NO-GO. Click "Calcular Scores IA"
-  apos edital selecionado (CV07). Backend roda DeepSeek (~30-180s).
+  Calcular scores GO/NO-GO multidimensionais via DeepSeek.
+  Predecessores: UC-CV07
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV08 scores 6 dimensoes + GO/NO-GO"

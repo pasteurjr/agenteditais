@@ -1147,8 +1147,9 @@ export function CaptacaoPage(props?: PageProps) {
       // Se já tem ID do backend (UUID), reutiliza (não duplica)
       let editalId: string | null = null;
       if (edital.id && edital.id.length === 36) {
-        // Promover de temp_score para novo se necessário
-        try { await crudUpdate("editais", edital.id, { status: "novo" }); } catch { /* ignora se não existe */ }
+        // Promover de temp_score para novo + ATUALIZAR campos PNCP (cnpj/ano/seq podem ter
+        // ficado vazios no salvamento temp). Envia payload completo, não só status.
+        try { await crudUpdate("editais", edital.id, payload); } catch { /* ignora se não existe */ }
         editalId = edital.id;
       }
       if (!editalId) {
@@ -1160,7 +1161,7 @@ export function CaptacaoPage(props?: PageProps) {
           );
           if (tempExistente) {
             editalId = String(tempExistente.id);
-            await crudUpdate("editais", editalId, { status: "novo" });
+            await crudUpdate("editais", editalId, payload);
           }
         } catch { /* ignora — cria novo */ }
       }

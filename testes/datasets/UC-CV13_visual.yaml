@@ -2,9 +2,12 @@ uc_id: UC-CV13
 trilha: visual
 variacao: fp
 descricao: |
-  Usar IA na validacao: gerar resumo do edital. Aba "IA" tem botao "Gerar Resumo".
-  Backend chama /api/chat com prompt resumo.
+  Gerar Resumo IA do edital (chat).
+  Predecessores: UC-CV07
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV13 IA gera resumo edital"

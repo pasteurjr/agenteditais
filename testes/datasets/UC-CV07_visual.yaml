@@ -2,10 +2,12 @@ uc_id: UC-CV07
 trilha: visual
 variacao: fp
 descricao: |
-  Listar editais salvos na ValidacaoPage e selecionar 1 para analise.
-  Reusa edital salvo pelo CV03 (V8: edital com maior score, determinado
-  pela busca PNCP + Score Hibrido em CV01).
+  Listar editais salvos em ValidacaoPage e selecionar (maior score).
+  Predecessores: UC-CV03
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "CV07 seleciona edital salvo"

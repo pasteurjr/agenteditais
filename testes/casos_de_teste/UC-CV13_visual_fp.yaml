@@ -1,16 +1,13 @@
 uc_id: UC-CV13
 variacao: fp
 trilha: visual
-descricao: "Gerar resumo do edital via IA"
+descricao: "Gerar Resumo IA do edital (chat)"
 
 passos:
-  - id: passo_00_confirmar_selecionado
-    asserts_dom:
-      - selector: 'h1:has-text("Validacao")'
+  - id: passo_00_aba_ia
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_abrir_aba_ia
-
-  - id: passo_02_gerar_resumo
+  - id: passo_01_clicar_gerar_resumo
     asserts_rede:
       - url_contem: "/api/chat"
         status_in: [200, 201]

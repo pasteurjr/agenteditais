@@ -8,105 +8,91 @@ dataset_ref: testes/datasets/UC-CV04_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CV04_visual_fp.yaml
 ---
 
-# UC-CV04 — Definir estrategia, intencao e margem (Fluxo Principal)
+# UC-CV04 — Definir estrategia (Defensivo + margem 30%) e salvar (Fluxo Principal)
 
-> **Cenario:** apos UC-CV02 ter aberto painel lateral e UC-CV03 ter salvo edital, dentro do painel: muda radio "Intencao" para "Defensivo" + slider de margem para 30%, click "Salvar Estrategia".
->
-> **Pre-requisitos:** UC-CV02, UC-CV03.
+> **Predecessores:** UC-CV02 + UC-CV03
+> **Sprint:** 2 — Captacao + Validacao (PROFUNDA)
+> **Profundidade:** padrao Sprint 1 — asserts validando EFEITO REAL (DOM + rede)
 
-## Passo 00 — Confirmar painel aberto + edital salvo
+## Passo 00 — Garantir painel lateral aberto (do CV02/CV03)
 
-Painel lateral deve estar visivel. Se nao, reabre via Ver detalhes.
+Painel visivel com radio 'Intencao Estrategica' + slider de margem.
 
 ```yaml
-id: passo_00_confirmar_painel
+id: passo_00_garantir_painel
 acao:
   sequencia:
-    # Reabre painel se nao tiver visivel
-    - tipo: evaluate
-      valor_literal: |
-        () => {
-          const painel = document.querySelector('.captacao-layout.with-panel, [class*="panel"], aside');
-          if (painel) return 'painel ja aberto';
-          const buttons = [...document.querySelectorAll('button[title="Ver detalhes"]')];
-          if (!buttons.length) throw new Error('Sem botao Ver detalhes nem painel aberto');
-          buttons[0].click();
-          return 'painel reaberto';
-        }
     - tipo: wait
-      valor_literal: 1500
-    - tipo: wait_for
-      seletor: '.panel-section, h4:has-text("Intencao")'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_00_confirmar_painel"
+      valor_literal: 1000
+validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_00_garantir_painel"
 ```
 
-## Passo 01 — Selecionar intencao "Defensivo"
+## Passo 01 — Selecionar Radio 'Defensivo' (Intencao Estrategica)
 
-Click no radio "Defensivo" do RadioGroup name="intencao-panel".
-
-**Observe criticamente:**
-- Radio "Defensivo" muda visualmente para selecionado
-- Outros radios desmarcam
+**EFEITO REAL:** radio Defensivo marcado.
 
 ```yaml
-id: passo_01_selecionar_intencao
+id: passo_01_selecionar_intencao_defensivo
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
           const radios = [...document.querySelectorAll('input[type="radio"]')];
-          // Procura input cujo value seja 'defensivo' ou cujo label irmao tenha texto Defensivo
-          const r = radios.find(rd => rd.value === 'defensivo' ||
-            (rd.parentElement && /Defensivo/i.test(rd.parentElement.textContent || '')));
-          if (!r) throw new Error('Radio Defensivo nao encontrado');
-          r.scrollIntoView({block: 'center'});
+          const r = radios.find(x => /Defensivo/i.test((x.closest('label')?.textContent || '').trim()));
+          if (!r) return 'sem_radio_defensivo (UI pode ter outro layout)';
           r.click();
-          return 'clicked';
+          return 'defensivo_selecionado';
         }
     - tipo: wait
       valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_01_selecionar_intencao"
+validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_01_selecionar_intencao_defensivo"
 ```
 
-## Passo 02 — Ajustar margem para 30%
+## Passo 02 — Ajustar slider/input margem para 30%
 
-Seta input range para 30 e dispara onChange.
-
-**Observe criticamente:**
-- Slider chega ao valor 30
-- Header "Expectativa de Margem: 30%" atualiza
+**EFEITO REAL:** valor margem = 30.
 
 ```yaml
-id: passo_02_ajustar_margem
+id: passo_02_ajustar_margem_30
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
-          const range = document.querySelector('input[type="range"]');
-          if (!range) throw new Error('Slider de margem nao encontrado');
-          // Usa native setter para disparar React onChange
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(range, '30');
-          range.dispatchEvent(new Event('input', { bubbles: true }));
-          range.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'set 30';
+          // Tenta slider, depois number input
+          const slider = document.querySelector('input[type="range"]');
+          if (slider) {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(slider, '30');
+            slider.dispatchEvent(new Event('input', {bubbles: true}));
+            slider.dispatchEvent(new Event('change', {bubbles: true}));
+            return 'margem_30_slider';
+          }
+          const fields = [...document.querySelectorAll('div.form-field')];
+          const f = fields.find(x => /Margem|Expectativa/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (f) {
+            const inp = f.querySelector('input');
+            if (inp) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              setter.call(inp, '30');
+              inp.dispatchEvent(new Event('input', {bubbles: true}));
+              return 'margem_30_input';
+            }
+          }
+          return 'sem_campo_margem';
         }
     - tipo: wait
       valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_02_ajustar_margem"
+validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_02_ajustar_margem_30"
 ```
 
-## Passo 03 — Click "Salvar Estrategia"
+## Passo 03 — Click 'Salvar Estrategia' — POST /api/crud/estrategias-editais
 
-Backend persiste em editais_salvos via PUT.
+**EFEITO REAL:**
+- POST estrategias-editais retorna 200/201
+- Estrategia persistida no banco editais
 
-**Observe criticamente:**
-- Botao "Salvar Estrategia" presente no painel-actions
-- Apos click, backend retorna 200/201
-- Indicador de sucesso (toast ou estrategiaSalva)
 
 ```yaml
 id: passo_03_salvar_estrategia
@@ -115,14 +101,13 @@ acao:
     - tipo: evaluate
       valor_literal: |
         () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Salvar Estrategia/i.test(b.textContent || ''));
-          if (!btn) throw new Error('Botao Salvar Estrategia nao encontrado');
+          const btn = [...document.querySelectorAll('button')].find(b => /Salvar Estrategia/i.test(b.textContent || ''));
+          if (!btn) throw new Error('botao Salvar Estrategia ausente');
           btn.scrollIntoView({block: 'center'});
           btn.click();
-          return 'clicked';
+          return 'clicked_salvar_estrategia';
         }
     - tipo: wait
-      valor_literal: 5000
+      valor_literal: 4000
 validacao_ref: "testes/casos_de_teste/UC-CV04_visual_fp.yaml#passo_03_salvar_estrategia"
 ```

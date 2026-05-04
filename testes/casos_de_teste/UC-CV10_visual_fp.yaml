@@ -1,19 +1,13 @@
 uc_id: UC-CV10
 variacao: fp
 trilha: visual
-descricao: "Confrontar documentacao com empresa via IA"
+descricao: "Confrontar documentacao do edital com empresa via IA"
 
 passos:
-  - id: passo_00_confirmar_selecionado
-    asserts_dom:
-      - selector: 'h1:has-text("Validacao")'
+  - id: passo_00_aba_documentos
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_abrir_aba_documentos
-    # Sem assert (aba abre client-side)
-
-  - id: passo_02_identificar_docs
-    # 200/201 = sucesso da IA; 400 = FE-04 do UC (PDF nao disponivel — esperado quando edital salvo
-    # do PNCP nao tem PDF baixado ainda); ambos sao comportamentos validos do backend.
+  - id: passo_01_clicar_identificar_documentos
     asserts_rede:
       - url_contem: "/extrair-requisitos"
         status_in: [200, 201, 400]

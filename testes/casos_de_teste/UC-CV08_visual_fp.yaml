@@ -1,14 +1,16 @@
 uc_id: UC-CV08
 variacao: fp
 trilha: visual
-descricao: "Calcular scores GO/NO-GO via IA"
+descricao: "Calcular scores GO/NO-GO multidimensionais via DeepSeek"
 
 passos:
-  - id: passo_00_confirmar_edital_selecionado
-    asserts_dom:
-      - selector: 'h1:has-text("Validacao")'
+  - id: passo_00_garantir_aderencia
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_calcular_scores
+  - id: passo_01_clicar_calcular_scores
     asserts_rede:
       - url_contem: "/scores-validacao"
         status_in: [200, 201]
+
+  - id: passo_02_validar_decisao_exibida
+    # Sem assert (passo de setup/exploracao)

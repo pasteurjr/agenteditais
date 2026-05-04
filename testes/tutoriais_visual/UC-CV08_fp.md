@@ -8,50 +8,46 @@ dataset_ref: testes/datasets/UC-CV08_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CV08_visual_fp.yaml
 ---
 
-# UC-CV08 — Calcular scores GO/NO-GO (Fluxo Principal)
+# UC-CV08 — Calcular scores GO/NO-GO multidimensionais via DeepSeek (Fluxo Principal)
 
-> **PO:** DeepSeek processa ~30-180s.
->
-> **Cenario:** apos CV07 selecionar edital, click "Calcular Scores IA". Backend chama DeepSeek e retorna 6 dimensoes + decisao GO/NO-GO baseada nos limiares do UC-F14 (Sprint 1).
->
-> **Pre-requisitos:** CV07 (edital selecionado), F14 (limiares).
+> **Predecessores:** UC-CV07
+> **Sprint:** 2 — Captacao + Validacao (PROFUNDA)
+> **Profundidade:** padrao Sprint 1 — asserts validando EFEITO REAL (DOM + rede)
 
-## Passo 00 — Confirmar edital selecionado e tab Aderencia
+## Passo 00 — Garantir tab Aderencia (default apos CV07)
+
+Tab Aderencia ativa.
 
 ```yaml
-id: passo_00_confirmar_edital_selecionado
+id: passo_00_garantir_aderencia
 acao:
   sequencia:
     - tipo: wait_for
       seletor: 'h1:has-text("Validacao")'
       timeout: 10000
-    # Se nenhum edital selecionado, seleciona o primeiro
     - tipo: evaluate
       valor_literal: |
         () => {
-          const tab = [...document.querySelectorAll('button')].find(b => /Aderencia|Lotes|Documentos|Riscos|Mercado/i.test(b.textContent || ''));
-          if (tab) return 'edital ja selecionado';
-          const tr = document.querySelector('table tbody tr');
-          if (!tr) throw new Error('Nem tabs nem linhas');
-          tr.click();
-          return 'selecionou primeiro';
+          const buttons = [...document.querySelectorAll('button')];
+          const btn = buttons.find(b => /^Aderencia/i.test((b.textContent||'').trim()));
+          if (btn) btn.click();
+          return 'aba_aderencia';
         }
     - tipo: wait
       valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CV08_visual_fp.yaml#passo_00_confirmar_edital_selecionado"
+validacao_ref: "testes/casos_de_teste/UC-CV08_visual_fp.yaml#passo_00_garantir_aderencia"
 ```
 
-## Passo 01 — Click "Calcular Scores IA" e aguardar DeepSeek
+## Passo 01 — Click 'Calcular Scores IA' — POST /scores-validacao (DeepSeek 30-180s)
 
-POST /api/editais/<id>/scores-validacao com timeout 240s.
+**EFEITO REAL ESPERADO:**
+- POST /scores-validacao retorna 200/201 com 6 dimensoes + decisao GO/NO-GO
+- Score final exibido (numero)
+- Decisao GO/NO-GO/AVALIAR exibida com cor (verde/vermelho/cinza)
 
-**Observe criticamente:**
-- Botao "Calcular Scores IA" (ou "Recalcular Scores IA") presente
-- Backend chama POST /scores-validacao
-- Retorna 200 com dimensoes calculadas
 
 ```yaml
-id: passo_01_calcular_scores
+id: passo_01_clicar_calcular_scores
 acao:
   sequencia:
     - tipo: evaluate
@@ -59,13 +55,33 @@ acao:
         () => {
           const buttons = [...document.querySelectorAll('button')];
           const btn = buttons.find(b => /Calcular Scores IA|Recalcular Scores IA/i.test(b.textContent || ''));
-          if (!btn) throw new Error('Botao Calcular Scores IA nao encontrado');
+          if (!btn) throw new Error('Botao Calcular Scores IA ausente');
           btn.scrollIntoView({block: 'center'});
           btn.click();
-          return 'clicked';
+          return 'clicked_calcular_scores';
         }
-    # Aguarda DeepSeek (timeout 240s)
     - tipo: wait
       valor_literal: 180000
-validacao_ref: "testes/casos_de_teste/UC-CV08_visual_fp.yaml#passo_01_calcular_scores"
+validacao_ref: "testes/casos_de_teste/UC-CV08_visual_fp.yaml#passo_01_clicar_calcular_scores"
+```
+
+## Passo 02 — EFEITO REAL: decisao GO/NO-GO/AVALIAR aparece na tela
+
+Decisao colorida + score numerico.
+
+```yaml
+id: passo_02_validar_decisao_exibida
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const txt = (document.body.textContent || '').toUpperCase();
+          const has_decisao = /GO|NO.GO|AVALIAR|DECIS[AÃ]O/.test(txt);
+          if (!has_decisao) throw new Error('Decisao nao apareceu na tela apos scores');
+          return 'decisao_visivel';
+        }
+    - tipo: wait
+      valor_literal: 500
+validacao_ref: "testes/casos_de_teste/UC-CV08_visual_fp.yaml#passo_02_validar_decisao_exibida"
 ```

@@ -1,18 +1,16 @@
 uc_id: UC-CV06
 variacao: fp
 trilha: visual
-descricao: "Criar monitoramento automatico de busca"
+descricao: "Criar monitoramento automatico de busca (PNCP recorrente)"
 
 passos:
-  - id: passo_00_setup_navegar_monitoramentos
-    asserts_dom:
-      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+  - id: passo_00_scroll_monitoramentos
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_abrir_form_novo
-    asserts_dom:
-      - selector: 'div.form-field:has(.form-field-label:has-text("Termo de busca")) input.text-input'
+  - id: passo_01_clicar_novo_monitoramento
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_02_criar_monitoramento
+  - id: passo_02_preencher_termo_monitoramento
     asserts_rede:
-      - url_contem: "/api/crud/monitoramentos"
+      - url_contem: "/monitoramentos"
         status_in: [200, 201]

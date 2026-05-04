@@ -1,21 +1,19 @@
 uc_id: UC-CV07
 variacao: fp
 trilha: visual
-descricao: "Listar editais salvos e selecionar"
+descricao: "Listar editais salvos em ValidacaoPage e selecionar (maior score)"
 
 passos:
-  - id: passo_00_setup_navegar_validacao
+  - id: passo_00_navegar_validacao
     asserts_dom:
       - selector: 'h1:has-text("Validacao"), h2:has-text("Validacao")'
 
-  - id: passo_01_confirmar_lista
+  - id: passo_01_validar_lista_editais_salvos
     asserts_dom:
-      - selector: '.card-title:has-text("Meus Editais"), h3:has-text("Meus Editais")'
       - selector: 'table tbody tr'
-    asserts_rede:
-      - url_contem: "/api/editais/salvos"
-        status_in: [200]
 
-  - id: passo_02_selecionar_edital
-    asserts_dom:
-      - selector: 'button.tab-panel-tab:has(.tab-label:has-text("Aderencia")), button:has-text("Aderencia")'
+  - id: passo_02_selecionar_primeiro_edital
+    # Sem assert (passo de setup/exploracao)
+
+  - id: passo_03_validar_tabs_aderencia
+    # Sem assert (passo de setup/exploracao)

@@ -1,14 +1,16 @@
 uc_id: UC-CV02
 variacao: fp
 trilha: visual
-descricao: "Explorar painel lateral do edital — click ver detalhes"
+descricao: "Explorar resultados e abrir painel lateral do edital com maior score"
 
 passos:
-  - id: passo_00_confirmar_grade
+  - id: passo_00_garantir_grade_carregada
     asserts_dom:
-      - selector: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
-      - selector: 'table tbody tr, .edital-card'
+      - selector: 'table tbody tr'
 
-  - id: passo_01_abrir_painel_lateral
+  - id: passo_01_clicar_ver_detalhes_primeiro
+    # Sem assert (passo de setup/exploracao)
+
+  - id: passo_02_validar_painel_aberto
     asserts_dom:
-      - selector: '.captacao-layout.with-panel, [class*="panel"], aside'
+      - selector: 'h4:has-text("Dados do Edital"), .captacao-layout.with-panel, [class*="panel"], aside'

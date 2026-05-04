@@ -2,12 +2,13 @@ uc_id: UC-CV04
 trilha: visual
 variacao: fp
 descricao: |
-  Definir estrategia, intencao e margem do edital. Painel lateral aberto pelo
-  CV02; CV04 muda radio "Defensivo" + slider margem para 30 e clica "Salvar Estrategia".
-
-intencao_value: "defensivo"
-margem_valor: "30"
+  Definir estrategia (Defensivo + margem 30%) e salvar.
+  Predecessores: UC-CV02 + UC-CV03
+  Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
+
+intencao: "Defensivo"
+margem: "30"

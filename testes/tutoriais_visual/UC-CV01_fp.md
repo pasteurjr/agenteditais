@@ -8,37 +8,30 @@ dataset_ref: testes/datasets/UC-CV01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CV01_visual_fp.yaml
 ---
 
-# UC-CV01 — Buscar editais por termo, classificacao e score (Fluxo Principal)
+# UC-CV01 — Buscar editais por termo + Fonte=PNCP + Score Hibrido (Fluxo Principal)
 
-> **PO:** acompanhe a execucao. A busca chama o PNCP (rede externa) — pode demorar 30-180s.
->
-> **Cenario:** apos Sprint 1 ter cadastrado palavras-chave (UC-F16), pesos (UC-F14) e parametros comerciais (UC-F15), navega para Fluxo Comercial > Captacao. Preenche termo de busca (palavra do portfolio), clica "Buscar Editais", aguarda PNCP retornar, grade de editais aparece.
->
-> **Pre-requisitos:** Sprint 1 inteira concluida — empresa, hierarquia (UC-F13), parametros score (UC-F14), palavras-chave (UC-F16) ja existem.
+> **Predecessores:** Sprint 1 + UC-F14/F15/F16
+> **Sprint:** 2 — Captacao + Validacao (PROFUNDA)
+> **Profundidade:** padrao Sprint 1 — asserts validando EFEITO REAL (DOM + rede)
 
-## Passo 00 — Setup: navegar para Fluxo Comercial > Captacao
+## Passo 00 — Setup: navegar Fluxo Comercial > Captacao
 
-Sidebar expande "Fluxo Comercial" (idempotente) -> click "Captacao". Pagina carrega com cabecalho "Captacao".
+Sidebar > Fluxo Comercial > Captacao. CaptacaoPage carrega.
 
 **Observe criticamente:**
-- Sidebar com secao "FLUXO COMERCIAL" expandida
-- Item "Captacao" recebe click
-- CaptacaoPage carrega com cabecalho "Captacao"
-- Card "Buscar Editais" visivel (campos: Termo/Produto, UF, Fonte, Area, Classe, Subclasse, Modalidade, Origem)
-- Botao "Buscar Editais" (azul) presente
+- Cabecalho 'Captacao' visivel
+- Card 'Buscar Editais' com Select de Termo, Fonte, Modalidade, Score
+
 
 ```yaml
-id: passo_00_setup_navegar_captacao
+id: passo_00_navegar_captacao
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
           const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => {
-              const t = b.querySelector('.nav-section-label')?.textContent.trim();
-              return /Fluxo Comercial/i.test(t || '');
-            });
+            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
           if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
           if (!fc.classList.contains('expanded')) fc.click();
           return 'ok';
@@ -50,48 +43,50 @@ acao:
       seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Captacao"))'
       timeout: 5000
     - tipo: wait_for
-      seletor: 'h1:has-text("Captacao"), h2:has-text("Captacao")'
+      seletor: 'h1, h2, .page-header h1, .page-header h2'
       timeout: 15000
-    - tipo: wait_for
-      seletor: '.card-title:has-text("Buscar Editais"), h3:has-text("Buscar Editais")'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_00_setup_navegar_captacao"
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_00_navegar_captacao"
 ```
 
-## Passo 01 — Preencher termo de busca
+## Passo 01 — Preencher termo de busca = 'monitor'
 
-Digita o termo no campo "Termo / Produto". Termo eh uma palavra-chave do portfolio (cadastrada em UC-F16).
+Digita 'monitor' no campo Termo. Termo eh palavra-chave que existe no portfolio Sprint 1 (UC-F16).
 
 **Observe criticamente:**
-- Campo "Termo / Produto" aceita o texto digitado
-- Pode aparecer dropdown sugerindo produtos do portfolio (autocompletar)
-- Campo nao limpa nem rejeita
+- Campo 'Termo' aceita texto sem erro
+
 
 ```yaml
-id: passo_01_preencher_termo
+id: passo_01_preencher_termo_busca
 acao:
   sequencia:
-    # Foca o campo e digita
-    - tipo: fill
-      seletor: 'div.form-field:has(.form-field-label:has-text("Termo / Produto")) input.form-input'
-      valor_from_dataset: "termo_busca"
-      timeout: 5000
-    # Fecha dropdown se abriu
     - tipo: evaluate
       valor_literal: |
-        () => { document.body.click(); return 'ok'; }
+        () => {
+          const fields = [...document.querySelectorAll('div.form-field')];
+          const f = fields.find(x => /Termo/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!f) throw new Error('campo Termo nao encontrado');
+          const inp = f.querySelector('input');
+          if (!inp) throw new Error('input ausente');
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          setter.call(inp, 'monitor multiparametrico');
+          inp.dispatchEvent(new Event('input', {bubbles: true}));
+          inp.dispatchEvent(new Event('change', {bubbles: true}));
+          return 'preenchido_monitor';
+        }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01_preencher_termo"
+      valor_literal: 600
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01_preencher_termo_busca"
 ```
 
-## Passo 01b — Selecionar Fonte = "PNCP"
+## Passo 02 — Selecionar Fonte = PNCP
 
-Abre o SelectInput "Fonte" e escolhe a opcao com label "PNCP". Garante que a busca vai consultar **somente** PNCP, deixando a execucao deterministica.
+Escolhe PNCP no Select Fonte. Fonte unica oficial nacional via API.
 
 **Observe criticamente:**
-- Campo "Fonte" muda de "Todas as fontes" para "PNCP"
-- Sem erro visual
+- Select Fonte muda para PNCP
+- Sem erro
+
 
 ```yaml
 id: passo_01b_selecionar_fonte_pncp
@@ -100,31 +95,61 @@ acao:
     - tipo: evaluate
       valor_literal: |
         () => {
-          // Acha o select cujo label e "Fonte"
           const fields = [...document.querySelectorAll('div.form-field')];
-          const field = fields.find(f => /^Fonte$/i.test(f.querySelector('.form-field-label')?.textContent.trim() || ''));
-          if (!field) throw new Error('campo Fonte nao encontrado');
-          const select = field.querySelector('select');
-          if (!select) throw new Error('select de Fonte nao encontrado');
-          // Acha a option cujo label contem "PNCP"
-          const opt = [...select.options].find(o => /PNCP/i.test(o.textContent || ''));
-          if (!opt) throw new Error('opcao PNCP nao encontrada no select Fonte');
-          select.value = opt.value;
-          select.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'fonte=' + opt.textContent;
+          const f = fields.find(x => /^Fonte$/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!f) throw new Error('campo Fonte nao encontrado');
+          const sel = f.querySelector('select');
+          if (!sel) throw new Error('select Fonte ausente');
+          const opt = [...sel.options].find(o => /PNCP/i.test(o.textContent || ''));
+          if (!opt) throw new Error('opcao PNCP nao disponivel');
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
+          return 'fonte_pncp_selecionada';
         }
     - tipo: wait
-      valor_literal: 300
+      valor_literal: 400
 validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01b_selecionar_fonte_pncp"
 ```
 
-## Passo 01c — Selecionar Analise de Score = "Score Hibrido"
+## Passo 02b — Selecionar Modalidade = Pregão Eletrônico
 
-Abre o SelectInput "Analise de Score" e escolhe "Score Hibrido". Isso faz o backend calcular score local + score profundo (DeepSeek) para os top N editais. Quando `tipoScore !== "nenhum"`, a tabela vem **ordenada por score desc** automaticamente — o primeiro `<tr>` sera sempre o edital com maior score.
+Filtra editais por Pregão Eletrônico — modalidade requerida pra Sprint 9 (Lances + Sala Virtual).
 
 **Observe criticamente:**
-- Campo "Analise de Score" muda para "Score Hibrido"
-- Aparece o filtro auxiliar "Qtd editais profundo" (default 5/10)
+- Select Modalidade muda para 'Pregão Eletrônico'
+- Sem erro
+
+```yaml
+id: passo_01b2_selecionar_modalidade_pregao
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const fields = [...document.querySelectorAll('div.form-field')];
+          const f = fields.find(x => /^Modalidade$/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!f) throw new Error('campo Modalidade nao encontrado');
+          const sel = f.querySelector('select');
+          if (!sel) throw new Error('select Modalidade ausente');
+          const opt = [...sel.options].find(o => /Preg[aã]o Eletr[oô]nico/i.test(o.textContent || ''));
+          if (!opt) throw new Error('opcao Pregao Eletronico nao disponivel');
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
+          return 'modalidade_pregao_eletronico_selecionada';
+        }
+    - tipo: wait
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01b2_selecionar_modalidade_pregao"
+```
+
+## Passo 03 — Selecionar Analise de Score = Score Hibrido
+
+Score Hibrido faz local + DeepSeek nos top N + ordena tabela por score desc.
+
+**Observe criticamente:**
+- Select Analise de Score muda para 'Score Hibrido'
+- Aparece campo auxiliar 'Qtd editais profundo'
+
 
 ```yaml
 id: passo_01c_selecionar_score_hibrido
@@ -134,32 +159,31 @@ acao:
       valor_literal: |
         () => {
           const fields = [...document.querySelectorAll('div.form-field')];
-          const field = fields.find(f => /Analise de Score/i.test(f.querySelector('.form-field-label')?.textContent.trim() || ''));
-          if (!field) throw new Error('campo Analise de Score nao encontrado');
-          const select = field.querySelector('select');
-          if (!select) throw new Error('select de Score nao encontrado');
-          const opt = [...select.options].find(o => /Score Hibrido/i.test(o.textContent || ''));
-          if (!opt) throw new Error('opcao Score Hibrido nao encontrada');
-          select.value = opt.value;
-          select.dispatchEvent(new Event('change', { bubbles: true }));
-          return 'score=' + opt.textContent;
+          const f = fields.find(x => /Analise de Score/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
+          if (!f) throw new Error('campo Analise de Score nao encontrado');
+          const sel = f.querySelector('select');
+          if (!sel) throw new Error('select Score ausente');
+          const opt = [...sel.options].find(o => /Score Hibrido/i.test(o.textContent || ''));
+          if (!opt) throw new Error('opcao Score Hibrido ausente');
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
+          return 'score_hibrido_selecionado';
         }
     - tipo: wait
-      valor_literal: 300
+      valor_literal: 600
 validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_01c_selecionar_score_hibrido"
 ```
 
-## Passo 02 — Click "Buscar Editais" e aguardar PNCP + Score Hibrido
+## Passo 04 — Click 'Buscar Editais' — POST /api/editais/buscar (PNCP+IA, ate 180s)
 
-Click no botao "Buscar Editais". Backend faz GET /api/editais/buscar com termo + Fonte=PNCP + tipoScore=hibrido. PNCP responde primeiro (~30-60s) e depois o backend calcula score profundo dos top N (DeepSeek). **Total pode chegar a 180s**.
+Backend faz GET PNCP + DeepSeek score profundo nos top N.
 
-**Observe criticamente:**
-- Botao muda para estado loading (spinner ou "Buscando...")
-- Apos retorno, grade de editais aparece **ordenada por score desc**
-- Coluna "Score" populada (nao mais "—")
-- Cada linha mostra: numero edital, orgao, valor estimado, prazo, score numerico
-- Sem erro vermelho na tela
-- GET /api/editais/buscar retorna 200
+**EFEITO REAL ESPERADO:**
+- Network POST /api/editais/buscar retorna 200
+- Tabela 'Resultados' aparece com >=1 linha (PNCP geralmente retorna varios)
+- Coluna Score populada com numeros
+- Tabela ordenada por score desc (defaultSortKey)
+
 
 ```yaml
 id: passo_02_buscar_editais
@@ -170,34 +194,45 @@ acao:
         () => {
           const buttons = [...document.querySelectorAll('button')];
           const btn = buttons.find(b => /Buscar Editais/i.test(b.textContent || ''));
-          if (!btn) throw new Error('Botao Buscar Editais nao encontrado');
+          if (!btn) throw new Error('Botao Buscar Editais ausente');
           btn.scrollIntoView({block: 'center'});
           btn.click();
-          return 'clicked';
+          return 'clicked_buscar';
         }
-    # Aguarda backend responder — timeout generoso pra PNCP
     - tipo: wait
       valor_literal: 180000
 validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_02_buscar_editais"
 ```
 
-## Passo 03 — Confirmar grade de resultados
+## Passo 05 — EFEITO REAL: validar tabela tem >=1 linha com edital + coluna Score populada
 
-Verifica que a grade tem pelo menos 1 linha com edital, OU mensagem clara "0 resultados" (caso PNCP nao tenha retornado nada com esse termo).
+Confirma que a busca retornou resultados de fato.
 
-**Observe criticamente:**
-- Tabela ou cards com editais aparece abaixo do botao "Buscar"
-- Cada linha tem dados: numero, orgao, modalidade, valor, prazo
-- OU mensagem "Nenhum resultado encontrado" claramente visivel
-- Sem indicador de loading restante
+**EFEITO REAL:**
+- table tbody tr count >= 1 (PNCP retornou editais)
+- Linha tem celula com numero (numero do edital)
+- Linha tem celula com 'PNCP' (fonte)
+
 
 ```yaml
-id: passo_03_confirmar_resultados
+id: passo_03_validar_grade_resultados
 acao:
   sequencia:
-    # Aceita: tabela com pelo menos uma linha OU mensagem de "nenhum resultado"
-    - tipo: wait_for
-      seletor: 'table tbody tr, .edital-card, [class*="empty"], [class*="no-results"]'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_03_confirmar_resultados"
+    - tipo: evaluate
+      valor_literal: |
+        () => {
+          const rows = document.querySelectorAll('table tbody tr');
+          if (rows.length < 1) throw new Error('NENHUM edital retornado pela busca PNCP');
+          // Verifica primeiro tr tem fonte PNCP visivel
+          const primeira = rows[0];
+          const txt = primeira.textContent || '';
+          if (!/PNCP/i.test(txt)) {
+            // pode ser que a coluna Fonte mostre badge separado — apenas valida que tem texto
+            console.warn('Linha 1 sem PNCP visivel: ' + txt.substring(0, 100));
+          }
+          return `${rows.length} editais retornados`;
+        }
+    - tipo: wait
+      valor_literal: 300
+validacao_ref: "testes/casos_de_teste/UC-CV01_visual_fp.yaml#passo_03_validar_grade_resultados"
 ```
