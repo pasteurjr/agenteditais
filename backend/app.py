@@ -84,6 +84,14 @@ app.register_blueprint(crm_bp)
 from audit_middleware import register_audit_hooks
 register_audit_hooks(app)
 
+# Sprint 9/10 — Simulador de Pregao Eletronico (LangNet + DeepSeek)
+import sys as _sys_pregao
+from pathlib import Path as _Path_pregao
+_sys_pregao.path.insert(0, str(_Path_pregao(__file__).resolve().parent / "pregao"))
+_sys_pregao.path.insert(0, str(_Path_pregao(__file__).resolve().parent / "langnet"))
+from pregao.api_simulador import register_simulador_routes
+register_simulador_routes(app)
+
 # JWT Config
 JWT_SECRET = "editais-ia-secret-key-change-in-production-2024"
 JWT_EXPIRY_HOURS = 24
