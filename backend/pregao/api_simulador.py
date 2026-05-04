@@ -164,4 +164,75 @@ def register_simulador_routes(app):
                  "criado_em": str(r[3]), "encerrado_em": str(r[4]) if r[4] else None}
                 for r in rows]})
 
-    print("[simulador] 5 endpoints registrados em /api/simulador/*")
+    # ===== Modo INTERATIVO (operador como 6º licitante) =====
+
+    @app.route("/api/simulador/interativo/iniciar", methods=["POST"])
+    def simulador_interativo_iniciar():
+        from sessao_interativa import criar_sessao_interativa
+        data = request.get_json(silent=True) or {}
+        try:
+            res = criar_sessao_interativa(
+                valor_referencia=float(data.get("valor_referencia", 200.0)),
+                custo_base=float(data.get("custo_base", 100.0)),
+                modalidade=data.get("modalidade", "aberto"),
+                operador_participa=bool(data.get("operador_participa", True)),
+                operador_custo_estimado=float(data.get("operador_custo", 100.0)),
+                use_llm=bool(data.get("use_llm", True)),
+            )
+            return jsonify({"ok": True, **res}), 201
+        except Exception as ex:
+            import traceback
+            return jsonify({"ok": False, "erro": str(ex), "trace": traceback.format_exc()}), 500
+
+    @app.route("/api/simulador/interativo/<sessao_id>/estado", methods=["GET"])
+    def simulador_interativo_estado(sessao_id):
+        from sessao_interativa import obter_estado
+        try:
+            return jsonify({"ok": True, **obter_estado(sessao_id)})
+        except Exception as ex:
+            return jsonify({"ok": False, "erro": str(ex)}), 500
+
+    @app.route("/api/simulador/interativo/<sessao_id>/propostas", methods=["POST"])
+    def simulador_interativo_propostas(sessao_id):
+        from sessao_interativa import coletar_propostas_iniciais
+        data = request.get_json(silent=True) or {}
+        valor_op = data.get("valor_proposta_operador")
+        if valor_op is not None: valor_op = float(valor_op)
+        res = coletar_propostas_iniciais(sessao_id, valor_op)
+        return jsonify(res)
+
+    @app.route("/api/simulador/interativo/<sessao_id>/avancar", methods=["POST"])
+    def simulador_interativo_avancar(sessao_id):
+        from sessao_interativa import avancar_rodada
+        data = request.get_json(silent=True) or {}
+        lance_op = data.get("lance_operador")
+        if lance_op is not None: lance_op = float(lance_op)
+        passar = bool(data.get("passar_operador", False))
+        res = avancar_rodada(sessao_id, lance_op, passar)
+        return jsonify(res)
+
+    @app.route("/api/simulador/interativo/<sessao_id>/negociar", methods=["POST"])
+    def simulador_interativo_negociar(sessao_id):
+        from sessao_interativa import executar_negociacao
+        return jsonify(executar_negociacao(sessao_id))
+
+    @app.route("/api/simulador/interativo/<sessao_id>/habilitar", methods=["POST"])
+    def simulador_interativo_habilitar(sessao_id):
+        from sessao_interativa import executar_habilitacao
+        return jsonify(executar_habilitacao(sessao_id))
+
+    @app.route("/api/simulador/interativo/<sessao_id>/adjudicar", methods=["POST"])
+    def simulador_interativo_adjudicar(sessao_id):
+        from sessao_interativa import executar_adjudicacao
+        return jsonify(executar_adjudicacao(sessao_id))
+
+    @app.route("/api/simulador/interativo/<sessao_id>/chat", methods=["POST"])
+    def simulador_interativo_chat(sessao_id):
+        from sessao_interativa import instruir_pregoeiro
+        data = request.get_json(silent=True) or {}
+        msg = data.get("mensagem", "").strip()
+        if not msg:
+            return jsonify({"ok": False, "erro": "mensagem vazia"}), 400
+        return jsonify(instruir_pregoeiro(sessao_id, msg))
+
+    print("[simulador] 5 endpoints batch + 7 endpoints interativos registrados em /api/simulador/*")

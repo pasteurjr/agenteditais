@@ -57,6 +57,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
       { id: "proposta", icon: <FileText size={16} />, label: "Proposta", page: "proposta" },
       { id: "submissao", icon: <Send size={16} />, label: "Submissao", page: "submissao" },
       { id: "lances", icon: <Gavel size={16} />, label: "Disputa Lances", page: "lances" },
+      { id: "simulador", icon: <Gavel size={16} />, label: "Simulador Pregão", page: "simulador" },
       { id: "recursos", icon: <Shield size={16} />, label: "Recursos", page: "recursos" },
       { id: "followup", icon: <Clock size={16} />, label: "Followup", page: "followup" },
       { id: "crm", icon: <Users size={16} />, label: "CRM", page: "crm" },
