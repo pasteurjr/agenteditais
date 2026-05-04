@@ -1,0 +1,12 @@
+uc_id: UC-LA01
+variacao: fp
+trilha: visual
+descricao: "Simulador de Lance Deterministico (PrecificacaoPage)"
+
+passos:
+  - id: passo_00_navegar_precificacao
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2'
+
+  - id: passo_01_validar_carregamento
+    # Sem assert (validacao via screenshot)

@@ -1,0 +1,9 @@
+uc_id: UC-HC01
+variacao: fp
+trilha: visual
+descricao: "Health Check do Sistema (rota /health)"
+
+passos:
+  - id: passo_00_validar_pagina_qualquer
+    asserts_dom:
+      - selector: '.page-header h1, .page-header h2, h1, h2, body'

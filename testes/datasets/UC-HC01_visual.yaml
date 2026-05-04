@@ -1,0 +1,17 @@
+uc_id: UC-HC01
+trilha: visual
+variacao: fp
+descricao: |
+  Health Check do Sistema (rota /health).
+  Predecessores: [infra]
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-HC01: rota /health do backend retorna 200. Sprint 10 simulador adiciona endpoints /api/simulador/* — todos disponiveis"

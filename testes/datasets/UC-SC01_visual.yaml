@@ -1,0 +1,17 @@
+uc_id: UC-SC01
+trilha: visual
+variacao: fp
+descricao: |
+  Score de Competitividade (PrecificacaoPage + CaptacaoPage).
+  Predecessores: UC-CV01 + UC-P11
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-SC01: score competitividade"

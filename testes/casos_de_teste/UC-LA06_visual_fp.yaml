@@ -1,0 +1,8 @@
+uc_id: UC-LA06
+variacao: fp
+trilha: visual
+descricao: "Envio Automatico de Lances (Robo de Lances)"
+
+passos:
+  - id: passo_00_garantir_lances
+    # Sem assert (validacao via screenshot)

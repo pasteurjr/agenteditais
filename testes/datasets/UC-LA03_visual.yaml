@@ -1,0 +1,17 @@
+uc_id: UC-LA03
+trilha: visual
+variacao: fp
+descricao: |
+  Sala Virtual de Disputa (LancesPage + Simulador).
+  Predecessores: UC-CV03 + Simulador
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-LA03: Sala Virtual. Sprint 10 simulador popula simulador_sessoes (3+ sessoes 'encerrado' disponiveis para visualizacao)"

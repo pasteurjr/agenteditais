@@ -1,0 +1,17 @@
+uc_id: UC-SC03
+trilha: visual
+variacao: fp
+descricao: |
+  Score Numerico de Recurso (RecursosPage).
+  Predecessores: UC-RE01
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-SC03: score recurso"

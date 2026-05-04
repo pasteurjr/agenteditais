@@ -1,0 +1,8 @@
+uc_id: UC-SC05
+variacao: fp
+trilha: visual
+descricao: "DRE do Contrato (ContratadoRealizadoPage + Precificacao)"
+
+passos:
+  - id: passo_00_garantir_cr
+    # Sem assert (validacao via screenshot)

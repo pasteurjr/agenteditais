@@ -1,0 +1,17 @@
+uc_id: UC-SC04
+trilha: visual
+variacao: fp
+descricao: |
+  Tempo Medio do 1o Empenho (ContratadoRealizadoPage).
+  Predecessores: UC-CT07
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-SC04: tempo medio 1o empenho"

@@ -1,0 +1,8 @@
+uc_id: UC-LA04
+variacao: fp
+trilha: visual
+descricao: "Lance Aberto + Fechado (modalidade aberto+fechado)"
+
+passos:
+  - id: passo_00_garantir_lances
+    # Sem assert (validacao via screenshot)

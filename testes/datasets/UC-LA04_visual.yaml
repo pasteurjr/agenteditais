@@ -1,0 +1,17 @@
+uc_id: UC-LA04
+trilha: visual
+variacao: fp
+descricao: |
+  Lance Aberto + Fechado (modalidade aberto+fechado).
+  Predecessores: UC-LA03
+  Sprint 9 (Lances/Sala Virtual + Scores + HC).
+  Mesma empresa/user herdados das Sprints 1-8 via teste_base_id.
+
+  *** Sprint 10 SIMULADOR jah implementado (backend + UI) — popula tabelas
+  simulador_sessoes/agentes/lances que UC-LA03/LA06 podem visualizar. ***
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+nota: "UC-LA04: modalidade aberto+fechado. Simulador Sprint 10 ja suporta (executor_pregao.py linha 269)"
