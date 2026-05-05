@@ -13,6 +13,7 @@
 > - UC-F03: 8 novos tipos de documento expostos no dropdown (AFE ANVISA, ISO, Certidão Estadual etc.) — UI corrigida
 > - UC-F03: caminho do arquivo PDF revisado — usar arquivos da pasta `docs/documentos_sintetizados`
 > - UC-F04: removido passo "Inicializar Fontes Padrão"; listadas as 9 fontes reais
+> - UC-F04: adicionado **Passo 0.5 (opcional)** — CRUD de Fontes de Certidões (Cadastros → Fontes de Certidões). Cadastra 3 fontes específicas para Vita-Sense/PR: **PGFN** (Federal), **SEFAZ-PR** (Estadual), **Prefeitura de Curitiba** (Municipal). Mais cenários de desativar/reativar.
 > - UC-F06: explicitado empty state esperado para portfólio vazio
 > - UC-F07: campo NCM com máscara automática
 > - UC-F07: aviso para usar upload IA em produto NOVO
@@ -581,6 +582,100 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ✅ **Correto se:** As 9 fontes aparecem listadas (não 5 como em versões antigas).
 ❌ **Problema se:** Tela aparece vazia ou retorna erro ao carregar fontes.
+
+---
+
+### Passo 0.5 (Opcional) — Cadastrar / editar fontes de certidão (CRUD)
+
+> **NOVO em V4:** existe uma tela CRUD para gerenciar (criar, editar, ativar/desativar, excluir) fontes de certidões. Esse passo cadastra **3 novas fontes específicas para Vita-Sense (PR/Curitiba)** que complementam as 9 pré-cadastradas.
+
+**Onde:** Sidebar → **Cadastros → Fontes de Certidões** (item com ícone de globo 🌐)
+
+**Cenário de validação A — cadastrar 3 fontes complementares (Vita-Sense/PR):**
+
+#### Fonte 1 — CND Federal: PGFN (Dívida Ativa da União)
+
+1. Clique em **+ Novo** no canto superior direito
+2. Preencha:
+
+| Campo | Valor |
+|---|---|
+| Tipo de Certidão | `CND Federal` |
+| Nome da Fonte | `PGFN - Dívida Ativa da União` |
+| Órgão Emissor | `Procuradoria-Geral da Fazenda Nacional` |
+| URL do Portal | `https://www.regularize.pgfn.gov.br/` |
+| Método de Acesso | `Público` |
+| Permitir Busca Automática | ✅ ON |
+| Ativo | ✅ ON |
+| Observações | `Certidão Conjunta de Débitos Federais (RFB+PGFN). Validade 180 dias.` |
+
+3. Clique em **Salvar**.
+
+#### Fonte 2 — CND Estadual: SEFAZ-PR (ICMS Paraná)
+
+1. Clique em **+ Novo**
+2. Preencha:
+
+| Campo | Valor |
+|---|---|
+| Tipo de Certidão | `CND Estadual` |
+| Nome da Fonte | `SEFAZ-PR - CND ICMS` |
+| Órgão Emissor | `Secretaria de Estado da Fazenda do Paraná` |
+| URL do Portal | `https://www.fazenda.pr.gov.br/Pagina/Certidao-Negativa-Estadual` |
+| Método de Acesso | `Público` |
+| UF | `PR` |
+| Permitir Busca Automática | ✅ ON |
+| Ativo | ✅ ON |
+| Observações | `CND ICMS Paraná - emissão online via portal SEFAZ/PR para Vita-Sense.` |
+
+3. Clique em **Salvar**.
+
+#### Fonte 3 — CND Municipal: Prefeitura de Curitiba (ISS)
+
+1. Clique em **+ Novo**
+2. Preencha:
+
+| Campo | Valor |
+|---|---|
+| Tipo de Certidão | `CND Municipal` |
+| Nome da Fonte | `Prefeitura de Curitiba - CND ISS` |
+| Órgão Emissor | `Prefeitura Municipal de Curitiba` |
+| URL do Portal | `https://iss.curitiba.pr.gov.br/iss/Cnd.aspx` |
+| Método de Acesso | `Público` |
+| UF | `PR` |
+| Cidade | `Curitiba` |
+| Permitir Busca Automática | ✅ ON |
+| Ativo | ✅ ON |
+| Observações | `CND ISS Curitiba - portal próprio da Prefeitura. Exigida em editais municipais.` |
+
+3. Clique em **Salvar**.
+
+✅ **Correto se:** As 3 fontes novas aparecem na lista, totalizando 12 fontes (9 pré-existentes + 3 novas), todas com badge "Ativo".
+
+**Cenário de validação B — desativar uma fonte existente:**
+
+1. Localize uma fonte (ex: `BrasilAPI Situação CNPJ`)
+2. Clique em **edição** (lápis)
+3. Desmarque o checkbox **Ativo**
+4. Salve
+
+✅ **Correto se:** Status muda para "Inativo".
+
+**Cenário de validação C — reativar:**
+
+1. Edite a fonte desativada acima
+2. Marque **Ativo** ✅ novamente
+3. Salve
+
+✅ **Correto se:** Volta para "Ativo".
+
+📌 **Observação importante:** as 3 fontes cadastradas em A ficam no banco para uso futuro. Se desativar uma fonte em B, **reative depois** para não impactar a busca real.
+
+🔴 **Sinais de problema:**
+- Item "Fontes de Certidões" não aparece na sidebar (verifique se você é superusuário)
+- Tela CRUD em branco ou erro 500
+- Não salva (campos obrigatórios ou erro de permissão)
+- Erro de "fonte duplicada" — significa que essa URL já existe; troque o nome ou pule
 
 ---
 

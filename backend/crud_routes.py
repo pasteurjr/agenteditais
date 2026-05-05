@@ -388,6 +388,7 @@ CRUD_TABLES = {
     "fontes-certidoes": {
         "model": FonteCertidao,
         "empresa_scoped": True,
+        "include_globais": True,  # NOVO: tambem mostra fontes com empresa_id IS NULL (catalogo do sistema)
         "search_fields": ["nome", "tipo_certidao", "orgao_emissor", "url_portal", "uf", "cidade"],
         "label": "Fonte de Certidão",
         "required": ["tipo_certidao", "nome", "url_portal"],
@@ -1052,7 +1053,15 @@ def crud_list(table_slug):
 
         # Scope by empresa if empresa_scoped
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
-            query = query.filter(model.empresa_id == empresa_id)
+            if config.get("include_globais"):
+                # Catalogos (ex: fontes_certidoes): mostra registros da empresa OU globais (NULL)
+                from sqlalchemy import or_ as _or_
+                query = query.filter(_or_(
+                    model.empresa_id == empresa_id,
+                    model.empresa_id.is_(None),
+                ))
+            else:
+                query = query.filter(model.empresa_id == empresa_id)
         elif table_slug == 'empresas':
             # Superuser sempre vê todas as empresas (independente da empresa_id no JWT)
             if is_super:
@@ -1160,7 +1169,14 @@ def crud_get(table_slug, record_id):
     try:
         query = db.query(model).filter(model.id == record_id)
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
-            query = query.filter(model.empresa_id == empresa_id)
+            if config.get("include_globais"):
+                from sqlalchemy import or_ as _or_
+                query = query.filter(_or_(
+                    model.empresa_id == empresa_id,
+                    model.empresa_id.is_(None),
+                ))
+            else:
+                query = query.filter(model.empresa_id == empresa_id)
         elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
@@ -1371,13 +1387,28 @@ def crud_update(table_slug, record_id):
         query = db.query(model).filter(model.id == record_id)
         empresa_id = get_current_empresa_id()
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
-            query = query.filter(model.empresa_id == empresa_id)
+            if config.get("include_globais"):
+                # Permite buscar global pra UPDATE, mas só admin pode salvar (verificado abaixo)
+                from sqlalchemy import or_ as _or_
+                query = query.filter(_or_(
+                    model.empresa_id == empresa_id,
+                    model.empresa_id.is_(None),
+                ))
+            else:
+                query = query.filter(model.empresa_id == empresa_id)
         elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()
         if not instance:
             return jsonify({"error": f"{config['label']} não encontrado(a)"}), 404
+
+        # Bloqueia edicao de registros GLOBAIS (empresa_id IS NULL) por user nao-admin
+        if config.get("include_globais") and getattr(instance, "empresa_id", None) is None:
+            if not is_super:
+                return jsonify({
+                    "error": f"Esta {config['label']} é do catálogo do sistema (compartilhada). Só superusuários podem editá-la. Para usar uma versão personalizada, crie uma nova fonte com seus próprios dados."
+                }), 403
 
         # RN-037: capturar snapshot "antes" para audit log (best-effort)
         _dados_antes_audit = None
@@ -1495,13 +1526,27 @@ def crud_delete(table_slug, record_id):
         query = db.query(model).filter(model.id == record_id)
         empresa_id = get_current_empresa_id()
         if config.get("empresa_scoped") and hasattr(model, "empresa_id") and empresa_id:
-            query = query.filter(model.empresa_id == empresa_id)
+            if config.get("include_globais"):
+                from sqlalchemy import or_ as _or_
+                query = query.filter(_or_(
+                    model.empresa_id == empresa_id,
+                    model.empresa_id.is_(None),
+                ))
+            else:
+                query = query.filter(model.empresa_id == empresa_id)
         elif config.get("user_scoped") and hasattr(model, "user_id") and not is_admin:
             query = query.filter(model.user_id == user_id)
 
         instance = query.first()
         if not instance:
             return jsonify({"error": f"{config['label']} não encontrado(a)"}), 404
+
+        # Bloqueia DELETE de registros GLOBAIS por user nao-admin
+        if config.get("include_globais") and getattr(instance, "empresa_id", None) is None:
+            if not is_super:
+                return jsonify({
+                    "error": f"Esta {config['label']} é do catálogo do sistema (compartilhada). Só superusuários podem excluí-la."
+                }), 403
 
         db.delete(instance)
         db.commit()

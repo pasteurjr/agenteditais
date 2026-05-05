@@ -60,7 +60,9 @@ export default function Teste() {
     try {
       const r = await fn()
       if (abrePainel && (r?.painel_url || r?.run_id)) {
-        window.open(r.painel_url || 'http://localhost:9876', '_blank')
+        // Fallback: usa o mesmo hostname pelo qual o user acessou a UI (5181 ou tunnel)
+        const fallback = `${window.location.protocol}//${window.location.hostname}:9876`;
+        window.open(r.painel_url || fallback, '_blank')
       }
       await carregar()
       return r
@@ -160,7 +162,8 @@ export default function Teste() {
               </button>
             )}
             {teste.pid_executor && (
-              <a href="http://localhost:9876" target="_blank" rel="noreferrer">
+              <a href={`${window.location.protocol}//${window.location.hostname}:9876`}
+                 target="_blank" rel="noreferrer">
                 <button className="primary">🎬 Abrir Painel</button>
               </a>
             )}

@@ -226,7 +226,7 @@ def criar_app(estado: EstadoSessao) -> Flask:
     return app
 
 
-def iniciar_painel_em_thread(estado: EstadoSessao, host: str = "localhost", porta: int = 9876) -> threading.Thread:
+def iniciar_painel_em_thread(estado: EstadoSessao, host: str = "0.0.0.0", porta: int = 9876) -> threading.Thread:
     """
     Sobe o Flask em thread daemon. Retorna a thread (pra join opcional).
 
@@ -268,5 +268,5 @@ if __name__ == "__main__":
     ]
 
     app = criar_app(estado)
-    print(f"Painel demo em http://localhost:{args.port}")
-    app.run(host="localhost", port=args.port, debug=False)
+    print(f"Painel demo em http://0.0.0.0:{args.port} (acessivel externamente)")
+    app.run(host="0.0.0.0", port=args.port, debug=False)

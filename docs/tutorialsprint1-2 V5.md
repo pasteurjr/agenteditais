@@ -1,13 +1,21 @@
-# Tutorial de Validação Manual — Sprint 1 — Conjunto 2 V4
+# Tutorial de Validação Manual — Sprint 1 — Conjunto 2 V5
 # Empresa: Bio-Hosp Equipamentos Hospitalares Ltda.
 
-**Data:** 05/05/2026 (V4)
+**Data:** 05/05/2026 (V5)
 **Dados:** dadosempportpar-2 V3.md
 **Referência:** CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V2.md
 **UCs:** F01–F17 (17 casos de uso)
 **Público:** Dono do Produto / Validador de Negócio (sem conhecimento técnico necessário)
 
-> **CHANGELOG V4 (vs V3) — após análise das observações de Arnaldo:**
+> **CHANGELOG V5 (vs V4):**
+>
+> - UC-F04 Passo 0.5 reformulado: as 3 fontes a cadastrar agora são **as que faltam para os editais reais das próximas sprints (Sprints 2-9)**:
+>   1. **PGFN — Dívida Ativa da União** (URL específica do REGULARIZE) — fonte principal complementar à CND Federal conjunta RFB+PGFN
+>   2. **CND Municipal de Itamarandiba/MG** — exigida pelo edital de teste `0031/2026 - MUNICIPIO DE ITAMARANDIBA`
+>   3. **Junta Comercial de MG (JUCEMG)** — exigida em editais que pedem "Certidão Simplificada da Junta Comercial"
+> - Esclarecimento técnico: a **CND Federal pré-cadastrada** (RFB/PGFN conjunta) é a **fonte oficial principal** desde a Portaria MF 358/2014. PGFN isolada é **complemento** para validar a integração separada.
+>
+> **CHANGELOG V4 (mantido):**
 >
 > - UC-F01: corrigidas 5 ocorrências erradas de `SP` para `MG` (cidade Belo Horizonte/MG)
 > - UC-F01: nova orientação para usar **Configurações → Empresa** após primeiro login
@@ -593,25 +601,26 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ---
 
-### Passo 0.5 (Opcional) — Cadastrar / editar fontes de certidão (CRUD)
+### Passo 0.5 (Importante) — Cadastrar 3 fontes de certidão necessárias para os editais
 
-> **NOVO em V4:** existe uma tela CRUD para gerenciar (criar, editar, ativar/desativar, excluir) fontes de certidões. Esse passo cadastra **3 novas fontes específicas para Bio-Hosp (MG/BH)** que complementam as 9 pré-cadastradas.
+> **V5 — Mudança importante:** as 3 fontes que vamos cadastrar agora **NÃO são exemplos genéricos** — elas cobrem **lacunas reais** dos editais de teste das próximas sprints (2-9). Sem essas fontes, Bio-Hosp não consegue habilitação completa nos editais que vamos validar.
+
+**Contexto técnico:**
+
+A fonte pré-cadastrada **CND Federal (Receita Federal / PGFN conjunta)** é a **fonte oficial principal** desde a Portaria MF 358/2014, que unificou a CND da Receita Federal com a CND da Dívida Ativa da União (PGFN) num único documento.
+**Mesmo assim**, a PGFN mantém um portal próprio (REGULARIZE) que pode ser usado para consulta isolada de Dívida Ativa em casos específicos. Validamos a integração separada cadastrando-a abaixo.
 
 **Onde:** Sidebar → **Cadastros → Fontes de Certidões** (item com ícone de globo 🌐)
 
-**Cenário de validação A — cadastrar 3 fontes complementares (Bio-Hosp/MG):**
-
-#### Fonte 1 — CND Federal: PGFN (Dívida Ativa da União)
-
-A fonte pré-cadastrada "CND Federal - Receita Federal / PGFN" cobre as duas conjuntamente. Aqui cadastramos a **PGFN especificamente** para validar a integração isolada.
+#### Fonte 1 — PGFN: Dívida Ativa da União (REGULARIZE) — **complementar à CND Federal conjunta**
 
 1. Clique em **+ Novo** no canto superior direito
-2. Preencha:
+2. Preencha exatamente:
 
 | Campo | Valor |
 |---|---|
 | Tipo de Certidão | `CND Federal` |
-| Nome da Fonte | `PGFN - Dívida Ativa da União` |
+| Nome da Fonte | `PGFN - REGULARIZE (Dívida Ativa)` |
 | Órgão Emissor | `Procuradoria-Geral da Fazenda Nacional` |
 | URL do Portal | `https://www.regularize.pgfn.gov.br/` |
 | URL da API | (em branco) |
@@ -619,32 +628,13 @@ A fonte pré-cadastrada "CND Federal - Receita Federal / PGFN" cobre as duas con
 | Requer Autenticação | OFF |
 | Permitir Busca Automática | ✅ ON |
 | Ativo | ✅ ON |
-| Observações | `Certidão Conjunta de Débitos Federais (RFB+PGFN). Validade 180 dias.` |
+| Observações | `Portal REGULARIZE da PGFN. A CND Federal conjunta (RFB+PGFN) já cobre Dívida Ativa, mas esta fonte permite consulta isolada e validação separada.` |
 
 3. Clique em **Salvar**.
 
-#### Fonte 2 — CND Estadual: SEFAZ-MG (ICMS direto)
+#### Fonte 2 — CND Municipal de Itamarandiba/MG (necessária para edital `0031/2026`)
 
-1. Clique em **+ Novo**
-2. Preencha:
-
-| Campo | Valor |
-|---|---|
-| Tipo de Certidão | `CND Estadual` |
-| Nome da Fonte | `SEFAZ-MG - CND ICMS Direta` |
-| Órgão Emissor | `Secretaria de Estado de Fazenda de Minas Gerais` |
-| URL do Portal | `https://www2.fazenda.mg.gov.br/sol/` |
-| Método de Acesso | `Público` |
-| UF | `MG` |
-| Permitir Busca Automática | ✅ ON |
-| Ativo | ✅ ON |
-| Observações | `Sistema SOL/MG - emissão online de CND ICMS para inscrição estadual de Bio-Hosp.` |
-
-3. Clique em **Salvar**.
-
-#### Fonte 3 — CND Municipal: Prefeitura de Contagem (vizinha de BH)
-
-Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. Cadastramos Contagem como exemplo.
+O edital de teste `0031/2026 - MUNICIPIO DE ITAMARANDIBA-MG` exige CND Municipal local. Bio-Hosp precisa cadastrar esta fonte para conseguir gerar a certidão automaticamente.
 
 1. Clique em **+ Novo**
 2. Preencha:
@@ -652,19 +642,42 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor |
 |---|---|
 | Tipo de Certidão | `CND Municipal` |
-| Nome da Fonte | `Prefeitura de Contagem - CND ISS` |
-| Órgão Emissor | `Prefeitura Municipal de Contagem` |
-| URL do Portal | `https://www.contagem.mg.gov.br/portal/servicos/certidao-negativa` |
+| Nome da Fonte | `Prefeitura de Itamarandiba/MG - CND ISS` |
+| Órgão Emissor | `Prefeitura Municipal de Itamarandiba` |
+| URL do Portal | `https://itamarandiba.mg.gov.br/servicos/certidao-negativa-de-debitos` |
 | Método de Acesso | `Público` |
 | UF | `MG` |
-| Cidade | `Contagem` |
+| Cidade | `Itamarandiba` |
 | Permitir Busca Automática | ✅ ON |
 | Ativo | ✅ ON |
-| Observações | `Município da região metropolitana de BH. Pode ser exigida em editais municipais.` |
+| Observações | `Necessária para participação no edital de teste 0031/2026. Município do Vale do Jequitinhonha-MG. CND ISS exigida em habilitação fiscal municipal.` |
 
 3. Clique em **Salvar**.
 
-✅ **Correto se:** As 3 fontes novas aparecem na lista, totalizando 12 fontes (9 pré-existentes + 3 novas), todas com badge "Ativo".
+#### Fonte 3 — Junta Comercial de Minas Gerais (JUCEMG)
+
+Vários editais (Lei 14.133, art. 67-68) exigem **Certidão Simplificada da Junta Comercial** comprovando regularidade do registro empresarial. Não está nas 9 pré-cadastradas e é necessária a partir da Sprint 2.
+
+1. Clique em **+ Novo**
+2. Preencha:
+
+| Campo | Valor |
+|---|---|
+| Tipo de Certidão | `Outro` |
+| Nome da Fonte | `JUCEMG - Junta Comercial de Minas Gerais` |
+| Órgão Emissor | `Junta Comercial do Estado de Minas Gerais` |
+| URL do Portal | `https://www.jucemg.mg.gov.br/empresa/online/certidao` |
+| Método de Acesso | `Público` |
+| UF | `MG` |
+| Permitir Busca Automática | ✅ ON |
+| Ativo | ✅ ON |
+| Observações | `Certidão Simplificada exigida em habilitação jurídica/qualificação técnica. Validade 30-90 dias. Necessária para editais que pedem comprovação de registro empresarial.` |
+
+3. Clique em **Salvar**.
+
+✅ **Correto se:** As 3 fontes novas aparecem na lista, totalizando **12 fontes (9 pré + 3 novas)**, todas com badge "Ativo".
+
+📌 **Importante:** **NÃO PULE este passo.** As próximas sprints (2-9) vão validar habilitação de Bio-Hosp em editais que dependem destas 3 fontes. Sem elas, a busca automática vai retornar resultado parcial.
 
 **Cenário de validação B — desativar uma fonte existente:**
 

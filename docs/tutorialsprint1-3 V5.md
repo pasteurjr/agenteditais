@@ -1,30 +1,35 @@
-# Tutorial de Validação Manual — Sprint 1 — Conjunto 2 V4
-# Empresa: Bio-Hosp Equipamentos Hospitalares Ltda.
+# Tutorial de Validação Manual — Sprint 1 — Conjunto 3 V5
+# Empresa: Vita-Sense Soluções Médicas Ltda.
 
-**Data:** 05/05/2026 (V4)
-**Dados:** dadosempportpar-2 V3.md
+**Data:** 05/05/2026 (V5)
+**Dados:** dadosempportpar-3 V3.md
 **Referência:** CASOS DE USO EMPRESA PORTFOLIO PARAMETRIZACAO V2.md
 **UCs:** F01–F17 (17 casos de uso)
 **Público:** Dono do Produto / Validador de Negócio (sem conhecimento técnico necessário)
 
-> **CHANGELOG V4 (vs V3) — após análise das observações de Arnaldo:**
+> **CHANGELOG V5 (vs V4):**
 >
-> - UC-F01: corrigidas 5 ocorrências erradas de `SP` para `MG` (cidade Belo Horizonte/MG)
-> - UC-F01: nova orientação para usar **Configurações → Empresa** após primeiro login
-> - UC-F01: aviso sobre formulário pré-populado com dados de outra empresa (clicar **+ Nova empresa** primeiro)
-> - UC-F03: 8 novos tipos de documento expostos no dropdown (AFE ANVISA, ISO via Outro, Certidão Negativa Estadual etc.) — UI corrigida
-> - UC-F03: orientação sobre badge de vencimento (verde/amarelo/vermelho) acionado pela `data_vencimento`
-> - UC-F03: caminhos de PDF revisados — usar arquivos da pasta `docs/documentos_sintetizados` enviada pelo Pasteur
-> - UC-F04: removido passo "Inicializar Fontes Padrão" (botão não existia); listadas as 9 fontes reais
-> - UC-F04: adicionado **Passo 0.5 (opcional)** — CRUD de Fontes de Certidões (Cadastros → Fontes de Certidões). Cadastra 3 fontes específicas para Bio-Hosp/MG: **PGFN** (Federal), **SEFAZ-MG SOL** (Estadual), **Prefeitura de Contagem** (Municipal vizinha de BH). Mais cenários de desativar/reativar.
-> - UC-F06: explicitado empty state esperado quando portfólio ainda não tem produtos
-> - UC-F07: campo NCM com máscara automática (digite só os 8 dígitos, pontos aparecem sozinhos)
-> - UC-F07: aviso para usar upload IA em produto **NOVO**, não em produto recém criado manualmente
-> - UC-F11: incluído cenário negativo (remover 1 campo → completude < 100%)
-> - UC-F12: clarificado que CATMAT/CATSER/termos de busca são gerados pela IA e não editáveis manualmente
-> - UC-F15: campos R$ aceitam ponto e vírgula (máscara monetária livre); toast verde fixo aparece após salvar
-> - UC-F16: orientação para identificar duplicidade de fontes "ComprasNet" no banco (afeta o teste de desativação)
-> - UC-F17: salvamento agora é persistido e recarregado corretamente (e-mail/canais/tema/idioma/fuso)
+> - UC-F04 Passo 0.5 reformulado: as 3 fontes a cadastrar agora são **as que faltam para os editais reais das próximas sprints (Sprints 2-9)**:
+>   1. **PGFN — Dívida Ativa da União** (URL específica do REGULARIZE) — fonte principal complementar à CND Federal conjunta RFB+PGFN
+>   2. **SEFAZ-PR — CND ICMS** — exigida pelo edital de teste `Processo 1299/2026 - JACAREZINHO-PR`
+>   3. **Junta Comercial do Paraná (JUCEPAR)** — exigida em editais que pedem "Certidão Simplificada da Junta Comercial"
+> - Esclarecimento técnico: a **CND Federal pré-cadastrada** (RFB/PGFN conjunta) é a **fonte oficial principal** desde a Portaria MF 358/2014. PGFN isolada é **complemento** para validar a integração separada.
+>
+> **CHANGELOG V4 (mantido):**
+>
+> - UC-F01: corrigidas 4 ocorrências erradas de `SP` para `PR` (cidade Curitiba/PR)
+> - UC-F03: 8 novos tipos de documento expostos no dropdown (AFE ANVISA, ISO, Certidão Estadual etc.) — UI corrigida
+> - UC-F03: caminho do arquivo PDF revisado — usar arquivos da pasta `docs/documentos_sintetizados`
+> - UC-F04: removido passo "Inicializar Fontes Padrão"; listadas as 9 fontes reais
+> - UC-F04: adicionado **Passo 0.5 (opcional)** — CRUD de Fontes de Certidões (Cadastros → Fontes de Certidões). Cadastra 3 fontes específicas para Vita-Sense/PR: **PGFN** (Federal), **SEFAZ-PR** (Estadual), **Prefeitura de Curitiba** (Municipal). Mais cenários de desativar/reativar.
+> - UC-F06: explicitado empty state esperado para portfólio vazio
+> - UC-F07: campo NCM com máscara automática
+> - UC-F07: aviso para usar upload IA em produto NOVO
+> - UC-F11: incluído cenário negativo
+> - UC-F12: clarificado read-only de CATMAT/CATSER/termos
+> - UC-F15: máscara monetária livre + toast verde fixo
+> - UC-F16: aviso de duplicidade ComprasNet
+> - UC-F17: persistência corrigida (e-mail/canais/tema/idioma/fuso)
 
 ---
 
@@ -38,40 +43,40 @@
 
 | Campo | Valor |
 |---|---|
-| Usuário (Conjunto 2 V3) | validaarnaldo@valida.com.br |
+| Usuário (Conjunto 3 V3) | validaargus@valida.com.br |
 | Senha | 123456 |
 | Perfil | Superusuário |
-| Empresa alvo | Bio-Hosp Equipamentos Hospitalares Ltda. |
+| Empresa alvo | Vita-Sense Soluções Médicas Ltda. |
 
-### Pré-requisito — Vincular validaarnaldo (super) à empresa Bio-Hosp
+### Pré-requisito — Vincular validaargus (super) à empresa Vita-Sense
 
 Este passo deve ser feito UMA VEZ antes de iniciar os UCs:
 
 **Procedimento (você é super, faz tudo sozinho):**
 1. Login com `(não usado neste V3 — validador é super)` / `123456`
 2. Menu lateral → "Associar Empresa/Usuario"
-3. Selecionar empresa: Bio-Hosp Equipamentos Hospitalares Ltda.
-4. Selecionar usuário: validaarnaldo@valida.com.br
+3. Selecionar empresa: Vita-Sense Soluções Médicas Ltda.
+4. Selecionar usuário: validaargus@valida.com.br
 5. Papel: admin → clicar "Vincular"
 
-**Opção B — validaarnaldo cria a empresa diretamente:**
-1. Login com `validaarnaldo@valida.com.br` / `123456`
-2. Ao ver a tela de seleção de empresa, a Bio-Hosp ainda não existe — selecionar qualquer empresa ou criar nova
-3. Menu Empresa → preencher dados da Bio-Hosp conforme UC-F01 → salvar
-4. A empresa fica associada automaticamente a validaarnaldo
+**Opção B — validaargus cria a empresa diretamente:**
+1. Login com `validaargus@valida.com.br` / `123456`
+2. Ao ver a tela de seleção de empresa, a Vita-Sense ainda não existe — selecionar qualquer empresa ou criar nova
+3. Menu Empresa → preencher dados da Vita-Sense conforme UC-F01 → salvar
+4. A empresa fica associada automaticamente a validaargus
 
 ### Fluxo de login (após associação)
 1. Acessar `http://pasteurjr.servehttp.com:5179`
-2. Email: `validaarnaldo@valida.com.br` / Senha: `123456`
-3. Tela de seleção de empresa → clicar "Bio-Hosp Equipamentos Hospitalares Ltda."
-4. Dashboard carrega com Bio-Hosp como empresa ativa
+2. Email: `validaargus@valida.com.br` / Senha: `123456`
+3. Tela de seleção de empresa → clicar "Vita-Sense Soluções Médicas Ltda."
+4. Dashboard carrega com Vita-Sense como empresa ativa
 
 ### Menus extras visíveis (superusuário)
 - **Usuarios** — CRUD de usuários
 - **Associar Empresa/Usuario** — vincular usuários a empresas
 - **Selecionar Empresa** — trocar empresa ativa
 
-> Esses menus não aparecem para usuários normais (super=False). O tutorial a seguir assume que a empresa Bio-Hosp já está associada a validaarnaldo.
+> Esses menus não aparecem para usuários normais (super=False). O tutorial a seguir assume que a empresa Vita-Sense já está associada a validaargus.
 
 ---
 
@@ -97,7 +102,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 ### Dicas de navegação
 
 - Para cadastro completo da empresa (incluindo redes sociais e endereço), acesse **Configurações > Empresa**
-- Para selecionar a empresa, acesse **Configurações > Selecionar Empresa** e escolha 'Bio-Hosp Equipamentos Hospitalares Ltda.'
+- Para selecionar a empresa, acesse **Configurações > Selecionar Empresa** e escolha 'Vita-Sense Soluções Médicas Ltda.'
 
 ---
 
@@ -138,13 +143,13 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 - Certifique-se de estar logado no sistema. Você deve ver o menu lateral visível com as opções de navegação.
 - Tenha em mãos os dados da empresa (eles estão listados neste tutorial — não precisa buscar em outro lugar).
-- Se já existir um cadastro anterior de outra empresa (por exemplo, do Conjunto 1), o formulário pode já estar preenchido. Nesse caso, simplesmente apague os valores e insira os da Bio-Hosp.
+- Se já existir um cadastro anterior de outra empresa (por exemplo, do Conjunto 1), o formulário pode já estar preenchido. Nesse caso, simplesmente apague os valores e insira os da Vita-Sense.
 
 ---
 
 ### Passo 1 — Navegar até a página de Empresa
 
-> **Nota de acesso:** Ao entrar no sistema com `validaarnaldo@valida.com.br`, a tela de seleção de empresa aparece primeiro. Selecione "Bio-Hosp Equipamentos Hospitalares Ltda." antes de seguir os passos abaixo.
+> **Nota de acesso:** Ao entrar no sistema com `validaargus@valida.com.br`, a tela de seleção de empresa aparece primeiro. Selecione "Vita-Sense Soluções Médicas Ltda." antes de seguir os passos abaixo.
 
 **O que fazer:** No menu lateral à esquerda da tela, localize e clique na opção "Empresa" ou "Cadastro". Isso vai abrir a tela principal de cadastro da empresa.
 
@@ -167,11 +172,11 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 | Campo | Valor |
 |---|---|
-| Razão Social | `Bio-Hosp Equipamentos Hospitalares Ltda.` |
-| Nome Fantasia | `Bio-Hosp` |
-| CNPJ | `33.014.556/0001-96` |
-| Inscrição Estadual | `062.118.443.0078` |
-| Website | `https://biohosp.com.br` |
+| Razão Social | `Vita-Sense Soluções Médicas Ltda.` |
+| Nome Fantasia | `Vita-Sense` |
+| CNPJ | `49.825.713/0001-04` |
+| Inscrição Estadual | `901.234.567.0098` |
+| Website | `https://vitasense.com.br` |
 
 📌 **Atenção:** O campo CNPJ pode ter máscara automática (formatar com pontos e barra enquanto você digita). Digite somente os números — o sistema formata sozinho.
 
@@ -192,8 +197,8 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 | Campo | Valor |
 |---|---|
-| Instagram | `@biohospequipamentos` |
-| LinkedIn | `bio-hosp-equipamentos` |
+| Instagram | `@vitasensemedical` |
+| LinkedIn | `vita-sense-medical` |
 | Facebook | (deixar em branco — campo opcional) |
 
 📌 **Atenção:** O Facebook deve ficar **vazio intencionalmente**. Este é um campo opcional e queremos confirmar que o sistema salva corretamente mesmo com ele em branco. Não invente um valor aqui.
@@ -215,17 +220,17 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 | Campo | Valor |
 |---|---|
-| Logradouro / Endereço | `Avenida Raja Gabaglia, 1781 — Sala 304` |
-| Cidade | `Belo Horizonte` |
-| UF | `MG` |
-| CEP | `30380-457` |
+| Logradouro / Endereço | `Rua Visconde de Nácar, 1441 — Conjunto 502` |
+| Cidade | `Curitiba` |
+| UF | `PR` |
+| CEP | `80410-201` |
 
-📌 **Atenção:** O campo UF provavelmente é uma lista suspensa (dropdown). Clique nele e selecione "MG" (Minas Gerais) na lista. Se for campo de texto livre, digite `MG`.
+📌 **Atenção:** O campo UF provavelmente é uma lista suspensa (dropdown). Clique nele e selecione "PR" (Paraná) na lista. Se for campo de texto livre, digite `PR`.
 
-**O que acontece depois:** Os campos de endereço estão preenchidos com os dados da Bio-Hosp.
+**O que acontece depois:** Os campos de endereço estão preenchidos com os dados da Vita-Sense.
 
-✅ **Correto se:** Todos os campos de endereço estão preenchidos corretamente, incluindo o estado MG selecionado.
-❌ **Problema se:** O campo CEP exibe mensagem de formato inválido, ou o estado não tem a opção MG disponível.
+✅ **Correto se:** Todos os campos de endereço estão preenchidos corretamente, incluindo o estado PR selecionado.
+❌ **Problema se:** O campo CEP exibe mensagem de formato inválido, ou o estado não tem a opção PR disponível.
 
 ---
 
@@ -233,7 +238,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 **O que fazer:** Após preencher todos os campos acima, localize o botão de salvar — geralmente chamado "Salvar", "Salvar Alterações" ou "Confirmar". Ele costuma estar no final do formulário ou no topo da página. Clique nele.
 
-**O que você vai ver na tela:** O formulário completamente preenchido com todos os dados da Bio-Hosp Equipamentos Hospitalares Ltda.
+**O que você vai ver na tela:** O formulário completamente preenchido com todos os dados da Vita-Sense Soluções Médicas Ltda.
 
 **O que acontece depois:** O sistema processa as informações e exibe uma mensagem de confirmação (geralmente um aviso verde no canto superior direito ou inferior da tela, chamado "toast"). A mensagem pode dizer algo como "Dados salvos com sucesso" ou "Empresa atualizada".
 
@@ -244,7 +249,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ### Passo 5.5 — Reabrir a empresa para conferir e completar (NOVO em V4)
 
-> **V4 — Passo crítico após salvar:** o save inicial pode não persistir TODOS os campos visíveis (a depender do estado de carregamento da página). Para garantir que os dados completos foram salvos, **siga os sub-passos abaixo**.
+> **V4 — Passo crítico após salvar:** o save inicial pode não persistir TODOS os campos visíveis. Siga os sub-passos abaixo para garantir consistência.
 
 **O que fazer:**
 
@@ -252,25 +257,23 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 2. **Recarregue a página (F5)** ou navegue para outra tela e volte para **Configurações → Empresa**.
 3. Confirme que o formulário voltou com **todos** os campos preenchidos (CNPJ, razão social, redes sociais, endereço completo).
 4. Se algum campo voltou vazio, **preencha novamente** e clique em Salvar.
-5. Verifique também a presença da empresa selecionada na top-bar (canto superior do sistema). Se a top-bar mostrar "Sem empresa" ou nome de outra empresa, vá em **Configurações → Selecionar Empresa** e clique no card da Bio-Hosp.
+5. Verifique a top-bar. Se mostrar "Sem empresa" ou outra empresa, vá em **Configurações → Selecionar Empresa** e clique no card da Vita-Sense.
 
-**O que acontece depois:** todos os dados estão consistentes na sessão e persistidos no banco.
-
-✅ **Correto se:** Após F5 todos os campos voltam preenchidos E a top-bar mostra "Bio-Hosp Equipamentos Hospitalares Ltda.".
-❌ **Problema se:** Algum campo volta vazio após F5 (defeito de persistência) OU top-bar mostra empresa errada.
+✅ **Correto se:** Após F5 todos os campos voltam preenchidos E a top-bar mostra "Vita-Sense Soluções Médicas Ltda.".
+❌ **Problema se:** Algum campo volta vazio após F5 OU top-bar mostra empresa errada.
 
 ---
 
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
-- A razão social `Bio-Hosp Equipamentos Hospitalares Ltda.` está exibida no formulário
-- O CNPJ `33.014.556/0001-96` está formatado corretamente
+- A razão social `Vita-Sense Soluções Médicas Ltda.` está exibida no formulário
+- O CNPJ `49.825.713/0001-04` está formatado corretamente
 - Instagram e LinkedIn preenchidos; Facebook em branco (sem erro)
-- Endereço de Belo Horizonte / MG preenchido
+- Endereço de Curitiba / PR preenchido
 - Uma mensagem verde de "salvo com sucesso" foi exibida
 - Após F5, todos os campos persistem (V4)
-- Top-bar do sistema mostra Bio-Hosp como empresa ativa
+- Top-bar do sistema mostra Vita-Sense como empresa ativa
 
 **🔴 Sinais de problema:**
 - Mensagem vermelha de erro ao tentar salvar
@@ -312,13 +315,13 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ### Passo 2 — Adicionar os endereços de email
 
-**O que fazer:** Localize o campo ou botão para adicionar email. Pode ser um campo de texto com um botão "Adicionar" ao lado, ou uma lista onde você clica em "+ Email". Adicione os dois emails da Bio-Hosp, um de cada vez.
+**O que fazer:** Localize o campo ou botão para adicionar email. Pode ser um campo de texto com um botão "Adicionar" ao lado, ou uma lista onde você clica em "+ Email". Adicione os dois emails da Vita-Sense, um de cada vez.
 
 **O que você vai ver na tela:** Uma área para inserir endereços de email, possivelmente com uma lista abaixo mostrando os já cadastrados.
 
 **Dados a informar (adicionar um por vez):**
-1. `licitacoes@biohosp.com.br`
-2. `diretoria@biohosp.com.br`
+1. `licitacoes@vitasense.com.br`
+2. `diretoria@vitasense.com.br`
 
 **O que acontece depois:** Após adicionar cada email, ele aparece na lista de emails cadastrados. Você deve ver os dois emails listados ao final.
 
@@ -329,14 +332,14 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ### Passo 3 — Adicionar os telefones
 
-**O que fazer:** Localize o campo para adicionar telefone (similar ao de email). Adicione os três telefones da Bio-Hosp, um de cada vez.
+**O que fazer:** Localize o campo para adicionar telefone (similar ao de email). Adicione os três telefones da Vita-Sense, um de cada vez.
 
 **O que você vai ver na tela:** Um campo de telefone com máscara ou sem, e uma lista dos telefones já adicionados.
 
 **Dados a informar (adicionar um por vez):**
-1. `(31) 3287-4500` — telefone fixo da empresa
-2. `(31) 99654-7821` — celular principal
-3. `(31) 99654-7821` — celular secundário
+1. `(41) 3024-7800` — telefone fixo da empresa
+2. `(41) 99812-5634` — celular principal
+3. `(41) 99445-2270` — celular secundário
 
 📌 **Atenção:** O sistema pode ter máscara automática para telefone (coloca os parênteses e o hífen automaticamente). Se isso acontecer, basta digitar os números — o formato aparece sozinho.
 
@@ -355,9 +358,9 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 **Dado a informar:** `Equipamentos Médico-Hospitalares`
 
-> **V4 — dica de filtro:** se a lista de áreas é longa e não rola direito, **digite "Equipa"** no campo de busca. Isso filtra para apenas as áreas que contêm "Equipa" no nome e a opção `Equipamentos Médico-Hospitalares` aparece logo. Em V4 também foi feita deduplicação no banco — antes podia haver várias entradas iguais, agora há apenas uma de cada.
+> **V4 — dica de filtro:** se a lista de áreas é longa e não rola direito, **digite "Equipa"** no campo de busca. Isso filtra para apenas as áreas que contêm "Equipa" no nome. Em V4 também foi feita deduplicação no banco — antes podia haver várias entradas iguais, agora há apenas uma de cada.
 
-**O que acontece depois:** A área selecionada fica destacada ou exibida no campo. Essa informação vai ser usada para filtrar automaticamente editais relevantes para a Bio-Hosp.
+**O que acontece depois:** A área selecionada fica destacada ou exibida no campo. Essa informação vai ser usada para filtrar automaticamente editais relevantes para a Vita-Sense.
 
 ✅ **Correto se:** A área "Equipamentos Médico-Hospitalares" está selecionada e visível.
 ❌ **Problema se:** A área não está disponível na lista após digitar "Equipa", ou o campo não salva a seleção.
@@ -380,8 +383,8 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
-- Dois emails cadastrados: `licitacoes@biohosp.com.br` e `diretoria@biohosp.com.br`
-- Três telefones cadastrados: `(31) 3287-4500`, `(31) 99654-7821` e `(31) 99654-7821`
+- Dois emails cadastrados: `licitacoes@vitasense.com.br` e `diretoria@vitasense.com.br`
+- Três telefones cadastrados: `(41) 3024-7800`, `(41) 99812-5634` e `(41) 99445-2270`
 - Área padrão definida como `Equipamentos Médico-Hospitalares`
 - Mensagem de sucesso foi exibida ao salvar
 
@@ -404,11 +407,10 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 ### Antes de começar
 
 - O cadastro da empresa (UC-F01) deve estar salvo.
-- Você vai fazer upload de **arquivos PDF** entregues junto com este tutorial na pasta `docs/documentos_sintetizados/` (envio do Pasteur). Use qualquer um deles — o conteúdo do PDF não importa para esta validação, apenas que o sistema aceite o upload e armazene metadados (tipo + datas).
-- Caso não tenha a pasta, **qualquer PDF** que você tenha no seu computador (max 10MB) serve.
-- Você vai cadastrar **quatro documentos** com datas de validade diferentes. Cada data vai gerar um status de cor diferente — isso é intencional e faz parte do que estamos validando.
+- Você vai fazer upload de **arquivos PDF** entregues junto com este tutorial na pasta `docs/documentos_sintetizados/` (envio do Pasteur). Use qualquer um deles — o conteúdo do PDF não importa para esta validação. Caso não tenha a pasta, **qualquer PDF** que você tenha no seu computador (max 10MB) serve.
 
-> **V4:** O dropdown de "Tipo de Documento" foi expandido. Agora aparecem 15 opções (vs 7 anteriores), incluindo "Autorização de Funcionamento ANVISA (AFE)", "Certidão Negativa Estadual", "Habilitação Fiscal/Econômica/Técnica", "CBPAD/CBPP/Bombeiros". A opção "Outro" agora aceita ISO/Acreditação.
+> **V4:** O dropdown de "Tipo de Documento" foi expandido. Agora aparecem 15 opções (vs 7 anteriores), incluindo "Autorização de Funcionamento ANVISA (AFE)", "Certidão Negativa Estadual", "Habilitação Fiscal/Econômica/Técnica". A opção "Outro" agora aceita ISO/Acreditação.
+- Você vai cadastrar **quatro documentos** com datas de validade diferentes. Cada data vai gerar um status de cor diferente — isso é intencional e faz parte do que estamos validando.
 
 ---
 
@@ -437,9 +439,9 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 |---|---|
 | Tipo de Documento | `Alvará / Licença Sanitária` |
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` (clique em "Escolher arquivo" e selecione um PDF) |
-| Data de Validade | `30/06/2026` |
+| Data de Validade | `12/05/2026` |
 
-📌 **Atenção:** A data `30/06/2026` é praticamente hoje (1º de abril de 2026). O sistema deve exibir este documento com um indicador de alerta — geralmente um badge ou ícone AMARELO, indicando que está prestes a vencer ou acabou de vencer. Isso é o comportamento esperado e correto.
+📌 **Atenção:** A data `12/05/2026` é praticamente hoje (1º de abril de 2026). O sistema deve exibir este documento com um indicador de alerta — geralmente um badge ou ícone AMARELO, indicando que está prestes a vencer ou acabou de vencer. Isso é o comportamento esperado e correto.
 
 **O que acontece depois:** Após salvar, o documento aparece na lista com um badge de status amarelo (pode dizer "Vence", "A vencer" ou similar).
 
@@ -458,7 +460,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 |---|---|
 | Tipo de Documento | `Autorização de Funcionamento ANVISA (AFE)` |
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` |
-| Data de Validade | `22/08/2027` |
+| Data de Validade | `18/03/2027` |
 
 **O que acontece depois:** Este documento deve aparecer na lista com um indicador VERDE (válido, dentro do prazo).
 
@@ -477,7 +479,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 |---|---|
 | Tipo de Documento | `Certificado ISO / Acreditação` |
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` |
-| Data de Validade | `15/10/2026` |
+| Data de Validade | `30/11/2026` |
 
 **O que acontece depois:** Este documento deve aparecer na lista com badge VERDE (válido por mais de 5 meses).
 
@@ -496,9 +498,9 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 |---|---|
 | Tipo de Documento | `Certidão Negativa Estadual` |
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` |
-| Data de Validade | `30/06/2026` |
+| Data de Validade | `12/05/2026` |
 
-📌 **Atenção:** A data `30/06/2026` já passou (estamos em abril de 2026). O sistema deve exibir este documento com um indicador VERMELHO (vencido) ou AMARELO (alerta). Ambas as cores são aceitáveis para um documento já expirado — o importante é que o sistema sinalize o problema visivelmente.
+📌 **Atenção:** A data `12/05/2026` já passou (estamos em abril de 2026). O sistema deve exibir este documento com um indicador VERMELHO (vencido) ou AMARELO (alerta). Ambas as cores são aceitáveis para um documento já expirado — o importante é que o sistema sinalize o problema visivelmente.
 
 **O que acontece depois:** Documento aparece na lista com badge vermelho ou amarelo de alerta.
 
@@ -536,7 +538,7 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ### Antes de começar
 
-- O CNPJ da Bio-Hosp deve estar cadastrado (UC-F01 concluído).
+- O CNPJ da Vita-Sense deve estar cadastrado (UC-F01 concluído).
 - A busca automática requer conexão com a internet — verifique se o computador está online.
 - Se a busca automática demorar mais de 30 segundos sem resposta, use o upload manual conforme descrito no Passo 4. Isso é normal em horários de pico dos sites governamentais.
 
@@ -548,9 +550,9 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 **O que você vai ver na tela:** Uma tela com a lista de certidões disponíveis para busca automática, e provavelmente um campo mostrando o CNPJ da empresa que será consultado.
 
-**O que acontece depois:** A tela de certidões é exibida com o CNPJ `33.014.556/0001-96` já preenchido automaticamente (vindo do cadastro).
+**O que acontece depois:** A tela de certidões é exibida com o CNPJ `49.825.713/0001-04` já preenchido automaticamente (vindo do cadastro).
 
-✅ **Correto se:** O CNPJ da Bio-Hosp está preenchido automaticamente.
+✅ **Correto se:** O CNPJ da Vita-Sense está preenchido automaticamente.
 ❌ **Problema se:** O CNPJ está em branco ou com o CNPJ de outra empresa.
 
 ---
@@ -577,8 +579,8 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 **O que fazer:** Antes de buscar certidões, verifique que existem fontes cadastradas. Vá em **Configurações → Empresa → bloco "Certidões Automáticas"**. As 9 fontes pré-cadastradas devem aparecer:
 
 1. **CND Federal** — Receita Federal / PGFN
-2. **CND Estadual SEFAZ/MG** — Secretaria da Fazenda de Minas Gerais
-3. **CND Municipal** — Prefeitura de Belo Horizonte
+2. **CND Estadual SEFAZ/PR** — Secretaria da Fazenda do Paraná (Curitiba)
+3. **CND Municipal** — Prefeitura local
 4. **CRF FGTS** — Caixa Econômica Federal
 5. **CNDT Trabalhista** — Tribunal Superior do Trabalho
 6. **SICAF** — Cadastro Unificado de Fornecedores
@@ -589,41 +591,41 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 ✅ **Correto se:** As 9 fontes aparecem listadas (não 5 como em versões antigas).
 ❌ **Problema se:** Tela aparece vazia ou retorna erro ao carregar fontes.
 
-📌 **Observação:** Se o tutorial menciona apenas 5 certidões padrão (Receita Federal, PGFN, FGTS, Trabalhista, Estadual), saiba que o produto evoluiu — agora são 9 fontes mais granulares. Use a busca contra todas elas.
-
 ---
 
-### Passo 0.5 (Opcional) — Cadastrar / editar fontes de certidão (CRUD)
+### Passo 0.5 (Importante) — Cadastrar 3 fontes de certidão necessárias para os editais
 
-> **NOVO em V4:** existe uma tela CRUD para gerenciar (criar, editar, ativar/desativar, excluir) fontes de certidões. Esse passo cadastra **3 novas fontes específicas para Bio-Hosp (MG/BH)** que complementam as 9 pré-cadastradas.
+> **V5 — Mudança importante:** as 3 fontes que vamos cadastrar agora **NÃO são exemplos genéricos** — elas cobrem **lacunas reais** dos editais de teste das próximas sprints (2-9). Sem essas fontes, Vita-Sense não consegue habilitação completa nos editais que vamos validar.
+
+**Contexto técnico:**
+
+A fonte pré-cadastrada **CND Federal (Receita Federal / PGFN conjunta)** é a **fonte oficial principal** desde a Portaria MF 358/2014, que unificou a CND da Receita Federal com a CND da Dívida Ativa da União (PGFN) num único documento.
+**Mesmo assim**, a PGFN mantém um portal próprio (REGULARIZE) que pode ser usado para consulta isolada de Dívida Ativa em casos específicos. Validamos a integração separada cadastrando-a abaixo.
 
 **Onde:** Sidebar → **Cadastros → Fontes de Certidões** (item com ícone de globo 🌐)
 
-**Cenário de validação A — cadastrar 3 fontes complementares (Bio-Hosp/MG):**
-
-#### Fonte 1 — CND Federal: PGFN (Dívida Ativa da União)
-
-A fonte pré-cadastrada "CND Federal - Receita Federal / PGFN" cobre as duas conjuntamente. Aqui cadastramos a **PGFN especificamente** para validar a integração isolada.
+#### Fonte 1 — PGFN: Dívida Ativa da União (REGULARIZE) — **complementar à CND Federal conjunta**
 
 1. Clique em **+ Novo** no canto superior direito
-2. Preencha:
+2. Preencha exatamente:
 
 | Campo | Valor |
 |---|---|
 | Tipo de Certidão | `CND Federal` |
-| Nome da Fonte | `PGFN - Dívida Ativa da União` |
+| Nome da Fonte | `PGFN - REGULARIZE (Dívida Ativa)` |
 | Órgão Emissor | `Procuradoria-Geral da Fazenda Nacional` |
 | URL do Portal | `https://www.regularize.pgfn.gov.br/` |
-| URL da API | (em branco) |
 | Método de Acesso | `Público` |
 | Requer Autenticação | OFF |
 | Permitir Busca Automática | ✅ ON |
 | Ativo | ✅ ON |
-| Observações | `Certidão Conjunta de Débitos Federais (RFB+PGFN). Validade 180 dias.` |
+| Observações | `Portal REGULARIZE da PGFN. A CND Federal conjunta (RFB+PGFN) já cobre Dívida Ativa, mas esta fonte permite consulta isolada e validação separada.` |
 
 3. Clique em **Salvar**.
 
-#### Fonte 2 — CND Estadual: SEFAZ-MG (ICMS direto)
+#### Fonte 2 — SEFAZ-PR (CND ICMS) — necessária para edital `Processo 1299/2026 JACAREZINHO-PR`
+
+O edital de teste `20 | Processo 1299/2026 - MUNICIPIO DE JACAREZINHO-PR` exige CND Estadual ICMS do Paraná. Vita-Sense (Curitiba/PR) precisa cadastrar esta fonte para gerar a certidão automaticamente.
 
 1. Clique em **+ Novo**
 2. Preencha:
@@ -631,40 +633,41 @@ A fonte pré-cadastrada "CND Federal - Receita Federal / PGFN" cobre as duas con
 | Campo | Valor |
 |---|---|
 | Tipo de Certidão | `CND Estadual` |
-| Nome da Fonte | `SEFAZ-MG - CND ICMS Direta` |
-| Órgão Emissor | `Secretaria de Estado de Fazenda de Minas Gerais` |
-| URL do Portal | `https://www2.fazenda.mg.gov.br/sol/` |
+| Nome da Fonte | `SEFAZ-PR - CND ICMS` |
+| Órgão Emissor | `Secretaria de Estado da Fazenda do Paraná` |
+| URL do Portal | `https://www.fazenda.pr.gov.br/Pagina/Certidao-Negativa-Estadual` |
 | Método de Acesso | `Público` |
-| UF | `MG` |
+| UF | `PR` |
 | Permitir Busca Automática | ✅ ON |
 | Ativo | ✅ ON |
-| Observações | `Sistema SOL/MG - emissão online de CND ICMS para inscrição estadual de Bio-Hosp.` |
+| Observações | `CND ICMS PR - exigida pelo edital de teste 1299/2026 (Jacarezinho-PR) e demais editais paranaenses.` |
 
 3. Clique em **Salvar**.
 
-#### Fonte 3 — CND Municipal: Prefeitura de Contagem (vizinha de BH)
+#### Fonte 3 — Junta Comercial do Paraná (JUCEPAR)
 
-Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. Cadastramos Contagem como exemplo.
+Vários editais (Lei 14.133, art. 67-68) exigem **Certidão Simplificada da Junta Comercial** comprovando regularidade do registro empresarial. Não está nas 9 pré-cadastradas e é necessária a partir da Sprint 2.
 
 1. Clique em **+ Novo**
 2. Preencha:
 
 | Campo | Valor |
 |---|---|
-| Tipo de Certidão | `CND Municipal` |
-| Nome da Fonte | `Prefeitura de Contagem - CND ISS` |
-| Órgão Emissor | `Prefeitura Municipal de Contagem` |
-| URL do Portal | `https://www.contagem.mg.gov.br/portal/servicos/certidao-negativa` |
+| Tipo de Certidão | `Outro` |
+| Nome da Fonte | `JUCEPAR - Junta Comercial do Paraná` |
+| Órgão Emissor | `Junta Comercial do Estado do Paraná` |
+| URL do Portal | `https://www.juntacomercial.pr.gov.br/Pagina/Certidao` |
 | Método de Acesso | `Público` |
-| UF | `MG` |
-| Cidade | `Contagem` |
+| UF | `PR` |
 | Permitir Busca Automática | ✅ ON |
 | Ativo | ✅ ON |
-| Observações | `Município da região metropolitana de BH. Pode ser exigida em editais municipais.` |
+| Observações | `Certidão Simplificada exigida em habilitação jurídica/qualificação técnica. Validade 30-90 dias. Necessária para editais que pedem comprovação de registro empresarial.` |
 
 3. Clique em **Salvar**.
 
-✅ **Correto se:** As 3 fontes novas aparecem na lista, totalizando 12 fontes (9 pré-existentes + 3 novas), todas com badge "Ativo".
+✅ **Correto se:** As 3 fontes novas aparecem na lista, totalizando **12 fontes (9 pré + 3 novas)**, todas com badge "Ativo".
+
+📌 **Importante:** **NÃO PULE este passo.** As próximas sprints (2-9) vão validar habilitação de Vita-Sense em editais que dependem destas 3 fontes. Sem elas, a busca automática vai retornar resultado parcial.
 
 **Cenário de validação B — desativar uma fonte existente:**
 
@@ -688,20 +691,20 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 🔴 **Sinais de problema:**
 - Item "Fontes de Certidões" não aparece na sidebar (verifique se você é superusuário)
 - Tela CRUD em branco ou erro 500
-- Não salva (campos obrigatórios faltando ou erro de permissão)
+- Não salva (campos obrigatórios ou erro de permissão)
 - Erro de "fonte duplicada" — significa que essa URL já existe; troque o nome ou pule
 
 ---
 
 ### Passo 3 — Iniciar a busca automática de certidões
 
-**O que fazer:** Clique no botão "Buscar Certidões", "Consultar" ou similar. O sistema vai acessar os sites governamentais usando o CNPJ da Bio-Hosp e tentar baixar as certidões automaticamente.
+**O que fazer:** Clique no botão "Buscar Certidões", "Consultar" ou similar. O sistema vai acessar os sites governamentais usando o CNPJ da Vita-Sense e tentar baixar as certidões automaticamente.
 
 **O que você vai ver na tela:** O botão de busca. Possivelmente um indicador de progresso enquanto a busca está acontecendo.
 
 **O que acontece depois:** O sistema tenta conectar com os sites governamentais. Esse processo pode levar de 10 a 30 segundos. Algumas certidões podem ser encontradas automaticamente; outras podem falhar se o site governamental estiver fora do ar.
 
-📌 **Atenção:** Como o CNPJ `33.014.556/0001-96` é fictício (usado apenas para testes), é provável que a busca automática não retorne documentos reais dos sites governamentais. Isso é esperado. O próximo passo mostra como fazer o upload manual nesse caso.
+📌 **Atenção:** Como o CNPJ `49.825.713/0001-04` é fictício (usado apenas para testes), é provável que a busca automática não retorne documentos reais dos sites governamentais. Isso é esperado. O próximo passo mostra como fazer o upload manual nesse caso.
 
 ✅ **Correto se:** O sistema tenta a busca e exibe o resultado (seja com certidões encontradas ou com mensagem de que não encontrou).
 ❌ **Problema se:** O sistema trava indefinidamente (mais de 60 segundos sem resposta) ou exibe um erro fatal de sistema.
@@ -710,7 +713,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Passo 4 — Fazer upload manual de certidão (PGFN)
 
-**O que fazer:** Localize a certidão da PGFN (Secretaria de Estado da Fazenda de Minas Gerais) na lista. Clique no botão de upload manual ao lado dela (pode ser um ícone de upload, nuvem ou a palavra "Upload"). Um formulário deve abrir.
+**O que fazer:** Localize a certidão da PGFN (Secretaria de Estado da Fazenda do Paraná) na lista. Clique no botão de upload manual ao lado dela (pode ser um ícone de upload, nuvem ou a palavra "Upload"). Um formulário deve abrir.
 
 **O que você vai ver na tela:** Um modal ou formulário para upload manual de certidão, com campos para arquivo, data de validade e número da certidão.
 
@@ -719,12 +722,12 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor |
 |---|---|
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` |
-| Data de Validade | `15/10/2026` |
-| Número da Certidão | `SEFAZ-MG-2026-3301` |
+| Data de Validade | `30/11/2026` |
+| Número da Certidão | `SEFAZ-PR-2026-4982` |
 
 **O que acontece depois:** O arquivo é enviado e a certidão aparece na lista com status "Upload manual" e os dados informados.
 
-✅ **Correto se:** A certidão PGFN aparece na lista com a data de validade `15/10/2026` e o número `SEFAZ-MG-2026-3301`.
+✅ **Correto se:** A certidão PGFN aparece na lista com a data de validade `30/11/2026` e o número `SEFAZ-PR-2026-4982`.
 ❌ **Problema se:** O upload falha ou os dados não aparecem na lista após salvar.
 
 ---
@@ -740,9 +743,9 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor esperado |
 |---|---|
 | Status | `Upload manual` |
-| Data de Validade | `15/10/2026` |
-| Número | `SEFAZ-MG-2026-3301` |
-| Órgão | `Secretaria de Estado da Fazenda de Minas Gerais` |
+| Data de Validade | `30/11/2026` |
+| Número | `SEFAZ-PR-2026-4982` |
+| Órgão | `Secretaria de Estado da Fazenda do Paraná` |
 
 **O que acontece depois:** Se os dados estiverem corretos, feche o modal. Se precisar corrigir algum campo, edite e salve.
 
@@ -756,8 +759,8 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 **O que o validador deve conferir:**
 - A seção de certidões exibe a lista de certidões disponíveis para a empresa
 - A frequência de atualização está configurada como `Quinzenal`
-- A certidão PGFN aparece com status "Upload manual", data `15/10/2026` e número `SEFAZ-MG-2026-3301`
-- O órgão está identificado como `Secretaria de Estado da Fazenda de Minas Gerais`
+- A certidão PGFN aparece com status "Upload manual", data `30/11/2026` e número `SEFAZ-PR-2026-4982`
+- O órgão está identificado como `Secretaria de Estado da Fazenda do Paraná`
 
 **🔴 Sinais de problema:**
 - A tela de certidões não carrega ou exibe erro
@@ -807,13 +810,13 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor |
 |---|---|
 | Tipo | `Representante Legal` |
-| Nome | `Mariana Andrade Silveira` |
-| Cargo | `Sócia-Diretora` |
-| Email | `fernanda.costa@biohosp.com.br` |
-| Telefone | `(31) 99654-7821` |
-| CPF | `845.612.339-58` |
+| Nome | `Roberto Mendes Cardoso` |
+| Cargo | `Diretor-Presidente` |
+| Email | `fernanda.costa@vitasense.com.br` |
+| Telefone | `(41) 99812-5634` |
+| CPF | `794.582.116-31` |
 
-**O que acontece depois:** Após salvar, a Mariana Andrade Silveira aparece na lista de responsáveis com o tipo "Representante Legal".
+**O que acontece depois:** Após salvar, a Roberto Mendes Cardoso aparece na lista de responsáveis com o tipo "Representante Legal".
 
 ✅ **Correto se:** O responsável aparece na lista com nome e tipo corretos.
 ❌ **Problema se:** O formulário não aceita o tipo "Representante Legal" ou os dados não são salvos.
@@ -829,18 +832,18 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor |
 |---|---|
 | Tipo | `Responsável Técnico` |
-| Nome | `Eng. Carlos Henrique Tavares` |
-| Cargo | `Engenheiro Biomédico Responsável` |
-| Email | `ricardo.nunes@biohosp.com.br` |
-| Telefone | `(31) 99654-7821` |
-| CPF | `627.483.501-90` |
+| Nome | `Dra. Patrícia Moreira Lopes` |
+| Cargo | `Engenheira Biomédica` |
+| Email | `ricardo.nunes@vitasense.com.br` |
+| Telefone | `(41) 99445-2270` |
+| CPF | `482.715.903-67` |
 
 📌 **Nota:** O campo CPF é opcional, mas recomendamos preencher para completude do cadastro.
 
 **O que acontece depois:** O Dr. Ricardo aparece na lista de responsáveis com o tipo "Responsável Técnico". A lista agora tem dois itens.
 
 ✅ **Correto se:** Dois responsáveis listados, cada um com seu tipo correto.
-❌ **Problema se:** O sistema exige um Preposto para salvar, ou rejeita o cargo "Engenheiro Biomédico Responsável".
+❌ **Problema se:** O sistema exige um Preposto para salvar, ou rejeita o cargo "Engenheira Biomédica".
 
 ---
 
@@ -848,7 +851,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 **O que fazer:** Verifique a lista de responsáveis. Confirme que há exatamente dois, sem um terceiro do tipo "Preposto".
 
-**O que você vai ver na tela:** Dois cards ou linhas na lista: Mariana Andrade Silveira (Representante Legal) e Eng. Carlos Henrique Tavares (Responsável Técnico).
+**O que você vai ver na tela:** Dois cards ou linhas na lista: Roberto Mendes Cardoso (Representante Legal) e Dra. Patrícia Moreira Lopes (Responsável Técnico).
 
 📌 **Atenção:** A ausência do Preposto é intencional. Queremos confirmar que o sistema não obriga o cadastro de um Preposto para funcionar. Se o sistema exibir um aviso dizendo que o Preposto é obrigatório, isso deve ser reportado como problema.
 
@@ -861,8 +864,8 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 **O que o validador deve conferir:**
 - Dois responsáveis cadastrados na lista
-- Mariana Andrade Silveira → tipo Representante Legal, cargo Sócia-Diretora
-- Eng. Carlos Henrique Tavares → tipo Responsável Técnico, cargo Engenheiro Biomédico Responsável
+- Roberto Mendes Cardoso → tipo Representante Legal, cargo Diretor-Presidente
+- Dra. Patrícia Moreira Lopes → tipo Responsável Técnico, cargo Engenheira Biomédica
 - Sistema não exige um terceiro responsável (Preposto)
 
 **🔴 Sinais de problema:**
@@ -886,7 +889,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 - Para este UC, pode não haver produtos cadastrados ainda (se for o primeiro acesso). Nesse caso, a validação principal é confirmar que a tela carrega corretamente e que os filtros funcionam. Os produtos serão cadastrados nos próximos UCs.
 - Se já houver produtos cadastrados de testes anteriores, eles serão visíveis aqui.
 
-> **V4 — Empty state esperado:** se você está executando este tutorial pela primeira vez para a empresa Bio-Hosp, **a lista virá vazia** (mensagem "Nenhum produto encontrado" ou similar). Isso é o **comportamento correto** — não é um defeito. Os produtos serão criados em UC-F07 logo a seguir. **Volte aqui depois do UC-F07** para ver o filtro retornando os produtos cadastrados.
+> **V4 — Empty state esperado:** se você está executando este tutorial pela primeira vez para a empresa Vita-Sense, **a lista virá vazia**. Isso é o **comportamento correto**. **Volte aqui depois do UC-F07** para ver o filtro retornando os produtos cadastrados.
 
 ---
 
@@ -937,7 +940,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 **O que você vai ver na tela:** O campo de busca com a nova palavra.
 
-**O que acontece depois:** A lista filtra para produtos relacionados ao hemograma (o produto se chama "Desfibrilador Externo Automático Philips HeartStart FRx").
+**O que acontece depois:** A lista filtra para produtos relacionados ao hemograma (o produto se chama "Oxímetro de Pulso Portátil Mindray PM-60").
 
 ✅ **Correto se:** O campo de busca aceita a nova palavra e a lista responde.
 ❌ **Problema se:** O campo de busca trava ou não aceita nova entrada.
@@ -972,7 +975,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 - Certifique-se de que o sistema está conectado à internet (a IA precisa acessar serviços externos).
 - Tenha paciência: a IA pode levar entre 20 e 60 segundos para processar o produto. Não clique em outros botões enquanto aguarda.
-- Você vai cadastrar um produto de diagnóstico in vitro (reagente para glicose), que é o produto principal da Bio-Hosp.
+- Você vai cadastrar um produto de diagnóstico in vitro (reagente para glicose), que é o produto principal da Vita-Sense.
 
 ---
 
@@ -999,23 +1002,23 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 |---|---|
 | Tipo de Documento / Entrada | `Instruções de Uso / IFU` |
 | Arquivo | qualquer PDF da pasta `docs/documentos_sintetizados/` |
-| Nome do Produto | `Monitor Multiparâmetro Nihon Kohden BSM-3000` |
+| Nome do Produto | `Ventilador Pulmonar Drager Savina 300` |
 | Área | `Equipamentos Médico-Hospitalares` |
-| Classe | `Monitorização Multiparamétrica` |
-| Subclasse | `Monitor Multiparâmetro` |
+| Classe | `Ventilação Pulmonar` |
+| Subclasse | `Ventilador Pulmonar` |
 
-> **V4 — sobre o campo NCM:** o NCM tem máscara automática `9999.99.99` (8 dígitos). Digite **só os 8 dígitos** (ex: `90181990`) e os pontos aparecem sozinhos. Não cole `9018.19.90` direto — o input só aceita os números.
+> **V4 — sobre o campo NCM:** o NCM tem máscara automática `9999.99.99` (8 dígitos). Digite **só os 8 dígitos** e os pontos aparecem sozinhos. Não cole `9019.20.10` direto — o input só aceita os números.
 
 **O que acontece depois:** Os campos básicos estão preenchidos. O formulário ainda não foi enviado para a IA.
 
 ✅ **Correto se:** Todos os campos estão preenchidos e nenhum campo obrigatório está em vermelho.
-❌ **Problema se:** A subclasse "Monitor Multiparâmetro" não existe na lista, ou a área não tem a classe "Monitorização Multiparamétrica".
+❌ **Problema se:** A subclasse "Ventilador Pulmonar" não existe na lista, ou a área não tem a classe "Ventilação Pulmonar".
 
 ---
 
 ### Passo 3 — Aguardar o processamento da IA
 
-> **V4 — Aviso importante (comportamento atual da IA):** se você já criou um produto manualmente antes de subir o arquivo (ex: salvou "Monitor Multiparâmetro" para preencher NCM e classificação primeiro), a IA pode **criar um SEGUNDO produto** com nome similar a partir do arquivo, em vez de complementar o produto existente. Esse comportamento será corrigido em uma versão futura. **Para esta validação V4:** suba o arquivo IA **antes** de salvar manualmente, ou aceite que dois produtos vão aparecer e marque um deles para exclusão. Reporte se a duplicidade ocorrer.
+> **V4 — Aviso importante:** se você já criou um produto manualmente antes de subir o arquivo, a IA pode **criar um SEGUNDO produto** com nome similar a partir do arquivo, em vez de complementar o existente. Para esta validação V4: suba o arquivo IA **antes** de salvar manualmente, ou aceite que dois produtos vão aparecer e marque um deles para exclusão. Reporte se a duplicidade ocorrer.
 
 **O que fazer:** Clique no botão de confirmar ou enviar (pode ser "Cadastrar com IA", "Processar", "Salvar e Analisar"). Após clicar, **aguarde** — não clique em mais nada.
 
@@ -1044,7 +1047,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Arquivo | `docs/documentos_sintetizados/sprint1/UC-F07/plano_contas_exemplo.csv` (NOVO em V4) |
 | Nome | (deixar em branco — não preencher) |
 
-> **V4 — arquivo de exemplo agora incluso:** o arquivo `plano_contas_exemplo.csv` foi gerado e está em `docs/documentos_sintetizados/sprint1/UC-F07/`. Ele contém 15 produtos hospitalares (monitor multiparâmetro, oxímetro, eletrocardiógrafo, reagentes, etc.) com NCM, fabricante, preço base. Use ele para testar a importação em lote sem precisar inventar dados.
+> **V4 — arquivo de exemplo agora incluso:** o arquivo `plano_contas_exemplo.csv` foi gerado e está em `docs/documentos_sintetizados/sprint1/UC-F07/`. Ele contém 15 produtos hospitalares com NCM, fabricante, preço base.
 
 📌 **Atenção:** O nome deve ficar **em branco propositalmente**. Queremos validar que o sistema aceita salvar um documento do tipo "Plano de Contas ERP" sem um nome específico. Esse é um comportamento esperado — este tipo de documento não precisa de nome customizado.
 
@@ -1079,7 +1082,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000` foi cadastrado e aparece no portfólio
+- O produto `Ventilador Pulmonar Drager Savina 300` foi cadastrado e aparece no portfólio
 - A IA preencheu automaticamente informações do produto (fabricante, especificações ou descrição)
 - O item "Plano de Contas ERP" foi salvo sem nome, sem erro
 - A importação em lote via Plano de Contas processou e cadastrou múltiplos produtos
@@ -1090,7 +1093,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 - Nenhum campo é preenchido automaticamente pela IA
 - O sistema exige nome obrigatório para o Plano de Contas ERP
 - A importação em lote não cadastra nenhum produto
-- A subclasse "Monitor Multiparâmetro" não está disponível
+- A subclasse "Ventilador Pulmonar" não está disponível
 
 ---
 
@@ -1105,7 +1108,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000` deve estar cadastrado (UC-F07 concluído).
+- O produto `Ventilador Pulmonar Drager Savina 300` deve estar cadastrado (UC-F07 concluído).
 - Você vai atualizar o nome do produto e preencher informações técnicas detalhadas.
 - Os dropdowns de **Área**, **Classe** e **Subclasse** dependem de dados cadastrados previamente (UC-F13). Se estiverem vazios, prossiga com os demais campos e retorne após executar o UC-F13.
 
@@ -1113,7 +1116,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Passo 1 — Localizar e abrir o produto para edição
 
-**O que fazer:** Na tela de portfólio, localize o produto `Monitor Multiparâmetro Nihon Kohden BSM-3000`. Clique nele para abrir os detalhes, depois localize o botão "Editar" (pode ser um lápis, ou a palavra "Editar").
+**O que fazer:** Na tela de portfólio, localize o produto `Ventilador Pulmonar Drager Savina 300`. Clique nele para abrir os detalhes, depois localize o botão "Editar" (pode ser um lápis, ou a palavra "Editar").
 
 **O que você vai ver na tela:** O card ou linha do produto na lista de portfólio.
 
@@ -1132,16 +1135,16 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 | Campo | Valor |
 |---|---|
-| Nome do Produto | `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` |
-| Fabricante | `Nihon Kohden` |
-| Modelo | `BSM-3000 V2` |
-| SKU | `NK-BSM3000-V2-BR` |
-| NCM | `9018.19.90` |
+| Nome do Produto | `Ventilador Pulmonar Drager Savina 300 (UTI)` |
+| Fabricante | `Dräger` |
+| Modelo | `Savina 300 Classic` |
+| SKU | `DRG-SVN300-CLS-BR` |
+| NCM | `9019.20.10` |
 
 **O que acontece depois:** Os campos são atualizados com os novos valores.
 
 ✅ **Correto se:** Todos os campos aceitar os novos valores sem mensagem de erro.
-❌ **Problema se:** O campo NCM rejeita o formato `9018.19.90`, ou o campo SKU tem limite de caracteres que impede o valor.
+❌ **Problema se:** O campo NCM rejeita o formato `9019.20.10`, ou o campo SKU tem limite de caracteres que impede o valor.
 
 ---
 
@@ -1149,7 +1152,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 **O que fazer:** Localize o campo de Descrição do produto e preencha com o texto abaixo.
 
-**Dado a informar:** `Monitor multiparamétrico de sinais vitais para uso hospitalar adulto e pediátrico, com tela touchscreen 12 polegadas e bateria interna de 4 horas`
+**Dado a informar:** `Ventilador pulmonar de alta performance para UTI adulto e pediátrico, com modos invasivos e não invasivos, tela touchscreen 12 polegadas e bateria interna de 2 horas`
 
 **O que acontece depois:** A descrição é preenchida no campo correspondente.
 
@@ -1167,8 +1170,8 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | Campo | Valor |
 |---|---|
 | Área | `Equipamentos Médico-Hospitalares` |
-| Classe | `Monitorização Multiparamétrica` |
-| Subclasse | `Monitor Multiparâmetro` |
+| Classe | `Ventilação Pulmonar` |
+| Subclasse | `Ventilador Pulmonar` |
 
 ✅ **Correto se:** Os três níveis de classificação estão selecionados corretamente.
 ❌ **Problema se:** Selecionar a Classe faz a Subclasse ser zerada, ou os valores não existem na lista.
@@ -1177,11 +1180,9 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Passo 5 — Preencher as especificações técnicas
 
-> **V4 — alinhado com o produto (8 especificações):** o frontend atual expõe 8 campos de especificação. As 11 da V3 incluíam 3 campos (Determinações, Volume, Validade do Kit) que ainda não têm input dedicado. Esses 3 ficam de fora desta validação — quando o produto evoluir para 11 campos, este tutorial será atualizado.
+> **V4 — alinhado com o produto (8 especificações):** o frontend atual expõe 8 campos de especificação. As 11 da V3 incluíam 3 campos (Determinações, Volume, Validade do Kit) que ainda não têm input dedicado.
 
-**O que fazer:** Localize a seção de especificações técnicas do produto. Pode ser uma tabela onde você adiciona especificações chave-valor, ou campos individuais. Preencha as 8 especificações listadas abaixo.
-
-**O que você vai ver na tela:** Uma área para adicionar especificações técnicas, com campos como "Nome da especificação" e "Valor".
+**O que fazer:** Localize a seção de especificações técnicas do produto. Preencha as 8 especificações listadas abaixo.
 
 **Especificações a preencher (8 ao total):**
 
@@ -1194,9 +1195,9 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 | 5 | Temperatura | `37°C` |
 | 6 | Incubação | `5 minutos` |
 | 7 | Conservação | `2–8°C` |
-| 8 | Registro ANVISA | `80129500015` |
+| 8 | Registro ANVISA | `80129500032` |
 
-📌 **Atenção:** São **8 especificações** técnicas. Adicione uma de cada vez. Alguns sistemas têm um botão "+ Adicionar Especificação" que você clica para cada nova linha.
+📌 **Atenção:** São **8 especificações** técnicas. Adicione uma de cada vez.
 
 **O que acontece depois:** Todas as 8 especificações aparecem listadas na seção de especificações técnicas do produto.
 
@@ -1211,7 +1212,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 **O que acontece depois:** Uma mensagem verde de sucesso aparece. O produto fica com todas as informações atualizadas.
 
-✅ **Correto se:** Mensagem de sucesso exibida e nome do produto na lista agora mostra `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)`.
+✅ **Correto se:** Mensagem de sucesso exibida e nome do produto na lista agora mostra `Ventilador Pulmonar Drager Savina 300 (UTI)`.
 ❌ **Problema se:** Erro ao salvar, ou o nome não foi atualizado na lista.
 
 ---
@@ -1219,10 +1220,10 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
-- Nome atualizado para `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)`
-- Fabricante `Nihon Kohden`, Modelo `BSM-3000 V2`, SKU `NK-BSM3000-V2-BR`, NCM `9018.19.90`
+- Nome atualizado para `Ventilador Pulmonar Drager Savina 300 (UTI)`
+- Fabricante `Dräger`, Modelo `Savina 300 Classic`, SKU `DRG-SVN300-CLS-BR`, NCM `9019.20.10`
 - 8 especificações técnicas salvas (V4 alinhado ao produto)
-- Registro ANVISA `80129500015` preenchido
+- Registro ANVISA `80129500032` preenchido
 - Classificação Área / Classe / Subclasse correta
 
 **🔴 Sinais de problema:**
@@ -1243,14 +1244,14 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` deve estar editado e salvo (UC-F08 concluído).
+- O produto `Ventilador Pulmonar Drager Savina 300 (UTI)` deve estar editado e salvo (UC-F08 concluído).
 - O produto deve ter um **documento anexado** (manual técnico, IFU ou plano de contas). Se nenhum documento foi enviado durante o UC-F07, o reprocessamento usará apenas a descrição do produto como base, o que pode gerar resultados limitados.
 
 ---
 
 ### Passo 1 — Abrir o produto e localizar o botão Reprocessar IA
 
-**O que fazer:** Na tela de portfólio, clique no produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` para abrir seus detalhes. No card de detalhes, procure pelo botão "Reprocessar IA", "Analisar com IA" ou similar.
+**O que fazer:** Na tela de portfólio, clique no produto `Ventilador Pulmonar Drager Savina 300 (UTI)` para abrir seus detalhes. No card de detalhes, procure pelo botão "Reprocessar IA", "Analisar com IA" ou similar.
 
 **O que você vai ver na tela:** O card de detalhes completo do produto, com todas as informações preenchidas nos UCs anteriores.
 
@@ -1315,7 +1316,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` deve estar cadastrado com o registro ANVISA `80129500015`.
+- O produto `Ventilador Pulmonar Drager Savina 300 (UTI)` deve estar cadastrado com o registro ANVISA `80129500032`.
 - A busca requer conexão com a internet.
 
 > **V4 — Dependências externas (motivo de "0 resultados"):**
@@ -1323,12 +1324,11 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 > A funcionalidade de UC-F10 **depende de duas integrações externas** que podem estar indisponíveis ou não configuradas no ambiente. Antes de reportar como bug, verifique:
 >
 > **1. Busca ANVISA** — usa o serviço oficial `consultas.anvisa.gov.br/api/consulta`. Limitações:
->    - O número de registro precisa ser **válido** no banco da ANVISA. O `80129500015` usado no tutorial é fictício, então **0 resultados é o esperado** para esse exemplo.
->    - Para validação real, use um registro de produto que sabidamente exista (ex: pegue um da etiqueta de um produto físico no estoque).
+>    - O número de registro precisa ser **válido** no banco da ANVISA. O `80129500032` usado no tutorial é fictício, então **0 resultados é o esperado** para esse exemplo.
+>    - Para validação real, use um registro de produto que sabidamente exista.
 >
 > **2. Busca Web (Brave Search API)** — requer chave de API ativa em `.env` do backend (`BRAVE_SEARCH_API_KEY`). Limitações:
 >    - Se a chave **não está configurada** ou **expirou**, todas as buscas retornam vazio.
->    - Se a chave existir mas excedeu cota mensal, idem.
 >    - **Como saber:** peça ao Pasteur para verificar `backend/.env`. Se a chave estiver lá e ativa, a busca funciona.
 >
 > **Resumo: "0 resultados" geralmente significa (a) registro/termo não existe, (b) chave Brave API ausente/expirada — NÃO é defeito do produto.**
@@ -1354,7 +1354,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 | Campo | Valor |
 |---|---|
-| Número de Registro ANVISA | `80129500015` |
+| Número de Registro ANVISA | `80129500032` |
 | Nome do produto (se pedido) | `Kit Glicose BioGlic` |
 
 **O que acontece depois:** O sistema consulta a ANVISA e exibe os resultados encontrados para este registro (ou informa que não foi encontrado — o que é possível pois pode ser um registro fictício para fins de teste).
@@ -1372,8 +1372,8 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 | Campo | Valor |
 |---|---|
-| Nome para busca | `Kit de Reagentes para Hemograma Completo Nihon Kohden` |
-| Fabricante | `Nihon Kohden` |
+| Nome para busca | `Kit de Reagentes para Hemograma Completo Dräger` |
+| Fabricante | `Dräger` |
 
 **O que acontece depois:** O sistema realiza uma busca na internet e exibe resultados de produtos similares encontrados. Os resultados podem ser links, fichas técnicas ou descrições de produtos similares.
 
@@ -1398,7 +1398,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ## [UC-F11] Verificar Completude do Produto
 
-> **O que este caso de uso faz:** O sistema calcula automaticamente um "índice de completude" para cada produto — uma porcentagem que indica o quanto a ficha do produto está preenchida. Quanto mais completo, maior a chance de o produto ser bem avaliado em editais. Este UC verifica se o indicador está sendo calculado e exibido corretamente para o produto da Bio-Hosp.
+> **O que este caso de uso faz:** O sistema calcula automaticamente um "índice de completude" para cada produto — uma porcentagem que indica o quanto a ficha do produto está preenchida. Quanto mais completo, maior a chance de o produto ser bem avaliado em editais. Este UC verifica se o indicador está sendo calculado e exibido corretamente para o produto da Vita-Sense.
 
 **Onde:** Portfólio → produto → Card de Detalhes (seção de completude ou score)
 **Quanto tempo leva:** 2 a 3 minutos
@@ -1407,21 +1407,21 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` deve estar com todos os dados preenchidos (UCs F07 e F08 concluídos).
+- O produto `Ventilador Pulmonar Drager Savina 300 (UTI)` deve estar com todos os dados preenchidos (UCs F07 e F08 concluídos).
 
-> **V4 — cenário negativo recomendado (opcional, mas útil):** se o produto está vindo 100% completo, faça um teste paralelo:
+> **V4 — cenário negativo recomendado (opcional):** se o produto está vindo 100% completo, faça um teste paralelo:
 > 1. Abra UC-F08 e **REMOVA** o conteúdo do campo "Fabricante" (apague para deixar vazio).
 > 2. Salve.
 > 3. Abra UC-F11 — a completude deve **CAIR** (ex: de 100% para ~92%).
-> 4. Volte para UC-F08, **restaure** "Nihon Kohden" no campo Fabricante e salve.
+> 4. Volte para UC-F08, **restaure** o fabricante original e salve.
 >
-> Isso valida que o cálculo de completude responde a campos vazios. Se a completude permanecer 100% mesmo com campo vazio, é um defeito.
+> Isso valida que o cálculo de completude responde a campos vazios.
 
 ---
 
 ### Passo 1 — Abrir os detalhes do produto e localizar o indicador de completude
 
-**O que fazer:** No portfólio, clique no produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)`. No card de detalhes, procure por um indicador de completude, score, porcentagem ou barra de progresso.
+**O que fazer:** No portfólio, clique no produto `Ventilador Pulmonar Drager Savina 300 (UTI)`. No card de detalhes, procure por um indicador de completude, score, porcentagem ou barra de progresso.
 
 **O que você vai ver na tela:** O card de detalhes do produto com um indicador visual de completude (pode ser uma barra, um número percentual, ou um badge colorido).
 
@@ -1442,7 +1442,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 - **Laranja** (40–69%): produto incompleto
 - **Vermelho** (< 40%): produto muito incompleto
 
-📌 **Atenção:** Um indicador AMARELO entre 70–89% é o resultado **correto e esperado** para este produto. NÃO é um problema. O produto da Bio-Hosp tem muitas informações preenchidas, mas faltam alguns campos que fariam o score chegar ao verde (≥ 90%). Isso é intencional neste conjunto de dados — estamos validando que o sistema diferencia produtos completos (verde) de produtos com boa mas não total completude (amarelo).
+📌 **Atenção:** Um indicador AMARELO entre 70–89% é o resultado **correto e esperado** para este produto. NÃO é um problema. O produto da Vita-Sense tem muitas informações preenchidas, mas faltam alguns campos que fariam o score chegar ao verde (≥ 90%). Isso é intencional neste conjunto de dados — estamos validando que o sistema diferencia produtos completos (verde) de produtos com boa mas não total completude (amarelo).
 
 ✅ **Correto se:** Indicador entre 70–89% com badge AMARELO.
 ❌ **Problema se:** Indicador verde (acima de 90%) quando o produto não deveria estar 100% completo, ou indicador vermelho (abaixo de 40%) para um produto com tantos campos preenchidos.
@@ -1474,9 +1474,9 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- O produto `Monitor Multiparâmetro Nihon Kohden BSM-3000 (Versão Hospitalar)` deve estar cadastrado.
+- O produto `Ventilador Pulmonar Drager Savina 300 (UTI)` deve estar cadastrado.
 
-> **V4 — Mudança importante (decisão de produto):** os campos **CATMAT, CATSER e Termos de Busca** são **gerados automaticamente pela IA** a partir do nome+especificações do produto. Eles aparecem **read-only** (somente leitura, como badges/tags) na tela de captação. **Você não vai conseguir editá-los manualmente** — esse é o comportamento atual e correto. Para alterar os códigos, é preciso reprocessar o produto via IA (UC-F09) com nome/especificações ajustados, ou cadastrar a subclasse com os códigos desejados (UC-F13).
+> **V4 — Mudança importante (decisão de produto):** os campos **CATMAT, CATSER e Termos de Busca** são **gerados automaticamente pela IA** a partir do nome+especificações do produto. Eles aparecem **read-only** (somente leitura, como badges/tags) na tela de captação. **Você não vai conseguir editá-los manualmente** — esse é o comportamento atual e correto. Para alterar, é preciso reprocessar o produto via IA (UC-F09).
 
 ---
 
@@ -1549,7 +1549,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 > **V8 do UC (29/04/2026):** Este UC foi reescrito. Antes era apenas "Consultar" (visualizar a árvore). Agora você **CRIA** a hierarquia primeiro e DEPOIS visualiza o que criou.
 >
-> **Por que:** cada empresa tem sua própria hierarquia (`empresa_scoped=True` no banco). A empresa Bio-Hosp (que você acabou de criar/vincular) ainda não tem nenhuma área/classe/subclasse cadastrada — você precisa criar a estrutura para que os outros UCs (UC-F02 área padrão, UC-F06 filtros de produto, UC-F08 cadastro de produto, e Sprint 2 com filtros de edital) funcionem.
+> **Por que:** cada empresa tem sua própria hierarquia (`empresa_scoped=True` no banco). A empresa Vita-Sense (que você acabou de criar/vincular) ainda não tem nenhuma área/classe/subclasse cadastrada — você precisa criar a estrutura para que os outros UCs (UC-F02 área padrão, UC-F06 filtros de produto, UC-F08 cadastro de produto, e Sprint 2 com filtros de edital) funcionem.
 
 > **O que este caso de uso faz:** O sistema possui uma hierarquia de classificação de produtos: **Área → Classe → Subclasse**. É como uma árvore de categorias — similar ao que você vê em e-commerces, onde produtos são organizados em departamentos e subseções. Você vai **criar** essa estrutura nos 3 CRUDs específicos (Áreas, Classes, Subclasses) e depois conferir na PortfolioPage que tudo aparece corretamente na árvore.
 
@@ -1565,7 +1565,7 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
 
 ### Antes de começar
 
-- Você deve ter logado como super (validaarnaldo ou similar) e ter a empresa Bio-Hosp **selecionada como ativa** (UC-F18 já feito).
+- Você deve ter logado como super (validaargus ou similar) e ter a empresa Vita-Sense **selecionada como ativa** (UC-F18 já feito).
 - Os 3 CRUDs (`Áreas de Produto`, `Classes de Produto`, `Subclasses de Produto`) ficam dentro do menu lateral em **Cadastros**.
 - Se em algum momento você já criou parte da hierarquia em sessão anterior, o tutorial é **idempotente**: pule os passos de criação cujos itens já aparecem na listagem e siga.
 
@@ -1579,10 +1579,10 @@ Bio-Hosp pode atender hospitais em municípios da região metropolitana de BH. C
        └── Monitor Multiparamétrico (NCM 9018.19.90)
 
 2. Equipamentos Médico-Hospitalares
-   ├── Monitorização Multiparamétrica
-   │   └── Monitor Multiparâmetro (NCM 9018.19.90)
-   └── Monitorização Multiparamétrica
-       └── Oxímetro de Pulso (NCM 9018.19.90)
+   ├── Ventilação Pulmonar
+   │   └── Ventilador Pulmonar (NCM 9019.20.10)
+   └── Ventilação Pulmonar
+       └── Oxímetro de Pulso (NCM 9019.20.10)
 ```
 
 Total: **2 áreas, 3 classes, 3 subclasses**.
@@ -1635,13 +1635,13 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 ✅ **Correto se:** Listagem mostra a classe com a área associada.
 
-#### Passo 2.3 — Criar Classe "Monitorização Multiparamétrica" vinculada à Área "Equipamentos Médico-Hospitalares"
+#### Passo 2.3 — Criar Classe "Ventilação Pulmonar" vinculada à Área "Equipamentos Médico-Hospitalares"
 
-**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
+**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Ventilação Pulmonar`. Salvar.
 
-#### Passo 2.4 — Criar Classe "Monitorização Multiparamétrica" vinculada à mesma área
+#### Passo 2.4 — Criar Classe "Ventilação Pulmonar" vinculada à mesma área
 
-**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
+**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Ventilação Pulmonar`. Salvar.
 
 ✅ **Correto se:** Listagem mostra **3 classes**, sendo 1 em Equipamentos e 2 em Diagnóstico.
 
@@ -1666,22 +1666,22 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 ✅ **Correto se:** Listagem mostra a subclasse com NCM.
 
-#### Passo 3.3 — Criar Subclasse "Monitor Multiparâmetro"
+#### Passo 3.3 — Criar Subclasse "Ventilador Pulmonar"
 
 **O que fazer:**
 1. Clique `Novo`.
-2. Classe: `Monitorização Multiparamétrica`
-3. Nome: `Monitor Multiparâmetro`
-4. NCM: `9018.19.90`
+2. Classe: `Ventilação Pulmonar`
+3. Nome: `Ventilador Pulmonar`
+4. NCM: `9019.20.10`
 5. Salvar.
 
 #### Passo 3.4 — Criar Subclasse "Oxímetro de Pulso"
 
 **O que fazer:**
 1. Clique `Novo`.
-2. Classe: `Monitorização Multiparamétrica`
+2. Classe: `Ventilação Pulmonar`
 3. Nome: `Oxímetro de Pulso`
-4. NCM: `9018.19.90`
+4. NCM: `9019.20.10`
 5. Salvar.
 
 ✅ **Correto se:** Listagem mostra **3 subclasses** com seus NCMs.
@@ -1705,8 +1705,8 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 - `Equipamentos Médico-Hospitalares`
   - `Monitoração` → `Monitor Multiparamétrico` (NCM 9018.19.90)
 - `Equipamentos Médico-Hospitalares`
-  - `Monitorização Multiparamétrica` → `Monitor Multiparâmetro` (NCM 9018.19.90)
-  - `Monitorização Multiparamétrica` → `Oxímetro de Pulso` (NCM 9018.19.90)
+  - `Ventilação Pulmonar` → `Ventilador Pulmonar` (NCM 9019.20.10)
+  - `Ventilação Pulmonar` → `Oxímetro de Pulso` (NCM 9019.20.10)
 
 ✅ **Correto se:** Toda a árvore aparece com NCMs corretos.
 ❌ **Problema se:** Falta alguma área/classe/subclasse — voltar ao CRUD correspondente e completar.
@@ -1721,7 +1721,7 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 **O que o validador deve conferir:**
 - 2 áreas criadas (Equipamentos Médico-Hospitalares + Diagnóstico in Vitro)
-- 3 classes criadas (Monitoração + Monitorização Multiparamétrica + Monitorização Multiparamétrica)
+- 3 classes criadas (Monitoração + Ventilação Pulmonar + Ventilação Pulmonar)
 - 3 subclasses criadas com NCMs corretos
 - Árvore consolidada na PortfolioPage mostra tudo aninhado
 
@@ -1878,7 +1878,7 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 ### Antes de começar
 
-- Neste conjunto de dados, a Bio-Hosp atua em **todo o Brasil** — não em estados específicos. Isso é diferente de outras empresas que atuam só em algumas regiões. A validação inclui marcar o checkbox "Todo o Brasil".
+- Neste conjunto de dados, a Vita-Sense atua em **todo o Brasil** — não em estados específicos. Isso é diferente de outras empresas que atuam só em algumas regiões. A validação inclui marcar o checkbox "Todo o Brasil".
 
 ---
 
@@ -1938,9 +1938,9 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 | Campo | Valor |
 |---|---|
-| TAM (Mercado Total Disponível) | `R$ 8.500.000.000,00` |
-| SAM (Mercado Endereçável) | `R$ 1.700.000.000,00` |
-| SOM (Fatia de Mercado Alcançável) | `R$ 95.000.000,00` |
+| TAM (Mercado Total Disponível) | `R$ 6.300.000.000,00` |
+| SAM (Mercado Endereçável) | `R$ 1.250.000.000,00` |
+| SOM (Fatia de Mercado Alcançável) | `R$ 78.000.000,00` |
 
 📌 **Atenção:** Os valores são grandes (bilhões e milhões). O sistema deve aceitar esses valores sem truncamento. Se o campo mostrar limite de dígitos, verifique se há um campo em valor simplificado (ex: "4.2 bi" em vez de "4.200.000.000").
 
@@ -1955,20 +1955,20 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 **O que fazer:** Localize a seção de precificação e preencha os campos conforme abaixo.
 
-> **V4 — Mudança de comportamento (campos monetários):** os campos de Markup, Custos Fixos e Frete agora **aceitam ponto e vírgula** (ex: `15000,50` ou `15.000,50`). Não tem mais aquela limitação de digitar só números puros. Use vírgula como separador decimal. Se você acha que o sistema não aceitou, recarregue a página — os valores devem reaparecer corretamente.
+> **V4 — Mudança de comportamento (campos monetários):** os campos de Markup, Custos Fixos e Frete agora **aceitam ponto e vírgula** (ex: `15000,50` ou `15.000,50`). Use vírgula como separador decimal.
 
 **Dados a informar:**
 
 | Campo | Valor (digite assim) |
 |---|---|
 | Markup | `35` (porcentagem, sem o símbolo %) |
-| Custos Fixos | `67000` (ou `67.000,00` se preferir) |
-| Frete | `320` (ou `320,00`) |
+| Custos Fixos | `58000` (ou `58.000,00`) |
+| Frete | `450` (ou `450,00`) |
 
-**O que acontece depois:** Os campos de precificação ficam preenchidos. Após clicar em "Salvar Custos", um **toast verde** aparece **fixo no canto superior direito da tela** com a mensagem "✓ Salvo!" (some sozinho em 3 segundos). Se você fizer scroll, o toast continua visível.
+**O que acontece depois:** Os campos de precificação ficam preenchidos. Após clicar em "Salvar Custos", um **toast verde** aparece **fixo no canto superior direito** com a mensagem "✓ Salvo!" (some em 3 segundos).
 
-✅ **Correto se:** Todos os campos aceitam os valores sem erro **E** o toast verde aparece após salvar.
-❌ **Problema se:** O campo de Markup não aceita porcentagem, OU os valores de custo não aceitam casas decimais, OU não aparece toast nenhum após salvar.
+✅ **Correto se:** Todos os campos aceitam os valores **E** o toast verde aparece.
+❌ **Problema se:** O campo de Markup não aceita porcentagem, OU não aparece toast nenhum após salvar.
 
 ---
 
@@ -2007,8 +2007,8 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 **O que o validador deve conferir:**
 - "Atuar em todo o Brasil" está marcado
 - Prazo de entrega: 15 dias; Frequência: Quinzenal
-- TAM: R$ 8.500.000.000,00; SAM: R$ 1.700.000.000,00; SOM: R$ 95.000.000,00
-- Markup: 35%, Custos Fixos: R$ 67.000, Frete: R$ 320
+- TAM: R$ 6.300.000.000,00; SAM: R$ 1.250.000.000,00; SOM: R$ 78.000.000,00
+- Markup: 35%, Custos Fixos: R$ 58.000, Frete: R$ 450
 - Três modalidades selecionadas: Pregão Eletrônico, Dispensa, Inexigibilidade
 
 **🔴 Sinais de problema:**
@@ -2049,15 +2049,15 @@ Total: **2 áreas, 3 classes, 3 subclasses**.
 
 ### Passo 2 — Desativar o ComprasNet
 
-> **V4 — Aviso importante (banco com duplicidade conhecida):** o banco atualmente tem **DUAS entradas** com o nome "ComprasNet" (uma é "ComprasNet" pura, outra é "ComprasNet (Portal de Compras do Governo Federal)"). Se você desativar APENAS uma, ao recarregar a tela pode ver "ComprasNet" voltando a aparecer ativo (referente ao registro irmão). Para esta validação V4: desative as **duas linhas** que tiverem "ComprasNet" no nome. Reporte se identificar a duplicidade.
+> **V4 — Aviso importante (banco com duplicidade conhecida):** o banco atualmente tem **DUAS entradas** com o nome "ComprasNet" (uma "ComprasNet" pura e outra "ComprasNet (Portal de Compras do Governo Federal)"). Se você desativar APENAS uma, ao recarregar pode ver "ComprasNet" voltando a aparecer ativo. Para esta validação V4: desative as **duas linhas** que tiverem "ComprasNet" no nome. Reporte se identificar a duplicidade.
 
-**O que fazer:** Localize **todas as linhas com "ComprasNet" no nome** na lista de portais. Clique no toggle ou checkbox para desativá-las uma por uma. Cada uma deve mudar de "Ativo" (geralmente verde) para "Inativo" (geralmente cinza ou vermelho).
+**O que fazer:** Localize **todas as linhas com "ComprasNet" no nome** na lista de portais. Clique no toggle/checkbox para desativá-las uma por uma.
 
 **O que você vai ver na tela:** Possivelmente 1 ou 2 linhas com "ComprasNet" no nome.
 
-**O que acontece depois:** Todas as linhas "ComprasNet" ficam marcadas como inativas. O sistema não vai mais buscar editais nestes portais (enquanto estiverem desativadas).
+**O que acontece depois:** Todas as linhas "ComprasNet" ficam marcadas como inativas.
 
-✅ **Correto se:** O status de cada linha "ComprasNet" muda para inativo após clicar no toggle E permanece inativo após recarregar a página.
+✅ **Correto se:** O status de cada linha "ComprasNet" muda para inativo E permanece inativo após recarregar a página.
 ❌ **Problema se:** O toggle não funciona, ou ao recarregar uma das linhas volta para ativo.
 
 ---
@@ -2095,11 +2095,11 @@ medio lote reagente
 
 **Dados a informar (NCMs):**
 ```
-9018.19.90
 9019.20.10
-9018.90.99
-9402.90.20
+9019.10.00
+9018.19.90
 9018.50.90
+9402.90.20
 ```
 
 **O que acontece depois:** Os cinco códigos NCM ficam associados às buscas.
@@ -2148,7 +2148,7 @@ medio lote reagente
 
 ## [UC-F17] Configurar Notificações e Preferências
 
-> **O que este caso de uso faz:** Este é o último passo da configuração da empresa: definir como e quando a empresa quer ser avisada sobre novos editais e eventos do sistema. Aqui configuramos os canais de notificação (email, sistema, SMS), a frequência dos alertas, e as preferências de interface (tema visual, idioma e fuso horário). É a personalização final que garante que o sistema vai funcionar do jeito que a equipe da Bio-Hosp prefere.
+> **O que este caso de uso faz:** Este é o último passo da configuração da empresa: definir como e quando a empresa quer ser avisada sobre novos editais e eventos do sistema. Aqui configuramos os canais de notificação (email, sistema, SMS), a frequência dos alertas, e as preferências de interface (tema visual, idioma e fuso horário). É a personalização final que garante que o sistema vai funcionar do jeito que a equipe da Vita-Sense prefere.
 
 **Onde:** Menu lateral → Configurações → Notificações (ou Preferências)
 **Quanto tempo leva:** 5 a 8 minutos
@@ -2158,9 +2158,9 @@ medio lote reagente
 ### Antes de começar
 
 - Esta é a última UC do fluxo de configuração da Sprint 1.
-- As notificações serão enviadas para o email `licitacoes@biohosp.com.br`.
+- As notificações serão enviadas para o email `licitacoes@vitasense.com.br`.
 
-> **V4 — Mudança importante (persistência corrigida):** a versão V3 tinha um defeito conhecido: ao salvar e-mail, canais (e-mail/sistema/SMS), tema, idioma e fuso, os valores eram persistidos no banco mas, ao recarregar a tela, a UI mostrava os defaults em vez dos valores salvos. **Em V4 isso foi corrigido.** Agora, depois de clicar em "Salvar Notificações" ou "Salvar Preferências", se você sair da tela e voltar, os valores devem permanecer iguais ao que você escolheu.
+> **V4 — Mudança importante (persistência corrigida):** a versão V3 tinha um defeito conhecido: ao salvar e-mail, canais (e-mail/sistema/SMS), tema, idioma e fuso, os valores eram persistidos no banco mas, ao recarregar a tela, a UI mostrava os defaults em vez dos valores salvos. **Em V4 isso foi corrigido.**
 >
 > **Como validar:** após cada save, **recarregue a página** (F5) e verifique se os campos mantêm o que você acabou de salvar. Se voltarem para defaults, é regressão e deve ser reportada.
 
@@ -2181,7 +2181,7 @@ medio lote reagente
 
 **O que fazer:** Localize o campo de email para notificações. Verifique se já está preenchido com o email da empresa ou insira manualmente.
 
-**Dado a informar:** `licitacoes@biohosp.com.br`
+**Dado a informar:** `licitacoes@vitasense.com.br`
 
 **O que acontece depois:** O email fica configurado como destino das notificações.
 
@@ -2260,7 +2260,7 @@ medio lote reagente
 
 **O que você vai ver na tela:** A página recarrega e exibe as configurações salvas anteriormente.
 
-✅ **Correto se:** Todos os toggles, seleções e campos mantêm os valores salvos após recarregar. Especificamente: email `licitacoes@biohosp.com.br`, canais Email/Sistema/SMS ativos, frequência Semanal, tema Claro, idioma pt-BR, fuso America/Sao_Paulo.
+✅ **Correto se:** Todos os toggles, seleções e campos mantêm os valores salvos após recarregar. Especificamente: email `licitacoes@vitasense.com.br`, canais Email/Sistema/SMS ativos, frequência Semanal, tema Claro, idioma pt-BR, fuso America/Sao_Paulo.
 ❌ **Problema se:** Algum campo volta ao valor padrão após recarregar — isso indica que o salvamento não persistiu no banco de dados.
 
 ---
@@ -2268,7 +2268,7 @@ medio lote reagente
 ### ✅ Resultado Final
 
 **O que o validador deve conferir:**
-- Email de notificação: `licitacoes@biohosp.com.br`
+- Email de notificação: `licitacoes@vitasense.com.br`
 - Canais ativos: Email ✅, Sistema ✅, SMS ✅
 - Frequência: Semanal
 - Tema: Claro
@@ -2287,10 +2287,10 @@ medio lote reagente
 
 | UC | O que verificar | Resultado esperado |
 |---|---|---|
-| UC-F01 | Cadastro principal da empresa | Dados salvos, CNPJ formatado, Facebook vazio sem erro, endereço de Belo Horizonte/MG |
+| UC-F01 | Cadastro principal da empresa | Dados salvos, CNPJ formatado, Facebook vazio sem erro, endereço de Curitiba/PR |
 | UC-F02 | Contatos e área padrão | 2 emails, 3 telefones e área "Equipamentos Médico-Hospitalares" salvos |
 | UC-F03 | Documentos com badges de validade | Alvará: amarelo; AFE: verde; ISO: verde; Certidão Estadual: vermelho/amarelo |
-| UC-F04 | Certidões automáticas e upload PGFN | Frequência quinzenal configurada; certidão PGFN com número `SEFAZ-MG-2026-3301` e validade `15/10/2026` |
+| UC-F04 | Certidões automáticas e upload PGFN | Frequência quinzenal configurada; certidão PGFN com número `SEFAZ-PR-2026-4982` e validade `30/11/2026` |
 | UC-F05 | Dois responsáveis sem Preposto | Fernanda (Rep. Legal) e Dr. Ricardo (Resp. Técnico) — sistema não exige Preposto |
 | UC-F06 | Filtros do portfólio funcionando | Filtro por área e busca por "reagente" e "hemograma" respondem corretamente |
 | UC-F07 | Cadastro por IA e Plano de Contas sem nome | IA processa em até 90s; item sem nome aceito pelo sistema |
@@ -2299,7 +2299,7 @@ medio lote reagente
 | UC-F10 | Busca ANVISA e busca web | Ambas executam sem travar o sistema |
 | UC-F11 | Completude do produto em AMARELO | Indicador entre 65–80% com badge amarelo (não verde, não vermelho) |
 | UC-F12 | Metadados de captação | CATMAT 256 e 258; 4 termos de busca salvos |
-| UC-F13 | Hierarquia de classificação | Área > Diagnóstico; subclasses "Monitor Multiparâmetro" e "Oxímetro de Pulso" existem |
+| UC-F13 | Hierarquia de classificação | Área > Diagnóstico; subclasses "Ventilador Pulmonar" e "Oxímetro de Pulso" existem |
 | UC-F14 | Pesos e limiares — dois subcenários | Soma 1.05 bloqueada; soma 1.00 aceita e salva |
 | UC-F15 | Parâmetros comerciais com "Todo o Brasil" | Checkbox nacional marcado; TAM/SAM/SOM; 3 modalidades ativas |
 | UC-F16 | Fontes de busca, keywords e NCMs | ComprasNet desativado; 10 keywords e 5 NCMs salvos |
@@ -2331,4 +2331,4 @@ Se aconteceu só uma vez, tente repetir o passo para confirmar se é consistente
 
 ---
 
-> **Dica final:** Faça os UCs na ordem apresentada neste tutorial. Cada UC depende dos dados inseridos nos anteriores. Se pular um UC, pode ser que o próximo não funcione como esperado por falta de dados. Se precisar recomeçar, limpe os dados da Bio-Hosp antes de começar novamente.
+> **Dica final:** Faça os UCs na ordem apresentada neste tutorial. Cada UC depende dos dados inseridos nos anteriores. Se pular um UC, pode ser que o próximo não funcione como esperado por falta de dados. Se precisar recomeçar, limpe os dados da Vita-Sense antes de começar novamente.

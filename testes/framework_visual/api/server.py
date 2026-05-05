@@ -98,15 +98,36 @@ def create_app():
     app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 8
 
     # CORS — proxy do Vite repassa pra /api do mesmo origin (5181), entao cookie
-    # eh same-origin do ponto de vista do browser. SameSite=Lax funciona.
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    app.config["SESSION_COOKIE_SECURE"] = False
-    CORS(app,
-         origins=["http://localhost:5181", "http://127.0.0.1:5181",
-                  "http://localhost:5180", "http://127.0.0.1:5180"],
-         supports_credentials=True,
-         allow_headers="*",
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    # eh same-origin do ponto de vista do browser. SameSite=Lax funciona pra dev local.
+    # Para acesso externo (IP publico, tunnel HTTPS), defina:
+    #   CORS_ORIGINS="http://1.2.3.4:5181,https://abc.ngrok.io"
+    #   COOKIE_SAMESITE_NONE=1 (so se for HTTPS — cookie cross-site precisa SameSite=None+Secure)
+    _samesite_none = os.getenv("COOKIE_SAMESITE_NONE", "0") == "1"
+    if _samesite_none:
+        app.config["SESSION_COOKIE_SAMESITE"] = "None"
+        app.config["SESSION_COOKIE_SECURE"] = True
+    else:
+        app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+        app.config["SESSION_COOKIE_SECURE"] = False
+
+    _cors_env = os.getenv("CORS_ORIGINS", "").strip()
+    if _cors_env == "*":
+        # Origin curinga real ("*") nao funciona com supports_credentials.
+        # Usar regex que case com qualquer origin e ainda permite cookies.
+        import re as _re
+        CORS(app, origins=_re.compile(r".*"), supports_credentials=True,
+             allow_headers="*", methods=["GET","POST","PUT","DELETE","OPTIONS"])
+    elif _cors_env:
+        CORS(app, origins=[o.strip() for o in _cors_env.split(",") if o.strip()],
+             supports_credentials=True, allow_headers="*",
+             methods=["GET","POST","PUT","DELETE","OPTIONS"])
+    else:
+        CORS(app,
+             origins=["http://localhost:5181", "http://127.0.0.1:5181",
+                      "http://localhost:5180", "http://127.0.0.1:5180"],
+             supports_credentials=True,
+             allow_headers="*",
+             methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     return app
 
@@ -1024,10 +1045,13 @@ def api_teste_iniciar(teste_id):
         if not run_atual.iniciado_em:
             run_atual.iniciado_em = datetime.now()
         db.commit()
+        # painel_url dinamico: usa o host pelo qual o cliente acessou a API.
+        # Permite acesso externo (Arnaldo via pasteurjr.servehttp.com:9876).
+        painel_host = (request.host or "localhost").split(":")[0]
         return jsonify({
             "ok": True,
             "pid": proc.pid,
-            "painel_url": "http://localhost:9876",
+            "painel_url": f"http://{painel_host}:9876",
             "log_path": f"/tmp/executor_{teste_id}.log",
             "run_id": run_atual.id,
             "run_numero": run_atual.numero,

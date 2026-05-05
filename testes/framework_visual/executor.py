@@ -466,9 +466,9 @@ def main():
             pontos_observacao=p.pontos_observacao,
         ))
 
-    # Sobe painel em thread
-    painel_thread = iniciar_painel_em_thread(estado, host="localhost", porta=args.porta)
-    print(f"[executor] Painel: http://localhost:{args.porta}")
+    # Sobe painel em thread em 0.0.0.0 (acessivel externamente)
+    painel_thread = iniciar_painel_em_thread(estado, host="0.0.0.0", porta=args.porta)
+    print(f"[executor] Painel: http://0.0.0.0:{args.porta} (acessivel externamente)")
     if not args.no_browser:
         try:
             webbrowser.open(f"http://localhost:{args.porta}")

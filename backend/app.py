@@ -68,7 +68,21 @@ def rn_enforce(rn_code: str, condition: bool, message: str):
             print(f"[RN-WARN {rn_code}] {message}")
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173", "http://localhost:5175", "http://localhost:3000"])
+# CORS: lê origins de env var. Default cobre dev local.
+# Para acesso externo (IP público, ngrok, domínio), set CORS_ORIGINS="http://5.6.7.8:5180,https://abc.ngrok.io"
+# Use "*" para aceitar qualquer origin (apenas em ambientes de desenvolvimento).
+import os as _os_cors
+_cors_origins_env = _os_cors.getenv("CORS_ORIGINS", "")
+if _cors_origins_env.strip() == "*":
+    CORS(app, origins="*")
+elif _cors_origins_env.strip():
+    CORS(app, origins=[o.strip() for o in _cors_origins_env.split(",") if o.strip()])
+else:
+    CORS(app, origins=[
+        "http://localhost:5173", "http://localhost:5174", "http://localhost:5175",
+        "http://localhost:5180", "http://127.0.0.1:5180",
+        "http://localhost:3000",
+    ])
 
 # Registrar blueprint CRUD genérico
 from crud_routes import crud_bp

@@ -8,7 +8,11 @@ export default defineConfig({
     port: 5181,
     strictPort: true,
     cors: true,                // aceita qualquer origin
-    allowedHosts: 'all',       // aceita qualquer Host header (ngrok, IP, etc)
+    // Vite 8.x: 'all' como string não é wildcard — usar array com ponto inicial.
+    // Lista cobre IPs, ngrok, no-ip e localhost. Adicionar novos hosts conforme necessário.
+    allowedHosts: ['.no-ip.info', '.ngrok.io', '.ngrok-free.app', '.servehttp.com',
+                   'localhost', '127.0.0.1', '0.0.0.0',
+                   'pasteurjr.servehttp.com', 'camerascasas.no-ip.info'],
     proxy: {
       '/api': {
         target: 'http://localhost:5060',

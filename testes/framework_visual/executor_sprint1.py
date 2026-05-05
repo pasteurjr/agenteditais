@@ -586,9 +586,9 @@ def main():
             evidencias_dir=evid_dir,
         )
 
-        # Sobe painel Flask
-        iniciar_painel_em_thread(estado, host="localhost", porta=args.porta)
-        print(f"[exec] Painel: http://localhost:{args.porta}")
+        # Sobe painel Flask em 0.0.0.0 (acessivel externamente, p/ Arnaldo)
+        iniciar_painel_em_thread(estado, host="0.0.0.0", porta=args.porta)
+        print(f"[exec] Painel: http://0.0.0.0:{args.porta} (acessivel externamente)")
         if not args.no_browser:
             try:
                 webbrowser.open(f"http://localhost:{args.porta}")
