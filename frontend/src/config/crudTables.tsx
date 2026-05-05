@@ -138,11 +138,14 @@ function CamposMascaraEditor({ value, onChange }: { value: unknown; onChange: (v
 
 // ─── Helper: Enum → options ───────────────────────────────────────────────────
 
-function enumOpts(values: string[]): { value: string; label: string }[] {
-  return values.map((v) => ({
-    value: v,
-    label: v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-  }));
+function enumOpts(values: Array<string | [string, string]>): { value: string; label: string }[] {
+  return values.map((v) => {
+    if (Array.isArray(v)) return { value: v[0], label: v[1] };
+    return {
+      value: v,
+      label: v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    };
+  });
 }
 
 // ─── Tabelas por Categoria ────────────────────────────────────────────────────
@@ -196,7 +199,23 @@ export const empresaDocumentosConfig: CrudPageConfig = {
   parentLabelField: "razao_social",
   fields: [
     { name: "empresa_id", label: "Empresa ID", type: "text", required: true, width: "half" },
-    { name: "tipo", label: "Tipo", type: "select", required: true, options: enumOpts(["contrato_social", "atestado_capacidade", "balanco", "alvara", "registro_conselho", "procuracao", "outro"]), width: "half" },
+    { name: "tipo", label: "Tipo", type: "select", required: true, options: enumOpts([
+        ["contrato_social", "Contrato Social"],
+        ["atestado_capacidade", "Atestado de Capacidade Técnica"],
+        ["balanco", "Balanço Patrimonial"],
+        ["alvara", "Alvará / Licença Sanitária"],
+        ["registro_conselho", "Registro em Conselho"],
+        ["procuracao", "Procuração"],
+        ["certidao_negativa", "Certidão Negativa Estadual"],
+        ["habilitacao_fiscal", "Habilitação Fiscal"],
+        ["habilitacao_economica", "Habilitação Econômico-Financeira"],
+        ["qualificacao_tecnica", "Qualificação Técnica"],
+        ["afe", "Autorização de Funcionamento ANVISA (AFE)"],
+        ["cbpad", "Boas Práticas de Distribuição ANVISA (CBPAD)"],
+        ["cbpp", "Boas Práticas de Produção ANVISA (CBPP)"],
+        ["bombeiros", "Auto de Vistoria do Corpo de Bombeiros"],
+        ["outro", "Outro / Certificado ISO / Acreditação"],
+      ]), width: "half" },
     { name: "nome_arquivo", label: "Nome do Arquivo", type: "text", required: true, width: "half" },
     { name: "path_arquivo", label: "Caminho do Arquivo", type: "text", required: true, width: "half" },
     { name: "data_emissao", label: "Data de Emissão", type: "date", width: "half" },

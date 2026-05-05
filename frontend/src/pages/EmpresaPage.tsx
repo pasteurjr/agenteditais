@@ -214,10 +214,12 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       setError(null);
       let emp: Record<string, unknown> | null = null;
       if (empresaCtx?.id) {
+        // Carrega APENAS a empresa ativa do contexto do usuário
         emp = await crudGet("empresas", empresaCtx.id);
       } else {
-        const res: CrudListResponse = await crudList("empresas", { limit: 1 });
-        emp = res.items.length > 0 ? res.items[0] as Record<string, unknown> : null;
+        // Sem empresa ativa no contexto: NÃO pré-popular com dados de outra empresa.
+        // Mantém formulário em branco para o usuário cadastrar uma nova.
+        emp = null;
       }
       if (emp) {
         const id = String(emp.id ?? "");
@@ -837,6 +839,14 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       render: (c) => c.validade ? new Date(c.validade + "T00:00:00").toLocaleDateString("pt-BR") : "-",
     },
     {
+      key: "numero",
+      header: "Número",
+      width: "150px",
+      render: (c) => c.numero
+        ? <span title={c.numero} style={{ fontFamily: "monospace", fontSize: 12 }}>{c.numero}</span>
+        : <span style={{ color: "var(--text-muted, #888)", fontStyle: "italic" }}>-</span>,
+    },
+    {
       key: "pdf",
       header: "PDF",
       width: "50px",
@@ -937,8 +947,10 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         <div className="page-header-left">
           <Building size={24} />
           <div>
-            <h1>Dados da Empresa</h1>
-            <p>Cadastro de informacoes e documentos da empresa</p>
+            <h1>{empresaId ? "Dados da Empresa" : "Cadastrar Nova Empresa"}</h1>
+            <p>{empresaId
+              ? "Cadastro de informacoes e documentos da empresa"
+              : "Preencha os dados abaixo. Após salvar, a empresa será vinculada ao seu usuário."}</p>
           </div>
         </div>
         <div className="page-header-actions">
@@ -1540,17 +1552,37 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
               );
             })()}
 
-            {/* PDF inline viewer */}
+            {/* PDF inline viewer com fallback amigavel */}
             {certDetail.path_arquivo && (
               <div>
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary, #666)", marginBottom: "6px" }}>
                   Documento PDF
                 </div>
-                <iframe
-                  src={`/api/empresa-certidoes/${certDetail.id}/download`}
-                  style={{ width: "100%", height: "280px", border: "1px solid var(--border, #e2e8f0)", borderRadius: "6px" }}
-                  title="Certidao PDF"
-                />
+                <object
+                  data={`/api/empresa-certidoes/${certDetail.id}/download`}
+                  type="application/pdf"
+                  style={{ width: "100%", height: "280px", border: "1px solid var(--border, #e2e8f0)", borderRadius: "6px", background: "#f9fafb" }}
+                >
+                  <div style={{ padding: 16, textAlign: "center", color: "var(--text-muted, #6b7280)", fontSize: 13 }}>
+                    Não foi possível exibir o PDF no navegador.{" "}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const tokenFn = getCrudTokenGetter();
+                        const token = tokenFn ? await tokenFn() : null;
+                        const res = await fetch(`/api/empresa-certidoes/${certDetail.id}/download?download=true`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                        if (res.ok) {
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          window.open(url, "_blank");
+                        } else {
+                          alert("Arquivo não encontrado no servidor. Faça upload novamente.");
+                        }
+                      }}
+                      style={{ background: "none", border: "none", color: "var(--primary, #3b82f6)", cursor: "pointer", textDecoration: "underline" }}
+                    >Clique aqui para baixar</button>
+                  </div>
+                </object>
               </div>
             )}
 

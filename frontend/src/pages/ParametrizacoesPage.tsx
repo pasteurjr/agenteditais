@@ -604,6 +604,16 @@ export function ParametrizacoesPage(_props: PageProps) {
         if (p.limiar_tecnico_nogo != null) setLimiarTecnicoNogo(String(p.limiar_tecnico_nogo));
         if (p.limiar_juridico_go != null) setLimiarJuridicoGo(String(p.limiar_juridico_go));
         if (p.limiar_juridico_nogo != null) setLimiarJuridicoNogo(String(p.limiar_juridico_nogo));
+
+        // UC-F17: notificacoes e preferencias persistidas
+        if (p.email_notificacao != null) setEmailNotif(String(p.email_notificacao));
+        if (p.notif_email != null) setNotifEmail(Boolean(p.notif_email));
+        if (p.notif_sistema != null) setNotifSistema(Boolean(p.notif_sistema));
+        if (p.notif_sms != null) setNotifSms(Boolean(p.notif_sms));
+        if (p.frequencia_resumo != null) setFrequenciaResumo(String(p.frequencia_resumo));
+        if (p.tema != null) setTema(String(p.tema));
+        if (p.idioma != null) setIdioma(String(p.idioma));
+        if (p.fuso_horario != null) setFusoHorario(String(p.fuso_horario));
       }
     } catch {
       // May not exist yet
@@ -726,11 +736,18 @@ export function ParametrizacoesPage(_props: PageProps) {
   };
 
   // RF-014: Salvar custos e margens
+  // toMoney: aceita "15.000,50" ou "15000.50" ou "15000,50" e devolve number
+  const toMoney = (v: string): number => {
+    if (!v) return 0;
+    const cleaned = v.replace(/\./g, '').replace(',', '.');
+    const n = Number(cleaned);
+    return isNaN(n) ? 0 : n;
+  };
   const handleSalvarCustos = async () => {
     await saveParamScore({
-      markup_padrao: markupPadrao ? Number(markupPadrao) : 0,
-      custos_fixos: custosFixos ? Number(custosFixos) : 0,
-      frete_base: freteBase ? Number(freteBase) : 0,
+      markup_padrao: toMoney(markupPadrao),
+      custos_fixos: toMoney(custosFixos),
+      frete_base: toMoney(freteBase),
     });
   };
 
@@ -871,13 +888,13 @@ export function ParametrizacoesPage(_props: PageProps) {
       </div>
 
       {salvoFeedback && (
-        <div style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 6, marginBottom: 8, fontSize: "0.9rem", textAlign: "center" }}>
-          {salvoFeedback}
+        <div style={{ position: "fixed", top: 16, right: 16, zIndex: 9999, background: "#16a34a", color: "#fff", padding: "10px 20px", borderRadius: 6, fontSize: "0.95rem", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+          ✓ {salvoFeedback}
         </div>
       )}
       {erroSave && (
-        <div style={{ background: "#dc2626", color: "#fff", padding: "8px 16px", borderRadius: 6, marginBottom: 8, fontSize: "0.9rem", textAlign: "center" }}>
-          {erroSave}
+        <div style={{ position: "fixed", top: 16, right: 16, zIndex: 9999, background: "#dc2626", color: "#fff", padding: "10px 20px", borderRadius: 6, fontSize: "0.95rem", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+          ✗ {erroSave}
         </div>
       )}
 
@@ -1053,14 +1070,14 @@ export function ParametrizacoesPage(_props: PageProps) {
 
                     <Card title="Custos e Margens" icon={<DollarSign size={18} />}>
                       <div className="form-grid form-grid-3">
-                        <FormField label="Markup Padrao (%)" hint="Percentual de markup sobre custo">
-                          <TextInput value={markupPadrao} onChange={(v) => setMarkupPadrao(v)} type="number" placeholder="Ex: 30" />
+                        <FormField label="Markup Padrao (%)" hint="Percentual. Use ponto ou virgula. Ex: 30,5">
+                          <TextInput value={markupPadrao} onChange={(v) => setMarkupPadrao(v.replace(/[^0-9.,]/g, ''))} placeholder="Ex: 30,5" />
                         </FormField>
-                        <FormField label="Custos Fixos Mensais (R$)" hint="Custos operacionais fixos mensais">
-                          <TextInput value={custosFixos} onChange={(v) => setCustosFixos(v)} type="number" prefix="R$" placeholder="Ex: 15000" />
+                        <FormField label="Custos Fixos Mensais (R$)" hint="Use ponto ou virgula. Ex: 15000,50">
+                          <TextInput value={custosFixos} onChange={(v) => setCustosFixos(v.replace(/[^0-9.,]/g, ''))} prefix="R$" placeholder="Ex: 15000,50" />
                         </FormField>
-                        <FormField label="Frete Base (R$)" hint="Custo base de frete por entrega">
-                          <TextInput value={freteBase} onChange={(v) => setFreteBase(v)} type="number" prefix="R$" placeholder="Ex: 500" />
+                        <FormField label="Frete Base (R$)" hint="Use ponto ou virgula. Ex: 500,00">
+                          <TextInput value={freteBase} onChange={(v) => setFreteBase(v.replace(/[^0-9.,]/g, ''))} prefix="R$" placeholder="Ex: 500,00" />
                         </FormField>
                       </div>
                       <div className="form-actions" style={{ marginTop: "12px" }}>

@@ -1,0 +1,16 @@
+codigo,descricao,categoria,fabricante,ncm,ipi,unidade,preco_base
+PCE001,Monitor Multiparâmetro Modular Hospitalar,Equipamentos Médicos,Nihon Kohden,90181990,0,UN,45000.00
+PCE002,Oxímetro de Pulso Portátil,Equipamentos Médicos,Mindray,90181990,0,UN,3500.00
+PCE003,Eletrocardiógrafo Digital 12 Canais,Equipamentos Médicos,Nihon Kohden,90181990,0,UN,28000.00
+PCE004,Desfibrilador Externo Automático (DEA),Equipamentos Médicos,Philips,90181990,0,UN,18500.00
+PCE005,Bomba de Infusão Volumétrica,Equipamentos Médicos,B.Braun,90189090,0,UN,8200.00
+PCE006,Ventilador Pulmonar UTI,Equipamentos Médicos,Drager,90192010,0,UN,135000.00
+PCE007,Aspirador Cirúrgico Elétrico,Equipamentos Médicos,Olidef,90189090,0,UN,2950.00
+PCE008,Mesa Cirúrgica Hidráulica,Mobiliário Hospitalar,Olidef,94029020,5,UN,42000.00
+PCE009,Foco Cirúrgico LED Teto Duplo,Equipamentos Médicos,Olidef,90185010,0,UN,28500.00
+PCE010,Maca Hospitalar Articulada Eletrônica,Mobiliário Hospitalar,Stiegelmeyer,94029020,5,UN,15800.00
+PCE011,Cardioversor Bifásico com Marcapasso,Equipamentos Médicos,Mindray,90181990,0,UN,32000.00
+PCE012,Reagente para Hemograma Completo,Reagentes Laboratoriais,Bio-Rad,38220090,0,KIT,890.00
+PCE013,Kit Diagnóstico Sorologia COVID-19,Reagentes Laboratoriais,Roche,38220090,0,KIT,3450.00
+PCE014,Glicose Enzimática 250 testes,Reagentes Laboratoriais,Bioclin,38220090,0,KIT,520.00
+PCE015,Reagente para PCR Tempo Real,Reagentes Laboratoriais,Thermo Fisher,38220090,0,KIT,2890.00

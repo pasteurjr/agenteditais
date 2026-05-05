@@ -1617,8 +1617,14 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
               <FormField label="SKU / Codigo Interno">
                 <TextInput value={editForm.codigo_interno || ""} onChange={(v) => setEditForm(f => ({ ...f, codigo_interno: v }))} placeholder="Codigo interno / SKU" />
               </FormField>
-              <FormField label="NCM">
-                <TextInput value={editForm.ncm || ""} onChange={(v) => setEditForm(f => ({ ...f, ncm: v }))} placeholder="Ex: 9027.30.00" />
+              <FormField label="NCM" hint="Formato 9999.99.99 (8 digitos). Pontos sao adicionados automaticamente.">
+                <TextInput value={editForm.ncm || ""} onChange={(v) => {
+                  const digits = v.replace(/\D/g, '').slice(0, 8);
+                  let masked = digits;
+                  if (digits.length > 4) masked = digits.slice(0,4) + '.' + digits.slice(4);
+                  if (digits.length > 6) masked = digits.slice(0,4) + '.' + digits.slice(4,6) + '.' + digits.slice(6);
+                  setEditForm(f => ({ ...f, ncm: masked }));
+                }} placeholder="Ex: 90273000" />
               </FormField>
               <FormField label="Descricao">
                 <TextInput value={editForm.descricao || ""} onChange={(v) => setEditForm(f => ({ ...f, descricao: v }))} placeholder="Descricao do produto" />
