@@ -95,14 +95,14 @@ passos:
         - "CNPJ e Razao ja vem preenchidos da criacao no CRUD"
 
   - id: passo_07_completar_dados_basicos
-    descricao: "Verificar que dados criados no CRUD estao carregados na EmpresaPage (sem reedicao)"
+    descricao: "EmpresaPage carregada (V4: form pode vir vazio se nao houver empresa ativa no AuthContext — comportamento correto pos-correcao #3 Arnaldo)"
     asserts_dom:
-      - selector: 'label:has-text("Razao Social")'
+      - selector: 'label:has-text("Razao Social"), label:has-text("Razão Social")'
       - selector: 'label:has-text("UF")'
     asserts_semantica:
       elementos_obrigatorios:
-        - "CNPJ, Razao Social, Nome Fantasia, IE, Endereco, Cidade, UF, CEP, Telefone, Email pre-preenchidos do CRUD"
-        - "UF mostrado como dropdown com SP selecionado (V5 FE-05)"
+        - "Tela EmpresaPage carregada com labels Razao Social, CNPJ, UF visiveis"
+        - "Titulo 'Dados da Empresa' OU 'Cadastrar Nova Empresa' (V4 dinamico)"
 
   - id: passo_08_completar_presenca_digital
     descricao: "Preencher Website, Instagram, LinkedIn, Facebook (campos que so existem na EmpresaPage)"
@@ -115,16 +115,16 @@ passos:
         - "Os 4 campos de redes sociais preenchidos com valores do dataset"
 
   - id: passo_10_salvar_e_confirmar
-    descricao: "Clicar em Salvar Alteracoes na EmpresaPage e ver feedback Salvo!"
+    descricao: "Clicar em Salvar Alteracoes na EmpresaPage e ver toast Salvo! (V4: toast agora fixed top-right z-9999 com prefixo ✓)"
     asserts_dom:
-      - selector: 'text=Salvo!'
+      - selector: 'text=Salvo!, text=/✓\\s*Salvo!/, [class*="toast"]:has-text("Salvo")'
     asserts_rede:
       - url_contem: "/api/crud/empresas"
         metodo_in: ["POST", "PUT"]
         status_in: [200, 201]
     asserts_semantica:
       elementos_obrigatorios:
-        - "Indicador 'Salvo!' verde aparece ao lado do botao (FE-06 corrigido)"
+        - "Toast verde 'Salvo!' aparece — pode estar fixed no canto superior direito (V4 correcao #20)"
       elementos_proibidos:
         - "Mensagem de erro vermelha"
         - "Botao 'Tentar novamente'"

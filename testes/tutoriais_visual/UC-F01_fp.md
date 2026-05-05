@@ -393,12 +393,13 @@ validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_06_navegar_emp
 
 ## Passo 07 — Verificar dados já preenchidos do CRUD (validação)
 
-Os dados básicos (CNPJ, Razão, Nome Fantasia, IE, IM, Endereço, Cidade, UF, CEP, Telefone, Email) já vieram do CRUD criado no passo 04. A EmpresaPage carrega esses dados via `crudList("empresas", { limit: 1 })`.
+EmpresaPage carregada. **V4 — mudança de comportamento (correção #3 Arnaldo):** se a empresa criada no passo 04 ainda não foi selecionada como ativa via passo 04c (`selecionarEmpresa`), o formulário pode vir **VAZIO** — esse é o novo comportamento esperado, evita o bug de "form pré-populado com dados de outra empresa". O título da página alterna entre "Dados da Empresa" (com contexto) ou "Cadastrar Nova Empresa" (sem contexto).
 
 **Observe criticamente:**
-- Razão Social, CNPJ, Nome Fantasia, IE preenchidos automaticamente
-- UF mostrado como dropdown com SP selecionado (V5 correção FE-05)
-- Endereço, Cidade, CEP preenchidos
+- Labels Razão Social, CNPJ, Nome Fantasia, UF visíveis (sempre)
+- Título alterna conforme há/não há empresa ativa no AuthContext (V4)
+- Quando há empresa ativa: campos preenchidos com seus dados
+- Quando não há: campos vazios (esperado em V4)
 - Asterisco vermelho só em Razão Social e CNPJ
 - Sem alerta de erro de carregamento
 
@@ -406,7 +407,7 @@ Os dados básicos (CNPJ, Razão, Nome Fantasia, IE, IM, Endereço, Cidade, UF, C
 id: passo_07_verificar_dados_carregados
 acao:
   tipo: wait_for
-  seletor: 'label:has-text("Razao Social")'
+  seletor: 'label:has-text("Razao Social"), label:has-text("Razão Social")'
   timeout: 5000
 validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_07_completar_dados_basicos"
 ```
@@ -446,12 +447,13 @@ validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_08_completar_p
 
 ## Passo 09 — Salvar Alterações e confirmar feedback
 
-O browser clica em "Salvar Alterações" na EmpresaPage. Backend faz POST/PUT e indicador "Salvo!" verde deve aparecer.
+O browser clica em "Salvar Alterações" na EmpresaPage. Backend faz POST/PUT e toast "Salvo!" verde deve aparecer.
 
-**Observe criticamente:** (V5 correção crítica — FE-06)
+**Observe criticamente:** (V4 — correção #20 Arnaldo)
 - Botão "Salvar Alteracoes" visível com cor de destaque (variant primary)
 - Após clique, botão entra em estado loading
-- Indicador **"Salvo!" em verde** aparece ao lado do botão
+- Toast **"✓ Salvo!" em verde** aparece **fixed no canto superior direito** (V4 — antes ficava abaixo do scroll, invisível)
+- Toast some sozinho em ~3 segundos
 - Sem mensagem vermelha de erro
 - Sem botão "Tentar novamente"
 

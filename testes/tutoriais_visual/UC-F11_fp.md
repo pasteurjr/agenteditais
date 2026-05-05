@@ -116,10 +116,12 @@ id: passo_02_fechar_modal
 acao:
   sequencia:
     - tipo: click
-      seletor: 'div.modal-footer button:has-text("Fechar")'
+      seletor: 'div.modal-footer button:has-text("Fechar"), .modal button:has-text("Fechar"), button:has-text("Fechar"):visible'
       timeout: 5000
+    - tipo: wait
+      valor_literal: 800
     - tipo: wait_for_hidden
-      seletor: 'div.modal-overlay'
-      timeout: 8000
+      seletor: 'div.modal-overlay, .modal-overlay, [role="dialog"]'
+      timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F11_visual_fp.yaml#passo_02_fechar_modal"
 ```
