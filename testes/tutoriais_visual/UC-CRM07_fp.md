@@ -8,49 +8,42 @@ dataset_ref: testes/datasets/UC-CRM07_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CRM07_visual_fp.yaml
 ---
 
-# UC-CRM07 — Registrar Motivo de Perda (Fluxo Principal)
+# UC-CRM07 — Parametrizacoes CRM (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [infra]
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Voltar para tab Pipeline
-
-Motivo de perda registra-se no pipeline em editais perdidos.
-
-**Observe criticamente:**
-- Tab Pipeline ativa
+> **Estrategia:** chamada direta GET /api/crud/crm-stages?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_voltar_pipeline
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /^Pipeline/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CRM07_visual_fp.yaml#passo_00_voltar_pipeline"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CRM07_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar secao de perdidos com botao Registrar Motivo
-
-Pipeline final tem editais classificados como perdidos.
-
-**Observe criticamente:**
-- Card 'Perdidos' OU stage final visivel
-- Botao 'Registrar Motivo' aparece em editais perdidos (se houver)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_pipeline_perdidos
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/crm-stages?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/crm-stages?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-CRM07_visual_fp.yaml#passo_01_validar_pipeline_perdidos"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CRM07_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

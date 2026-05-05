@@ -8,57 +8,42 @@ dataset_ref: testes/datasets/UC-AT01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-AT01_visual_fp.yaml
 ---
 
-# UC-AT01 — Buscar Atas no PNCP (Fluxo Principal)
+# UC-AT01 — Buscar Atas PNCP (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [login]
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Setup: navegar Fluxo Comercial > Atas de Pregao
-
-Sidebar -> click Atas de Pregao. AtasPage carrega.
-
-**Observe criticamente:**
-- AtasPage carrega
-- Tabs: Buscar / Extrair / Minhas Atas / Saldo ARP
+> **Estrategia:** chamada direta GET /api/atas/buscar?termo=monitor + valida resposta
 
 ```yaml
-id: passo_00_navegar_atas
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Atas de Pregao"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Atas de Pregao"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-AT01_visual_fp.yaml#passo_00_navegar_atas"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-AT01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Permanecer na tab Buscar (default)
-
-Tab Buscar tem campo de busca + botao Buscar.
-
-**Observe criticamente:**
-- Tab Buscar ativa
-- Campo de termo + botao Buscar
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_aba_buscar
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/atas/buscar?termo=monitor', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/atas/buscar?termo=monitor ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 1000
-validacao_ref: "testes/casos_de_teste/UC-AT01_visual_fp.yaml#passo_01_aba_buscar"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-AT01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

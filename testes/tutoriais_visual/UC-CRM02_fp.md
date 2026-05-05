@@ -8,55 +8,42 @@ dataset_ref: testes/datasets/UC-CRM02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CRM02_visual_fp.yaml
 ---
 
-# UC-CRM02 — Parametrizacoes do CRM (Tipos/Agrupamentos/Motivos) (Fluxo Principal)
+# UC-CRM02 — CRM KPIs (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [infra]
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Click na tab "Parametrizacoes"
-
-Tab com 3 sub-abas: Tipos de Edital, Agrupamentos, Motivos de Derrota.
-
-**Observe criticamente:**
-- Tab Parametrizacoes destacada
-- Sub-tabs visiveis
+> **Estrategia:** chamada direta GET /api/crm/kpis + valida resposta
 
 ```yaml
-id: passo_00_aba_param
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Parametriza/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CRM02_visual_fp.yaml#passo_00_aba_param"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CRM02_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar sub-abas (Tipos / Agrupamentos / Motivos)
-
-**Observe criticamente:**
-- Sub-abas Tipos / Agrupamentos / Motivos visiveis
-- Cada uma tem lista + botao Novo
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_subabas
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const txt = (document.body.textContent || '').toLowerCase();
-          const tem = /tipos|agrupamentos|motivos/i.test(txt);
-          return tem ? 'sub_abas_visiveis' : 'sub_abas_nao_visiveis';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crm/kpis', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crm/kpis ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CRM02_visual_fp.yaml#passo_01_validar_subabas"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CRM02_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

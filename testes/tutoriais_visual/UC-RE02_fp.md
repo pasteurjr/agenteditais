@@ -8,81 +8,43 @@ dataset_ref: testes/datasets/UC-RE02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-RE02_visual_fp.yaml
 ---
 
-# UC-RE02 — Analisar Proposta Vencedora (IA) (Fluxo Principal)
+# UC-RE02 — Listar Recursos - GET /recursos (Sprint 4 V3 PROFUNDO via API)
 
-> **Predecessores:** UC-CV03
-> **Sprint:** 4 — Recursos e Impugnacoes
+> **Predecessores:** Sprint 2 V3 + Sprint 3 V3
+> **Estrategia:** chamada direta API + assert SQL
 
-## Passo 00 — Click na tab "Analise"
-
-Abre tab Analise com campo de texto pra colar proposta vencedora.
-
-**Observe criticamente:**
-- Tab Analise destacada
-- Campo TextArea 'Texto da Proposta Vencedora'
+## Passo 00 Setup
 
 ```yaml
-id: passo_00_aba_analise
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /^An[aá]lise/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-RE02_visual_fp.yaml#passo_00_aba_analise"
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-RE02_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Preencher texto da proposta + click "Analisar Proposta Vencedora"
-
-Cola um texto-stub da proposta concorrente. IA processa.
-
-**Observe criticamente:**
-- Campo aceita texto
-- POST /api/recursos/analisar-vencedora chama DeepSeek
-- **COMPORTAMENTO IA**: identifica vulnerabilidades na proposta vencedora (specs em desacordo com edital, precos abaixo do exequivel, certidoes vencidas)
+## Passo 01 Listar Recursos
 
 ```yaml
-id: passo_01_preencher_e_analisar
+id: passo_01_listar_recursos
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          // Selecionar edital primeiro (se nao selecionado ainda)
-          const fields = [...document.querySelectorAll('div.form-field')];
-          const fSel = fields.find(x => /Selecione o Edital/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
-          if (fSel) {
-            const sel = fSel.querySelector('select');
-            if (sel) {
-              const opts = [...sel.options].filter(o => o.value);
-              if (opts.length) {
-                sel.value = opts[0].value;
-                sel.dispatchEvent(new Event('change', {bubbles: true}));
-              }
-            }
-          }
-          // Preencher texto
-          const ta = document.querySelector('textarea');
-          if (ta) {
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-            setter.call(ta, 'Empresa Concorrente XYZ Ltda. Proposta de R$ 95,00 por unidade. Prazo de entrega 30 dias. Certidoes ANVISA datadas de 2024.');
-            ta.dispatchEvent(new Event('input', {bubbles: true}));
-            ta.dispatchEvent(new Event('change', {bubbles: true}));
-          }
-          // Click Analisar
-          const btn = [...document.querySelectorAll('button')].find(b => /Analisar Proposta Vencedora/i.test(b.textContent || ''));
-          if (!btn) return 'sem_botao';
-          btn.scrollIntoView({block: 'center'});
-          btn.click();
-          return 'clicado';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/recursos', { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) throw new Error(`GET /recursos ${r.status}`);
+          const data = await r.json();
+          const arr = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          if (arr.length < 1) throw new Error('EFEITO REAL: 0 recursos (rodar RE01 antes)');
+          return `lista_OK ${arr.length} recursos`;
         }
     - tipo: wait
-      valor_literal: 90000
-validacao_ref: "testes/casos_de_teste/UC-RE02_visual_fp.yaml#passo_01_preencher_e_analisar"
+      valor_literal: 1000
+validacao_ref: "testes/casos_de_teste/UC-RE02_visual_fp.yaml#passo_01_listar_recursos"
 ```

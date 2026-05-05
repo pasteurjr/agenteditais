@@ -1,8 +1,8 @@
 uc_id: UC-MO04
 variacao: fp
 trilha: visual
-descricao: "Verificar Pendencias PNCP de Edital (sob demanda)"
+descricao: "Resultado Monit"
 
 passos:
-  - id: passo_00_validar_acao
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

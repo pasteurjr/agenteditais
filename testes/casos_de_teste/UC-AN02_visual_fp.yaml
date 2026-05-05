@@ -1,8 +1,8 @@
 uc_id: UC-AN02
 variacao: fp
 trilha: visual
-descricao: "Taxas de Conversao Detalhadas"
+descricao: "Análise Editais"
 
 passos:
-  - id: passo_00_aba_taxas
-    # Sem assert (validacao via screenshot pos-execucao)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

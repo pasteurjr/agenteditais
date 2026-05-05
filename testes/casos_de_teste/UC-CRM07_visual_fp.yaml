@@ -1,11 +1,8 @@
 uc_id: UC-CRM07
 variacao: fp
 trilha: visual
-descricao: "Registrar Motivo de Perda"
+descricao: "Parametrizacoes CRM"
 
 passos:
-  - id: passo_00_voltar_pipeline
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_pipeline_perdidos
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

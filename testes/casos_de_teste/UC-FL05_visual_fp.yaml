@@ -1,11 +1,8 @@
 uc_id: UC-FL05
 variacao: fp
 trilha: visual
-descricao: "Ver Agenda de Disparos (Calendario)"
+descricao: "Resumo Sistema"
 
 passos:
-  - id: passo_00_aba_agenda
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_calendario
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

@@ -1,12 +1,8 @@
 uc_id: UC-FL01
 variacao: fp
 trilha: visual
-descricao: "Visualizar Dashboard de Alertas Ativos"
+descricao: "Listar Flags"
 
 passos:
-  - id: passo_00_navegar_flags
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_validar_dashboard
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

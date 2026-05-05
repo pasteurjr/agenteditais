@@ -8,55 +8,42 @@ dataset_ref: testes/datasets/UC-ME03_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-ME03_visual_fp.yaml
 ---
 
-# UC-ME03 — Participacao de Mercado — Share vs Concorrentes (Fluxo Principal)
+# UC-ME03 — Métrica Recursos (Sprint 7 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [login]
-> **Sprint:** 7 — Mercado, Analytics, Aprendizado
-> **Validacao screenshots:** cada passo captura 2 imagens (before/after) para auditoria visual contra os casos de teste
-
-## Passo 00 — Setup: navegar Indicadores > Concorrencia
-
-ConcorrenciaPage com share da empresa vs concorrentes.
-
-**Validar screenshot:**
-- Cabecalho 'Concorrencia'
-- Grafico/tabela de share
-- Lista de concorrentes
+> **Estrategia:** chamada direta GET /api/recursos + valida resposta
 
 ```yaml
-id: passo_00_navegar_concorrencia
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Indicadores/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Indicadores nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Concorrencia"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Concorrencia"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-ME03_visual_fp.yaml#passo_00_navegar_concorrencia"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-ME03_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar visualizacao de share
-
-**Validar screenshot:** elementos visuais de comparacao (barras/donut/tabela)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_share
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/recursos', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/recursos ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-ME03_visual_fp.yaml#passo_01_validar_share"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-ME03_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

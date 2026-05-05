@@ -1,8 +1,8 @@
 uc_id: UC-LA02
 variacao: fp
 trilha: visual
-descricao: "Sugestao de Lance em Tempo Real"
+descricao: "Listar Sessões Lances"
 
 passos:
-  - id: passo_00_pagina_carregada
-    # Sem assert (validacao via screenshot)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

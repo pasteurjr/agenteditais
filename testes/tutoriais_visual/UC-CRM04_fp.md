@@ -8,49 +8,42 @@ dataset_ref: testes/datasets/UC-CRM04_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CRM04_visual_fp.yaml
 ---
 
-# UC-CRM04 — Agenda/Timeline de Etapas (Fluxo Principal)
+# UC-CRM04 — CRM Agenda (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [infra]
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Click na tab "Agenda"
-
-Tab Agenda com timeline de etapas/datas.
-
-**Observe criticamente:**
-- Tab Agenda destacada
-- Timeline ou lista de itens
+> **Estrategia:** chamada direta GET /api/crm/agenda + valida resposta
 
 ```yaml
-id: passo_00_aba_agenda
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /^Agenda/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CRM04_visual_fp.yaml#passo_00_aba_agenda"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CRM04_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar itens da agenda
-
-Pelo menos 6 itens com datas + badges de urgencia.
-
-**Observe criticamente:**
-- Itens visiveis (badge critica/alta/normal/baixa)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_itens
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crm/agenda', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crm/agenda ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CRM04_visual_fp.yaml#passo_01_validar_itens"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CRM04_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

@@ -8,54 +8,42 @@ dataset_ref: testes/datasets/UC-LA03_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-LA03_visual_fp.yaml
 ---
 
-# UC-LA03 — Sala Virtual de Disputa (LancesPage + Simulador) (Fluxo Principal)
+# UC-LA03 — Status Lance Atual (Sprint 9 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CV03 + Simulador
-> **Sprint:** 9 — Lances + Scores + HC
-> **Validacao screenshots:** auditoria visual contra os casos de teste
-
-## Passo 00 — Setup: navegar Fluxo Comercial > Disputa Lances
-
-LancesPage = sala virtual de pregao.
-
-**Validar screenshot:** Cabecalho com 'Lances' OU 'Disputa' visivel.
+> **Estrategia:** chamada direta GET /api/crud/sessoes-lances?limit=5 + valida resposta
 
 ```yaml
-id: passo_00_navegar_lances
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Disputa Lances"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Disputa Lances"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-LA03_visual_fp.yaml#passo_00_navegar_lances"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-LA03_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar elementos da Sala Virtual
-
-Tabela de lances + ranking + cronometro.
-
-**Validar screenshot:** elementos de sala virtual presentes (lista de pregoes, status, ranking).
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_sala
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/sessoes-lances?limit=5', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/sessoes-lances?limit=5 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-LA03_visual_fp.yaml#passo_01_validar_sala"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-LA03_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

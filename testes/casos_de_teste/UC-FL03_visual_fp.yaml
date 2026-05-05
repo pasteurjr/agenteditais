@@ -1,11 +1,8 @@
 uc_id: UC-FL03
 variacao: fp
 trilha: visual
-descricao: "Listar e Filtrar Historico de Alertas"
+descricao: "Status Sistema"
 
 passos:
-  - id: passo_00_garantir_flags
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_filtros
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

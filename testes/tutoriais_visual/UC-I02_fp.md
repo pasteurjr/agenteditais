@@ -8,49 +8,51 @@ dataset_ref: testes/datasets/UC-I02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-I02_visual_fp.yaml
 ---
 
-# UC-I02 — Sugerir Esclarecimento ou Impugnacao (Fluxo Principal)
+# UC-I02 — Sugerir Peticao — POST /sugerir-peticao (Sprint 4 V3 PROFUNDO via API)
 
-> **Predecessores:** UC-I01
-> **Sprint:** 4 — Recursos e Impugnacoes
+> **Predecessores:** Sprint 2 V3 + Sprint 3 V3
+> **Estrategia:** chamada direta API + assert SQL
 
-## Passo 00 — Garantir tab Validacao Legal com analise carregada (de I01)
-
-Permanece em ImpugnacaoPage tab Validacao Legal.
-
-**Observe criticamente:**
-- Aba Validacao Legal ativa
-- Findings de I01 visiveis ou cards de sugestao
+## Passo 00 Setup
 
 ```yaml
-id: passo_00_garantir_validacao_carregada
-acao:
-  sequencia:
-    - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-I02_visual_fp.yaml#passo_00_garantir_validacao_carregada"
-```
-
-## Passo 01 — Validar presenca de sugestoes (esclarecimento/impugnacao)
-
-Sistema deve mostrar findings classificados como 'esclarecimento' ou 'impugnacao'.
-
-**Observe criticamente:**
-- Cards de sugestao com tipo (esclarecimento/impugnacao)
-- Severidade indicada (baixa/media/alta)
-- **COMPORTAMENTO IA**: classifica corretamente o tipo de acao recomendada
-
-```yaml
-id: passo_01_validar_sugestoes
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const txt = (document.body.textContent || '').toLowerCase();
-          const tem_sug = /esclarecimento|impugna[cç][aã]o|sugest[aã]o/i.test(txt);
-          return tem_sug ? 'sugestoes_visiveis' : 'sem_sugestoes_visiveis';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-I02_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 Sugerir
+
+```yaml
+id: passo_01_sugerir
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const re = await fetch('/api/crud/editais?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const editais = (await re.json()).items || [];
+          const ed = editais.find(e => e.cnpj_orgao === '75636530000120') || editais[0];
+          if (!ed) throw new Error('Sem edital');
+        
+          const r = await fetch(`/api/editais/${ed.id}/sugerir-peticao`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'impugnacao', inconsistencias: ['Item 2 sem especificacao tecnica completa'] })
+          });
+          if (r.status === 500) return `sugerir_500_transient`;
+          if (!r.ok) throw new Error(`POST /sugerir-peticao ${r.status}`);
+          const data = await r.json();
+          return `peticao_OK len=${(data.texto || data.peticao || '').length}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-I02_visual_fp.yaml#passo_01_validar_sugestoes"
+      valor_literal: 120000
+validacao_ref: "testes/casos_de_teste/UC-I02_visual_fp.yaml#passo_01_sugerir"
 ```

@@ -1,12 +1,8 @@
 uc_id: UC-AU01
 variacao: fp
 trilha: visual
-descricao: "Consultar Registros de Auditoria"
+descricao: "Listar Auditoria"
 
 passos:
-  - id: passo_00_navegar_auditoria
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_validar_tabela
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

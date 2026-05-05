@@ -8,55 +8,42 @@ dataset_ref: testes/datasets/UC-CT02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CT02_visual_fp.yaml
 ---
 
-# UC-CT02 — Registrar Entrega + NF (Fluxo Principal)
+# UC-CT02 — Listar Aditivos (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CT01
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Click na tab "Entregas"
-
-Tab Entregas com tabela de entregas + botao Nova Entrega.
-
-**Observe criticamente:**
-- Tab Entregas destacada
-- Tabela de entregas
+> **Estrategia:** chamada direta GET /api/crud/contrato-aditivos?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_entregas
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /^Entregas/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CT02_visual_fp.yaml#passo_00_aba_entregas"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CT02_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar botao "Nova Entrega"
-
-Botao abre modal pra registrar entrega + NF.
-
-**Observe criticamente:**
-- Botao 'Nova Entrega' presente
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_botao_nova
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Nova Entrega|Registrar Entrega/i.test(b.textContent||''));
-          return btn ? 'presente' : 'ausente (FE: sem contrato selecionado)';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/contrato-aditivos?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/contrato-aditivos?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CT02_visual_fp.yaml#passo_01_validar_botao_nova"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CT02_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

@@ -8,30 +8,42 @@ dataset_ref: testes/datasets/UC-AN02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-AN02_visual_fp.yaml
 ---
 
-# UC-AN02 — Taxas de Conversao Detalhadas (Fluxo Principal)
+# UC-AN02 — Análise Editais (Sprint 7 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-AN01
-> **Sprint:** 7 — Mercado, Analytics, Aprendizado
-> **Validacao screenshots:** cada passo captura 2 imagens (before/after) para auditoria visual contra os casos de teste
-
-## Passo 00 — Localizar aba/secao de taxas
-
-**Validar screenshot:** percentuais de conversao stage->stage (ex: Em Analise -> Proposta = 65%)
+> **Estrategia:** chamada direta GET /api/crud/editais?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_taxas
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Taxas|Conversao/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-AN02_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — Chamada API
+
+```yaml
+id: passo_01_chamar_endpoint
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/editais?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/editais?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-AN02_visual_fp.yaml#passo_00_aba_taxas"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-AN02_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

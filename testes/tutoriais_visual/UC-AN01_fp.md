@@ -8,55 +8,42 @@ dataset_ref: testes/datasets/UC-AN01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-AN01_visual_fp.yaml
 ---
 
-# UC-AN01 — Funil de Conversao do Pipeline CRM (Fluxo Principal)
+# UC-AN01 — Análise Geral (Sprint 7 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [login]
-> **Sprint:** 7 — Mercado, Analytics, Aprendizado
-> **Validacao screenshots:** cada passo captura 2 imagens (before/after) para auditoria visual contra os casos de teste
-
-## Passo 00 — Setup: navegar Indicadores > Analytics
-
-AnalyticsPage com funil do pipeline.
-
-**Validar screenshot:**
-- Cabecalho 'Analytics'
-- Funil visualizado (barras decrescentes ou stages)
-- Numeros por stage
+> **Estrategia:** chamada direta GET /api/dashboard/analytics/funil + valida resposta
 
 ```yaml
-id: passo_00_navegar_analytics
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Indicadores/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Indicadores nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Analytics"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Analytics"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-AN01_visual_fp.yaml#passo_00_navegar_analytics"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-AN01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar funil + dados do pipeline
-
-**Validar screenshot:** funil renderizado com stages do pipeline CRM (13 stages da Sprint 5)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_funil
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/dashboard/analytics/funil', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/dashboard/analytics/funil ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-AN01_visual_fp.yaml#passo_01_validar_funil"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-AN01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

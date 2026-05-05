@@ -1,11 +1,8 @@
 uc_id: UC-CR03
 variacao: fp
 trilha: visual
-descricao: "Alertas de Vencimento Multi-tier"
+descricao: "Listar Contratos Status"
 
 passos:
-  - id: passo_00_aba_vencimentos
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_alertas
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

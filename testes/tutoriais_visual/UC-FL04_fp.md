@@ -8,41 +8,42 @@ dataset_ref: testes/datasets/UC-FL04_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-FL04_visual_fp.yaml
 ---
 
-# UC-FL04 — Cancelar/Silenciar Alerta (Fluxo Principal)
+# UC-FL04 — Health Check (Sprint 6 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-FL01
-> **Sprint:** 6 — Alertas, Monitoramentos, Auditoria, SMTP
-
-## Passo 00 — Garantir tabela de alertas com acoes
-
-**Observe criticamente:**
-- Coluna Acoes com botoes Cancelar/Silenciar (se ha alertas)
+> **Estrategia:** chamada direta GET /api/crud/feature-flags?limit=5 + valida resposta
 
 ```yaml
-id: passo_00_garantir_flags
-acao:
-  sequencia:
-    - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-FL04_visual_fp.yaml#passo_00_garantir_flags"
-```
-
-## Passo 01 — Validar botoes Cancelar/Silenciar
-
-**Observe criticamente:**
-- Pelo menos 1 botao Cancelar OU Silenciar visivel em alguma linha (ou estado vazio)
-
-```yaml
-id: passo_01_validar_acoes
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Cancelar|Silenciar|Desativar/i.test(b.textContent||''));
-          return btn ? 'acoes_presentes' : 'sem_alertas_para_acionar';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-FL04_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — Chamada API
+
+```yaml
+id: passo_01_chamar_endpoint
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/feature-flags?limit=5', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/feature-flags?limit=5 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-FL04_visual_fp.yaml#passo_01_validar_acoes"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-FL04_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

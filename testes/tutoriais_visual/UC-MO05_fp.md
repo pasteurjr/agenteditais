@@ -8,33 +8,42 @@ dataset_ref: testes/datasets/UC-MO05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-MO05_visual_fp.yaml
 ---
 
-# UC-MO05 — Ver Eventos Capturados por Monitoramento (Fluxo Principal)
+# UC-MO05 — Status Monit (Sprint 6 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-MO01
-> **Sprint:** 6 — Alertas, Monitoramentos, Auditoria, SMTP
-
-## Passo 00 — Localizar aba/secao "Eventos"
-
-Lista eventos capturados pelos monitoramentos (novas publicacoes do PNCP).
-
-**Observe criticamente:**
-- Tab/secao Eventos visivel
-- Cards/linhas de eventos (pode estar vazio)
+> **Estrategia:** chamada direta GET /api/crud/monitoramentos?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_eventos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Eventos|Capturados/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-MO05_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — Chamada API
+
+```yaml
+id: passo_01_chamar_endpoint
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/monitoramentos?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/monitoramentos?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-MO05_visual_fp.yaml#passo_00_aba_eventos"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-MO05_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

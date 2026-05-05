@@ -1,11 +1,8 @@
 uc_id: UC-CT03
 variacao: fp
 trilha: visual
-descricao: "Acompanhar Cronograma de Entregas"
+descricao: "Listar Designacoes"
 
 passos:
-  - id: passo_00_aba_cronograma
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_visualizacao
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

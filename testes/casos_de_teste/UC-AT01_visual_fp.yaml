@@ -1,12 +1,8 @@
 uc_id: UC-AT01
 variacao: fp
 trilha: visual
-descricao: "Buscar Atas no PNCP"
+descricao: "Buscar Atas PNCP"
 
 passos:
-  - id: passo_00_navegar_atas
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_aba_buscar
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

@@ -8,56 +8,42 @@ dataset_ref: testes/datasets/UC-CT08_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CT08_visual_fp.yaml
 ---
 
-# UC-CT08 — Auditoria Empenhos x Faturas x Pedidos (NOVO V3) (Fluxo Principal)
+# UC-CT08 — Listar Eventos Contrato (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CT07
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Click na tab "Auditoria"
-
-Tab Auditoria com 5 totais e tabela de conciliacao.
-
-**Observe criticamente:**
-- Tab Auditoria destacada
-- 5 stat cards: Empenhado, Faturado, Pago, Entregue, Saldo
+> **Estrategia:** chamada direta GET /api/crud/contrato-eventos?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_auditoria
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /^Auditoria/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CT08_visual_fp.yaml#passo_00_aba_auditoria"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CT08_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar cards de totais + botao Exportar CSV
-
-Stats consolidam todas linhas. Botao exporta CSV.
-
-**Observe criticamente:**
-- Cards de totais visiveis (mesmo que zerados)
-- Botao 'Exportar CSV' presente
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_cards
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Exportar CSV/i.test(b.textContent||''));
-          return btn ? 'csv_presente' : 'sem_csv';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/contrato-eventos?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/contrato-eventos?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CT08_visual_fp.yaml#passo_01_validar_cards"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CT08_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

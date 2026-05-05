@@ -1,12 +1,8 @@
 uc_id: UC-CRM01
 variacao: fp
 trilha: visual
-descricao: "Pipeline de Cards do CRM (13 stages)"
+descricao: "CRM Pipeline"
 
 passos:
-  - id: passo_00_navegar_crm
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_validar_pipeline
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

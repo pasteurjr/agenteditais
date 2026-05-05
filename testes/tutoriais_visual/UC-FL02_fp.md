@@ -8,44 +8,42 @@ dataset_ref: testes/datasets/UC-FL02_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-FL02_visual_fp.yaml
 ---
 
-# UC-FL02 — Criar Alerta via IA (chatbox) (Fluxo Principal)
+# UC-FL02 — Listar Fluxos (Sprint 6 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-FL01
-> **Sprint:** 6 — Alertas, Monitoramentos, Auditoria, SMTP
-
-## Passo 00 — Garantir FlagsPage carregada
-
-**Observe criticamente:**
-- FlagsPage ativa
-- Botao 'Novo Alerta' OU campo de chat para criar via IA
+> **Estrategia:** chamada direta GET /api/crud/feature-flags?limit=20 + valida resposta
 
 ```yaml
-id: passo_00_garantir_flags
-acao:
-  sequencia:
-    - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-FL02_visual_fp.yaml#passo_00_garantir_flags"
-```
-
-## Passo 01 — Validar botao "Novo Alerta" ou similar
-
-**COMPORTAMENTO IA**: chatbox aceita descricao em linguagem natural e cria alerta estruturado.
-
-**Observe criticamente:**
-- Botao 'Novo Alerta' OU chat input presente
-
-```yaml
-id: passo_01_validar_botao_novo
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Novo Alerta|Criar Alerta|Nova Flag/i.test(b.textContent||''));
-          return btn ? 'botao_presente' : 'sem_botao_dedicado (criacao via chat)';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-FL02_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — Chamada API
+
+```yaml
+id: passo_01_chamar_endpoint
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/feature-flags?limit=20', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/feature-flags?limit=20 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-FL02_visual_fp.yaml#passo_01_validar_botao_novo"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-FL02_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

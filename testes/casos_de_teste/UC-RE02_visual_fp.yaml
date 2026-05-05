@@ -1,11 +1,8 @@
 uc_id: UC-RE02
 variacao: fp
 trilha: visual
-descricao: "Analisar Proposta Vencedora (IA)"
+descricao: "Listar Recursos - GET /recursos"
 
 passos:
-  - id: passo_00_aba_analise
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_preencher_e_analisar
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_listar_recursos

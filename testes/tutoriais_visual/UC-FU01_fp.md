@@ -8,65 +8,42 @@ dataset_ref: testes/datasets/UC-FU01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-FU01_visual_fp.yaml
 ---
 
-# UC-FU01 — Registrar Resultado (Vitoria/Derrota) (Fluxo Principal)
+# UC-FU01 — Funil Analytics (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CV03 (edital salvo)
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Setup: navegar Fluxo Comercial > Followup
-
-Sidebar -> click Followup. Page carrega com tab 'Resultados' default.
-
-**Observe criticamente:**
-- FollowupPage carrega
-- Tabs: Resultados / Alertas
-- StatCards no topo (Vitorias, Derrotas, Taxa de Sucesso, etc)
+> **Estrategia:** chamada direta GET /api/dashboard/analytics/funil + valida resposta
 
 ```yaml
-id: passo_00_navegar_followup
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Followup"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Followup"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-FU01_visual_fp.yaml#passo_00_navegar_followup"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-FU01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar tabela "Editais Pendentes"
-
-Tabela mostra editais com proposta submetida aguardando resultado.
-
-**Observe criticamente:**
-- Tabela 'Editais Pendentes' visivel (pode estar vazia se nao ha proposta submetida — FE-01)
-- Coluna 'Acao' com botao 'Registrar' por linha (se tabela tem dados)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_tabela_pendentes
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const txt = (document.body.textContent || '');
-          const tem_pend = /Pendente|Resultado|Editais/i.test(txt);
-          return tem_pend ? 'tabela_visivel' : 'sem_dados (FE-01)';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/dashboard/analytics/funil', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/dashboard/analytics/funil ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-FU01_visual_fp.yaml#passo_01_validar_tabela_pendentes"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-FU01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

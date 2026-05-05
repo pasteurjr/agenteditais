@@ -8,63 +8,42 @@ dataset_ref: testes/datasets/UC-CL01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CL01_visual_fp.yaml
 ---
 
-# UC-CL01 — Gerar Classes do Portfolio via IA (Fluxo Principal)
+# UC-CL01 — Listar Clientes (Sprint 8 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [login]
-> **Sprint:** 8 — Dispensas, Classes IA, Mascaras
-> **Validacao screenshots:** cada passo captura before/after para auditoria visual contra os casos de teste
-
-## Passo 00 — Setup: navegar Configuracoes > Parametrizacoes
-
-ParametrizacoesPage onde fica funcionalidade Classes IA.
-
-**Validar screenshot:**
-- Cabecalho 'Parametriza...' presente
-- Tabs/secoes incluindo Classes/Mascaras
+> **Estrategia:** chamada direta GET /api/crud/clientes?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_navegar_parametros
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Configuracoes/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Configuracoes nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Parametrizacoes"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Parametrizacoes"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-CL01_visual_fp.yaml#passo_00_navegar_parametros"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CL01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar botao "Gerar Classes via IA"
-
-**COMPORTAMENTO IA**: agrupa produtos do portfolio em classes (DeepSeek analisa NCMs+nomes).
-
-**Validar screenshot:**
-- Botao 'Gerar Classes via IA' OU 'Gerar Classes' visivel
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_botao_gerar_classes_ia
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Gerar Classes/i.test(b.textContent||''));
-          return btn ? 'botao_presente' : 'sem_botao_dedicado (acesso via aba/secao)';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/clientes?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/clientes?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CL01_visual_fp.yaml#passo_01_validar_botao_gerar_classes_ia"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CL01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

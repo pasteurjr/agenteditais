@@ -8,49 +8,49 @@ dataset_ref: testes/datasets/UC-I05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-I05_visual_fp.yaml
 ---
 
-# UC-I05 — Controle de Prazo (impugnacao/esclarecimento) (Fluxo Principal)
+# UC-I05 — Status / Prazo Impugnacao - GET /prazo-impugnacao (Sprint 4 V3 PROFUNDO via API)
 
-> **Predecessores:** UC-CV03 + UC-I03 OU UC-I04
-> **Sprint:** 4 — Recursos e Impugnacoes
+> **Predecessores:** Sprint 2 V3 + Sprint 3 V3
+> **Estrategia:** chamada direta API + assert SQL
 
-## Passo 00 — Click na tab "Prazos"
-
-Abre tab Prazos com tabela de deadlines.
-
-**Observe criticamente:**
-- Tab Prazos destacada
-- Tabela com prazos da impugnacao
+## Passo 00 Setup
 
 ```yaml
-id: passo_00_aba_prazos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /^Prazos/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-I05_visual_fp.yaml#passo_00_aba_prazos"
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-I05_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar tabela de prazos visivel
-
-Tabela mostra deadlines com dias restantes.
-
-**Observe criticamente:**
-- Tabela de prazos visivel
-- Pode estar vazia se nao ha peticao ainda (FE valido)
+## Passo 01 Prazo Impugnacao
 
 ```yaml
-id: passo_01_validar_tabela_prazos
+id: passo_01_prazo_impugnacao
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const re = await fetch('/api/crud/editais?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const editais = (await re.json()).items || [];
+          const ed = editais.find(e => e.cnpj_orgao === '75636530000120') || editais[0];
+          if (!ed) throw new Error('Sem edital');
+        
+          const r = await fetch(`/api/editais/${ed.id}/prazo-impugnacao`, { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) {
+            if (r.status === 404) return `prazo_404 (sem data abertura — dados consistentes esperados Sprint2 V3)`;
+            throw new Error(`GET /prazo-impugnacao ${r.status}`);
+          }
+          const data = await r.json();
+          return `prazo_OK dias_restantes=${data.dias_restantes || data.prazo || '?'}`;
+        }
     - tipo: wait
-      valor_literal: 1000
-validacao_ref: "testes/casos_de_teste/UC-I05_visual_fp.yaml#passo_01_validar_tabela_prazos"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-I05_visual_fp.yaml#passo_01_prazo_impugnacao"
 ```

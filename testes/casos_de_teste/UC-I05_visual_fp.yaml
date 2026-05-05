@@ -1,11 +1,8 @@
 uc_id: UC-I05
 variacao: fp
 trilha: visual
-descricao: "Controle de Prazo (impugnacao/esclarecimento)"
+descricao: "Status / Prazo Impugnacao - GET /prazo-impugnacao"
 
 passos:
-  - id: passo_00_aba_prazos
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_tabela_prazos
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_prazo_impugnacao

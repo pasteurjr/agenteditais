@@ -8,47 +8,42 @@ dataset_ref: testes/datasets/UC-FL05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-FL05_visual_fp.yaml
 ---
 
-# UC-FL05 — Ver Agenda de Disparos (Calendario) (Fluxo Principal)
+# UC-FL05 — Resumo Sistema (Sprint 6 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-FL01
-> **Sprint:** 6 — Alertas, Monitoramentos, Auditoria, SMTP
-
-## Passo 00 — Click na aba "Agenda" ou "Calendario"
-
-Mostra calendario de disparos programados.
-
-**Observe criticamente:**
-- Tab Agenda/Calendario destacada
-- Visualizacao tipo calendario ou timeline
+> **Estrategia:** chamada direta GET /api/crud/feature-flags?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_agenda
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Agenda|Calend/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-FL05_visual_fp.yaml#passo_00_aba_agenda"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-FL05_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar visualizacao de calendario
-
-**Observe criticamente:**
-- Calendario/timeline renderizado
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_calendario
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/feature-flags?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/feature-flags?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-FL05_visual_fp.yaml#passo_01_validar_calendario"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-FL05_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

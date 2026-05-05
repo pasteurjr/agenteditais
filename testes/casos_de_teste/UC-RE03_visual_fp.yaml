@@ -1,11 +1,8 @@
 uc_id: UC-RE03
 variacao: fp
 trilha: visual
-descricao: "Chatbox de Analise"
+descricao: "Atualizar Status Recurso - PUT /recursos/{id}/status"
 
 passos:
-  - id: passo_00_garantir_aba_analise
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_chat
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_atualizar_status

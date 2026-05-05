@@ -1,8 +1,8 @@
 uc_id: UC-MO03
 variacao: fp
 trilha: visual
-descricao: "Analisar Documentos da Empresa (sob demanda)"
+descricao: "Listar Acoes Monit"
 
 passos:
-  - id: passo_00_validar_secao
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

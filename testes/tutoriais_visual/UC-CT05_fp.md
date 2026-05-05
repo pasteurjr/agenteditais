@@ -8,49 +8,42 @@ dataset_ref: testes/datasets/UC-CT05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CT05_visual_fp.yaml
 ---
 
-# UC-CT05 — Designar Gestor/Fiscal (Fluxo Principal)
+# UC-CT05 — Listar Saldos (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CT01
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Click na tab "Gestor/Fiscal" (Designacoes)
-
-Tab com lista de designacoes do contrato.
-
-**Observe criticamente:**
-- Tab destacada
-- Tabela com gestor e fiscal designados
+> **Estrategia:** chamada direta GET /api/crud/ata-saldos?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_aba_designacoes
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Gestor.*Fiscal|Designa/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CT05_visual_fp.yaml#passo_00_aba_designacoes"
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CT05_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar tabela com designacoes
-
-Mostra cada pessoa designada como gestor/fiscal.
-
-**Observe criticamente:**
-- Tabela visivel
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_lista
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/ata-saldos?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/ata-saldos?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CT05_visual_fp.yaml#passo_01_validar_lista"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CT05_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

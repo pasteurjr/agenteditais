@@ -1,8 +1,8 @@
 uc_id: UC-SM03
 variacao: fp
 trilha: visual
-descricao: "Consultar Fila de Envio e Reenviar Manualmente"
+descricao: "Versao Sistema"
 
 passos:
-  - id: passo_00_aba_fila
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

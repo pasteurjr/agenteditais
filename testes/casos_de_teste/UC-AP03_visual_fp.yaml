@@ -1,8 +1,8 @@
 uc_id: UC-AP03
 variacao: fp
 trilha: visual
-descricao: "Padroes Detectados pela IA"
+descricao: "Aprendizado Resumo"
 
 passos:
-  - id: passo_00_aba_padroes
-    # Sem assert (validacao via screenshot pos-execucao)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

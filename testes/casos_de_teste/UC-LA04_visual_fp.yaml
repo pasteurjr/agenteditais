@@ -1,8 +1,8 @@
 uc_id: UC-LA04
 variacao: fp
 trilha: visual
-descricao: "Lance Aberto + Fechado (modalidade aberto+fechado)"
+descricao: "Lances Recentes"
 
 passos:
-  - id: passo_00_garantir_lances
-    # Sem assert (validacao via screenshot)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

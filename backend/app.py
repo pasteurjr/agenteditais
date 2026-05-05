@@ -13801,6 +13801,7 @@ def criar_recurso_detalhado():
     """UC-RE04/RE05: Criar recurso ou contra-razão via IA."""
     from tools import tool_gerar_laudo_recurso
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json(silent=True) or {}
 
     edital_id = data.get("edital_id")
@@ -13810,6 +13811,7 @@ def criar_recurso_detalhado():
     resultado = tool_gerar_laudo_recurso(
         edital_id=edital_id,
         user_id=user_id,
+        empresa_id=empresa_id,
         tipo=data.get("tipo", "recurso"),
         inconsistencias=data.get("inconsistencias"),
         template_id=data.get("template_id"),

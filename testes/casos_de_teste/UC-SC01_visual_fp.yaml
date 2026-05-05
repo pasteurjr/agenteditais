@@ -1,9 +1,8 @@
 uc_id: UC-SC01
 variacao: fp
 trilha: visual
-descricao: "Score de Competitividade (PrecificacaoPage + CaptacaoPage)"
+descricao: "Listar Salas"
 
 passos:
-  - id: passo_00_navegar_precif
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

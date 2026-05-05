@@ -1,11 +1,8 @@
 uc_id: UC-CRM06
 variacao: fp
 trilha: visual
-descricao: "Registrar Decisao de Nao-Participacao"
+descricao: "Editais Pipeline"
 
 passos:
-  - id: passo_00_aba_decisoes
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_lista
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

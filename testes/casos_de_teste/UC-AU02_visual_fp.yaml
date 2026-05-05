@@ -1,8 +1,8 @@
 uc_id: UC-AU02
 variacao: fp
 trilha: visual
-descricao: "Investigar Alteracoes Sensiveis em Parametrizacoes"
+descricao: "Listar User Sessions"
 
 passos:
-  - id: passo_00_filtrar_sensiveis
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

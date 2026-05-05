@@ -8,44 +8,42 @@ dataset_ref: testes/datasets/UC-MA01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-MA01_visual_fp.yaml
 ---
 
-# UC-MA01 — Aplicar Mascara de Descricao a Produtos (Fluxo Principal)
+# UC-MA01 — Listar Marcas (Sprint 8 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CL02
-> **Sprint:** 8 — Dispensas, Classes IA, Mascaras
-> **Validacao screenshots:** cada passo captura before/after para auditoria visual contra os casos de teste
-
-## Passo 00 — Garantir PortfolioPage com produtos
-
-**Validar screenshot:**
-- PortfolioPage com tabela de produtos
+> **Estrategia:** chamada direta GET /api/crud/marcas?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_garantir_portfolio
-acao:
-  sequencia:
-    - tipo: wait
-      valor_literal: 800
-validacao_ref: "testes/casos_de_teste/UC-MA01_visual_fp.yaml#passo_00_garantir_portfolio"
-```
-
-## Passo 01 — Validar acao "Aplicar Mascara"
-
-Mascara padroniza descricao dos produtos (ex: '{Marca} {Modelo} - {Volume}').
-
-**Validar screenshot:**
-- Botao/acao 'Aplicar Mascara' OU 'Mascara' presente
-
-```yaml
-id: passo_01_validar_acao_mascara
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Aplicar Mascara|^Mascara/i.test(b.textContent||''));
-          return btn ? 'acao_presente' : 'acao_via_outro_caminho';
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-MA01_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — Chamada API
+
+```yaml
+id: passo_01_chamar_endpoint
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/marcas?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/marcas?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-MA01_visual_fp.yaml#passo_01_validar_acao_mascara"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-MA01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

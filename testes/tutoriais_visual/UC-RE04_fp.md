@@ -8,55 +8,47 @@ dataset_ref: testes/datasets/UC-RE04_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-RE04_visual_fp.yaml
 ---
 
-# UC-RE04 — Gerar Laudo de Recurso (Fluxo Principal)
+# UC-RE04 — Score Recurso - GET /recursos/{edital_id}/score (Sprint 4 V3 PROFUNDO via API)
 
-> **Predecessores:** UC-RE02 + UC-RE01
-> **Sprint:** 4 — Recursos e Impugnacoes
+> **Predecessores:** Sprint 2 V3 + Sprint 3 V3
+> **Estrategia:** chamada direta API + assert SQL
 
-## Passo 00 — Click na tab "Laudos"
-
-Tab Laudos com lista + botoes Novo/Upload.
-
-**Observe criticamente:**
-- Tab Laudos destacada
-- Botoes 'Novo Laudo' e 'Upload Laudo'
+## Passo 00 Setup
 
 ```yaml
-id: passo_00_aba_laudos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /^Laudos/i.test((b.textContent||'').trim()));
-          if (!btn) return 'sem_aba';
-          btn.click();
-          return 'clicked';
-        }
+        () => 'setup_ok'
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-RE04_visual_fp.yaml#passo_00_aba_laudos"
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-RE04_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar botao "Novo Laudo" (geracao IA)
-
-Botao abre modal/inline pra gerar laudo via IA.
-
-**Observe criticamente:**
-- Botao 'Novo Laudo' presente
-- **COMPORTAMENTO IA**: gera laudo juridico estruturado com fundamentacao baseada na analise da proposta vencedora
+## Passo 01 Score Recurso
 
 ```yaml
-id: passo_01_validar_botao_novo_laudo
+id: passo_01_score_recurso
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Novo Laudo/i.test(b.textContent || ''));
-          return btn ? 'presente' : 'ausente';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const re = await fetch('/api/crud/editais?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const editais = (await re.json()).items || [];
+          const ed = editais.find(e => e.cnpj_orgao === '75636530000120') || editais[0];
+          if (!ed) throw new Error('Sem edital');
+        
+          const r = await fetch(`/api/recursos/${ed.id}/score`, { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 500) return `score_500_transient`;
+          if (!r.ok) throw new Error(`GET score ${r.status}`);
+          const data = await r.json();
+          return `score_OK total=${data.total || data.score_total || '?'}`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-RE04_visual_fp.yaml#passo_01_validar_botao_novo_laudo"
+      valor_literal: 90000
+validacao_ref: "testes/casos_de_teste/UC-RE04_visual_fp.yaml#passo_01_score_recurso"
 ```

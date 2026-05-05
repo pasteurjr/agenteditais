@@ -1,11 +1,8 @@
 uc_id: UC-I02
 variacao: fp
 trilha: visual
-descricao: "Sugerir Esclarecimento ou Impugnacao"
+descricao: "Sugerir Peticao — POST /sugerir-peticao"
 
 passos:
-  - id: passo_00_garantir_validacao_carregada
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_sugestoes
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_sugerir

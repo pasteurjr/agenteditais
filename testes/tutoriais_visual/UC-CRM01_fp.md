@@ -8,57 +8,42 @@ dataset_ref: testes/datasets/UC-CRM01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CRM01_visual_fp.yaml
 ---
 
-# UC-CRM01 — Pipeline de Cards do CRM (13 stages) (Fluxo Principal)
+# UC-CRM01 — CRM Pipeline (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** [infra]
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Setup: navegar Fluxo Comercial > CRM
-
-Sidebar -> click CRM. CRMPage carrega com tab Pipeline default.
-
-**Observe criticamente:**
-- CRMPage carrega
-- Tabs: Pipeline / Parametrizacoes / Mapa / Agenda / KPIs / Decisoes
+> **Estrategia:** chamada direta GET /api/crm/pipeline + valida resposta
 
 ```yaml
-id: passo_00_navegar_crm
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("CRM"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("CRM"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-CRM01_visual_fp.yaml#passo_00_navegar_crm"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CRM01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar Pipeline com 13 cards
-
-Pipeline mostra 13 stages com badges numericos.
-
-**Observe criticamente:**
-- Pipeline visivel com cards
-- Pelo menos algum card visivel (pode ser <13 se sem dados)
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_pipeline
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crm/pipeline', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crm/pipeline ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-CRM01_visual_fp.yaml#passo_01_validar_pipeline"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CRM01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

@@ -1,15 +1,8 @@
 uc_id: UC-I01
 variacao: fp
 trilha: visual
-descricao: "Validacao Legal do Edital"
+descricao: "Validacao Legal Edital — POST /validacao-legal"
 
 passos:
-  - id: passo_00_navegar_impugnacao
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_selecionar_edital
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_02_analisar_edital
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_validar_legalmente

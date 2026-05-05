@@ -1,0 +1,8 @@
+uc_id: UC-CL03
+variacao: fp
+trilha: visual
+descricao: "Listar Interacoes"
+
+passos:
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

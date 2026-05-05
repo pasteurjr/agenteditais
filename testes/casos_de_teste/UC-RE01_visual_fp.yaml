@@ -1,15 +1,9 @@
 uc_id: UC-RE01
 variacao: fp
 trilha: visual
-descricao: "Monitorar Janela de Recurso"
+descricao: "Criar Recurso - POST /recursos + assert SQL"
 
 passos:
-  - id: passo_00_navegar_recursos
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_selecionar_edital_monit
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_02_validar_botao_intencao
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_criar_recurso
+  - id: passo_02_validar_sql

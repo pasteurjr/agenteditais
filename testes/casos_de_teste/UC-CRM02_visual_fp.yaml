@@ -1,11 +1,8 @@
 uc_id: UC-CRM02
 variacao: fp
 trilha: visual
-descricao: "Parametrizacoes do CRM (Tipos/Agrupamentos/Motivos)"
+descricao: "CRM KPIs"
 
 passos:
-  - id: passo_00_aba_param
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_subabas
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

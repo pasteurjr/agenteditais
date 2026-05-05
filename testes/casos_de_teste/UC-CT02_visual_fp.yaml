@@ -1,11 +1,8 @@
 uc_id: UC-CT02
 variacao: fp
 trilha: visual
-descricao: "Registrar Entrega + NF"
+descricao: "Listar Aditivos"
 
 passos:
-  - id: passo_00_aba_entregas
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_botao_nova
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

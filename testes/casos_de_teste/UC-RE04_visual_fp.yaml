@@ -1,11 +1,8 @@
 uc_id: UC-RE04
 variacao: fp
 trilha: visual
-descricao: "Gerar Laudo de Recurso"
+descricao: "Score Recurso - GET /recursos/{edital_id}/score"
 
 passos:
-  - id: passo_00_aba_laudos
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_botao_novo_laudo
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_score_recurso

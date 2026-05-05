@@ -1,11 +1,8 @@
 uc_id: UC-FU02
 variacao: fp
 trilha: visual
-descricao: "Configurar Alertas de Prazo"
+descricao: "Funil por Status"
 
 passos:
-  - id: passo_00_aba_alertas
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_botao_atualizar
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

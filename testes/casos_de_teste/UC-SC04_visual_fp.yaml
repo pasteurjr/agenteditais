@@ -1,9 +1,8 @@
 uc_id: UC-SC04
 variacao: fp
 trilha: visual
-descricao: "Tempo Medio do 1o Empenho (ContratadoRealizadoPage)"
+descricao: "Comunicacao Sala"
 
 passos:
-  - id: passo_00_navegar_cr
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

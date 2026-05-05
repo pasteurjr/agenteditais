@@ -1,11 +1,8 @@
 uc_id: UC-CRM04
 variacao: fp
 trilha: visual
-descricao: "Agenda/Timeline de Etapas"
+descricao: "CRM Agenda"
 
 passos:
-  - id: passo_00_aba_agenda
-    # Sem assert (passo opcional/exploratorio)
-
-  - id: passo_01_validar_itens
-    # Sem assert (passo opcional/exploratorio)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

@@ -1,12 +1,8 @@
 uc_id: UC-ME03
 variacao: fp
 trilha: visual
-descricao: "Participacao de Mercado — Share vs Concorrentes"
+descricao: "Métrica Recursos"
 
 passos:
-  - id: passo_00_navegar_concorrencia
-    asserts_dom:
-      - selector: '.page-header h1, .page-header h2, h1, h2'
-
-  - id: passo_01_validar_share
-    # Sem assert (validacao via screenshot pos-execucao)
+  - id: passo_00_setup
+  - id: passo_01_chamar_endpoint

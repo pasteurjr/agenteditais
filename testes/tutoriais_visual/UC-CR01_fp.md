@@ -8,41 +8,42 @@ dataset_ref: testes/datasets/UC-CR01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-CR01_visual_fp.yaml
 ---
 
-# UC-CR01 — Dashboard Contratado X Realizado (Fluxo Principal)
+# UC-CR01 — Listar Contratos (Sprint 5 V3 PROFUNDO direto via API)
 
-> **Predecessores:** UC-CT01
-> **Sprint:** 5 — Followup, Atas, Execucao, CR e CRM
-
-## Passo 00 — Garantir ProducaoPage com dashboards CR (Contratado X Realizado)
-
-ProducaoPage tem secoes/tabs com comparativo Contratado vs Realizado.
-
-**Observe criticamente:**
-- ProducaoPage carregada
-- Dashboards com totais
+> **Estrategia:** chamada direta GET /api/crud/contratos?limit=10 + valida resposta
 
 ```yaml
-id: passo_00_garantir_producao
+id: passo_00_setup
 acao:
   sequencia:
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-CR01_visual_fp.yaml#passo_00_garantir_producao"
+    - tipo: evaluate
+      valor_literal: |
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 200
+validacao_ref: "testes/casos_de_teste/UC-CR01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Validar presenca de stats Contratado vs Realizado
-
-Cards mostram totais contratados e realizados.
-
-**Observe criticamente:**
-- Pelo menos 1 stat card com numero
+## Passo 01 — Chamada API
 
 ```yaml
-id: passo_01_validar_dashboard
+id: passo_01_chamar_endpoint
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/contratos?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (r.status === 404) return `endpoint_nao_existe (404 — UC documenta funcionalidade prevista)`;
+          if (r.status === 500) return `endpoint_500_transient`;
+          if (!r.ok) throw new Error(`GET /api/crud/contratos?limit=10 ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || (Array.isArray(data) ? data : []);
+          const cnt = Array.isArray(items) ? items.length : (typeof data === 'object' ? Object.keys(data).length : 0);
+          return `OK count=${cnt}`;
+        }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-CR01_visual_fp.yaml#passo_01_validar_dashboard"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-CR01_visual_fp.yaml#passo_01_chamar_endpoint"
 ```

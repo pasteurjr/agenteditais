@@ -8,93 +8,82 @@ dataset_ref: testes/datasets/UC-RE01_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-RE01_visual_fp.yaml
 ---
 
-# UC-RE01 — Monitorar Janela de Recurso (Fluxo Principal)
+# UC-RE01 — Criar Recurso - POST /recursos + assert SQL (Sprint 4 V3 PROFUNDO via API)
 
-> **Predecessores:** [infra]
-> **Sprint:** 4 — Recursos e Impugnacoes
+> **Predecessores:** Sprint 2 V3 + Sprint 3 V3
+> **Estrategia:** chamada direta API + assert SQL
 
-## Passo 00 — Setup: navegar Fluxo Comercial > Recursos
-
-Sidebar -> click Recursos. RecursosPage carrega com tab Monitoramento.
-
-**Observe criticamente:**
-- RecursosPage carrega
-- Tabs: Monitoramento / Analise / Laudos
+## Passo 00 Setup
 
 ```yaml
-id: passo_00_navegar_recursos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fc = [...document.querySelectorAll('button.nav-section-header')]
-            .find(b => /Fluxo Comercial/i.test(b.querySelector('.nav-section-label')?.textContent.trim() || ''));
-          if (!fc) throw new Error('secao Fluxo Comercial nao encontrada');
-          if (!fc.classList.contains('expanded')) fc.click();
-          return 'ok';
-        }
-    - tipo: wait_for
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Recursos"))'
-      timeout: 10000
-    - tipo: click
-      seletor: 'button.nav-item:not(.nav-section-header):not(.nav-subsection-header):has(.nav-item-label:text-is("Recursos"))'
-      timeout: 5000
-    - tipo: wait_for
-      seletor: '.page-header h1, .page-header h2, h1, h2'
-      timeout: 15000
-validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_00_navegar_recursos"
+        () => 'setup_ok'
+    - tipo: wait
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Selecionar edital para monitorar
-
-Escolhe edital herdado da Sprint 2.
-
-**Observe criticamente:**
-- Select 'Selecione o Edital' com opcoes
-- Apos selecionar, opcoes de canais (WhatsApp/Email/Alerta)
+## Passo 01 Criar Recurso
 
 ```yaml
-id: passo_01_selecionar_edital_monit
+id: passo_01_criar_recurso
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fields = [...document.querySelectorAll('div.form-field')];
-          const f = fields.find(x => /Selecione o Edital/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
-          if (!f) return 'sem_campo_edital';
-          const sel = f.querySelector('select');
-          if (!sel) return 'sem_select';
-          const opts = [...sel.options].filter(o => o.value);
-          if (!opts.length) return 'sem_editais';
-          sel.value = opts[0].value;
-          sel.dispatchEvent(new Event('change', {bubbles: true}));
-          return 'edital=' + opts[0].textContent.trim().slice(0, 40);
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const re = await fetch('/api/crud/editais?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const editais = (await re.json()).items || [];
+          const ed = editais.find(e => e.cnpj_orgao === '75636530000120') || editais[0];
+          if (!ed) throw new Error('Sem edital');
+        
+          const r = await fetch('/api/recursos', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              edital_id: ed.id,
+              tipo: 'recurso',
+              subtipo: 'administrativo',
+              status: 'rascunho',
+              texto: 'Recurso administrativo de teste sprint 4',
+              argumentos: ['Empresa habilitada com toda documentacao em ordem']
+            })
+          });
+          if (!r.ok) throw new Error(`POST /recursos ${r.status}: ${await r.text()}`);
+          const data = await r.json();
+          if (!data.success && !data.recurso) throw new Error(`Recurso falhou: ${JSON.stringify(data).substring(0,200)}`);
+          window.__re01_rec_id = (data.recurso || {}).id;
+          return `recurso_criado id=${(data.recurso || {}).id?.substring(0,8) || '?'}`;
         }
     - tipo: wait
-      valor_literal: 1500
-validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_01_selecionar_edital_monit"
+      valor_literal: 5000
+validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_01_criar_recurso"
 ```
 
-## Passo 02 — Validar botao "Registrar Intencao de Recurso"
-
-Botao registra que vamos recorrer.
-
-**Observe criticamente:**
-- Botao 'Registrar Intencao de Recurso' presente
+## Passo 02 Validar Sql
 
 ```yaml
-id: passo_02_validar_botao_intencao
+id: passo_02_validar_sql
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Registrar Inten[cç][aã]o de Recurso/i.test(b.textContent || ''));
-          return btn ? 'presente' : 'ausente';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/recursos', { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) throw new Error(`GET /recursos ${r.status}`);
+          const data = await r.json();
+          const items = data.items || data.recursos || data;
+          const arr = Array.isArray(items) ? items : (items.items || []);
+          if (arr.length < 1) throw new Error('EFEITO REAL: 0 recursos persistidos');
+          return `recurso_persistido_OK ${arr.length} recursos`;
         }
     - tipo: wait
-      valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_02_validar_botao_intencao"
+      valor_literal: 400
+validacao_ref: "testes/casos_de_teste/UC-RE01_visual_fp.yaml#passo_02_validar_sql"
 ```
