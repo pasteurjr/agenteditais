@@ -3592,29 +3592,72 @@ def processar_cadastrar_produto(message: str, user_id: str):
             if not sub_exists:
                 subclasse_id = None  # Ignorar ID inválido
 
-        # Verificar duplicidade
-        existente = db.query(Produto).filter(
-            Produto.empresa_id == empresa_id,
-            Produto.nome == nome
-        ).first()
-        if existente:
-            return f"Produto **{nome}** ja existe (ID: {existente.id}). Use 'atualizar produto' para modificar.", {"error": "duplicado", "produto_id": existente.id}
+        # ===== UPSERT por (nome + fabricante + modelo) normalizado =====
+        # Critério B: 3 campos juntos identificam um produto comercial.
+        # Match: nome, fabricante e modelo normalizados (lowercase, sem acento, espaços colapsados).
+        # Fallback: se fabricante OU modelo do existente são vazios E o existente tem o mesmo nome
+        #          normalizado, faz match também — cobre o caso "user cadastrou só nome,
+        #          IA traz nome+fab+modelo".
+        # UPDATE: COALESCE — só preenche campos que estão vazios no existente. Nunca sobrescreve.
+        import unicodedata as _ud
+        def _norm(s):
+            if not s: return ""
+            s = _ud.normalize('NFKD', str(s)).encode('ASCII', 'ignore').decode('ASCII')
+            s = re.sub(r'[\s\-_]+', ' ', s.lower()).strip()
+            return s
+        nome_n = _norm(nome)
+        fab_n = _norm(fabricante)
+        mod_n = _norm(modelo)
 
-        # Criar produto
-        produto = Produto(
-            user_id=user_id,
-            empresa_id=empresa_id,
-            nome=nome,
-            fabricante=fabricante,
-            modelo=modelo,
-            categoria=categoria,
-            subclasse_id=subclasse_id,
-            ncm=ncm,
-            status_pipeline="cadastrado",
-        )
-        db.add(produto)
-        db.flush()
-        produto_id = produto.id
+        existente = None
+        candidatos = db.query(Produto).filter(Produto.empresa_id == empresa_id).all()
+        # 1) tenta match estrito (nome+fab+modelo todos batendo)
+        for c in candidatos:
+            if _norm(c.nome) == nome_n and _norm(c.fabricante) == fab_n and _norm(c.modelo) == mod_n:
+                existente = c
+                break
+        # 2) fallback: mesmo nome E (fabricante OU modelo do existente vazios)
+        if not existente:
+            for c in candidatos:
+                if _norm(c.nome) == nome_n and (not _norm(c.fabricante) or not _norm(c.modelo)):
+                    existente = c
+                    break
+
+        if existente:
+            # UPDATE com COALESCE: só preenche o que está vazio
+            campos_atualizados = []
+            if not existente.fabricante and fabricante:
+                existente.fabricante = fabricante; campos_atualizados.append("fabricante")
+            if not existente.modelo and modelo:
+                existente.modelo = modelo; campos_atualizados.append("modelo")
+            if not existente.ncm and ncm:
+                existente.ncm = ncm; campos_atualizados.append("ncm")
+            if (not existente.subclasse_id) and subclasse_id:
+                existente.subclasse_id = subclasse_id; campos_atualizados.append("subclasse_id")
+            if (not existente.categoria or existente.categoria == "outro") and categoria and categoria != "outro":
+                existente.categoria = categoria; campos_atualizados.append("categoria")
+            db.flush()
+            produto_id = existente.id
+            produto = existente
+            modo_operacao = "atualizado"
+        else:
+            # Criar produto novo
+            produto = Produto(
+                user_id=user_id,
+                empresa_id=empresa_id,
+                nome=nome,
+                fabricante=fabricante,
+                modelo=modelo,
+                categoria=categoria,
+                subclasse_id=subclasse_id,
+                ncm=ncm,
+                status_pipeline="cadastrado",
+            )
+            db.add(produto)
+            db.flush()
+            produto_id = produto.id
+            modo_operacao = "criado"
+            campos_atualizados = []
 
         # Parsear especificações com formato enriquecido: campo=valor[unidade]{tipo}
         specs_criadas = []
@@ -3650,29 +3693,58 @@ def processar_cadastrar_produto(message: str, user_id: str):
                             except (InvalidOperation, ValueError):
                                 pass
 
-                        spec = ProdutoEspecificacao(
-                            produto_id=produto_id,
-                            nome_especificacao=campo,
-                            valor=valor,
-                            unidade=unidade,
-                            valor_numerico=valor_numerico,
-                        )
-                        db.add(spec)
-                        specs_criadas.append(f"{campo}: {valor}{f' {unidade}' if unidade else ''}")
+                        # UPSERT spec: se já existe spec com mesmo nome, atualiza valor;
+                        # senão cria nova. Evita duplicar specs em re-processamento.
+                        spec_existente = db.query(ProdutoEspecificacao).filter(
+                            ProdutoEspecificacao.produto_id == produto_id,
+                            ProdutoEspecificacao.nome_especificacao == campo
+                        ).first()
+                        if spec_existente:
+                            spec_existente.valor = valor
+                            if unidade: spec_existente.unidade = unidade
+                            if valor_numerico is not None: spec_existente.valor_numerico = valor_numerico
+                            specs_criadas.append(f"{campo}: {valor}{f' {unidade}' if unidade else ''} (atualizada)")
+                        else:
+                            spec = ProdutoEspecificacao(
+                                produto_id=produto_id,
+                                nome_especificacao=campo,
+                                valor=valor,
+                                unidade=unidade,
+                                valor_numerico=valor_numerico,
+                            )
+                            db.add(spec)
+                            specs_criadas.append(f"{campo}: {valor}{f' {unidade}' if unidade else ''}")
 
         db.commit()
 
         specs_text = ""
         if specs_criadas:
             specs_list = "\n".join([f"  - {s}" for s in specs_criadas])
-            specs_text = f"\n\n**Especificacoes cadastradas ({len(specs_criadas)}):**\n{specs_list}"
+            specs_text = f"\n\n**Especificacoes ({len(specs_criadas)}):**\n{specs_list}"
 
         subclasse_text = ""
         if subclasse_id:
             sub = db.query(SubclasseProduto).filter(SubclasseProduto.id == subclasse_id).first()
             subclasse_text = f"\n- **Subclasse:** {sub.nome if sub else subclasse_id}"
 
-        response = f"""## Produto cadastrado com sucesso
+        # Mensagem reflete operação real (criado vs atualizado) — V4 fix observação #14 Arnaldo
+        if modo_operacao == "atualizado":
+            atualizados_text = ""
+            if campos_atualizados:
+                atualizados_text = f"\n- **Campos preenchidos:** {', '.join(campos_atualizados)}"
+            response = f"""## Produto atualizado (já existia no portfolio)
+
+- **Nome:** {nome}
+- **ID existente:** {produto_id}{atualizados_text}{subclasse_text}
+- **Fabricante:** {produto.fabricante or 'N/I'}
+- **Modelo:** {produto.modelo or 'N/I'}
+- **NCM:** {produto.ncm or 'N/I'}{specs_text}
+
+A IA identificou que este produto já existia (match por nome+fabricante+modelo)
+e completou apenas os campos que estavam vazios. Dados que voce ja tinha digitado
+foram preservados."""
+        else:
+            response = f"""## Produto cadastrado com sucesso
 
 - **Nome:** {nome}
 - **Categoria:** {categoria}{subclasse_text}
@@ -3683,7 +3755,7 @@ def processar_cadastrar_produto(message: str, user_id: str):
 
 O produto foi salvo no banco. Voce pode ver na aba "Meus Produtos" do Portfolio."""
 
-        return response, {"success": True, "produto_id": produto_id, "nome": nome}
+        return response, {"success": True, "produto_id": produto_id, "nome": nome, "modo": modo_operacao, "campos_atualizados": campos_atualizados}
 
     except Exception as e:
         db.rollback()
