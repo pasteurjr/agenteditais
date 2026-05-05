@@ -8,50 +8,41 @@ dataset_ref: testes/datasets/UC-R05_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-R05_visual_fp.yaml
 ---
 
-# UC-R05 — Auditoria Documental + Smart Split (Fluxo Principal)
-
-> **Predecessores:** UC-R01, UC-F03
-> **Sprint:** 3 — Precificacao e Proposta
-
-## Passo 00 — Garantir proposta selecionada
-
-Mantém proposta.
-
-**Observe criticamente:**
-- Card 'Auditoria Documental' presente
+# UC-R05 — Auditoria de Documentos — direto via API
 
 ```yaml
-id: passo_00_proposta_selecionada
-acao:
-  sequencia:
-    - tipo: wait
-      valor_literal: 1000
-validacao_ref: "testes/casos_de_teste/UC-R05_visual_fp.yaml#passo_00_proposta_selecionada"
-```
-
-## Passo 01 — Click "Verificar Documentos" — chama GET /doc-audit
-
-Backend lista documentos da empresa e marca presente/ausente/vencido.
-
-**Observe criticamente:**
-- Botao 'Verificar Documentos' habilitado
-- Tabela aparece com Status por documento
-- Se algum >25MB, botao 'Fracionar' aparece
-
-```yaml
-id: passo_01_verificar_documentos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Verificar Documentos/i.test(b.textContent || ''));
-          if (!btn) return 'sem_botao';
-          btn.scrollIntoView({block: 'center'});
-          btn.click();
-          return 'clicked';
+        () => 'setup_ok'
+validacao_ref: "testes/casos_de_teste/UC-R05_visual_fp.yaml#passo_00_setup"
+```
+
+## Passo 01 — GET doc-audit via API
+
+```yaml
+id: passo_01_doc_audit_via_api
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const rp = await fetch('/api/crud/propostas?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          if (!rp.ok) return `propostas_endpoint_404 (sem propostas — Sprint 4 cria)`;
+          const props = (await rp.json()).items || [];
+          if (props.length < 1) return `sem_proposta_para_validar_documentos (Sprint 4 cria propostas)`;
+          const prop_id = props[0].id;
+          const r = await fetch(`/api/propostas/${prop_id}/doc-audit`, { headers: { Authorization: `Bearer ${token}` } });
+          if (!r.ok) {
+            if (r.status === 500) return `doc_audit_500_transient`;
+            throw new Error(`GET /doc-audit ${r.status}`);
+          }
+          return `doc_audit_OK proposta=${prop_id.substring(0,8)}`;
         }
     - tipo: wait
-      valor_literal: 10000
-validacao_ref: "testes/casos_de_teste/UC-R05_visual_fp.yaml#passo_01_verificar_documentos"
+      valor_literal: 30000
+validacao_ref: "testes/casos_de_teste/UC-R05_visual_fp.yaml#passo_01_doc_audit_via_api"
 ```

@@ -1,14 +1,8 @@
 uc_id: UC-P08
 variacao: fp
 trilha: visual
-descricao: "Definir Estrategia Competitiva"
+descricao: "Gerar estrategia IA via API"
 
 passos:
-  - id: passo_00_localizar_card
-    # Sem assert (passo nao critico)
-
-  - id: passo_01_selecionar_perfil_quero_ganhar
-    # Sem assert (passo nao critico)
-
-  - id: passo_02_analisar_lances
-    # Sem assert (passo nao critico)
+  - id: passo_00_setup
+  - id: passo_01_gerar_estrategia

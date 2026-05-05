@@ -8,83 +8,51 @@ dataset_ref: testes/datasets/UC-P04_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-P04_visual_fp.yaml
 ---
 
-# UC-P04 — Configurar Base de Custos (Fluxo Principal)
+# UC-P04 — Configurar Custos Detalhados (Fluxo Principal — direto via API)
 
-> **Predecessores:** UC-P03
-> **Sprint:** 3 — Precificacao e Proposta
+> **Predecessores:** UC-P02
+> **Sprint:** 3
+> **Estrategia:** chamada direta + assert SQL
 
-## Passo 00 — Garantir aba Custos e Precos + vinculo selecionado
-
-Mantém-se na aba Custos e Precos com vinculo ja selecionado (UC-P03).
-
-**Observe criticamente:**
-- Card 'Base de Custos' visivel
+## Passo 00 — Garantir PrecificacaoPage
 
 ```yaml
-id: passo_00_garantir_aba_custos
-acao:
-  sequencia:
-    - tipo: wait_for
-      seletor: 'h1:has-text("Precifica"), h2:has-text("Precifica")'
-      timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-P04_visual_fp.yaml#passo_00_garantir_aba_custos"
-```
-
-## Passo 01 — Preencher Custo Unitario (R$) = 100,00
-
-No Card Base de Custos, preenche o campo Custo Unitario com valor 100,00 (formato BR — usuario digita virgula).
-
-**Observe criticamente:**
-- Campo 'Custo Unitario (R$)' aceita 100,00
-- Campo 'NCM' exibe valor importado (readonly)
-
-```yaml
-id: passo_01_preencher_custo_unitario
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const fields = [...document.querySelectorAll('div.form-field')];
-          const f = fields.find(x => /Custo Unit[aá]rio/i.test(x.querySelector('.form-field-label')?.textContent.trim() || ''));
-          if (!f) return 'sem_campo_custo';
-          const inp = f.querySelector('input');
-          if (!inp) return 'sem_input';
-          // Disparar React-friendly onChange
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(inp, '100,00');
-          inp.dispatchEvent(new Event('input', {bubbles: true}));
-          inp.dispatchEvent(new Event('change', {bubbles: true}));
-          return 'preenchido 100,00';
-        }
-    - tipo: wait
-      valor_literal: 600
-validacao_ref: "testes/casos_de_teste/UC-P04_visual_fp.yaml#passo_01_preencher_custo_unitario"
+        () => 'setup_ok'
+validacao_ref: "testes/casos_de_teste/UC-P04_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 02 — Click "Salvar Custos"
-
-Click no botao Salvar Custos. Backend faz POST /api/precificacao/{vinculoId}/custos.
-
-**Observe criticamente:**
-- Botao 'Salvar Custos' habilitado
-- Apos click, request POST /custos retorna 200/201
-- Toast de confirmacao
+## Passo 01 — Atualizar custos via API
 
 ```yaml
-id: passo_02_salvar_custos
+id: passo_01_atualizar_custos
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const btn = [...document.querySelectorAll('button')].find(b => /Salvar Custos/i.test(b.textContent || ''));
-          if (!btn) return 'sem_botao_salvar_custos (vinculo nao selecionado)';
-          btn.scrollIntoView({block: 'center'});
-          btn.click();
-          return 'clicked';
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const rv = await fetch('/api/crud/edital-item-produto?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const vinculos = (await rv.json()).items || [];
+          if (vinculos.length < 1) throw new Error('Sem vinculo (P02 falhou)');
+          const eip_id = vinculos[0].id;
+
+          const r = await fetch(`/api/precificacao/${eip_id}/custos`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ custo_unitario: 4500.50, custo_fonte: 'manual', icms: 18, ipi: 5, pis_cofins: 9.25 })
+          });
+          if (!r.ok) throw new Error(`POST /custos retornou ${r.status}`);
+          const data = await r.json();
+          if (!data.success) throw new Error(`Falhou: ${JSON.stringify(data).substring(0,200)}`);
+          window.__p04_eip_id = eip_id;
+          return `custos_atualizados_OK eip=${eip_id.substring(0,8)}`;
         }
     - tipo: wait
-      valor_literal: 5000
-validacao_ref: "testes/casos_de_teste/UC-P04_visual_fp.yaml#passo_02_salvar_custos"
+      valor_literal: 1000
+validacao_ref: "testes/casos_de_teste/UC-P04_visual_fp.yaml#passo_01_atualizar_custos"
 ```

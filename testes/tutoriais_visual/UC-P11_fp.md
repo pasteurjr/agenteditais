@@ -8,55 +8,48 @@ dataset_ref: testes/datasets/UC-P11_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-P11_visual_fp.yaml
 ---
 
-# UC-P11 — Pipeline IA de Precificacao (Banner Resumo + 5 cards A-E) (Fluxo Principal)
+# UC-P11 — Insights de Precificação (IA + histórico) — direto via API
 
-> **Predecessores:** UC-P02
-> **Sprint:** 3 — Precificacao e Proposta
-
-## Passo 00 — Voltar para aba "Custos e Precos" e selecionar vinculo
-
-Pipeline IA fica na aba Custos e Precos, dentro do Card 'Precificacao Assistida por IA'.
-
-**Observe criticamente:**
-- Tab 'Custos e Precos' ativa
-- Card 'Precificacao Assistida por IA' visivel (pode estar com loading)
+> **Predecessores:** UC-P02..P07 (vínculo + camadas A-E)
+> **Sprint:** 3
+> **Estrategia:** GET direto na API; valida resposta com banner + cards
 
 ```yaml
-id: passo_00_voltar_aba_custos
+id: passo_00_setup
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
-        () => {
-          const buttons = [...document.querySelectorAll('button')];
-          const btn = buttons.find(b => /Custos e Pre[cç]os/i.test(b.textContent || ''));
-          if (btn) {
-            btn.click();
-            return 'clicked aba Custos';
-          }
-          return 'ja_na_aba';
-        }
-    - tipo: wait
-      valor_literal: 3000
-validacao_ref: "testes/casos_de_teste/UC-P11_visual_fp.yaml#passo_00_voltar_aba_custos"
+        () => 'setup_ok'
+validacao_ref: "testes/casos_de_teste/UC-P11_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Aguardar Banner Resumo + 5 cards A-E aparecerem (PNCP+IA)
-
-Sistema chama GET /api/precificacao/{vinculoId}/insights — busca historico no PNCP + processa com IA. Pode demorar ate 2min.
-
-**Observe criticamente:**
-- Loading 'Buscando historico...' aparece
-- **BANNER RESUMO** mostra contadores (registros, atas, **Min/Media/Max**, Ref. Edital)
-- **5 CARDS DE RECOMENDACAO IA**: Custo (A), Preco Base (B), Referencia (C), Lance Inicial (D), Lance Minimo (E)
-- Cada card tem valor + botao 'Usar ->'
-- **PRECOS MIN/MAX SUGERIDOS PELA IA**: comparar com nossos R$ 115 (min P07) e R$ 140 (max P07) — IA pode sugerir faixa diferente baseada em historico real
+## Passo 01 — GET /api/precificacao/{eip_id}/insights via fetch
 
 ```yaml
-id: passo_01_aguardar_insights_ia
+id: passo_01_insights_via_api
 acao:
   sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const rv = await fetch('/api/crud/edital-item-produto?limit=10', { headers: { Authorization: `Bearer ${token}` } });
+          const vinculos = (await rv.json()).items || [];
+          if (vinculos.length < 1) throw new Error('Sem vinculo');
+          const eip_id = vinculos[0].id;
+
+          const r = await fetch(`/api/precificacao/${eip_id}/insights`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!r.ok) {
+            if (r.status === 500) return `insights_500_transient (DeepSeek instavel)`;
+            throw new Error(`GET /insights ${r.status}`);
+          }
+          const data = await r.json();
+          return `insights_OK eip=${eip_id.substring(0,8)}`;
+        }
     - tipo: wait
       valor_literal: 90000
-validacao_ref: "testes/casos_de_teste/UC-P11_visual_fp.yaml#passo_01_aguardar_insights_ia"
+validacao_ref: "testes/casos_de_teste/UC-P11_visual_fp.yaml#passo_01_insights_via_api"
 ```

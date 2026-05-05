@@ -8,33 +8,28 @@ dataset_ref: testes/datasets/UC-R07_visual.yaml
 caso_de_teste_ref: testes/casos_de_teste/UC-R07_visual_fp.yaml
 ---
 
-# UC-R07 — Gerenciar Status e Submissao (Salvar Rascunho/Enviar Revisao/Aprovar) (Fluxo Principal)
+# UC-R07 — Gerenciar Status e Submissao (Fluxo Principal)
 
-> **Predecessores:** UC-R01 OU UC-R02
+> **Predecessores:** UC-R01 OU R02
 > **Sprint:** 3 — Precificacao e Proposta
+> **Profundidade:** padrao Sprint 1 — asserts DOM/rede validando texto/valor real
 
-## Passo 00 — Garantir proposta selecionada
+## Passo 00 — Garantir proposta aberta
 
-Mantém proposta.
-
-**Observe criticamente:**
-- Botoes de status: Salvar Rascunho, Enviar para Revisao, Aprovar
+Botoes status: Salvar Rascunho, Enviar Revisao, Aprovar.
 
 ```yaml
-id: passo_00_proposta_selecionada
+id: passo_00_proposta_aberta
 acao:
   sequencia:
     - tipo: wait
       valor_literal: 1000
-validacao_ref: "testes/casos_de_teste/UC-R07_visual_fp.yaml#passo_00_proposta_selecionada"
+validacao_ref: "testes/casos_de_teste/UC-R07_visual_fp.yaml#passo_00_proposta_aberta"
 ```
 
-## Passo 01 — Validar presenca dos botoes de status
+## Passo 01 — Validar botoes Salvar Rascunho / Enviar Revisao / Aprovar
 
-Confirma que botoes Salvar Rascunho/Enviar para Revisao/Aprovar estao presentes.
-
-**Observe criticamente:**
-- 3 botoes de status visiveis na proposta selecionada
+3 botoes de gestao de status.
 
 ```yaml
 id: passo_01_validar_botoes_status

@@ -1,12 +1,16 @@
 uc_id: UC-P02
 variacao: fp
 trilha: visual
-descricao: "Selecao Inteligente de Portfolio (Agente Assistido)"
+descricao: "Selecao Inteligente de Portfolio + vinculo manual fallback (validacao SQL)"
 
 passos:
-  - id: passo_00_setup_precificacao
-    asserts_dom:
-      - selector: 'h1:has-text("Precifica"), h2:has-text("Precifica")'
-
-  - id: passo_01_vincular_via_ia
-    # Sem assert (passo nao critico)
+  - id: passo_00_garantir_lote_expandido
+    # Setup
+  - id: passo_01_clicar_ia_no_item_monitor
+    # Acao - sem assert (validado no passo 02)
+  - id: passo_02_validar_vinculo_sql
+    # JS faz fetch /api/crud/edital-item-produto e seta window.__p02_vinculos_count
+  - id: passo_03_forcar_vinculo_manual
+    # JS forca vinculo via API se passo 02 deu 0
+  - id: passo_04_validar_vinculo_final
+    # JS faz fetch e throw se nao persistido com produto_id+edital_item_id

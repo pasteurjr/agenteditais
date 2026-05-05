@@ -7,10 +7,28 @@ passos:
   - id: passo_00_navegar_precificacao
     asserts_dom:
       - selector: 'h1:has-text("Precifica"), h2:has-text("Precifica")'
+      - selector: 'div.form-field:has(.form-field-label:has-text("Selecione o edital"))'
+      - selector: 'button:has-text("Criar Lotes")'
 
   - id: passo_01_selecionar_edital
     asserts_dom:
       - selector: 'button.tab-panel-tab, button[class*="tab"]'
 
-  - id: passo_02_criar_lotes_se_necessario
-    # Sem assert (passo nao critico)
+  - id: passo_02_validar_aba_lotes_ativa
+    # Sem assert (passo de setup/exploracao)
+
+  - id: passo_03_expandir_lote_1
+    asserts_dom:
+      - selector: 'div.form-field:has(.form-field-label:has-text("Especialidade")) input'
+      - selector: 'div.form-field:has(.form-field-label:has-text("Tipo de Amostra")) input'
+
+  - id: passo_04_preencher_parametros_tecnicos
+    # Sem assert (passo de setup/exploracao)
+
+  - id: passo_05_atualizar_lote
+    asserts_rede:
+      - url_contem: "/lotes"
+        status_in: [200, 201, 204]
+
+  - id: passo_06_validar_tabela_itens
+    # Sem assert (passo de setup/exploracao)

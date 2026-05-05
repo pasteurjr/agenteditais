@@ -12,13 +12,11 @@ caso_de_teste_ref: testes/casos_de_teste/UC-R02_visual_fp.yaml
 
 > **Predecessores:** [login]
 > **Sprint:** 3 — Precificacao e Proposta
+> **Profundidade:** padrao Sprint 1 — asserts DOM/rede validando texto/valor real
 
-## Passo 00 — Garantir PropostaPage carregada
+## Passo 00 — Garantir PropostaPage
 
-Permanece em PropostaPage.
-
-**Observe criticamente:**
-- Botao 'Upload Proposta Externa' no header
+Botao 'Upload Proposta Externa' no header.
 
 ```yaml
 id: passo_00_garantir_proposta_page
@@ -30,26 +28,21 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-R02_visual_fp.yaml#passo_00_garantir_proposta_page"
 ```
 
-## Passo 01 — Localizar botao "Upload Proposta Externa"
+## Passo 01 — Validar botao 'Upload Proposta Externa' presente
 
-Apenas valida que o botao existe (nao executa upload real, exigiria arquivo).
-
-**Observe criticamente:**
-- Botao 'Upload Proposta Externa' presente no header da PropostaPage
+Botao abre modal de upload.
 
 ```yaml
-id: passo_01_localizar_botao_upload
+id: passo_01_validar_botao_upload
 acao:
   sequencia:
     - tipo: evaluate
       valor_literal: |
         () => {
           const btn = [...document.querySelectorAll('button')].find(b => /Upload Proposta Externa/i.test(b.textContent || ''));
-          if (!btn) return 'sem_botao_upload';
-          // So valida presenca, nao clica (abre modal)
-          return 'botao_presente';
+          return btn ? 'botao_presente' : 'ausente';
         }
     - tipo: wait
       valor_literal: 500
-validacao_ref: "testes/casos_de_teste/UC-R02_visual_fp.yaml#passo_01_localizar_botao_upload"
+validacao_ref: "testes/casos_de_teste/UC-R02_visual_fp.yaml#passo_01_validar_botao_upload"
 ```

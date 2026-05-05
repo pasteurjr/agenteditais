@@ -12,17 +12,14 @@ caso_de_teste_ref: testes/casos_de_teste/UC-R03_visual_fp.yaml
 
 > **Predecessores:** UC-R01
 > **Sprint:** 3 — Precificacao e Proposta
+> **Profundidade:** padrao Sprint 1 — asserts DOM/rede validando texto/valor real
 
-## Passo 00 — Garantir uma proposta selecionada (clica primeira linha da tabela)
+## Passo 00 — Click na primeira linha da tabela 'Minhas Propostas'
 
-Click na primeira linha da tabela 'Minhas Propostas' pra abrir o card 'Proposta Selecionada'.
-
-**Observe criticamente:**
-- Tabela tem ao menos 1 linha (R01 criou)
-- Card 'Proposta Selecionada' aparece embaixo
+Abre Card 'Proposta Selecionada' com secoes.
 
 ```yaml
-id: passo_00_garantir_proposta_selecionada
+id: passo_00_selecionar_proposta
 acao:
   sequencia:
     - tipo: evaluate
@@ -31,26 +28,22 @@ acao:
           const tr = document.querySelector('table tbody tr');
           if (!tr) return 'sem_propostas';
           tr.click();
-          return 'clicada primeira linha';
+          return 'selecionada';
         }
     - tipo: wait
       valor_literal: 2000
-validacao_ref: "testes/casos_de_teste/UC-R03_visual_fp.yaml#passo_00_garantir_proposta_selecionada"
+validacao_ref: "testes/casos_de_teste/UC-R03_visual_fp.yaml#passo_00_selecionar_proposta"
 ```
 
-## Passo 01 — Localizar secao "Descricao Tecnica" com Toggle Modo
+## Passo 01 — Localizar secao 'Descricao Tecnica' com toggle Modo
 
-Card aparece com toggle entre 'edital' e 'personalizado'.
-
-**Observe criticamente:**
-- Secao 'Descricao Tecnica' visivel
-- Toggle/botao para alternar modo
+Toggle entre 'edital' (default) e 'personalizado'.
 
 ```yaml
-id: passo_01_localizar_secao_descricao
+id: passo_01_localizar_descricao_tecnica
 acao:
   sequencia:
     - tipo: wait
-      valor_literal: 2000
-validacao_ref: "testes/casos_de_teste/UC-R03_visual_fp.yaml#passo_01_localizar_secao_descricao"
+      valor_literal: 1500
+validacao_ref: "testes/casos_de_teste/UC-R03_visual_fp.yaml#passo_01_localizar_descricao_tecnica"
 ```

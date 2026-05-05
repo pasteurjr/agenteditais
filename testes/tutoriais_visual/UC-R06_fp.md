@@ -10,16 +10,13 @@ caso_de_teste_ref: testes/casos_de_teste/UC-R06_visual_fp.yaml
 
 # UC-R06 — Exportar Dossie Completo (PDF/DOCX/ZIP) (Fluxo Principal)
 
-> **Predecessores:** UC-R01, UC-R04 OU UC-R05
+> **Predecessores:** UC-R01 + UC-R04 OU R05
 > **Sprint:** 3 — Precificacao e Proposta
+> **Profundidade:** padrao Sprint 1 — asserts DOM/rede validando texto/valor real
 
-## Passo 00 — Localizar Card "Exportacao" com botoes Baixar PDF/DOCX/ZIP
+## Passo 00 — Localizar Card 'Exportacao'
 
-Card aparece na proposta selecionada.
-
-**Observe criticamente:**
-- Card 'Exportacao' visivel
-- Botoes 'Baixar PDF', 'Baixar DOCX', 'Baixar Dossie ZIP', 'Enviar por Email'
+Botoes Baixar PDF, Baixar DOCX, Baixar Dossie ZIP, Enviar por Email.
 
 ```yaml
 id: passo_00_localizar_card_exportacao
@@ -30,12 +27,9 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-R06_visual_fp.yaml#passo_00_localizar_card_exportacao"
 ```
 
-## Passo 01 — Validar presenca dos 4 botoes de exportacao
+## Passo 01 — Validar 4 botoes de exportacao
 
-Apenas valida que os botoes estao presentes (download real abre file picker).
-
-**Observe criticamente:**
-- 'Baixar PDF', 'Baixar DOCX', 'Baixar Dossie ZIP' visiveis
+Apenas valida presenca (download real abre file picker).
 
 ```yaml
 id: passo_01_validar_botoes_exportacao

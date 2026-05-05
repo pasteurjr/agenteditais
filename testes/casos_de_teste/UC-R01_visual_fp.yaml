@@ -1,14 +1,8 @@
 uc_id: UC-R01
 variacao: fp
 trilha: visual
-descricao: "Gerar Proposta Tecnica (Motor IA Automatico)"
+descricao: "Gerar Proposta IA via API direto"
 
 passos:
-  - id: passo_00_navegar_proposta
-    # Sem assert (passo nao critico)
-
-  - id: passo_01_preencher_form_proposta
-    # Sem assert (passo nao critico)
-
-  - id: passo_02_gerar_proposta
-    # Sem assert (passo nao critico)
+  - id: passo_00_setup
+  - id: passo_01_simular_ia

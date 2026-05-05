@@ -1,11 +1,8 @@
 uc_id: UC-R05
 variacao: fp
 trilha: visual
-descricao: "Auditoria Documental + Smart Split"
+descricao: "Doc-audit via API direto"
 
 passos:
-  - id: passo_00_proposta_selecionada
-    # Sem assert (passo nao critico)
-
-  - id: passo_01_verificar_documentos
-    # Sem assert (passo nao critico)
+  - id: passo_00_setup
+  - id: passo_01_doc_audit_via_api

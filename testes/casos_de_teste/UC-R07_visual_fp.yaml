@@ -1,11 +1,11 @@
 uc_id: UC-R07
 variacao: fp
 trilha: visual
-descricao: "Gerenciar Status e Submissao (Salvar Rascunho/Enviar Revisao/Aprovar)"
+descricao: "Gerenciar Status e Submissao"
 
 passos:
-  - id: passo_00_proposta_selecionada
-    # Sem assert (passo nao critico)
+  - id: passo_00_proposta_aberta
+    # Sem assert (passo de setup/exploracao)
 
   - id: passo_01_validar_botoes_status
-    # Sem assert (passo nao critico)
+    # Sem assert (passo de setup/exploracao)

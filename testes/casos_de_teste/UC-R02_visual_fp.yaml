@@ -5,7 +5,7 @@ descricao: "Upload de Proposta Externa"
 
 passos:
   - id: passo_00_garantir_proposta_page
-    # Sem assert (passo nao critico)
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_localizar_botao_upload
-    # Sem assert (passo nao critico)
+  - id: passo_01_validar_botao_upload
+    # Sem assert (passo de setup/exploracao)

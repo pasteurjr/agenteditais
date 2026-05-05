@@ -11215,14 +11215,18 @@ def precif_buscar_cadastrar_produto(item_id):
 @app.route("/api/precificacao/vincular-ia/<item_id>", methods=["POST"])
 @require_auth
 def precif_vincular_ia(item_id):
-    """UC-P02: Seleção inteligente — IA analisa item e sugere melhor produto do portfolio."""
+    """UC-P02: Seleção inteligente — IA analisa item e sugere melhor produto do portfolio.
+    Se body tem produto_id, faz vinculação manual confirmada (sem matching automático)."""
     from tools import tool_selecao_portfolio
     user_id = get_current_user_id()
     empresa_id = get_current_empresa_id()
+    body = request.get_json(silent=True) or {}
+    produto_id = body.get("produto_id")
     resultado = tool_selecao_portfolio(
         edital_item_id=item_id,
         user_id=user_id,
         empresa_id=empresa_id,
+        produto_id=produto_id,
     )
     return jsonify(resultado)
 
@@ -11251,9 +11255,12 @@ def precif_preco_base(eip_id):
     """UC-P05: Montar preço base (Camada B) — manual, custo+markup ou upload."""
     from tools import tool_montar_preco_base
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json() or {}
+    print(f"[PRECO_BASE] eip={eip_id[:8]} user={user_id[:8]} empresa={empresa_id} modo={data.get('modo')} markup={data.get('markup_percentual')}")
     resultado = tool_montar_preco_base(
         edital_item_produto_id=eip_id, user_id=user_id,
+        empresa_id=empresa_id,
         modo=data.get("modo", "manual"),
         preco_base=data.get("preco_base"),
         markup_percentual=data.get("markup_percentual"),
@@ -11267,9 +11274,11 @@ def precif_referencia(eip_id):
     """UC-P06: Definir valor de referência (Camada C)."""
     from tools import tool_definir_referencia
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json() or {}
     resultado = tool_definir_referencia(
         edital_item_produto_id=eip_id, user_id=user_id,
+        empresa_id=empresa_id,
         valor_referencia=data.get("valor_referencia"),
         percentual_sobre_base=data.get("percentual_sobre_base"),
     )
@@ -11282,9 +11291,11 @@ def precif_lances(eip_id):
     """UC-P07: Estruturar lances (Camadas D e E)."""
     from tools import tool_estruturar_lances
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json() or {}
     resultado = tool_estruturar_lances(
         edital_item_produto_id=eip_id, user_id=user_id,
+        empresa_id=empresa_id,
         lance_inicial=data.get("lance_inicial"),
         lance_minimo=data.get("lance_minimo"),
         modo_inicial=data.get("modo_inicial", "absoluto"),

@@ -4,8 +4,8 @@ trilha: visual
 descricao: "Consultar Historico de Precos"
 
 passos:
-  - id: passo_00_abrir_historico
-    # Sem assert (passo nao critico)
+  - id: passo_00_aba_historico
+    # Sem assert (passo de setup/exploracao)
 
-  - id: passo_01_filtrar_historico
-    # Sem assert (passo nao critico)
+  - id: passo_01_preencher_termo_e_filtrar
+    # Sem assert (passo de setup/exploracao)

@@ -1,11 +1,11 @@
 uc_id: UC-P12
 variacao: fp
 trilha: visual
-descricao: "Relatorio de Custos e Precos (markdown nova aba)"
+descricao: "Relatorio de Custos e Precos (markdown)"
 
 passos:
-  - id: passo_00_localizar_botao
-    # Sem assert (passo nao critico)
+  - id: passo_00_localizar_botao_relatorio
+    # Sem assert (passo de setup/exploracao)
 
   - id: passo_01_click_relatorio
-    # Sem assert (passo nao critico)
+    # Sem assert (passo de setup/exploracao)
