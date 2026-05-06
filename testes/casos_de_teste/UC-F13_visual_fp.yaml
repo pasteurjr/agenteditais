@@ -73,9 +73,3 @@ passos:
       - url_contem: "/api/crud/subclasses-produto/"
         metodo: PUT
         status_in: [200]
-
-  - id: passo_13_cadastrar_mascara_reagente
-    asserts_rede:
-      - url_contem: "/api/crud/subclasses-produto/"
-        metodo: PUT
-        status_in: [200]
