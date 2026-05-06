@@ -1,15 +1,38 @@
 uc_id: UC-F04
 variacao: fp
 trilha: visual
-descricao: "Buscar certidoes via scrapers (streaming)"
+descricao: "Buscar certidoes — fontes globais + fontes V5 da empresa (PGFN/Itamarandiba/JUCEMG) via API direta"
 
 passos:
-  - id: passo_00_setup_navegar_certidoes
-    asserts_dom:
-      - selector: '.card-title:has-text("Certidoes Automaticas"), h3:has-text("Certidoes Automaticas")'
+  - id: passo_00_setup
+    # JWT presente com empresa_id
 
-  - id: passo_01_buscar_certidoes
+  - id: passo_01_listar_antes
     asserts_rede:
-      - url_contem: "/api/empresa-certidoes/buscar-stream"
+      - url_contem: "/api/crud/fontes-certidoes"
+        metodo: GET
+        status_in: [200]
+
+  - id: passo_02_cadastrar_fontes_v5
+    asserts_rede:
+      - url_contem: "/api/crud/fontes-certidoes"
         metodo: POST
         status_in: [200, 201]
+
+  - id: passo_03_validar_listagem_combinada
+    asserts_rede:
+      - url_contem: "/api/crud/fontes-certidoes"
+        metodo: GET
+        status_in: [200]
+
+  - id: passo_04_sincronizar_fontes
+    asserts_rede:
+      - url_contem: "/api/empresa-certidoes/sincronizar-fontes"
+        metodo: POST
+        status_in: [200]
+
+  - id: passo_05_cleanup
+    asserts_rede:
+      - url_contem: "/api/crud/fontes-certidoes/"
+        metodo: DELETE
+        status_in: [200, 204]
