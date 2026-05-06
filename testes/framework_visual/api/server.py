@@ -1046,8 +1046,11 @@ def api_teste_iniciar(teste_id):
             run_atual.iniciado_em = datetime.now()
         db.commit()
         # painel_url dinamico: usa o host pelo qual o cliente acessou a API.
+        # X-Forwarded-Host eh setado pelo proxy do Vite com o Host original do browser
+        # (vite reescreve request.host por causa do changeOrigin:true).
         # Permite acesso externo (Arnaldo via pasteurjr.servehttp.com:9876).
-        painel_host = (request.host or "localhost").split(":")[0]
+        _host_header = request.headers.get("X-Forwarded-Host") or request.host or "localhost"
+        painel_host = _host_header.split(":")[0]
         return jsonify({
             "ok": True,
             "pid": proc.pid,

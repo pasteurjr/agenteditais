@@ -17,6 +17,16 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5060',
         changeOrigin: true,
+        // Preserva o Host original via X-Forwarded-Host pra que a API possa
+        // construir painel_url usando o hostname pelo qual o cliente acessou
+        // (ex: pasteurjr.servehttp.com em vez de localhost).
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.host) {
+              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+            }
+          });
+        },
       },
     },
   },
