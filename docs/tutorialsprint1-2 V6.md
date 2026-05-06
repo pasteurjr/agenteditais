@@ -7,8 +7,9 @@
 **UCs:** F01–F17 (17 casos de uso)
 **Público:** Dono do Produto / Validador de Negócio (sem conhecimento técnico necessário)
 
-> **CHANGELOG V6 (vs V5) — corrige bug grave de especificações:**
+> **CHANGELOG V6 (vs V5) — corrige bug grave de especificações + ordem dos UCs:**
 >
+> - **ORDEM DOS UCs REORGANIZADA (V6):** UC-F13 (Áreas/Classes/Subclasses + Máscara de Campos) movido para **antes do UC-F06**. Nas versões V3/V4/V5, o tutorial seguia ordem numérica (F06 antes de F13), mas F06–F12 dependem da hierarquia + máscara cadastradas em F13. Validador deve seguir a ordem do índice (F01-F05-F13-F06-F07-...), não a numérica.
 > - **UC-F13 PARTE 4 (NOVO):** cadastro de **Máscara de Campos** das subclasses (`campos_mascara`).
 >   Define previamente quais especificações cada subclasse exige. Sem esta etapa, ao cadastrar um produto não há orientação dos campos esperados — Arnaldo procurou esta funcionalidade na Sprint 1 e não encontrou no tutorial. Caminho: **Cadastros → Portfolio → Subclasses → editar subclasse → campo "Máscara de Campos"**.
 > - **UC-F08 Passo 5 reescrito:** as 8 especificações listadas em V3/V4/V5 eram de **kit reagente bioquímico de glicose** (Método GOD-PAP, Comprimento de Onda 505 nm, Linearidade 0–500 mg/dL) num produto que é **Monitor Multiparâmetro** — semanticamente absurdo. V6 corrige com 8 specs derivadas da máscara da subclasse "Monitor Multiparâmetro" (Tela, Parâmetros, Tipo de Paciente, Bateria, Peso, Alimentação, Classe ANVISA, Registro ANVISA).
@@ -117,11 +118,14 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 
 ## Índice
 
+> **⚠ ORDEM DE EXECUÇÃO (V6) — siga esta sequência:** O índice abaixo está **ordenado por dependência**, não pelo número canônico. UC-F13 (Áreas/Classes/Subclasses + Máscara de Campos) foi movido para **antes do UC-F06** porque os UCs F06–F12 (Portfólio, Cadastro/Edição de Produto) dependem da hierarquia e da máscara cadastrada em F13.
+
 - [UC-F01 — Manter Cadastro Principal da Empresa](#uc-f01--manter-cadastro-principal-da-empresa)
 - [UC-F02 — Gerir Contatos e Área Padrão](#uc-f02--gerir-contatos-e-área-padrão)
 - [UC-F03 — Gerir Documentos da Empresa](#uc-f03--gerir-documentos-da-empresa)
 - [UC-F04 — Gerir Certidões Automáticas](#uc-f04--gerir-certidões-automáticas)
 - [UC-F05 — Gerir Responsáveis da Empresa](#uc-f05--gerir-responsáveis-da-empresa)
+- **[UC-F13 — Gerir Classificação Área/Classe/Subclasse + Máscara de Campos](#uc-f13--gerir-e-consultar-classificação-áreaclassesubclasse)** — **EXECUTAR ANTES DO F06**
 - [UC-F06 — Listar e Filtrar Produtos do Portfólio](#uc-f06--listar-e-filtrar-produtos-do-portfólio)
 - [UC-F07 — Cadastrar Produto por IA](#uc-f07--cadastrar-produto-por-ia)
 - [UC-F08 — Editar Produto do Portfólio](#uc-f08--editar-produto-do-portfólio)
@@ -129,7 +133,6 @@ Caminho: **Configurações → Selecionar Empresa → clicar no card da empresa*
 - [UC-F10 — Busca ANVISA e Busca Web](#uc-f10--busca-anvisa-e-busca-web)
 - [UC-F11 — Verificar Completude do Produto](#uc-f11--verificar-completude-do-produto)
 - [UC-F12 — Visualizar Metadados de Captação](#uc-f12--visualizar-metadados-de-captação)
-- [UC-F13 — Gerir Classificação Área/Classe/Subclasse](#uc-f13--gerir-classificação-áreaclassesubclasse)
 - [UC-F14 — Configurar Pesos e Limiares de Score](#uc-f14--configurar-pesos-e-limiares-de-score)
 - [UC-F15 — Configurar Parâmetros Comerciais](#uc-f15--configurar-parâmetros-comerciais)
 - [UC-F16 — Gerir Fontes de Busca e Palavras-Chave](#uc-f16--gerir-fontes-de-busca-e-palavras-chave)
@@ -891,6 +894,280 @@ Vários editais (Lei 14.133, art. 67-68) exigem **Certidão Simplificada da Junt
 
 ---
 
+## [UC-F13] Gerir e consultar classificação Área/Classe/Subclasse
+
+> **V8 do UC (29/04/2026):** Este UC foi reescrito. Antes era apenas "Consultar" (visualizar a árvore). Agora você **CRIA** a hierarquia primeiro e DEPOIS visualiza o que criou.
+>
+> **Por que:** cada empresa tem sua própria hierarquia (`empresa_scoped=True` no banco). A empresa Bio-Hosp (que você acabou de criar/vincular) ainda não tem nenhuma área/classe/subclasse cadastrada — você precisa criar a estrutura para que os outros UCs (UC-F02 área padrão, UC-F06 filtros de produto, UC-F08 cadastro de produto, e Sprint 2 com filtros de edital) funcionem.
+
+> **O que este caso de uso faz:** O sistema possui uma hierarquia de classificação de produtos: **Área → Classe → Subclasse**. É como uma árvore de categorias — similar ao que você vê em e-commerces, onde produtos são organizados em departamentos e subseções. Você vai **criar** essa estrutura nos 3 CRUDs específicos (Áreas, Classes, Subclasses) e depois conferir na PortfolioPage que tudo aparece corretamente na árvore.
+
+**Onde:**
+- Cadastros → Áreas de Produto (criar áreas)
+- Cadastros → Classes de Produto (criar classes vinculadas a áreas)
+- Cadastros → Subclasses de Produto (criar subclasses vinculadas a classes, com NCM)
+- Portfólio → aba Classificação (visualizar a árvore consolidada)
+
+**Quanto tempo leva:** 12 a 18 minutos (3 hierarquias × 3 ciclos = 9 cadastros + visualização)
+
+---
+
+### Antes de começar
+
+- Você deve ter logado como super (validaarnaldo ou similar) e ter a empresa Bio-Hosp **selecionada como ativa** (UC-F18 já feito).
+- Os 3 CRUDs (`Áreas de Produto`, `Classes de Produto`, `Subclasses de Produto`) ficam dentro do menu lateral em **Cadastros**.
+- Se em algum momento você já criou parte da hierarquia em sessão anterior, o tutorial é **idempotente**: pule os passos de criação cujos itens já aparecem na listagem e siga.
+
+---
+
+### Resumo do que você vai criar (3 hierarquias completas)
+
+```
+1. Equipamentos Médico-Hospitalares
+   └── Monitoração
+       └── Monitor Multiparamétrico (NCM 9018.19.90)
+
+2. Equipamentos Médico-Hospitalares
+   ├── Monitorização Multiparamétrica
+   │   └── Monitor Multiparâmetro (NCM 9018.19.90)
+   └── Monitorização Multiparamétrica
+       └── Oxímetro de Pulso (NCM 9018.19.90)
+```
+
+Total: **2 áreas, 3 classes, 3 subclasses**.
+
+---
+
+### PARTE 1 — Criar Áreas
+
+#### Passo 1.1 — Navegar para Cadastros → Áreas de Produto
+
+**O que fazer:** Na sidebar, expanda a seção **Cadastros**. Clique no item **Áreas de Produto** (pode estar dentro de uma sub-seção "Empresa" ou similar).
+
+**O que você vai ver:** Uma página CRUD com botão `Novo` no canto superior e uma lista (provavelmente vazia, se for a primeira vez).
+
+✅ **Correto se:** Header da página mostra "Áreas de Produto" e botão `Novo` está visível.
+
+#### Passo 1.2 — Criar Área "Equipamentos Médico-Hospitalares"
+
+**O que fazer:**
+1. Clique `Novo`.
+2. No campo **Nome**, digite exatamente: `Equipamentos Médico-Hospitalares`
+3. Clique `Salvar`.
+
+✅ **Correto se:** Mensagem "Salvo com sucesso" aparece e a área entra na listagem.
+❌ **Problema se:** Erro de duplicidade (área já existe — pular este passo) ou erro de validação.
+
+#### Passo 1.3 — Criar Área "Equipamentos Médico-Hospitalares"
+
+**O que fazer:** Clique `Novo` novamente. Nome: `Equipamentos Médico-Hospitalares`. Salvar.
+
+✅ **Correto se:** Listagem agora mostra **2 áreas**.
+
+---
+
+### PARTE 2 — Criar Classes
+
+#### Passo 2.1 — Navegar para Cadastros → Classes de Produto
+
+**O que fazer:** Sidebar → Cadastros → **Classes de Produto**.
+
+✅ **Correto se:** Página CRUD de Classes carrega com botão `Novo`.
+
+#### Passo 2.2 — Criar Classe "Monitoração" vinculada à Área "Equipamentos Médico-Hospitalares"
+
+**O que fazer:**
+1. Clique `Novo`.
+2. No select **Área**, selecione: `Equipamentos Médico-Hospitalares`.
+3. No campo **Nome**, digite: `Monitoração`.
+4. Salvar.
+
+✅ **Correto se:** Listagem mostra a classe com a área associada.
+
+#### Passo 2.3 — Criar Classe "Monitorização Multiparamétrica" vinculada à Área "Equipamentos Médico-Hospitalares"
+
+**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
+
+#### Passo 2.4 — Criar Classe "Monitorização Multiparamétrica" vinculada à mesma área
+
+**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
+
+✅ **Correto se:** Listagem mostra **3 classes**, sendo 1 em Equipamentos e 2 em Diagnóstico.
+
+---
+
+### PARTE 3 — Criar Subclasses (com NCM)
+
+#### Passo 3.1 — Navegar para Cadastros → Subclasses de Produto
+
+**O que fazer:** Sidebar → Cadastros → **Subclasses de Produto**.
+
+✅ **Correto se:** Página CRUD de Subclasses carrega com botão `Novo` e campos para Classe + Nome + NCM.
+
+#### Passo 3.2 — Criar Subclasse "Monitor Multiparamétrico" vinculada à classe "Monitoração"
+
+**O que fazer:**
+1. Clique `Novo`.
+2. Select **Classe**: selecione `Monitoração`.
+3. **Nome**: `Monitor Multiparamétrico`
+4. **NCM**: `9018.19.90`
+5. Salvar.
+
+✅ **Correto se:** Listagem mostra a subclasse com NCM.
+
+#### Passo 3.3 — Criar Subclasse "Monitor Multiparâmetro"
+
+**O que fazer:**
+1. Clique `Novo`.
+2. Classe: `Monitorização Multiparamétrica`
+3. Nome: `Monitor Multiparâmetro`
+4. NCM: `9018.19.90`
+5. Salvar.
+
+#### Passo 3.4 — Criar Subclasse "Oxímetro de Pulso"
+
+**O que fazer:**
+1. Clique `Novo`.
+2. Classe: `Monitorização Multiparamétrica`
+3. Nome: `Oxímetro de Pulso`
+4. NCM: `9018.19.90`
+5. Salvar.
+
+✅ **Correto se:** Listagem mostra **3 subclasses** com seus NCMs.
+
+---
+
+### PARTE 4 — Configurar Máscara de Campos das Subclasses (NOVO em V6)
+
+> **Por que esta parte é importante:** quando você cadastra um produto da subclasse "Monitor Multiparâmetro", o sistema precisa saber **quais especificações são esperadas** (tela, bateria, parâmetros monitorados, etc.). A **Máscara de Campos** (`campos_mascara`) define isso previamente. Sem esta configuração, o cadastro do produto fica "à mão livre" sem orientação dos campos certos.
+
+**Onde:** Cadastros → Portfolio → Subclasses → clicar na subclasse → editar → campo **"Máscara de Campos"** (último campo do formulário, full-width).
+
+#### Passo 4.1 — Abrir editor de máscara da subclasse "Monitor Multiparâmetro"
+
+**O que fazer:**
+1. Sidebar → **Cadastros → Portfolio → Subclasses**
+2. Localize na lista a subclasse `Monitor Multiparâmetro` (criada em PARTE 3)
+3. Clique no ícone de **edição** (lápis)
+4. Role o formulário até o último campo: **"Máscara de Campos"**
+5. Você verá um editor visual com botão **"+ Adicionar Campo"**
+
+✅ **Correto se:** Editor aparece com lista vazia + botão para adicionar.
+❌ **Problema se:** Campo "Máscara de Campos" não aparece no formulário.
+
+#### Passo 4.2 — Adicionar os 8 campos da máscara de Monitor Multiparâmetro
+
+**O que fazer:** Clique em **"+ Adicionar Campo"** 8 vezes, preenchendo cada um conforme tabela abaixo:
+
+| # | Nome do Campo | Tipo | Unidade | Opções | Obrigatório |
+|---|---|---|---|---|---|
+| 1 | `Tela` | texto | `polegadas` | — | ✓ |
+| 2 | `Parâmetros Monitorados` | texto | — | — | ✓ |
+| 3 | `Tipo de Paciente` | seleção | — | `Adulto, Pediátrico, Neonatal` | ✓ |
+| 4 | `Bateria Interna` | decimal | `horas` | — | — |
+| 5 | `Peso` | decimal | `kg` | — | — |
+| 6 | `Alimentação` | texto | `V` | — | — |
+| 7 | `Classe ANVISA` | seleção | — | `I, II, III, IV` | ✓ |
+| 8 | `Registro ANVISA` | texto | — | — | ✓ |
+
+**O que acontece depois:** Após preencher os 8 campos, o JSON da máscara fica:
+```json
+[
+  {"campo":"Tela","tipo":"texto","unidade":"polegadas","obrigatorio":true},
+  {"campo":"Parâmetros Monitorados","tipo":"texto","obrigatorio":true},
+  {"campo":"Tipo de Paciente","tipo":"select","opcoes":["Adulto","Pediátrico","Neonatal"],"obrigatorio":true},
+  {"campo":"Bateria Interna","tipo":"decimal","unidade":"horas"},
+  {"campo":"Peso","tipo":"decimal","unidade":"kg"},
+  {"campo":"Alimentação","tipo":"texto","unidade":"V"},
+  {"campo":"Classe ANVISA","tipo":"select","opcoes":["I","II","III","IV"],"obrigatorio":true},
+  {"campo":"Registro ANVISA","tipo":"texto","obrigatorio":true}
+]
+```
+
+#### Passo 4.3 — Salvar a subclasse
+
+**O que fazer:** Clique em **"Salvar"** ou **"Atualizar"** no formulário.
+
+✅ **Correto se:** Mensagem verde "Salvo!". Na listagem de subclasses, ao reabrir "Monitor Multiparâmetro", os 8 campos da máscara devem reaparecer no editor.
+
+#### Passo 4.4 — Repetir para "Oxímetro de Pulso"
+
+**O que fazer:** Volte à listagem de Subclasses. Edite `Oxímetro de Pulso` e configure a máscara abaixo:
+
+| # | Nome do Campo | Tipo | Unidade | Opções | Obrigatório |
+|---|---|---|---|---|---|
+| 1 | `Faixa de SpO2` | texto | `%` | — | ✓ |
+| 2 | `Faixa de Frequência Cardíaca` | texto | `bpm` | — | ✓ |
+| 3 | `Tipo de Sensor` | seleção | — | `Adulto, Pediátrico, Neonatal, Universal` | ✓ |
+| 4 | `Bateria` | decimal | `horas` | — | — |
+| 5 | `Display` | texto | — | — | — |
+| 6 | `Peso` | decimal | `kg` | — | — |
+| 7 | `Classe ANVISA` | seleção | — | `I, II, III, IV` | ✓ |
+| 8 | `Registro ANVISA` | texto | — | — | ✓ |
+
+Salvar.
+
+✅ **Correto se:** "Oxímetro de Pulso" também tem 8 campos na máscara.
+
+#### Passo 4.5 — Verificar resultado no PortfolioPage
+
+**O que fazer:** Vá em **Portfólio → aba Classificação**. Localize as 2 subclasses que você acabou de configurar. Cada uma deve mostrar (em algum lugar do card) os campos da máscara como referência visual ou contagem (ex: "8 campos").
+
+✅ **Correto se:** As subclasses "Monitor Multiparâmetro" e "Oxímetro de Pulso" mostram os 8 campos cada.
+❌ **Problema se:** O JSON foi salvo mas não aparece na aba Classificação — pode ser problema de cache, recarregue a página.
+
+📌 **Observação:** A máscara é uma **referência** para o cadastro de produtos (UC-F07/F08). Ela **não impede** salvar produto sem alguma especificação — é uma sugestão de UI que ajuda o validador a saber quais campos são esperados para aquele tipo de produto. Os campos marcados como "obrigatório" geram destaque visual no formulário do produto, mas não bloqueiam o save.
+
+---
+
+### PARTE 5 — Visualizar a árvore consolidada
+
+#### Passo 5.1 — Navegar para Portfólio → aba Classificação
+
+**O que fazer:** Sidebar → Configurações → Portfolio (ou Portfólio direto, dependendo do menu). Acesse a aba **Classificação**.
+
+**O que você vai ver:** Card "Estrutura de Classificação" listando as 2 áreas que você criou, expansíveis.
+
+✅ **Correto se:** Aparecem as áreas `Equipamentos Médico-Hospitalares` e `Equipamentos Médico-Hospitalares`.
+
+#### Passo 5.2 — Expandir cada área e classe
+
+**O que fazer:** Clique nas setas para expandir. Confira:
+
+- `Equipamentos Médico-Hospitalares`
+  - `Monitoração` → `Monitor Multiparamétrico` (NCM 9018.19.90)
+- `Equipamentos Médico-Hospitalares`
+  - `Monitorização Multiparamétrica` → `Monitor Multiparâmetro` (NCM 9018.19.90)
+  - `Monitorização Multiparamétrica` → `Oxímetro de Pulso` (NCM 9018.19.90)
+
+✅ **Correto se:** Toda a árvore aparece com NCMs corretos.
+❌ **Problema se:** Falta alguma área/classe/subclasse — voltar ao CRUD correspondente e completar.
+
+#### Passo 5.3 — Conferir Card "Funil de Monitoramento"
+
+**O que verificar:** Contagem de "N classes" e "N subclasses" reflete o que você acabou de criar.
+
+---
+
+### ✅ Resultado Final
+
+**O que o validador deve conferir:**
+- 2 áreas criadas (Equipamentos Médico-Hospitalares + Diagnóstico in Vitro)
+- 3 classes criadas (Monitoração + Monitorização Multiparamétrica + Monitorização Multiparamétrica)
+- 3 subclasses criadas com NCMs corretos
+- **Máscara de Campos configurada (V6) em "Monitor Multiparâmetro" (8 campos) e "Oxímetro de Pulso" (8 campos)**
+- Árvore consolidada na PortfolioPage mostra tudo aninhado
+
+**🔴 Sinais de problema:**
+- Erro 400 ao salvar classe (esqueceu selecionar Área)
+- Erro 400 ao salvar subclasse (esqueceu selecionar Classe)
+- NCM rejeitado (formato precisa ser XXXX.XX.XX)
+- Duplicidade ao tentar criar Área já existente (pular)
+
+**Pós-requisito:** Os UCs **UC-F02 (Área Padrão)**, **UC-F06 (Filtros de produto)**, **UC-F08 (Cadastrar produto)** e **Sprint 2 (busca de editais com filtros de classificação)** dependem desta hierarquia. Não execute esses UCs antes de concluir UC-F13.
+
+---
+
 ## [UC-F06] Listar e Filtrar Produtos do Portfólio
 
 > **O que este caso de uso faz:** O portfólio de produtos é o catálogo de tudo que a empresa vende ou pode oferecer em licitações. Esta tela permite visualizar todos os produtos cadastrados e filtrá-los por área de atuação ou palavras-chave. Assim, quando um edital chega, é fácil verificar se a empresa tem o produto certo no portfólio.
@@ -1566,280 +1843,6 @@ Vários editais (Lei 14.133, art. 67-68) exigem **Certidão Simplificada da Junt
 - Metadados não persistem
 - Sistema não aceita múltiplos termos
 - A seção de captação não existe no produto
-
----
-
-## [UC-F13] Gerir e consultar classificação Área/Classe/Subclasse
-
-> **V8 do UC (29/04/2026):** Este UC foi reescrito. Antes era apenas "Consultar" (visualizar a árvore). Agora você **CRIA** a hierarquia primeiro e DEPOIS visualiza o que criou.
->
-> **Por que:** cada empresa tem sua própria hierarquia (`empresa_scoped=True` no banco). A empresa Bio-Hosp (que você acabou de criar/vincular) ainda não tem nenhuma área/classe/subclasse cadastrada — você precisa criar a estrutura para que os outros UCs (UC-F02 área padrão, UC-F06 filtros de produto, UC-F08 cadastro de produto, e Sprint 2 com filtros de edital) funcionem.
-
-> **O que este caso de uso faz:** O sistema possui uma hierarquia de classificação de produtos: **Área → Classe → Subclasse**. É como uma árvore de categorias — similar ao que você vê em e-commerces, onde produtos são organizados em departamentos e subseções. Você vai **criar** essa estrutura nos 3 CRUDs específicos (Áreas, Classes, Subclasses) e depois conferir na PortfolioPage que tudo aparece corretamente na árvore.
-
-**Onde:**
-- Cadastros → Áreas de Produto (criar áreas)
-- Cadastros → Classes de Produto (criar classes vinculadas a áreas)
-- Cadastros → Subclasses de Produto (criar subclasses vinculadas a classes, com NCM)
-- Portfólio → aba Classificação (visualizar a árvore consolidada)
-
-**Quanto tempo leva:** 12 a 18 minutos (3 hierarquias × 3 ciclos = 9 cadastros + visualização)
-
----
-
-### Antes de começar
-
-- Você deve ter logado como super (validaarnaldo ou similar) e ter a empresa Bio-Hosp **selecionada como ativa** (UC-F18 já feito).
-- Os 3 CRUDs (`Áreas de Produto`, `Classes de Produto`, `Subclasses de Produto`) ficam dentro do menu lateral em **Cadastros**.
-- Se em algum momento você já criou parte da hierarquia em sessão anterior, o tutorial é **idempotente**: pule os passos de criação cujos itens já aparecem na listagem e siga.
-
----
-
-### Resumo do que você vai criar (3 hierarquias completas)
-
-```
-1. Equipamentos Médico-Hospitalares
-   └── Monitoração
-       └── Monitor Multiparamétrico (NCM 9018.19.90)
-
-2. Equipamentos Médico-Hospitalares
-   ├── Monitorização Multiparamétrica
-   │   └── Monitor Multiparâmetro (NCM 9018.19.90)
-   └── Monitorização Multiparamétrica
-       └── Oxímetro de Pulso (NCM 9018.19.90)
-```
-
-Total: **2 áreas, 3 classes, 3 subclasses**.
-
----
-
-### PARTE 1 — Criar Áreas
-
-#### Passo 1.1 — Navegar para Cadastros → Áreas de Produto
-
-**O que fazer:** Na sidebar, expanda a seção **Cadastros**. Clique no item **Áreas de Produto** (pode estar dentro de uma sub-seção "Empresa" ou similar).
-
-**O que você vai ver:** Uma página CRUD com botão `Novo` no canto superior e uma lista (provavelmente vazia, se for a primeira vez).
-
-✅ **Correto se:** Header da página mostra "Áreas de Produto" e botão `Novo` está visível.
-
-#### Passo 1.2 — Criar Área "Equipamentos Médico-Hospitalares"
-
-**O que fazer:**
-1. Clique `Novo`.
-2. No campo **Nome**, digite exatamente: `Equipamentos Médico-Hospitalares`
-3. Clique `Salvar`.
-
-✅ **Correto se:** Mensagem "Salvo com sucesso" aparece e a área entra na listagem.
-❌ **Problema se:** Erro de duplicidade (área já existe — pular este passo) ou erro de validação.
-
-#### Passo 1.3 — Criar Área "Equipamentos Médico-Hospitalares"
-
-**O que fazer:** Clique `Novo` novamente. Nome: `Equipamentos Médico-Hospitalares`. Salvar.
-
-✅ **Correto se:** Listagem agora mostra **2 áreas**.
-
----
-
-### PARTE 2 — Criar Classes
-
-#### Passo 2.1 — Navegar para Cadastros → Classes de Produto
-
-**O que fazer:** Sidebar → Cadastros → **Classes de Produto**.
-
-✅ **Correto se:** Página CRUD de Classes carrega com botão `Novo`.
-
-#### Passo 2.2 — Criar Classe "Monitoração" vinculada à Área "Equipamentos Médico-Hospitalares"
-
-**O que fazer:**
-1. Clique `Novo`.
-2. No select **Área**, selecione: `Equipamentos Médico-Hospitalares`.
-3. No campo **Nome**, digite: `Monitoração`.
-4. Salvar.
-
-✅ **Correto se:** Listagem mostra a classe com a área associada.
-
-#### Passo 2.3 — Criar Classe "Monitorização Multiparamétrica" vinculada à Área "Equipamentos Médico-Hospitalares"
-
-**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
-
-#### Passo 2.4 — Criar Classe "Monitorização Multiparamétrica" vinculada à mesma área
-
-**O que fazer:** Clique `Novo`. Área: `Equipamentos Médico-Hospitalares`. Nome: `Monitorização Multiparamétrica`. Salvar.
-
-✅ **Correto se:** Listagem mostra **3 classes**, sendo 1 em Equipamentos e 2 em Diagnóstico.
-
----
-
-### PARTE 3 — Criar Subclasses (com NCM)
-
-#### Passo 3.1 — Navegar para Cadastros → Subclasses de Produto
-
-**O que fazer:** Sidebar → Cadastros → **Subclasses de Produto**.
-
-✅ **Correto se:** Página CRUD de Subclasses carrega com botão `Novo` e campos para Classe + Nome + NCM.
-
-#### Passo 3.2 — Criar Subclasse "Monitor Multiparamétrico" vinculada à classe "Monitoração"
-
-**O que fazer:**
-1. Clique `Novo`.
-2. Select **Classe**: selecione `Monitoração`.
-3. **Nome**: `Monitor Multiparamétrico`
-4. **NCM**: `9018.19.90`
-5. Salvar.
-
-✅ **Correto se:** Listagem mostra a subclasse com NCM.
-
-#### Passo 3.3 — Criar Subclasse "Monitor Multiparâmetro"
-
-**O que fazer:**
-1. Clique `Novo`.
-2. Classe: `Monitorização Multiparamétrica`
-3. Nome: `Monitor Multiparâmetro`
-4. NCM: `9018.19.90`
-5. Salvar.
-
-#### Passo 3.4 — Criar Subclasse "Oxímetro de Pulso"
-
-**O que fazer:**
-1. Clique `Novo`.
-2. Classe: `Monitorização Multiparamétrica`
-3. Nome: `Oxímetro de Pulso`
-4. NCM: `9018.19.90`
-5. Salvar.
-
-✅ **Correto se:** Listagem mostra **3 subclasses** com seus NCMs.
-
----
-
-### PARTE 4 — Configurar Máscara de Campos das Subclasses (NOVO em V6)
-
-> **Por que esta parte é importante:** quando você cadastra um produto da subclasse "Monitor Multiparâmetro", o sistema precisa saber **quais especificações são esperadas** (tela, bateria, parâmetros monitorados, etc.). A **Máscara de Campos** (`campos_mascara`) define isso previamente. Sem esta configuração, o cadastro do produto fica "à mão livre" sem orientação dos campos certos.
-
-**Onde:** Cadastros → Portfolio → Subclasses → clicar na subclasse → editar → campo **"Máscara de Campos"** (último campo do formulário, full-width).
-
-#### Passo 4.1 — Abrir editor de máscara da subclasse "Monitor Multiparâmetro"
-
-**O que fazer:**
-1. Sidebar → **Cadastros → Portfolio → Subclasses**
-2. Localize na lista a subclasse `Monitor Multiparâmetro` (criada em PARTE 3)
-3. Clique no ícone de **edição** (lápis)
-4. Role o formulário até o último campo: **"Máscara de Campos"**
-5. Você verá um editor visual com botão **"+ Adicionar Campo"**
-
-✅ **Correto se:** Editor aparece com lista vazia + botão para adicionar.
-❌ **Problema se:** Campo "Máscara de Campos" não aparece no formulário.
-
-#### Passo 4.2 — Adicionar os 8 campos da máscara de Monitor Multiparâmetro
-
-**O que fazer:** Clique em **"+ Adicionar Campo"** 8 vezes, preenchendo cada um conforme tabela abaixo:
-
-| # | Nome do Campo | Tipo | Unidade | Opções | Obrigatório |
-|---|---|---|---|---|---|
-| 1 | `Tela` | texto | `polegadas` | — | ✓ |
-| 2 | `Parâmetros Monitorados` | texto | — | — | ✓ |
-| 3 | `Tipo de Paciente` | seleção | — | `Adulto, Pediátrico, Neonatal` | ✓ |
-| 4 | `Bateria Interna` | decimal | `horas` | — | — |
-| 5 | `Peso` | decimal | `kg` | — | — |
-| 6 | `Alimentação` | texto | `V` | — | — |
-| 7 | `Classe ANVISA` | seleção | — | `I, II, III, IV` | ✓ |
-| 8 | `Registro ANVISA` | texto | — | — | ✓ |
-
-**O que acontece depois:** Após preencher os 8 campos, o JSON da máscara fica:
-```json
-[
-  {"campo":"Tela","tipo":"texto","unidade":"polegadas","obrigatorio":true},
-  {"campo":"Parâmetros Monitorados","tipo":"texto","obrigatorio":true},
-  {"campo":"Tipo de Paciente","tipo":"select","opcoes":["Adulto","Pediátrico","Neonatal"],"obrigatorio":true},
-  {"campo":"Bateria Interna","tipo":"decimal","unidade":"horas"},
-  {"campo":"Peso","tipo":"decimal","unidade":"kg"},
-  {"campo":"Alimentação","tipo":"texto","unidade":"V"},
-  {"campo":"Classe ANVISA","tipo":"select","opcoes":["I","II","III","IV"],"obrigatorio":true},
-  {"campo":"Registro ANVISA","tipo":"texto","obrigatorio":true}
-]
-```
-
-#### Passo 4.3 — Salvar a subclasse
-
-**O que fazer:** Clique em **"Salvar"** ou **"Atualizar"** no formulário.
-
-✅ **Correto se:** Mensagem verde "Salvo!". Na listagem de subclasses, ao reabrir "Monitor Multiparâmetro", os 8 campos da máscara devem reaparecer no editor.
-
-#### Passo 4.4 — Repetir para "Oxímetro de Pulso"
-
-**O que fazer:** Volte à listagem de Subclasses. Edite `Oxímetro de Pulso` e configure a máscara abaixo:
-
-| # | Nome do Campo | Tipo | Unidade | Opções | Obrigatório |
-|---|---|---|---|---|---|
-| 1 | `Faixa de SpO2` | texto | `%` | — | ✓ |
-| 2 | `Faixa de Frequência Cardíaca` | texto | `bpm` | — | ✓ |
-| 3 | `Tipo de Sensor` | seleção | — | `Adulto, Pediátrico, Neonatal, Universal` | ✓ |
-| 4 | `Bateria` | decimal | `horas` | — | — |
-| 5 | `Display` | texto | — | — | — |
-| 6 | `Peso` | decimal | `kg` | — | — |
-| 7 | `Classe ANVISA` | seleção | — | `I, II, III, IV` | ✓ |
-| 8 | `Registro ANVISA` | texto | — | — | ✓ |
-
-Salvar.
-
-✅ **Correto se:** "Oxímetro de Pulso" também tem 8 campos na máscara.
-
-#### Passo 4.5 — Verificar resultado no PortfolioPage
-
-**O que fazer:** Vá em **Portfólio → aba Classificação**. Localize as 2 subclasses que você acabou de configurar. Cada uma deve mostrar (em algum lugar do card) os campos da máscara como referência visual ou contagem (ex: "8 campos").
-
-✅ **Correto se:** As subclasses "Monitor Multiparâmetro" e "Oxímetro de Pulso" mostram os 8 campos cada.
-❌ **Problema se:** O JSON foi salvo mas não aparece na aba Classificação — pode ser problema de cache, recarregue a página.
-
-📌 **Observação:** A máscara é uma **referência** para o cadastro de produtos (UC-F07/F08). Ela **não impede** salvar produto sem alguma especificação — é uma sugestão de UI que ajuda o validador a saber quais campos são esperados para aquele tipo de produto. Os campos marcados como "obrigatório" geram destaque visual no formulário do produto, mas não bloqueiam o save.
-
----
-
-### PARTE 5 — Visualizar a árvore consolidada
-
-#### Passo 5.1 — Navegar para Portfólio → aba Classificação
-
-**O que fazer:** Sidebar → Configurações → Portfolio (ou Portfólio direto, dependendo do menu). Acesse a aba **Classificação**.
-
-**O que você vai ver:** Card "Estrutura de Classificação" listando as 2 áreas que você criou, expansíveis.
-
-✅ **Correto se:** Aparecem as áreas `Equipamentos Médico-Hospitalares` e `Equipamentos Médico-Hospitalares`.
-
-#### Passo 5.2 — Expandir cada área e classe
-
-**O que fazer:** Clique nas setas para expandir. Confira:
-
-- `Equipamentos Médico-Hospitalares`
-  - `Monitoração` → `Monitor Multiparamétrico` (NCM 9018.19.90)
-- `Equipamentos Médico-Hospitalares`
-  - `Monitorização Multiparamétrica` → `Monitor Multiparâmetro` (NCM 9018.19.90)
-  - `Monitorização Multiparamétrica` → `Oxímetro de Pulso` (NCM 9018.19.90)
-
-✅ **Correto se:** Toda a árvore aparece com NCMs corretos.
-❌ **Problema se:** Falta alguma área/classe/subclasse — voltar ao CRUD correspondente e completar.
-
-#### Passo 5.3 — Conferir Card "Funil de Monitoramento"
-
-**O que verificar:** Contagem de "N classes" e "N subclasses" reflete o que você acabou de criar.
-
----
-
-### ✅ Resultado Final
-
-**O que o validador deve conferir:**
-- 2 áreas criadas (Equipamentos Médico-Hospitalares + Diagnóstico in Vitro)
-- 3 classes criadas (Monitoração + Monitorização Multiparamétrica + Monitorização Multiparamétrica)
-- 3 subclasses criadas com NCMs corretos
-- **Máscara de Campos configurada (V6) em "Monitor Multiparâmetro" (8 campos) e "Oxímetro de Pulso" (8 campos)**
-- Árvore consolidada na PortfolioPage mostra tudo aninhado
-
-**🔴 Sinais de problema:**
-- Erro 400 ao salvar classe (esqueceu selecionar Área)
-- Erro 400 ao salvar subclasse (esqueceu selecionar Classe)
-- NCM rejeitado (formato precisa ser XXXX.XX.XX)
-- Duplicidade ao tentar criar Área já existente (pular)
-
-**Pós-requisito:** Os UCs **UC-F02 (Área Padrão)**, **UC-F06 (Filtros de produto)**, **UC-F08 (Cadastrar produto)** e **Sprint 2 (busca de editais com filtros de classificação)** dependem desta hierarquia. Não execute esses UCs antes de concluir UC-F13.
 
 ---
 
