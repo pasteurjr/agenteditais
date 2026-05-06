@@ -175,3 +175,54 @@ acao:
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F08_visual_fp.yaml#passo_03_confirmar_grade_atualizada"
 ```
+
+## Passo 04 — Validar Mascara de Campos da subclasse aplicada (NOVO em V6)
+
+Verifica via API direta que a subclasse do produto editado tem `campos_mascara` configurada.
+Pre-condicao: UC-F13 Passos 12 e 13 ja cadastraram a mascara das subclasses.
+
+```yaml
+id: passo_04_validar_mascara_subclasse
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+
+          // 1. Lista produtos do user
+          const rp = await fetch('/api/crud/produtos?limit=20', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!rp.ok) throw new Error(`GET produtos ${rp.status}`);
+          const dp = await rp.json();
+          const produtos = dp.items || [];
+          const produto = produtos.find(p => /Monitor MultiParam Pro/i.test(p.nome || ''))
+                       || produtos.find(p => p.subclasse_id);
+          if (!produto) throw new Error(`Produto Monitor nao encontrado (total=${produtos.length})`);
+          if (!produto.subclasse_id) {
+            return `produto_sem_subclasse nome=${(produto.nome||'').substring(0,30)} — pulando validacao mascara`;
+          }
+
+          // 2. GET subclasse pra ler campos_mascara
+          const rs = await fetch(`/api/crud/subclasses-produto/${produto.subclasse_id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!rs.ok) throw new Error(`GET subclasse ${rs.status}`);
+          const sub = await rs.json();
+          const m = sub.campos_mascara || [];
+
+          // 3. Valida que a mascara tem campos
+          if (m.length < 1) {
+            throw new Error(`Subclasse "${sub.nome}" tem campos_mascara vazia. ` +
+                            `UC-F13 Passo 12/13 precisa cadastrar a mascara antes deste UC.`);
+          }
+
+          // 4. Lista os campos para evidencia
+          const nomes = m.map(c => c.campo || c.nome).filter(Boolean).slice(0,8).join(',');
+          return `mascara_OK subclasse=${(sub.nome||'').substring(0,30)} campos=${m.length} [${nomes}]`;
+        }
+    - tipo: wait
+      valor_literal: 300
+validacao_ref: "testes/casos_de_teste/UC-F08_visual_fp.yaml#passo_04_validar_mascara_subclasse"
+```

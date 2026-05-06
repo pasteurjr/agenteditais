@@ -510,3 +510,119 @@ acao:
       timeout: 10000
 validacao_ref: "testes/casos_de_teste/UC-F13_visual_fp.yaml#passo_11_visualizar_arvore"
 ```
+
+## Passo 12 — Cadastrar Mascara de Campos da subclasse "Monitor Multiparametro" (NOVO em V6)
+
+Configura `campos_mascara` (8 campos) na subclasse via PUT direto na API. Equivalente
+ao Passo 4.1-4.3 dos tutoriais humanos V6. Sem isso o cadastro de produto (UC-F08)
+nao tem orientacao dos campos esperados — bug historico que Arnaldo reportou.
+
+```yaml
+id: passo_12_cadastrar_mascara_monitor
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/subclasses-produto?limit=100', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!r.ok) throw new Error(`GET subclasses ${r.status}`);
+          const data = await r.json();
+          const items = data.items || [];
+          const monitor = items.find(s => /Monitor Multipar/i.test(s.nome || ''));
+          if (!monitor) throw new Error(`Subclasse Monitor nao encontrada (total=${items.length})`);
+
+          const mascara = [
+            { campo: "Tela", tipo: "texto", unidade: "polegadas", obrigatorio: true },
+            { campo: "Parâmetros Monitorados", tipo: "texto", obrigatorio: true },
+            { campo: "Tipo de Paciente", tipo: "select", opcoes: ["Adulto","Pediátrico","Neonatal"], obrigatorio: true },
+            { campo: "Bateria Interna", tipo: "decimal", unidade: "horas" },
+            { campo: "Peso", tipo: "decimal", unidade: "kg" },
+            { campo: "Alimentação", tipo: "texto", unidade: "V" },
+            { campo: "Classe ANVISA", tipo: "select", opcoes: ["I","II","III","IV"], obrigatorio: true },
+            { campo: "Registro ANVISA", tipo: "texto", obrigatorio: true }
+          ];
+
+          const r2 = await fetch(`/api/crud/subclasses-produto/${monitor.id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+            body: JSON.stringify({ ...monitor, campos_mascara: mascara })
+          });
+          if (!r2.ok) throw new Error(`PUT subclasse ${r2.status}: ${(await r2.text()).substring(0,200)}`);
+
+          const r3 = await fetch(`/api/crud/subclasses-produto/${monitor.id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const final = await r3.json();
+          const m = final.campos_mascara || [];
+          if (m.length !== 8) throw new Error(`Esperado 8 campos na mascara, achou ${m.length}`);
+
+          window.__test_mascara_monitor_id = monitor.id;
+          return `mascara_monitor_OK subclasse=${monitor.nome.substring(0,30)} campos=${m.length}`;
+        }
+    - tipo: wait
+      valor_literal: 500
+validacao_ref: "testes/casos_de_teste/UC-F13_visual_fp.yaml#passo_12_cadastrar_mascara_monitor"
+```
+
+## Passo 13 — Cadastrar Mascara de Campos da subclasse "Reagente para Glicose" (NOVO em V6)
+
+Configura mascara de uma 2a subclasse — desta vez de reagente, mostrando que mascaras
+diferentes funcionam para tipos de produto diferentes (Monitor != Reagente).
+Subclasse criada no Passo 09 do mesmo UC-F13.
+
+```yaml
+id: passo_13_cadastrar_mascara_reagente
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const r = await fetch('/api/crud/subclasses-produto?limit=100', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!r.ok) throw new Error(`GET subclasses ${r.status}`);
+          const data = await r.json();
+          // Aceita "Reagente para Glicose" ou variantes
+          const reagente = (data.items || []).find(s => /Reagente.*Glicose|Glicose.*Reagente/i.test(s.nome || ''));
+          if (!reagente) {
+            // Fallback: usa qualquer subclasse de reagente disponivel
+            const fallback = (data.items || []).find(s => /Reagente|Kit|Hematolog/i.test(s.nome || ''));
+            if (!fallback) throw new Error('Nenhuma subclasse de reagente/kit encontrada');
+            throw new Error(`Subclasse "Reagente para Glicose" nao encontrada (achei "${fallback.nome}")`);
+          }
+
+          const mascara = [
+            { campo: "Método", tipo: "select", opcoes: ["Enzimático (GOD-PAP)","Hexoquinase","Glicose Oxidase"], obrigatorio: true },
+            { campo: "Amostra", tipo: "texto", obrigatorio: true, placeholder: "Soro, plasma" },
+            { campo: "Comprimento de Onda", tipo: "texto", unidade: "nm", obrigatorio: true },
+            { campo: "Linearidade", tipo: "texto", unidade: "mg/dL" },
+            { campo: "Temperatura de Reação", tipo: "decimal", unidade: "°C" },
+            { campo: "Conservação", tipo: "texto", unidade: "°C" },
+            { campo: "Validade do Kit", tipo: "decimal", unidade: "meses" },
+            { campo: "Registro ANVISA", tipo: "texto", obrigatorio: true }
+          ];
+
+          const r2 = await fetch(`/api/crud/subclasses-produto/${reagente.id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+            body: JSON.stringify({ ...reagente, campos_mascara: mascara })
+          });
+          if (!r2.ok) throw new Error(`PUT subclasse ${r2.status}: ${(await r2.text()).substring(0,200)}`);
+
+          const r3 = await fetch(`/api/crud/subclasses-produto/${reagente.id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const final = await r3.json();
+          const m = final.campos_mascara || [];
+          if (m.length !== 8) throw new Error(`Esperado 8 campos, achou ${m.length}`);
+
+          return `mascara_reagente_OK subclasse=${reagente.nome.substring(0,30)} campos=${m.length}`;
+        }
+    - tipo: wait
+      valor_literal: 500
+validacao_ref: "testes/casos_de_teste/UC-F13_visual_fp.yaml#passo_13_cadastrar_mascara_reagente"
+```

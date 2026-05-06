@@ -67,3 +67,15 @@ passos:
     asserts_dom:
       - selector: 'text=Equipamentos Médico-Hospitalares'
       - selector: 'text=Diagnóstico in Vitro'
+
+  - id: passo_12_cadastrar_mascara_monitor
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto/"
+        metodo: PUT
+        status_in: [200]
+
+  - id: passo_13_cadastrar_mascara_reagente
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto/"
+        metodo: PUT
+        status_in: [200]

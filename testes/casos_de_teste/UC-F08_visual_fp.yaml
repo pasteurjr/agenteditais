@@ -22,3 +22,9 @@ passos:
   - id: passo_03_confirmar_grade_atualizada
     asserts_dom:
       - selector: 'text=Monitor MultiParam Pro Edicao Visual'
+
+  - id: passo_04_validar_mascara_subclasse
+    asserts_rede:
+      - url_contem: "/api/crud/subclasses-produto/"
+        metodo: GET
+        status_in: [200]
