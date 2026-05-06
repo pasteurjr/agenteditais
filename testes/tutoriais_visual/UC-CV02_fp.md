@@ -29,10 +29,10 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-CV02_visual_fp.yaml#passo_00_garantir_grade_carregada"
 ```
 
-## Passo 01 — Localizar e Click 'Ver detalhes' do edital Bento Gonçalves
+## Passo 01 — Localizar e Click 'Ver detalhes' do edital Município de Vere
 
 **EFEITO REAL ESPERADO:**
-- Procura na tabela linha cujo orgao/numero match com Bento Gonçalves OU CNPJ 87849923000109
+- Procura na tabela linha cujo orgao/numero match com Município de Vere OU CNPJ 75636530000120 OU 0000031/2026
 - Se nao encontrou, valida que pelo menos editais com cnpj/ano/seq apareceram (genérico)
 - Click no botao 'Ver detalhes' dessa linha
 - Painel lateral abre
@@ -47,7 +47,7 @@ acao:
           const rows = [...document.querySelectorAll('table tbody tr')];
           if (!rows.length) throw new Error('Nenhum edital na tabela');
           
-          // Tenta achar Bento Gonçalves ou CNPJ alvo
+          // Tenta achar Município de Vere ou CNPJ alvo
           let alvo = null;
           for (const r of rows) {
             const txt = (r.textContent || '').toLowerCase();
