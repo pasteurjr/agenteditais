@@ -68,6 +68,31 @@ passos:
       elementos_proibidos:
         - "Mensagem de erro vermelha"
 
+  - id: passo_04b_vincular_empresa_ao_user
+    descricao: "FA-07.B via UI: navega para Associar Empresa/Usuario, vincula empresa ao user"
+    asserts_dom:
+      - selector: 'h1:has-text("Associar Empresa")'
+    asserts_rede:
+      - url_contem: "/api/admin/associar-empresa"
+        metodo: "POST"
+        status_in: [200, 201]
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Mensagem 'Vinculo criado' ou similar"
+        - "Tabela 'Vinculos Existentes' mostra novo vinculo"
+
+  - id: passo_04c_selecionar_empresa_ativa
+    descricao: "Navega para Selecionar Empresa e clica no card da empresa criada"
+    asserts_dom:
+      - selector: 'h1:has-text("Selecionar Empresa")'
+    asserts_rede:
+      - url_contem: "/api/auth/switch-empresa"
+        metodo: "POST"
+        status_in: [200]
+    asserts_semantica:
+      elementos_obrigatorios:
+        - "Empresa selecionada como ativa (top bar atualiza)"
+
   - id: passo_05_selecionar_empresa
     descricao: "Sair do CRUD e selecionar a empresa recem-criada via Selecionar Empresa"
     asserts_dom:
@@ -94,7 +119,7 @@ passos:
         - "Form com 4 secoes (Dados Basicos, Presenca Digital, Endereco, Emails/Telefones)"
         - "CNPJ e Razao ja vem preenchidos da criacao no CRUD"
 
-  - id: passo_07_completar_dados_basicos
+  - id: passo_07_verificar_dados_carregados
     descricao: "EmpresaPage carregada (V4: form pode vir vazio se nao houver empresa ativa no AuthContext — comportamento correto pos-correcao #3 Arnaldo)"
     asserts_dom:
       - selector: 'label:has-text("Razao Social"), label:has-text("Razão Social")'
@@ -114,17 +139,16 @@ passos:
         - "Prefixo @ visivel no campo Instagram"
         - "Os 4 campos de redes sociais preenchidos com valores do dataset"
 
-  - id: passo_10_salvar_e_confirmar
-    descricao: "Clicar em Salvar Alteracoes na EmpresaPage e ver toast Salvo! (V4: toast agora fixed top-right z-9999 com prefixo ✓)"
-    asserts_dom:
-      - selector: 'text=Salvo!, text=/✓\\s*Salvo!/, [class*="toast"]:has-text("Salvo")'
+  - id: passo_09_salvar_e_confirmar
+    descricao: "Clicar em Salvar Alteracoes na EmpresaPage e PUT retorna 200 (V4: toast fixed top-right z-9999 some em 3s — assert via rede)"
+    # Toast some em 3s — assert via rede (mais robusto que DOM)
     asserts_rede:
       - url_contem: "/api/crud/empresas"
         metodo_in: ["POST", "PUT"]
         status_in: [200, 201]
     asserts_semantica:
       elementos_obrigatorios:
-        - "Toast verde 'Salvo!' aparece — pode estar fixed no canto superior direito (V4 correcao #20)"
+        - "PUT /api/crud/empresas retornou 200 — alteracao persistida"
       elementos_proibidos:
         - "Mensagem de erro vermelha"
         - "Botao 'Tentar novamente'"

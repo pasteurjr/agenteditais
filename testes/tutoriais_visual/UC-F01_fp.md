@@ -270,7 +270,7 @@ acao:
     - tipo: wait_for
       seletor: '.section-card:has-text("Vínculos Existentes") table tbody tr'
       timeout: 5000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa"
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_04b_vincular_empresa_ao_user"
 ```
 
 ## Passo 04c — Selecionar empresa ativa para a sessão
@@ -409,7 +409,7 @@ acao:
   tipo: wait_for
   seletor: 'label:has-text("Razao Social"), label:has-text("Razão Social")'
   timeout: 5000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_07_completar_dados_basicos"
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_07_verificar_dados_carregados"
 ```
 
 ## Passo 08 — Preencher Presença Digital (Website + redes sociais)
@@ -467,6 +467,6 @@ acao:
     - tipo: wait_for
       seletor: 'text=Salvo!'
       timeout: 10000
-validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_10_salvar_e_confirmar"
+validacao_ref: "testes/casos_de_teste/UC-F01_visual_fp.yaml#passo_09_salvar_e_confirmar"
 ```
 

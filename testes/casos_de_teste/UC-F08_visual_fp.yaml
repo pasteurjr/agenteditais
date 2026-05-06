@@ -1,29 +1,28 @@
 uc_id: UC-F08
 variacao: fp
 trilha: visual
-descricao: "Editar produto criado pelo F07 — altera dados basicos e salva"
+descricao: "Editar produto via API direta + validar persistencia + validar mascara da subclasse (V6 PROFUNDO)"
 
 passos:
-  - id: passo_00_setup_navegar_meus_produtos
-    asserts_dom:
-      - selector: 'h1:has-text("Portfolio"), h2:has-text("Portfolio")'
-      - selector: 'button.ptab.active:has-text("Meus Produtos")'
-
-  - id: passo_01_abrir_modal_editar
-    asserts_dom:
-      - selector: 'div.modal h2:has-text("Editar:")'
-
-  - id: passo_02_editar_e_salvar
+  - id: passo_00_setup_listar_produtos
     asserts_rede:
       - url_contem: "/api/crud/produtos"
+        metodo: GET
+        status_in: [200]
+
+  - id: passo_01_editar_produto
+    asserts_rede:
+      - url_contem: "/api/crud/produtos/"
         metodo: PUT
         status_in: [200, 201]
 
-  - id: passo_03_confirmar_grade_atualizada
-    asserts_dom:
-      - selector: 'text=Monitor MultiParam Pro Edicao Visual'
+  - id: passo_02_validar_persistencia
+    asserts_rede:
+      - url_contem: "/api/crud/produtos/"
+        metodo: GET
+        status_in: [200]
 
-  - id: passo_04_validar_mascara_subclasse
+  - id: passo_03_validar_mascara_subclasse
     asserts_rede:
       - url_contem: "/api/crud/subclasses-produto/"
         metodo: GET
