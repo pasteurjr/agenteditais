@@ -571,6 +571,12 @@ def main():
             ciclo_contexto["pasta_documentos_teste"] = teste.user.pasta_documentos_teste
             print(f"[exec] pasta_documentos_teste = {teste.user.pasta_documentos_teste}")
 
+        # base_url do app testado: configuravel via env APP_BASE_URL
+        # Quando Arnaldo acessa de fora (pasteurjr.servehttp.com:5181), o executor precisa
+        # navegar pra http://pasteurjr.servehttp.com:5180 (nao localhost) — assim os
+        # screenshots e elementos no painel mostram a URL externa correta.
+        app_base_url = os.environ.get("APP_BASE_URL", "http://localhost:5180")
+
         # Estado compartilhado com painel
         # ciclo_id vem da RODADA atual (run.ciclo_id), nao do teste —
         # teste.ciclo_id pode ficar stale apos rodadas canceladas.
@@ -578,7 +584,7 @@ def main():
             uc_id=teste.titulo,
             variacao=f"{len(execs)} CTs",
             ciclo_id=(run.ciclo_id if run else None) or teste.ciclo_id or "",
-            base_url="http://localhost:5180",
+            base_url=app_base_url,
             ambiente="agenteditais",
             total_passos=0,
             estado="aguardando_inicio",
@@ -589,7 +595,11 @@ def main():
         # Sobe painel Flask em 0.0.0.0 (acessivel externamente, p/ Arnaldo)
         iniciar_painel_em_thread(estado, host="0.0.0.0", porta=args.porta)
         print(f"[exec] Painel: http://0.0.0.0:{args.porta} (acessivel externamente)")
-        if not args.no_browser:
+        # Abre browser local SO se rodando localmente (APP_BASE_URL=localhost).
+        # Se APP_BASE_URL aponta pra hostname externo (Arnaldo via web), nao abre nada
+        # no servidor — Arnaldo ja esta acessando o painel pelo browser dele.
+        _is_local = "localhost" in app_base_url or "127.0.0.1" in app_base_url
+        if not args.no_browser and _is_local:
             try:
                 webbrowser.open(f"http://localhost:{args.porta}")
             except Exception:
@@ -598,10 +608,11 @@ def main():
 
         # Boot Playwright
         print(f"[exec] Subindo browser (slow_mo={args.slow_mo}, delay_tecla={args.delay_tecla}, pausa={args.pausa})")
+        print(f"[exec] APP_BASE_URL = {app_base_url}")
         with sync_playwright() as p:
             browser: Browser = p.chromium.launch(headless=False, slow_mo=args.slow_mo)
             context = browser.new_context(
-                base_url="http://localhost:5180",
+                base_url=app_base_url,
                 viewport={"width": 1600, "height": 1000},
             )
             page = context.new_page()

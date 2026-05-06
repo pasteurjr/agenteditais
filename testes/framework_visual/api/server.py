@@ -1033,10 +1033,20 @@ def api_teste_iniciar(teste_id):
             motivo = "ja tem aprovados" if ja_tem_aprovados else "herda de teste base"
             print(f"[api] rodada {run_atual.numero} {motivo} — passa --auto-login")
         log = open(f"/tmp/executor_{teste_id}.log", "w")
+        # APP_BASE_URL: passa hostname pelo qual cliente acessou (X-Forwarded-Host).
+        # Faz o Playwright (executor_sprint1) navegar pra http://<host>:5180 em vez de
+        # localhost:5180 — Arnaldo de fora ve screenshots/elementos com URL externa.
+        _host_header = request.headers.get("X-Forwarded-Host") or request.host or "localhost"
+        _app_host = _host_header.split(":")[0]
+        _exec_env = {
+            **os.environ,
+            "DISPLAY": os.environ.get("DISPLAY", ":0"),
+            "APP_BASE_URL": f"http://{_app_host}:5180",
+        }
         proc = subprocess.Popen(
             cmd, cwd=str(_PROJECT),
             stdout=log, stderr=subprocess.STDOUT,
-            env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0")},
+            env=_exec_env,
         )
         # Atualiza pid+estado tanto no Teste (compat) quanto na RunTeste (canonico)
         t.pid_executor = proc.pid
@@ -1045,16 +1055,11 @@ def api_teste_iniciar(teste_id):
         if not run_atual.iniciado_em:
             run_atual.iniciado_em = datetime.now()
         db.commit()
-        # painel_url dinamico: usa o host pelo qual o cliente acessou a API.
-        # X-Forwarded-Host eh setado pelo proxy do Vite com o Host original do browser
-        # (vite reescreve request.host por causa do changeOrigin:true).
-        # Permite acesso externo (Arnaldo via pasteurjr.servehttp.com:9876).
-        _host_header = request.headers.get("X-Forwarded-Host") or request.host or "localhost"
-        painel_host = _host_header.split(":")[0]
+        # painel_url usa o mesmo host externo (X-Forwarded-Host) que o browser do tutorial.
         return jsonify({
             "ok": True,
             "pid": proc.pid,
-            "painel_url": f"http://{painel_host}:9876",
+            "painel_url": f"http://{_app_host}:9876",
             "log_path": f"/tmp/executor_{teste_id}.log",
             "run_id": run_atual.id,
             "run_numero": run_atual.numero,

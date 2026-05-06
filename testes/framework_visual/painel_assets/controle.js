@@ -90,7 +90,7 @@ function renderEstado(d) {
           </p>
           <p style="color: #aaa; font-size: 11pt; margin-top: 1em; padding-top: 1em; border-top: 1px solid #333;">
             Para o <strong>agregado total do teste</strong> (todos os CTs):<br>
-            Acesse <strong>http://localhost:5181</strong> e abra o relatório.
+            Acesse <strong>${window.location.protocol}//${window.location.hostname}:5181</strong> e abra o relatório.
           </p>
           <p style="color: #888; font-size: 10pt; margin-top: 1em;">
             Esta janela permanecerá aberta por 30 segundos.
