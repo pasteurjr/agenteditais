@@ -59,6 +59,22 @@ from rn_validators import (
 )
 ENFORCE_RN_VALIDATORS = os.environ.get("ENFORCE_RN_VALIDATORS", "false").lower() == "true"
 
+def _arquivo_eh_pdf_valido(filepath: str) -> bool:
+    """F04-07: Verifica se um arquivo no disco eh PDF de verdade (magic bytes %PDF).
+
+    Scrapers de certidao podem retornar HTML de erro/login com extensao .pdf.
+    Sem essa validacao, o sistema "pensa" que tem o PDF mas o user vai abrir e
+    encontrar conteudo aleatorio (caso F04-07 reportado pelo Arnaldo na SEFAZ-MG).
+    """
+    try:
+        if not filepath or not os.path.exists(filepath):
+            return False
+        with open(filepath, 'rb') as f:
+            return f.read(4) == b'%PDF'
+    except Exception:
+        return False
+
+
 def rn_enforce(rn_code: str, condition: bool, message: str):
     """Aplica validador de RN apenas se ENFORCE_RN_VALIDATORS=true. Caso contrario, loga warning."""
     if not condition:
@@ -925,6 +941,58 @@ def api_auditoria():
     except (TypeError, ValueError):
         limit = 100
     return jsonify(get_auditoria(entidade=entidade, entidade_id=entidade_id, limit=limit))
+
+
+# F03-03: Auditoria de aceite de resultado de IA
+@app.route("/api/auditoria/aceite-ia", methods=["POST"])
+@require_auth
+def api_registrar_aceite_ia():
+    """Registra que o user revisou e aceitou um resultado de IA.
+
+    Body JSON: {
+        "contexto": "upload_certidao" | "cadastro_produto_ia" | etc,
+        "recurso_id": "<id da entidade afetada>" (opcional),
+        "dados_extraidos_ia": {...} (snapshot do que IA disse),
+        "dados_aceitos_user": {...} (snapshot do que foi salvo)
+    }
+    """
+    from models import AuditoriaAceiteIA, User
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    data = request.get_json(silent=True) or {}
+
+    contexto = (data.get("contexto") or "").strip()
+    if not contexto:
+        return jsonify({"error": "Campo 'contexto' obrigatorio"}), 400
+
+    db = get_db()
+    try:
+        user_email = None
+        if user_id:
+            user = db.query(User).filter_by(id=user_id).first()
+            if user:
+                user_email = user.email
+
+        log = AuditoriaAceiteIA(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            user_email_snapshot=user_email,
+            empresa_id=empresa_id,
+            contexto=contexto[:100],
+            recurso_id=data.get("recurso_id"),
+            dados_extraidos_ia=data.get("dados_extraidos_ia"),
+            dados_aceitos_user=data.get("dados_aceitos_user"),
+            ip_origem=(request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64],
+            user_agent=(request.headers.get("User-Agent") or "")[:500],
+        )
+        db.add(log)
+        db.commit()
+        return jsonify({"ok": True, "id": log.id})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 
 # =============================================================================
@@ -10564,6 +10632,306 @@ def upload_empresa_documento():
         db.close()
 
 
+# F01-01/F01-06/F02-03/F03-02: Upload em massa de documentos com classificação por IA
+@app.route("/api/upload-lote-ia", methods=["POST"])
+@require_auth
+def upload_lote_ia():
+    """Recebe N arquivos PDF/DOCX, IA classifica cada um por TIPO e extrai metadados.
+
+    Suporta 3 contextos:
+      - "cadastro_empresa" → extrai dados da empresa (CNPJ, Razao Social, etc) do contrato social
+      - "documentos" → classifica cada arquivo como contrato/alvara/CND/etc. e cria EmpresaDocumento
+      - "portfolio" → classifica como catalogo/manual/registro_anvisa/etc. e prepara cadastro de produto
+
+    Form data:
+      - file_0, file_1, ... file_N: arquivos
+      - contexto: "cadastro_empresa" | "documentos" | "portfolio"
+      - empresa_id: ID da empresa (obrigatorio para "documentos" e "portfolio")
+
+    Retorna:
+      {
+        "ok": True,
+        "resultados": [
+          {"filename": "contrato.pdf", "classificacao": "contrato_social",
+           "dados_extraidos": {...}, "criado_id": "<id>", "erro": null},
+          ...
+        ],
+        "total": 5, "sucessos": 4, "erros": 1
+      }
+
+    User precisa REVISAR o resultado e clicar "Aceito" antes de persistir definitivamente.
+    """
+    from models import Empresa, EmpresaDocumento
+    from werkzeug.utils import secure_filename
+    import io
+
+    user_id = get_current_user_id()
+    contexto = (request.form.get("contexto") or "").strip()
+    empresa_id = request.form.get("empresa_id")
+
+    contextos_validos = {"cadastro_empresa", "documentos", "portfolio"}
+    if contexto not in contextos_validos:
+        return jsonify({"error": f"contexto invalido. Use um de: {sorted(contextos_validos)}"}), 400
+
+    if contexto in ("documentos", "portfolio") and not empresa_id:
+        return jsonify({"error": f"empresa_id obrigatorio para contexto '{contexto}'"}), 400
+
+    arquivos = []
+    for key in request.files:
+        if key.startswith("file"):
+            f = request.files[key]
+            if f.filename:
+                arquivos.append(f)
+
+    if not arquivos:
+        return jsonify({"error": "Nenhum arquivo enviado (use chaves file_0, file_1, ...)"}), 400
+
+    if len(arquivos) > 50:
+        return jsonify({"error": f"Limite de 50 arquivos por upload. Recebido: {len(arquivos)}"}), 400
+
+    # Diretorio de upload
+    upload_dir = os.path.join(UPLOAD_FOLDER, 'lote_ia', empresa_id or 'sem_empresa', uuid.uuid4().hex[:8])
+    os.makedirs(upload_dir, exist_ok=True)
+
+    resultados = []
+    sucessos = 0
+    erros = 0
+
+    for f in arquivos:
+        nome_original = f.filename or "sem_nome"
+        item = {
+            "filename": nome_original,
+            "classificacao": None,
+            "dados_extraidos": None,
+            "criado_id": None,
+            "filepath": None,
+            "erro": None,
+        }
+        try:
+            # F04-07: validar magic bytes (so para PDFs)
+            f.stream.seek(0)
+            primeiros = f.stream.read(4)
+            f.stream.seek(0)
+            ext = os.path.splitext(nome_original)[1].lower()
+            if ext == ".pdf" and primeiros != b"%PDF":
+                item["erro"] = "Arquivo nao eh PDF valido (magic bytes invalidos)"
+                erros += 1
+                resultados.append(item)
+                continue
+
+            safe_name = secure_filename(nome_original) or f"doc_{uuid.uuid4().hex[:8]}.pdf"
+            filepath = os.path.join(upload_dir, f"{uuid.uuid4().hex[:8]}_{safe_name}")
+            f.save(filepath)
+            item["filepath"] = filepath
+
+            # Extrair texto se for PDF
+            texto = ""
+            if ext == ".pdf":
+                try:
+                    import fitz as _fitz
+                    doc = _fitz.open(filepath)
+                    paginas_texto = []
+                    for p in doc:
+                        paginas_texto.append(p.get_text())
+                    texto = "\n".join(paginas_texto)
+                    doc.close()
+                except Exception as e_pdf:
+                    print(f"[upload_lote_ia] erro PDF {nome_original}: {e_pdf}")
+
+            if not texto or len(texto) < 100:
+                item["erro"] = "Nao foi possivel extrair texto do arquivo"
+                erros += 1
+                resultados.append(item)
+                continue
+
+            # Chamar IA pra classificar e extrair metadados
+            from llm import call_deepseek
+            if contexto == "cadastro_empresa":
+                prompt = f"""Voce e um assistente que extrai dados cadastrais de empresa de um documento.
+Documento ({nome_original}):
+\"\"\"{texto[:8000]}\"\"\"
+
+Retorne APENAS um JSON com os campos:
+- razao_social: string ou null
+- nome_fantasia: string ou null
+- cnpj: string ou null (formato 00.000.000/0000-00)
+- inscricao_estadual: string ou null
+- inscricao_municipal: string ou null
+- cep: string ou null
+- endereco: string ou null
+- endereco_numero: string ou null
+- bairro: string ou null
+- cidade: string ou null
+- uf: string ou null (2 letras)
+- telefone: string ou null
+- email: string ou null
+- regime_tributario: 'simples' | 'lucro_presumido' | 'lucro_real' | null
+- porte: 'me' | 'epp' | 'medio' | 'grande' | null
+
+Responda APENAS o JSON, sem texto antes nem depois."""
+            elif contexto == "documentos":
+                prompt = f"""Voce classifica documentos de empresa para cadastro em sistema de licitacoes.
+Documento ({nome_original}):
+\"\"\"{texto[:6000]}\"\"\"
+
+Retorne APENAS um JSON com:
+- tipo: um de 'contrato_social', 'atestado_capacidade', 'balanco', 'alvara', 'registro_conselho',
+       'procuracao', 'certidao_negativa', 'habilitacao_fiscal', 'qualificacao_tecnica',
+       'afe', 'cbpad', 'cbpp', 'bombeiros', 'outro'
+- numero: string ou null (numero do documento se houver)
+- data_emissao: string YYYY-MM-DD ou null
+- data_vencimento: string YYYY-MM-DD ou null
+- orgao_emissor: string ou null
+- resumo: string curta (1 frase) descrevendo o que eh
+
+Responda APENAS o JSON."""
+            else:  # portfolio
+                prompt = f"""Voce classifica documentos de produto/portfolio para empresa de licitacoes.
+Documento ({nome_original}):
+\"\"\"{texto[:6000]}\"\"\"
+
+Retorne APENAS um JSON com:
+- tipo: um de 'catalogo', 'manual', 'registro_anvisa', 'spec_tecnica', 'bula', 'certificado_qualidade', 'outro'
+- nome_produto: string ou null
+- fabricante: string ou null
+- modelo: string ou null
+- ncm: string ou null (formato 0000.00.00 se identificavel)
+- subclasse_sugerida: string ou null (ex: "Monitor Multiparametro", "Reagente Bioquimico")
+- area_sugerida: string ou null (ex: "Equipamentos Medico-Hospitalares")
+- resumo: string curta
+
+Responda APENAS o JSON."""
+
+            try:
+                resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=1500)
+                resposta = (resposta or "").strip()
+                # Remover markdown code fence se houver
+                if resposta.startswith("```"):
+                    resposta = resposta.split("```")[1]
+                    if resposta.startswith("json"):
+                        resposta = resposta[4:]
+                import json as _json
+                dados = _json.loads(resposta)
+                item["dados_extraidos"] = dados
+
+                if contexto == "documentos":
+                    item["classificacao"] = dados.get("tipo", "outro")
+                elif contexto == "portfolio":
+                    item["classificacao"] = dados.get("tipo", "outro")
+                elif contexto == "cadastro_empresa":
+                    item["classificacao"] = "dados_empresa"
+
+                sucessos += 1
+            except Exception as e_ia:
+                item["erro"] = f"Falha na IA: {str(e_ia)[:200]}"
+                erros += 1
+        except Exception as e_geral:
+            item["erro"] = f"Erro geral: {str(e_geral)[:200]}"
+            erros += 1
+
+        resultados.append(item)
+
+    return jsonify({
+        "ok": True,
+        "contexto": contexto,
+        "empresa_id": empresa_id,
+        "total": len(arquivos),
+        "sucessos": sucessos,
+        "erros": erros,
+        "resultados": resultados,
+        "instrucoes": "Resultados estao em modo RASCUNHO. Revise cada item e chame /api/upload-lote-ia/confirmar com a lista de itens aprovados para persistir definitivamente.",
+    })
+
+
+@app.route("/api/upload-lote-ia/confirmar", methods=["POST"])
+@require_auth
+def upload_lote_ia_confirmar():
+    """Persiste o resultado de upload-lote-ia depois da revisao do user.
+
+    Body JSON: {
+      "contexto": "documentos" | "portfolio" | ...,
+      "empresa_id": "<id>",
+      "itens_aprovados": [
+        {"filepath": "/...", "classificacao": "alvara", "dados_extraidos": {...}, "filename": "..."},
+        ...
+      ]
+    }
+
+    Tambem registra um aceite de IA (F03-03) para cada item.
+    """
+    from models import EmpresaDocumento, AuditoriaAceiteIA
+    from datetime import datetime as _dt
+
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+    contexto = data.get("contexto", "")
+    empresa_id = data.get("empresa_id")
+    itens = data.get("itens_aprovados", [])
+
+    if not itens:
+        return jsonify({"error": "Nenhum item aprovado"}), 400
+
+    db = get_db()
+    persistidos = []
+    try:
+        for item in itens:
+            try:
+                if contexto == "documentos":
+                    doc = EmpresaDocumento(
+                        id=str(uuid.uuid4()),
+                        empresa_id=empresa_id,
+                        tipo=item.get("classificacao", "outro"),
+                        nome=item.get("filename", "Documento"),
+                        path_arquivo=item.get("filepath"),
+                    )
+                    extraidos = item.get("dados_extraidos") or {}
+                    if extraidos.get("data_vencimento"):
+                        try:
+                            doc.data_vencimento = _dt.strptime(extraidos["data_vencimento"], "%Y-%m-%d").date()
+                        except Exception:
+                            pass
+                    if extraidos.get("data_emissao"):
+                        try:
+                            doc.data_emissao = _dt.strptime(extraidos["data_emissao"], "%Y-%m-%d").date()
+                        except Exception:
+                            pass
+                    if extraidos.get("numero"):
+                        doc.numero = extraidos["numero"]
+                    if extraidos.get("orgao_emissor"):
+                        doc.orgao_emissor = extraidos["orgao_emissor"]
+                    db.add(doc)
+                    db.flush()
+                    persistidos.append({"id": doc.id, "tipo": "documento", "filename": item.get("filename")})
+
+                    # F03-03: registrar aceite de IA
+                    log = AuditoriaAceiteIA(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        empresa_id=empresa_id,
+                        contexto="upload_lote_documento",
+                        recurso_id=doc.id,
+                        dados_extraidos_ia=extraidos,
+                        dados_aceitos_user=extraidos,
+                    )
+                    db.add(log)
+                # contexto cadastro_empresa e portfolio sao implementados em fluxos especificos
+                # (revisao do user antes de aplicar — ver frontend).
+            except Exception as e_item:
+                print(f"[upload_lote_ia_confirmar] erro item {item.get('filename')}: {e_item}")
+
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "persistidos": len(persistidos),
+            "itens": persistidos,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
 @app.route("/api/empresa-documentos/<doc_id>/download", methods=["GET"])
 @require_auth
 def download_empresa_documento(doc_id):
@@ -10731,6 +11099,17 @@ def upload_empresa_certidao(certidao_id):
     if file.filename == '':
         return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
+    # F04-07: validar magic bytes %PDF antes de salvar
+    # (scrapers podem retornar HTML de erro/login com extensao .pdf — rejeitamos)
+    file.stream.seek(0)
+    primeiros_bytes = file.stream.read(4)
+    file.stream.seek(0)
+    if primeiros_bytes != b'%PDF':
+        return jsonify({
+            "error": "O arquivo enviado não é um PDF válido. Verifique se você selecionou o arquivo correto.",
+            "magic_bytes_invalidos": True,
+        }), 400
+
     db = get_db()
     try:
         cert = db.query(EmpresaCertidao).filter(EmpresaCertidao.id == certidao_id).first()
@@ -10760,13 +11139,44 @@ def upload_empresa_certidao(certidao_id):
         cert.path_arquivo = filepath
         cert.data_emissao = _date.today()
 
+        # F04-06: rastrear divergencia entre data digitada pelo user e data extraida pela IA.
+        # A data REAL do PDF (extraida pela IA) prevalece sobre a data digitada pelo user
+        # — evita o caso "user digita 30/12/2026 mas validade real eh 30/03/2026" que mascara
+        # certidoes vencidas como validas.
+        data_venc_user_raw = (request.form.get('data_vencimento') or "").strip()
+        data_venc_user_parsed = None
+        if data_venc_user_raw:
+            try:
+                data_venc_user_parsed = _dt.strptime(data_venc_user_raw, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        divergencia_data = None  # dict {data_user, data_ia, prevaleceu}
+
         if dados_ia:
             # IA extraiu dados — aplicar automaticamente
+            data_venc_ia = None
             if dados_ia.get("data_vencimento"):
                 try:
-                    cert.data_vencimento = _dt.strptime(dados_ia["data_vencimento"], '%Y-%m-%d').date()
+                    data_venc_ia = _dt.strptime(dados_ia["data_vencimento"], '%Y-%m-%d').date()
                 except (ValueError, TypeError):
                     pass
+
+            # F04-06: se o user digitou validade E a IA extraiu validade do PDF, e divergem,
+            # PREVALECE a data extraida do PDF (mais confiavel)
+            if data_venc_ia and data_venc_user_parsed and data_venc_ia != data_venc_user_parsed:
+                cert.data_vencimento = data_venc_ia
+                divergencia_data = {
+                    "data_informada_user": data_venc_user_parsed.isoformat(),
+                    "data_extraida_pdf": data_venc_ia.isoformat(),
+                    "prevaleceu": "data_extraida_pdf",
+                    "motivo": "Divergencia detectada entre data digitada e data real do PDF — usada a data real",
+                }
+            elif data_venc_ia:
+                cert.data_vencimento = data_venc_ia
+            elif data_venc_user_parsed:
+                cert.data_vencimento = data_venc_user_parsed
+
             if dados_ia.get("data_emissao"):
                 try:
                     cert.data_emissao = _dt.strptime(dados_ia["data_emissao"], '%Y-%m-%d').date()
@@ -10788,29 +11198,34 @@ def upload_empresa_certidao(certidao_id):
                 cert.status = 'valida'  # Upload manual = assume válida
 
             cert.mensagem = dados_ia.get("resumo") or "Certidão enviada por upload manual"
-            cert.dados_extras = {k: v for k, v in dados_ia.items() if k not in ("resumo",) and v}
+            extras = {k: v for k, v in dados_ia.items() if k not in ("resumo",) and v}
+            if divergencia_data:
+                extras["__divergencia_validade"] = divergencia_data
+            cert.dados_extras = extras
         else:
             # Falha na extração IA — salvar com dados mínimos
             cert.status = 'valida'
             cert.mensagem = "Certidão enviada por upload manual (extração automática indisponível)"
+            # Sem IA: aceitar data do user (nao tem como validar)
+            if data_venc_user_parsed:
+                cert.data_vencimento = data_venc_user_parsed
 
-        # Fallback: dados do formulário sobrescrevem IA se enviados
-        data_venc = request.form.get('data_vencimento')
-        if data_venc:
-            try:
-                cert.data_vencimento = _dt.strptime(data_venc, '%Y-%m-%d').date()
-            except ValueError:
-                pass
         numero = request.form.get('numero')
         if numero:
             cert.numero = numero
 
         db.commit()
+        msg_base = "Certidão atualizada com sucesso"
+        if dados_ia:
+            msg_base += " (dados extraídos por IA)"
+        if divergencia_data:
+            msg_base += f". ATENCAO: a IA detectou validade {divergencia_data['data_extraida_pdf']} no PDF, diferente da que voce digitou ({divergencia_data['data_informada_user']}). Foi usada a data real do PDF."
         return jsonify({
             "success": True,
-            "message": f"Certidão atualizada com sucesso" + (" (dados extraídos por IA)" if dados_ia else ""),
+            "message": msg_base,
             "certidao": cert.to_dict(),
             "dados_extraidos": dados_ia,
+            "divergencia_validade": divergencia_data,
         })
 
     except Exception as e:
@@ -12857,11 +13272,24 @@ def buscar_certidoes_automatica():
                     import json as json_mod
                     de = resultado_auto["dados_extras"]
                     cert_existente.dados_extras = json_mod.loads(de) if isinstance(de, str) else de
+                # F04-08: SEMPRE persistir path_arquivo quando scraper baixou o PDF,
+                # independente do status_novo — antes so salvava se status=='valida'
+                # (caso CRF/FGTS: scraper baixou PDF mas status ficava pendente, perdia o arquivo).
+                # F04-07: validar magic bytes %PDF antes de aceitar
+                if resultado_auto and resultado_auto.get("path_arquivo"):
+                    pdf_path = resultado_auto["path_arquivo"]
+                    if _arquivo_eh_pdf_valido(pdf_path):
+                        cert_existente.path_arquivo = pdf_path
+                    else:
+                        # Arquivo nao eh PDF de verdade (HTML de erro/login do scraper)
+                        try:
+                            os.remove(pdf_path)  # remove arquivo invalido
+                        except OSError:
+                            pass
+                        print(f"[CERTIDAO] {fonte.nome}: arquivo retornado nao eh PDF valido — descartado")
                 if status_novo == 'valida':
                     # Nova busca retornou válida — atualizar dados PRIMEIRO
                     cert_existente.status = 'valida'
-                    if resultado_auto and resultado_auto.get("path_arquivo"):
-                        cert_existente.path_arquivo = resultado_auto["path_arquivo"]
                     if resultado_auto and resultado_auto.get("data_vencimento"):
                         try:
                             cert_existente.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
@@ -12897,8 +13325,17 @@ def buscar_certidoes_automatica():
                 nova_cert.url_consulta = url_consulta
                 nova_cert.fonte_certidao_id = fonte.id
                 nova_cert.status = status_novo
+                # F04-07/F04-08: validar PDF antes de persistir
                 if resultado_auto and resultado_auto.get("path_arquivo"):
-                    nova_cert.path_arquivo = resultado_auto["path_arquivo"]
+                    pdf_path = resultado_auto["path_arquivo"]
+                    if _arquivo_eh_pdf_valido(pdf_path):
+                        nova_cert.path_arquivo = pdf_path
+                    else:
+                        try:
+                            os.remove(pdf_path)
+                        except OSError:
+                            pass
+                        print(f"[CERTIDAO] {fonte.nome}: PDF retornado nao eh valido — descartado")
                 if resultado_auto and resultado_auto.get("data_vencimento"):
                     try:
                         nova_cert.data_vencimento = datetime.strptime(resultado_auto["data_vencimento"], '%Y-%m-%d').date()
@@ -12987,6 +13424,8 @@ def buscar_certidoes_stream():
     empresa_id = get_current_empresa_id()
     data = request.json or {}
     empresa_id = data.get('empresa_id')
+    # F04-04: ids_alvo restringe a busca a apenas certidoes especificas (botao individual)
+    certidao_ids_alvo = data.get('certidao_ids') or []
 
     if not empresa_id:
         return jsonify({"error": "empresa_id é obrigatório"}), 400
@@ -13008,13 +13447,23 @@ def buscar_certidoes_stream():
 
             # Buscar fontes ativas: globais (empresa_id IS NULL) + da empresa
             from sqlalchemy import or_ as _or_
-            fontes = db.query(FonteCertidao).filter(
+            fontes_q = db.query(FonteCertidao).filter(
                 _or_(
                     FonteCertidao.empresa_id == empresa_id,
                     FonteCertidao.empresa_id.is_(None),
                 ),
                 FonteCertidao.ativo == True
-            ).all()
+            )
+            fontes = fontes_q.all()
+
+            # F04-04: se vieram ids_alvo, filtra apenas as fontes_certidao das certidoes-alvo
+            if certidao_ids_alvo:
+                certs_alvo = db.query(EmpresaCertidao).filter(
+                    EmpresaCertidao.id.in_(certidao_ids_alvo),
+                    EmpresaCertidao.empresa_id == empresa_id,
+                ).all()
+                fonte_ids_validos = {c.fonte_certidao_id for c in certs_alvo if c.fonte_certidao_id}
+                fontes = [f for f in fontes if f.id in fonte_ids_validos]
 
             if not fontes:
                 yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Nenhuma fonte de certidão cadastrada.'})}\n\n"

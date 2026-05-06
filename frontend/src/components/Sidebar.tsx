@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LogOut, User as UserIcon, ChevronDown, ChevronRight,
   LayoutDashboard, Search, CheckCircle, DollarSign, FileText, Send,
@@ -81,7 +81,7 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
           { id: "crud-empresa-documentos", icon: <FileText size={14} />, label: "Documentos", page: "crud:empresa-documentos" },
           { id: "crud-empresa-certidoes", icon: <Shield size={14} />, label: "Certidoes", page: "crud:empresa-certidoes" },
           { id: "crud-fontes-certidoes", icon: <Globe size={14} />, label: "Fontes de Certidoes", page: "crud:fontes-certidoes" },
-          { id: "crud-empresa-responsaveis", icon: <Users size={14} />, label: "Responsaveis", page: "crud:empresa-responsaveis" },
+          { id: "crud-empresa-responsaveis", icon: <Users size={14} />, label: "Responsaveis e Representantes", page: "crud:empresa-responsaveis" },
           { id: "crud-cat-doc", icon: <FolderTree size={14} />, label: "Categorias Documento", page: "crud:categorias-documento" },
           { id: "crud-docs-nec", icon: <FileText size={14} />, label: "Tipos de Documento", page: "crud:documentos-necessarios" },
           { id: "crud-beneficios-fiscais-ncm", icon: <DollarSign size={14} />, label: "Beneficios Fiscais NCM", page: "crud:beneficios-fiscais-ncm" },
@@ -233,10 +233,11 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
     icon: <Settings size={18} />,
     label: "Configuracoes",
     items: [
-      { id: "empresa", icon: <Building size={16} />, label: "Empresa", page: "empresa" },
-      { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio", page: "portfolio" },
-      { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes", page: "parametros" },
-      { id: "selecionar-empresa", icon: <Building size={16} />, label: "Selecionar Empresa", page: "selecionar-empresa" },
+      // F01-05: tornar claro que sao configuracoes de uso, nao cadastros estruturais
+      { id: "empresa", icon: <Building size={16} />, label: "Dados da Empresa (visao integrada)", page: "empresa" },
+      { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio (visao integrada)", page: "portfolio" },
+      { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes (notif/score/tema)", page: "parametros" },
+      { id: "selecionar-empresa", icon: <Building size={16} />, label: "Selecionar Empresa Ativa", page: "selecionar-empresa" },
     ]
   }
 ];
@@ -258,8 +259,36 @@ export function Sidebar({
   isSuper = false,
   isAdmin = false,
 }: SidebarProps) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["fluxo"]));
-  const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(new Set());
+  // F01-08: lembrar preferencia do user em localStorage
+  const SIDEBAR_SECTIONS_KEY = "facilicita_sidebar_sections_v1";
+  const SIDEBAR_SUBS_KEY = "facilicita_sidebar_subs_v1";
+
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+      if (saved) return new Set(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set(["fluxo"]);  // default: Fluxo Comercial expandido
+  });
+  const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_SUBS_KEY);
+      if (saved) return new Set(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+
+  // F01-08: persiste mudancas
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(Array.from(expandedSections)));
+    } catch { /* ignore */ }
+  }, [expandedSections]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_SUBS_KEY, JSON.stringify(Array.from(expandedSubSections)));
+    } catch { /* ignore */ }
+  }, [expandedSubSections]);
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
@@ -286,6 +315,12 @@ export function Sidebar({
     });
   };
 
+  // F01-08: botao "Recolher tudo"
+  const recolherTudo = () => {
+    setExpandedSections(new Set());
+    setExpandedSubSections(new Set());
+  };
+
   const handleItemClick = (page: string) => {
     onNavigate(page);
   };
@@ -310,6 +345,19 @@ export function Sidebar({
           <span className="nav-item-icon"><LayoutDashboard size={18} /></span>
           <span className="nav-item-label">Dashboard</span>
         </button>
+
+        {/* F01-08: botao recolher tudo (so aparece quando alguma secao esta expandida) */}
+        {(expandedSections.size > 0 || expandedSubSections.size > 0) && (
+          <button
+            className="nav-item nav-item-secondary"
+            onClick={recolherTudo}
+            title="Recolher todas as secoes e subsecoes"
+            style={{ fontSize: "11px", opacity: 0.7, padding: "4px 12px" }}
+          >
+            <span className="nav-item-icon"><ChevronRight size={14} /></span>
+            <span className="nav-item-label">Recolher tudo</span>
+          </button>
+        )}
 
         {SIDEBAR_SECTIONS.map((section) => (
           <div key={section.id} className="nav-section">

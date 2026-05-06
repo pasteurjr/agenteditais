@@ -271,6 +271,8 @@ class ProdutoDocumento(Base):
 class AreaProduto(Base):
     """Áreas de produto — nível mais alto (Médica, Tecnologia, Construção Civil)"""
     __tablename__ = 'areas_produto'
+    # F13-01: nome unico por empresa (taxonomia nao deve duplicar)
+    __table_args__ = (UniqueConstraint('empresa_id', 'nome', name='uq_area_empresa_nome'),)
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
@@ -296,6 +298,8 @@ class AreaProduto(Base):
 class ClasseProdutoV2(Base):
     """Classes de produto — nível intermediário (Reagentes, Equipamentos, etc)"""
     __tablename__ = 'classes_produto_v2'
+    # F13-01: classe unica por (empresa, area, nome)
+    __table_args__ = (UniqueConstraint('empresa_id', 'area_id', 'nome', name='uq_classe_empresa_area_nome'),)
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
@@ -1368,7 +1372,11 @@ class Empresa(Base):
     inscricao_estadual = Column(String(20), nullable=True)
     inscricao_municipal = Column(String(20), nullable=True)
     regime_tributario = Column(Enum('simples', 'lucro_presumido', 'lucro_real'), nullable=True)
-    endereco = Column(Text, nullable=True)
+    endereco = Column(Text, nullable=True)  # Logradouro (Rua/Av) — campo legado
+    # F01-07: campos separados para endereço estruturado (CEP API popula automaticamente)
+    endereco_numero = Column(String(20), nullable=True)
+    endereco_complemento = Column(String(100), nullable=True)
+    bairro = Column(String(100), nullable=True)
     cidade = Column(String(100), nullable=True)
     uf = Column(String(2), nullable=True)
     cep = Column(String(10), nullable=True)
@@ -1406,6 +1414,9 @@ class Empresa(Base):
             "inscricao_municipal": self.inscricao_municipal,
             "regime_tributario": self.regime_tributario,
             "endereco": self.endereco,
+            "endereco_numero": self.endereco_numero,
+            "endereco_complemento": self.endereco_complemento,
+            "bairro": self.bairro,
             "cidade": self.cidade,
             "uf": self.uf,
             "cep": self.cep,
@@ -1618,6 +1629,10 @@ class EmpresaResponsavel(Base):
     email = Column(String(255), nullable=True)
     telefone = Column(String(20), nullable=True)
     tipo = Column(Enum('representante_legal', 'preposto', 'tecnico'), nullable=True)
+    # F05-02: prazo de validade do mandato (procuracoes vencem)
+    documento_validade = Column(Date, nullable=True)
+    documento_path = Column(String(500), nullable=True)  # PDF da procuracao/contrato/estatuto
+    documento_descricao = Column(String(255), nullable=True)  # ex: "Procuração 2026", "Contrato Social cláusula 5"
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1633,6 +1648,9 @@ class EmpresaResponsavel(Base):
             "email": self.email,
             "telefone": self.telefone,
             "tipo": self.tipo,
+            "documento_validade": self.documento_validade.isoformat() if self.documento_validade else None,
+            "documento_path": self.documento_path,
+            "documento_descricao": self.documento_descricao,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -3505,6 +3523,30 @@ engine = create_engine(
     pool_timeout=30,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# F03-03: Auditoria de aceite de resultado de IA
+class AuditoriaAceiteIA(Base):
+    """Registro de aceite humano de dado/decisao gerado por IA.
+
+    Sempre que o sistema apresenta resultado de IA (extracao de dados, classificacao,
+    score, sugestao) e o user clica "Eu li e confiro", criamos uma linha aqui.
+    Em caso de erro com consequencia (ex: certidao vencida nao detectada porque IA extraiu
+    data errada e user nao revisou), essa trilha protege legalmente a Facilicita.
+    """
+    __tablename__ = 'auditoria_aceite_ia'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    user_email_snapshot = Column(String(255), nullable=True)  # email do user no momento
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='SET NULL'), nullable=True)
+    contexto = Column(String(100), nullable=False)  # ex: "upload_certidao", "cadastro_produto_ia", "extrair_dados_empresa"
+    recurso_id = Column(String(36), nullable=True)  # id da entidade afetada (certidao, produto, empresa)
+    dados_extraidos_ia = Column(JSON, nullable=True)  # snapshot do que a IA disse
+    dados_aceitos_user = Column(JSON, nullable=True)  # snapshot final salvo (pode ser igual ou ajustado pelo user)
+    aceito_em = Column(DateTime, default=datetime.now)
+    ip_origem = Column(String(64), nullable=True)
+    user_agent = Column(String(500), nullable=True)
 
 
 def init_db():

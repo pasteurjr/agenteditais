@@ -8,3 +8,5 @@ export { FilterBar } from "./FilterBar";
 export { Modal, ConfirmModal } from "./Modal";
 export { FormField, TextInput, SelectInput, TextArea, Checkbox, RadioGroup } from "./FormField";
 export { TabPanel } from "./TabPanel";
+export { AceiteIACheckbox, registrarAceiteIA } from "./AceiteIACheckbox";
+export { UploadLoteIA } from "./UploadLoteIA";

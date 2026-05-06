@@ -246,7 +246,8 @@ export const empresaCertidoesConfig: CrudPageConfig = {
 
 export const empresaResponsaveisConfig: CrudPageConfig = {
   table: "empresa-responsaveis",
-  title: "Responsáveis da Empresa",
+  // F05-01: renomeado submenu pra abranger Representantes Legais + Tecnicos + Prepostos
+  title: "Responsáveis e Representantes",
   icon: <Users size={24} />,
   parentFk: "empresa_id",
   parentTable: "empresas",
@@ -258,7 +259,16 @@ export const empresaResponsaveisConfig: CrudPageConfig = {
     { name: "cpf", label: "CPF", type: "text", width: "half" },
     { name: "email", label: "Email", type: "email", width: "half" },
     { name: "telefone", label: "Telefone", type: "text", width: "half" },
-    { name: "tipo", label: "Tipo", type: "select", options: enumOpts(["representante_legal", "preposto", "tecnico"]), width: "half" },
+    { name: "tipo", label: "Tipo", type: "select", options: enumOpts([
+      ["representante_legal", "Representante Legal (assina contratos)"],
+      ["preposto", "Preposto (representa em pregão — exige documento de outorga)"],
+      ["tecnico", "Responsável Técnico (responde pelo produto)"],
+    ]), width: "half" },
+    // F05-02: validade do mandato/procuracao
+    { name: "documento_validade", label: "Validade do mandato/procuração", type: "date", width: "half" },
+    // F05-03: documento de outorga (obrigatorio principalmente para preposto)
+    { name: "documento_descricao", label: "Documento de outorga (descrição)", type: "text", width: "half", placeholder: "Ex: Procuração 2026, Contrato Social cláusula 5" },
+    { name: "documento_path", label: "Caminho/URL do documento (PDF)", type: "text", width: "full", placeholder: "Caminho do PDF da procuração/estatuto/contrato" },
   ],
 };
 
@@ -1039,8 +1049,14 @@ export const fontesCertidoesConfig: CrudPageConfig = {
     { name: "orgao_emissor", label: "Órgão Emissor", type: "text", width: "half", placeholder: "Ex: Receita Federal / PGFN" },
     { name: "url_portal", label: "URL do Portal", type: "text", required: true, width: "full", placeholder: "https://..." },
     { name: "url_api", label: "URL da API (se disponível)", type: "text", width: "full", placeholder: "https://api..." },
-    { name: "metodo_acesso", label: "Método de Acesso", type: "select", options: enumOpts(["publico", "login_senha", "certificado_digital", "api_key"]), width: "half" },
-    { name: "requer_autenticacao", label: "Requer Autenticação", type: "boolean", width: "half" },
+    { name: "metodo_acesso", label: "Método de Acesso", type: "select", options: enumOpts([
+      ["publico", "Acesso público (sem login)"],
+      ["login_senha", "Login + senha"],
+      ["certificado_digital", "Certificado digital (.pfx)"],
+      ["api_key", "API key"],
+    ]), width: "half" },
+    // F04-02: label clara — marca quando NÃO for público (requer credencial)
+    { name: "requer_autenticacao", label: "Requer credencial para acessar (marque se NÃO for público)", type: "boolean", width: "half" },
     { name: "usuario", label: "Usuário/Login", type: "text", width: "half", placeholder: "Login no portal (se necessário)" },
     { name: "senha_criptografada", label: "Senha", type: "text", width: "half", placeholder: "Deixe em branco para manter. Valor salvo é criptografado." },
     { name: "certificado_path", label: "Caminho do Certificado Digital", type: "text", width: "full", placeholder: "/caminho/certificado.pfx" },

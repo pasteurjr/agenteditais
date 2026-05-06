@@ -79,6 +79,11 @@ def _friendly_error(exc: Exception, table_slug: str | None = None) -> str:
             return "Ja existe um responsavel com este CPF nesta empresa."
         if table_slug == "empresas" and "cnpj" in low:
             return "Ja existe uma empresa cadastrada com este CNPJ."
+        # F13-01: areas/classes duplicadas
+        if "uq_area_empresa_nome" in low:
+            return "Ja existe uma Area com este nome nesta empresa. Areas devem ser unicas — use Subclasses para variacoes."
+        if "uq_classe_empresa_area_nome" in low:
+            return "Ja existe uma Classe com este nome nesta Area. Use uma Subclasse para subdividir."
         return "Ja existe um registro com estes dados (violacao de unicidade)."
 
     if "data truncated for column" in low or "incorrect enum value" in low:
@@ -1060,6 +1065,23 @@ def crud_list(table_slug):
                     model.empresa_id == empresa_id,
                     model.empresa_id.is_(None),
                 ))
+                # F04-01: para fontes-certidoes, filtrar globais por UF da empresa
+                # (federais: uf NULL → mantem; estaduais/municipais: uf == empresa.uf)
+                if table_slug == 'fontes-certidoes':
+                    try:
+                        from models import Empresa as _Emp
+                        emp = db.query(_Emp).filter(_Emp.id == empresa_id).first()
+                        if emp and emp.uf:
+                            from sqlalchemy import or_ as _or2_, and_ as _and2_
+                            # Manter: globais do tipo SEM uf (federais) + globais com uf == empresa.uf + da empresa
+                            query = query.filter(_or2_(
+                                model.empresa_id == empresa_id,         # da empresa = mantem
+                                model.uf.is_(None),                     # global federal (sem UF)
+                                model.uf == '',                         # legado: string vazia
+                                model.uf == emp.uf,                     # global estadual/municipal da MESMA UF
+                            ))
+                    except Exception as _ex:
+                        print(f"[F04-01] aviso filtro UF nao aplicado: {_ex}")
             else:
                 query = query.filter(model.empresa_id == empresa_id)
         elif table_slug == 'empresas':

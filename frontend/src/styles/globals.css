@@ -23,6 +23,27 @@
   box-sizing: border-box;
 }
 
+/* F02-02: cursor pointer em qualquer elemento clicavel — afordancia visual */
+button:not(:disabled),
+a,
+[role="button"]:not([aria-disabled="true"]),
+[onclick],
+label[for],
+summary,
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+select:not(:disabled),
+.clickable,
+.row-clickable {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+.disabled {
+  cursor: not-allowed;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background-color: var(--bg-primary);

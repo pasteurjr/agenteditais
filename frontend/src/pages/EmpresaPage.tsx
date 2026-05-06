@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Building, Upload, Plus, Trash2, Eye, Download, AlertTriangle, X, RefreshCw, Mail, Phone, Loader2, AlertCircle, Pencil, Search, Sparkles, Globe, Info } from "lucide-react";
-import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal, StatusBadge } from "../components/common";
+import { Card, DataTable, ActionButton, FormField, TextInput, SelectInput, Modal, StatusBadge, UploadLoteIA } from "../components/common";
 import type { Column } from "../components/common";
 import { crudList, crudGet, crudCreate, crudUpdate, crudDelete, getCrudTokenGetter } from "../api/crud";
 import type { CrudListResponse } from "../api/crud";
@@ -21,6 +21,9 @@ interface Empresa {
   linkedin?: string;
   facebook?: string;
   endereco?: string;
+  endereco_numero?: string;
+  endereco_complemento?: string;
+  bairro?: string;
   cidade?: string;
   uf?: string;
   cep?: string;
@@ -33,7 +36,8 @@ interface Documento {
   nome: string;
   tipo: string;
   validade: string | null;
-  status: "ok" | "vence" | "falta";
+  // "ok" = válido | "vence" = vence em <=30 dias | "vencido" = passou da data | "falta" = nunca enviado
+  status: "ok" | "vence" | "vencido" | "falta";
   arquivo?: string;
 }
 
@@ -69,6 +73,7 @@ interface CertidaoAutomatica {
   orgao_emissor?: string;
   fonte_certidao_id?: string;
   fonte_nome?: string;
+  fonte_ativa?: boolean;  // F04-03: status da fonte (ativa/inativa)
   numero?: string;
   permite_busca_automatica?: boolean;
   mensagem?: string;
@@ -103,14 +108,14 @@ function formatCpf(value: string): string {
   return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
 }
 
-function calcDocStatus(hasArquivo: boolean, dataVencimento: string | null): "ok" | "vence" | "falta" {
+function calcDocStatus(hasArquivo: boolean, dataVencimento: string | null): "ok" | "vence" | "vencido" | "falta" {
   if (!hasArquivo) return "falta";
   if (!dataVencimento) return "ok";
   const hoje = new Date();
   const venc = new Date(dataVencimento);
   const diffMs = venc.getTime() - hoje.getTime();
   const diffDias = diffMs / (1000 * 60 * 60 * 24);
-  if (diffDias <= 0) return "falta";
+  if (diffDias <= 0) return "vencido";
   if (diffDias <= 30) return "vence";
   return "ok";
 }
@@ -128,6 +133,10 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const [linkedin, setLinkedin] = useState("");
   const [facebook, setFacebook] = useState("");
   const [endereco, setEndereco] = useState("");
+  // F01-07: campos separados de endereco
+  const [enderecoNumero, setEnderecoNumero] = useState("");
+  const [enderecoComplemento, setEnderecoComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
   const [cep, setCep] = useState("");
@@ -233,6 +242,9 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         setLinkedin(String(emp.linkedin ?? ""));
         setFacebook(String(emp.facebook ?? ""));
         setEndereco(String(emp.endereco ?? ""));
+        setEnderecoNumero(String(emp.endereco_numero ?? ""));
+        setEnderecoComplemento(String(emp.endereco_complemento ?? ""));
+        setBairro(String(emp.bairro ?? ""));
         setCidade(String(emp.cidade ?? ""));
         setUf(String(emp.uf ?? ""));
         setCep(String(emp.cep ?? ""));
@@ -266,11 +278,19 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         });
       } catch { /* silencioso — não impede carregar a página */ }
 
-      const [docsRes, certRes, respRes] = await Promise.all([
+      const [docsRes, certRes, respRes, fontesRes] = await Promise.all([
         crudList("empresa-documentos", { parent_id: id }),
         crudList("empresa-certidoes", { parent_id: id }),
         crudList("empresa-responsaveis", { parent_id: id }),
+        // F04-03: precisamos do estado 'ativo' das fontes pra mostrar na tabela
+        crudList("fontes-certidoes", { include_globais: true, limit: 200 }),
       ]);
+
+      // F04-03: mapa fonte_id -> ativo
+      const fonteAtivaMap = new Map<string, boolean>();
+      for (const f of fontesRes.items) {
+        if (f.id) fonteAtivaMap.set(String(f.id), f.ativo !== false);
+      }
 
       setDocumentos(docsRes.items.map(d => {
         const hasArquivo = !!(d.path_arquivo || d.arquivo);
@@ -298,6 +318,8 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           fonte_certidao_id: c.fonte_certidao_id ? String(c.fonte_certidao_id) : undefined,
           numero: c.numero ? String(c.numero) : undefined,
           fonte_nome: c.fonte_nome ? String(c.fonte_nome) : undefined,
+          // F04-03: pega do map de fontes (true se nao achou — comportamento padrao)
+          fonte_ativa: c.fonte_certidao_id ? (fonteAtivaMap.get(String(c.fonte_certidao_id)) ?? true) : true,
           permite_busca_automatica: c.permite_busca_automatica !== false,
           mensagem: c.mensagem ? String(c.mensagem) : undefined,
           dados_extras: c.dados_extras && typeof c.dados_extras === "object" ? c.dados_extras as Record<string, unknown> : undefined,
@@ -383,6 +405,9 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         linkedin,
         facebook,
         endereco,
+        endereco_numero: enderecoNumero,
+        endereco_complemento: enderecoComplemento,
+        bairro,
         cidade,
         uf,
         cep,
@@ -563,7 +588,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
     }
   };
 
-  const handleBuscarCertidoes = async () => {
+  const handleBuscarCertidoes = async (idsAlvo?: string[]) => {
     if (!empresaId) {
       setError("Cadastre a empresa primeiro (com CNPJ) antes de buscar certidoes.");
       return;
@@ -585,10 +610,15 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
     try {
       const headers = await getAuthHeaders();
+      // F04-04: passa certidao_ids quando o user clica no botao individual
+      const body: Record<string, unknown> = { empresa_id: empresaId };
+      if (idsAlvo && idsAlvo.length > 0) {
+        body.certidao_ids = idsAlvo;
+      }
       const res = await fetch("/api/empresa-certidoes/buscar-stream", {
         method: "POST",
         headers,
-        body: JSON.stringify({ empresa_id: empresaId }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -686,7 +716,17 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
 
       const result = await res.json();
       setShowCertUploadModal(false);
-      if (result.dados_extraidos) {
+      // F04-06: avisar quando IA detectou validade diferente da digitada pelo user
+      if (result.divergencia_validade) {
+        const d = result.divergencia_validade;
+        alert(
+          `⚠ DIVERGÊNCIA DE VALIDADE DETECTADA\n\n` +
+          `Você digitou: ${d.data_informada_user}\n` +
+          `IA extraiu do PDF: ${d.data_extraida_pdf}\n\n` +
+          `Foi salva a data REAL do PDF (${d.data_extraida_pdf}) — ela prevalece sobre a digitada.\n` +
+          `Confira o documento se a data parecer estranha.`
+        );
+      } else if (result.dados_extraidos) {
         alert(`Dados extraídos automaticamente por IA:\n• Situação: ${result.dados_extraidos.situacao || "N/I"}\n• Validade: ${result.dados_extraidos.data_vencimento || "N/I"}\n• Número: ${result.dados_extraidos.numero || "N/I"}\n• Órgão: ${result.dados_extraidos.orgao_emissor || "N/I"}`);
       }
       if (empresaId) await loadSubTables(empresaId);
@@ -703,8 +743,10 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
         return <span className="status-badge status-badge-success">OK</span>;
       case "vence":
         return <span className="status-badge status-badge-warning"><AlertTriangle size={12} /> Vence em breve</span>;
+      case "vencido":
+        return <span className="status-badge status-badge-error"><AlertTriangle size={12} /> Vencido</span>;
       case "falta":
-        return <span className="status-badge status-badge-error">Falta</span>;
+        return <span className="status-badge status-badge-error">Falta envio</span>;
     }
   };
 
@@ -791,13 +833,35 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
   const certidaoColumns: Column<CertidaoAutomatica>[] = [
     { key: "certidao", header: "Certidao", sortable: true },
     {
+      key: "fonte_ativa",
+      header: "Fonte",
+      width: "85px",
+      render: (c) => {
+        // F04-03: mostrar se a fonte cadastrada esta ativa ou inativa
+        const ativa = c.fonte_ativa !== false;
+        return (
+          <span title={ativa ? "Fonte de certidao ativa — sera usada na busca" : "Fonte INATIVA — nao sera usada"} style={{
+            display: "inline-block",
+            padding: "2px 8px",
+            borderRadius: "10px",
+            fontSize: "11px",
+            fontWeight: 500,
+            background: ativa ? "rgba(34,197,94,0.12)" : "rgba(148,163,184,0.18)",
+            color: ativa ? "#16a34a" : "#64748b",
+          }}>
+            {ativa ? "Ativa" : "Inativa"}
+          </span>
+        );
+      },
+    },
+    {
       key: "modo",
       header: "Modo",
       width: "100px",
       render: (c) => {
         const auto = c.permite_busca_automatica !== false;
         return (
-          <span style={{
+          <span title={auto ? "Busca automatica disponivel — clique no icone de atualizar" : "Apenas upload manual — sistema nao consegue buscar nesta fonte"} style={{
             display: "inline-block",
             padding: "2px 8px",
             borderRadius: "10px",
@@ -871,7 +935,7 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
       width: "140px",
       render: (c) => (
         <div className="table-actions" style={{ gap: "2px" }}>
-          <button title="Editar certidao" onClick={() => {
+          <button title="Editar dados da certidao (numero, validade, orgao emissor)" onClick={() => {
             setCertDetail(c);
             setCertEditNumero(c.numero || "");
             setCertEditValidade(c.validade || "");
@@ -882,11 +946,11 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           }} style={{ color: "var(--color-primary, #3b82f6)" }}>
             <Pencil size={18} />
           </button>
-          <button title="Upload PDF" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
+          <button title="Fazer upload manual do PDF da certidao (use quando a busca automatica falhou)" onClick={() => handleOpenCertUpload(c)} style={{ color: "var(--color-warning, #f59e0b)" }}>
             <Upload size={15} />
           </button>
           {c.path_arquivo && (
-            <button title="Download PDF" onClick={async () => {
+            <button title="Baixar o PDF salvo da certidao" onClick={async () => {
               const tokenFn = getCrudTokenGetter();
               const token = tokenFn ? await tokenFn() : null;
               const res = await fetch(`/api/empresa-certidoes/${c.id}/download?download=true`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -898,12 +962,12 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             }} style={{ color: "var(--color-success, #22c55e)" }}><Download size={15} /></button>
           )}
           {c.permite_busca_automatica !== false && (
-            <button title="Atualizar esta certidao" disabled={buscandoCertidoes} onClick={() => handleBuscarCertidoes()}>
+            <button title="Atualizar APENAS esta certidao (busca individual)" disabled={buscandoCertidoes} onClick={() => handleBuscarCertidoes([c.id])}>
               <RefreshCw size={15} className={buscandoCertidoes ? "spin" : ""} />
             </button>
           )}
           {c.url_consulta && (
-            <button title={`Abrir portal: ${c.orgao_emissor || c.certidao}`} onClick={() => window.open(c.url_consulta, "_blank")} style={{ color: "var(--color-info, #06b6d4)" }}>
+            <button title={`Abrir portal externo (${c.orgao_emissor || c.certidao}) em nova aba — emita a certidao manualmente e depois faca upload`} onClick={() => window.open(c.url_consulta, "_blank")} style={{ color: "var(--color-info, #06b6d4)" }}>
               <Globe size={15} />
             </button>
           )}
@@ -981,11 +1045,22 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             <FormField label="Nome Fantasia">
               <TextInput value={nomeFantasia} onChange={setNomeFantasia} />
             </FormField>
-            <FormField label="CNPJ" required>
-              <TextInput value={cnpj} onChange={setCnpj} placeholder="00.000.000/0000-00" />
+            <FormField label={empresaId ? "CNPJ (não editável após cadastro)" : "CNPJ"} required>
+              <TextInput
+                value={cnpj}
+                onChange={setCnpj}
+                placeholder="00.000.000/0000-00"
+                disabled={!!empresaId}
+              />
+              {empresaId && (
+                <small style={{ color: "var(--text-muted, #94a3b8)", display: "block", marginTop: "4px", fontSize: "11px" }}>
+                  CNPJ é a chave fiscal da empresa e não pode ser alterado. Para cadastrar outra empresa, use "Selecionar Empresa → Nova Empresa".
+                </small>
+              )}
             </FormField>
-            <FormField label="Inscricao Estadual">
-              <TextInput value={inscricaoEstadual} onChange={setInscricaoEstadual} />
+            {/* F01-02: Inscricao Estadual obrigatoria (decisao de produto). IM continua opcional (nem todas tem). */}
+            <FormField label="Inscrição Estadual" required>
+              <TextInput value={inscricaoEstadual} onChange={setInscricaoEstadual} placeholder="Digite ISENTO se a empresa for isenta" />
             </FormField>
           </div>
 
@@ -1022,14 +1097,26 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
           </div>
 
           <div className="form-section-title">Endereco</div>
-          <div className="form-grid form-grid-1">
-            <FormField label="Endereco">
-              <TextInput value={endereco} onChange={setEndereco} />
-            </FormField>
-          </div>
-          <div className="form-grid form-grid-3">
-            <FormField label="Cidade">
-              <TextInput value={cidade} onChange={setCidade} />
+          {/* F01-07: CEP no topo, popula automaticamente os outros campos */}
+          <div className="form-grid form-grid-2">
+            <FormField label="CEP — digite e os campos abaixo são preenchidos automaticamente">
+              <TextInput value={cep} placeholder="00000-000" onChange={(v) => {
+                setCep(v);
+                const digits = v.replace(/\D/g, '');
+                if (digits.length === 8) {
+                  fetch(`https://viacep.com.br/ws/${digits}/json/`)
+                    .then(r => r.json())
+                    .then(data => {
+                      if (!data.erro) {
+                        setEndereco(data.logradouro || '');
+                        setBairro(data.bairro || '');
+                        setCidade(data.localidade || '');
+                        setUf(data.uf || '');
+                      }
+                    })
+                    .catch(() => {});
+                }
+              }} />
             </FormField>
             <FormField label="UF">
               <SelectInput value={uf} onChange={setUf} options={[
@@ -1045,23 +1132,24 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
                 {value: "SE", label: "SE"}, {value: "SP", label: "SP"}, {value: "TO", label: "TO"},
               ]} />
             </FormField>
-            <FormField label="CEP">
-              <TextInput value={cep} onChange={(v) => {
-                setCep(v);
-                const digits = v.replace(/\D/g, '');
-                if (digits.length === 8) {
-                  fetch(`https://viacep.com.br/ws/${digits}/json/`)
-                    .then(r => r.json())
-                    .then(data => {
-                      if (!data.erro) {
-                        setEndereco(data.logradouro || '');
-                        setCidade(data.localidade || '');
-                        setUf(data.uf || '');
-                      }
-                    })
-                    .catch(() => {});
-                }
-              }} />
+          </div>
+          <div className="form-grid form-grid-3">
+            <FormField label="Logradouro (Rua/Avenida)">
+              <TextInput value={endereco} onChange={setEndereco} placeholder="Ex: Av. Paulista" />
+            </FormField>
+            <FormField label="Número">
+              <TextInput value={enderecoNumero} onChange={setEnderecoNumero} placeholder="123 ou S/N" />
+            </FormField>
+            <FormField label="Complemento (opcional)">
+              <TextInput value={enderecoComplemento} onChange={setEnderecoComplemento} placeholder="Apto 45, Sala 102" />
+            </FormField>
+          </div>
+          <div className="form-grid form-grid-2">
+            <FormField label="Bairro">
+              <TextInput value={bairro} onChange={setBairro} placeholder="Ex: Centro" />
+            </FormField>
+            <FormField label="Cidade">
+              <TextInput value={cidade} onChange={setCidade} />
             </FormField>
           </div>
 
@@ -1160,6 +1248,13 @@ export function EmpresaPage({ onSendToChat }: EmpresaPageProps) {
             </div>
           )}
         </Card>
+
+        {/* F03-02: Upload em massa por IA */}
+        {empresaId && (
+          <Card title="🤖 Cadastro Automático de Documentos por IA (NOVO)" icon={<Upload size={18} />}>
+            <UploadLoteIA contexto="documentos" empresaId={empresaId} onConfirmado={() => loadSubTables(empresaId)} />
+          </Card>
+        )}
 
         {/* Documentos */}
         <Card

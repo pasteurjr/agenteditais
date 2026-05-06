@@ -96,13 +96,17 @@ export function AssociarEmpresaUsuario() {
     const data = await res.json();
     setLoading(false);
     if (res.ok) {
-      setMsg({ text: "Vínculo criado com sucesso!", error: false });
+      setMsg({ text: "Vínculo criado com sucesso! Atualizando lista de empresas...", error: false });
       if (filterEmpresa === selectedEmpresa) loadVinculos(filterEmpresa);
-      // Se o usuario corrente foi quem vinculou (ele mesmo), atualiza
-      // a lista de vinculadas no AuthContext — assim SelecionarEmpresaPage
-      // mostra a empresa imediatamente sem precisar relogar.
-      if (currentUser && selectedUser === currentUser.id) {
-        try { await recarregarEmpresas(); } catch (e) { console.warn("recarregarEmpresas falhou:", e); }
+      // F01-03: SEMPRE recarregar empresas (não só quando o user corrente é o alvo).
+      // Mesmo o admin que vincula outra pessoa pode estar vinculando ele mesmo
+      // por um caminho indireto, e nao vai mais precisar relogar.
+      try {
+        await recarregarEmpresas();
+        setMsg({ text: "Vínculo criado e lista de empresas atualizada — sem precisar relogar!", error: false });
+      } catch (e) {
+        console.warn("recarregarEmpresas falhou:", e);
+        setMsg({ text: "Vínculo criado, mas falhou ao atualizar lista. Recarregue a página (F5).", error: false });
       }
     } else {
       setMsg({ text: data.error || "Erro ao vincular", error: true });

@@ -6,7 +6,7 @@ import {
   Filter, Zap, ArrowDown, CheckCircle, DollarSign, AlertTriangle,
   Edit2, Save, X, Layers, Check, SquareCheck as SquareCheckIcon
 } from "lucide-react";
-import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge } from "../components/common";
+import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge, UploadLoteIA } from "../components/common";
 import type { Column } from "../components/common";
 import { getProdutos, getProduto, getProdutoCompletude, reprocessarMetadados, sendMessage, sendMessageWithFile, createSession } from "../api/client";
 import type { Produto, ProdutoEspecificacao, CompletudeResult } from "../api/client";
@@ -1179,6 +1179,11 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
             ==================================================== */}
         {activeTab === "cadastroIA" && (
           <>
+            {/* F02-03: upload em lote por IA — drag-and-drop de varios PDFs */}
+            <Card title="🤖 Upload em Lote por IA (NOVO)" subtitle="Arraste varios catalogos/manuais/registros — IA classifica e extrai dados de cada produto. Voce revisa antes de salvar.">
+              <UploadLoteIA contexto="portfolio" />
+            </Card>
+
             <Card title="Cadastro por IA" subtitle="Faca upload de documentos e a IA extrai automaticamente os dados do produto e suas especificacoes tecnicas.">
               <div className="cadastro-form">
                 {/* Linha 1: Tipo de documento */}
