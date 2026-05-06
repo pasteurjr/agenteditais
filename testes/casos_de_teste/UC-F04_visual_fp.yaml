@@ -1,7 +1,7 @@
 uc_id: UC-F04
 variacao: fp
 trilha: visual
-descricao: "Buscar certidoes — fontes globais + fontes V5 da empresa (PGFN/Itamarandiba/JUCEMG) via API direta"
+descricao: "Buscar certidoes — fontes globais + fontes V5 da empresa (PGFN/Itamarandiba/JUCEMG) + busca REAL via scrapers"
 
 passos:
   - id: passo_00_setup
@@ -31,7 +31,13 @@ passos:
         metodo: POST
         status_in: [200]
 
-  - id: passo_05_cleanup
+  - id: passo_05_buscar_certidoes_real
+    asserts_rede:
+      - url_contem: "/api/empresa-certidoes/buscar-automatica"
+        metodo: POST
+        status_in: [200]
+
+  - id: passo_06_cleanup
     asserts_rede:
       - url_contem: "/api/crud/fontes-certidoes/"
         metodo: DELETE

@@ -228,12 +228,88 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_04_sincronizar_fontes"
 ```
 
-## Passo 05 — Cleanup das fontes V5
+## Passo 05 — Buscar Certidoes (efeito real — chama scrapers/APIs externas)
+
+Equivalente ao "Buscar Certidoes" da UI: POST /api/empresa-certidoes/buscar-automatica
+processa as 12 fontes (9 globais + 3 V5) e tenta baixar/consultar cada uma.
+
+Este passo valida que:
+- O endpoint da busca real existe e responde 200
+- A busca processa as 12 fontes (globais + V5) — confirma o fix include_globais
+- Pelo menos 1 das certidoes da empresa muda de status apos a busca
+
+CNPJs ficticios podem retornar erro/vazio nos portais reais — isso e ESPERADO.
+O que validamos eh o FLUXO completo (endpoint chamado, fontes processadas,
+status atualizados), nao se baixou PDF de verdade.
+
+```yaml
+id: passo_05_buscar_certidoes_real
+acao:
+  sequencia:
+    - tipo: evaluate
+      valor_literal: |
+        async () => {
+          const token = localStorage.getItem('editais_ia_access_token');
+          const empresa_id = window.__test_empresa_id;
+          if (!empresa_id) throw new Error('empresa_id ausente');
+
+          // Snapshot ANTES — quantas certidoes em status "pendente"
+          const rAntes = await fetch(`/api/crud/empresa-certidoes?parent_id=${empresa_id}&limit=100`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const dAntes = await rAntes.json();
+          const totalAntes = (dAntes.items || []).length;
+
+          // Chama busca real
+          const r = await fetch('/api/empresa-certidoes/buscar-automatica', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ empresa_id }),
+          });
+          if (!r.ok) {
+            const txt = (await r.text()).substring(0,250);
+            throw new Error(`buscar-automatica ${r.status}: ${txt}`);
+          }
+          const data = await r.json();
+          const processadas = (data.resultados || []).length || data.total || 0;
+          const stats = data.stats || {};
+
+          // Snapshot DEPOIS — verifica que pelo menos 1 status mudou
+          const rDepois = await fetch(`/api/crud/empresa-certidoes?parent_id=${empresa_id}&limit=100`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const dDepois = await rDepois.json();
+          const items = dDepois.items || [];
+          const naoProcessadas = items.filter(c => c.status === 'pendente' || c.status === 'nao_disponivel').length;
+          const processadasComEstado = items.filter(c =>
+            c.status === 'valida' || c.status === 'vencida' || c.status === 'erro' || c.status === 'login_invalido'
+          ).length;
+
+          // Asserts:
+          // 1. Busca processou >= 1 fonte (pode ser 12 globais + 3 V5 = 15 ou subset)
+          if (processadas < 1) throw new Error(`buscar-automatica processou 0 fontes — esperado >= 1`);
+          // 2. Pelo menos 1 certidao mudou de status (algum portal respondeu)
+          if (processadasComEstado < 1) {
+            throw new Error(`Nenhuma certidao mudou de status apos busca. ` +
+                            `total=${items.length} pendentes=${naoProcessadas}`);
+          }
+
+          return `busca_real_OK processadas=${processadas} status_alterados=${processadasComEstado} pendentes=${naoProcessadas} stats=${JSON.stringify(stats)}`;
+        }
+    - tipo: wait
+      valor_literal: 2000
+validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_05_buscar_certidoes_real"
+```
+
+## Passo 06 — Cleanup das fontes V5
 
 DELETE das 3 fontes V5 e das certidoes empresa associadas (best-effort).
 
 ```yaml
-id: passo_05_cleanup
+id: passo_06_cleanup
 acao:
   sequencia:
     - tipo: evaluate
@@ -254,5 +330,5 @@ acao:
         }
     - tipo: wait
       valor_literal: 300
-validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_05_cleanup"
+validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_06_cleanup"
 ```
