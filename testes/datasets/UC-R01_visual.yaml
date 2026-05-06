@@ -2,15 +2,15 @@ uc_id: UC-R01
 trilha: visual
 variacao: fp
 descricao: |
-  Gerar Proposta Tecnica (Motor IA Automatico).
-  Predecessores: UC-P04..P08, UC-CV03, UC-F07/F08
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Gerar Proposta Tecnica via Motor IA.
+  Predecessores: UC-P04..P08 + UC-CV03 + UC-F07/F08
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-preco_unitario: "130,00"
-quantidade: "10"
-valor_total_esperado: "R$ 1.300,00"
-nota: "UC-R01 chama motor IA (DeepSeek) — proposta tecnica gerada deve ser coerente com produto + edital + precos previos (P05 preco_base R$ 130)"
+preco: "130,00"
+qtd: "10"
+valor_total: "R$ 1.300,00"

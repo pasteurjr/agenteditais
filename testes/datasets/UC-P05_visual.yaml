@@ -4,11 +4,12 @@ variacao: fp
 descricao: |
   Montar Preco Base (Camada B) — Custo+Markup.
   Predecessores: UC-P04
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
 markup_pct: "30"
-preco_base_esperado: "R$ 130,00 (= custo 100 * 1.30)"
+preco_base_esperado: "R$ 130,00"

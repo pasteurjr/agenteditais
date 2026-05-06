@@ -3,11 +3,12 @@ trilha: visual
 variacao: fp
 descricao: |
   Auditoria Documental + Smart Split.
-  Predecessores: UC-R01, UC-F03
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Predecessores: UC-R01 + UC-F03
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-nota: "UC-R05 audita documentos da empresa para a proposta"
+nota: "UC-R05 audita docs + smart split"

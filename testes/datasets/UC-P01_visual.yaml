@@ -3,12 +3,16 @@ trilha: visual
 variacao: fp
 descricao: |
   Organizar Edital por Lotes.
-  Predecessores: UC-CV03, UC-CV09 — herda da Sprint 2
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Predecessores: UC-CV03 + UC-CV09
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-termo_busca: "monitor"
-nota: "UC-P01 valida selecao de edital herdado Sprint 2 + criacao/validacao de lotes"
+lote_especialidade: "Hematologia"
+lote_volume: "50000"
+lote_tipo_amostra: "Sangue total"
+lote_equipamento: "Analisador bioquimico"
+lote_observacoes: "Lote prioritario para validacao"

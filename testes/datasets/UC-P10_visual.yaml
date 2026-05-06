@@ -3,8 +3,9 @@ trilha: visual
 variacao: fp
 descricao: |
   Gestao de Comodato.
-  Predecessores: [login] — apenas autenticado
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Predecessores: [login]
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
@@ -12,5 +13,4 @@ usuario:
 
 equipamento: "Monitor Multiparametrico"
 valor: "15000"
-prazo_meses: "24"
-amortizacao_esperada: "R$ 625,00/mes"
+prazo: "24"

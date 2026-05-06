@@ -4,10 +4,11 @@ variacao: fp
 descricao: |
   Upload de Proposta Externa.
   Predecessores: [login]
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-nota: "UC-R02 valida presenca do botao Upload Proposta Externa (upload real exige arquivo)"
+nota: "UC-R02 valida presenca botao upload"

@@ -2,9 +2,10 @@ uc_id: UC-P07
 trilha: visual
 variacao: fp
 descricao: |
-  Estruturar Lances (Camadas D e E) — minimo e maximo.
-  Predecessores: UC-P04, UC-P05, UC-P06
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Estruturar Lances (Camadas D e E) — minimo R$ 115 e maximo R$ 140.
+  Predecessores: UC-P04 + UC-P05 + UC-P06
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
@@ -12,4 +13,4 @@ usuario:
 
 valor_inicial: "140,00"
 valor_minimo: "115,00"
-faixa_lances_esperada: "R$ 115,00 (min) a R$ 140,00 (max) — margem 15-40% sobre custo R$ 100"
+faixa: "R$ 115-140"

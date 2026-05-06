@@ -4,10 +4,11 @@ variacao: fp
 descricao: |
   Personalizar Descricao Tecnica (Toggle A/B).
   Predecessores: UC-R01
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-nota: "UC-R03 valida secao Descricao Tecnica de uma proposta"
+nota: "UC-R03 valida secao Descricao Tecnica"

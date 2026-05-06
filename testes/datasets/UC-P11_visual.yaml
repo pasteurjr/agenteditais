@@ -2,12 +2,13 @@ uc_id: UC-P11
 trilha: visual
 variacao: fp
 descricao: |
-  Pipeline IA de Precificacao (Banner Resumo + 5 cards A-E).
+  Pipeline IA de Precificacao (Banner Resumo + 5 Cards A-E).
   Predecessores: UC-P02
-  Sprint 3 (Precificacao e Proposta), V7 dos casos de uso canonicos.
+  Sprint 3 (Precificacao + Proposta) — TUTORIAL PROFUNDO padrao Sprint 1.
+  Asserts DOM/rede ricos validando texto/valor/elemento.
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-nota: "UC-P11 valida pipeline IA — DeepSeek + PNCP — pode demorar ate 90s. Compara sugestoes IA com nosso preco_base 130 / valor_referencia 143 / lance_inicial 140 / lance_minimo 115"
+nota: "UC-P11 IA Pipeline. 5 cards A-E sugeridos pela IA."
