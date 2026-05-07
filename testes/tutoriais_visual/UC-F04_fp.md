@@ -44,7 +44,11 @@ acao:
 validacao_ref: "testes/casos_de_teste/UC-F04_visual_fp.yaml#passo_00_setup"
 ```
 
-## Passo 01 — Listar fontes ANTES (devem aparecer 9 globais + as da empresa)
+## Passo 01 — Listar fontes ANTES (devem aparecer fontes globais filtradas por UF + as da empresa)
+
+> **F04-01 (07/05/2026):** o backend agora filtra fontes globais pela UF da empresa.
+> Antes esperava ">= 9 globais" (catalogo total). Agora espera ">= 5 globais" (federais sem UF +
+> globais cuja UF == empresa.uf). Empresas SP veem mais fontes que MG/PR (depende do catalogo).
 
 ```yaml
 id: passo_01_listar_antes
@@ -64,7 +68,8 @@ acao:
           const empresa = items.filter(f => f.empresa_id).length;
           window.__test_total_antes = items.length;
           window.__test_globais_antes = globais;
-          if (globais < 9) throw new Error(`Esperado >= 9 fontes globais (catalogo do sistema), achou ${globais}`);
+          // F04-01: minimo 5 (federais sempre presentes: CND Federal, FGTS, CNDT, BrasilAPI, Falencia)
+          if (globais < 5) throw new Error(`Esperado >= 5 fontes globais (federais minimo), achou ${globais}`);
           return `OK total=${items.length} globais=${globais} empresa=${empresa}`;
         }
     - tipo: wait

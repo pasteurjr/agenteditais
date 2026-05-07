@@ -25,7 +25,11 @@ empresa:
   inscricao_municipal: "{{IM_UNICA}}"
   regime_tributario: "simples"
   porte: "me"
-  endereco: "Av. da Validação, 1000"
+  # F01-07: endereco estruturado (4 campos)
+  endereco: "Av. da Validação"
+  endereco_numero: "1000"
+  endereco_complemento: "Sala 502"
+  bairro: "Centro"
   cidade: "São Paulo"
   uf: "SP"
   cep: "01000-000"

@@ -140,16 +140,29 @@ acao:
       seletor: 'label:has-text("Porte") ~ select.select-input, label:has-text("Porte") + select'
       valor_from_dataset: "empresa.porte"
       timeout: 5000
+    # F01-07: campos novos de endereco (logradouro/numero/complemento/bairro)
     - tipo: fill
-      seletor: 'label:has-text("Endereço") ~ textarea, label:has-text("Endereço") + textarea, label:has-text("Endereço") ~ input.text-input'
+      seletor: 'label:has-text("Logradouro") ~ input.text-input, label:has-text("Logradouro") + input, label:has-text("Endereço") ~ input.text-input, label:has-text("Endereço") + input, label:has-text("Endereço") ~ textarea'
       valor_from_dataset: "empresa.endereco"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Número") ~ input.text-input, label:has-text("Número") + input, label:has-text("Numero") ~ input.text-input'
+      valor_from_dataset: "empresa.endereco_numero"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Complemento") ~ input.text-input, label:has-text("Complemento") + input'
+      valor_from_dataset: "empresa.endereco_complemento"
+      timeout: 5000
+    - tipo: fill
+      seletor: 'label:has-text("Bairro") ~ input.text-input, label:has-text("Bairro") + input'
+      valor_from_dataset: "empresa.bairro"
       timeout: 5000
     - tipo: fill
       seletor: 'label:has-text("Cidade") ~ input.text-input, label:has-text("Cidade") + input'
       valor_from_dataset: "empresa.cidade"
       timeout: 5000
     - tipo: fill
-      seletor: 'label:has-text("UF") ~ input.text-input, label:has-text("UF") + input'
+      seletor: 'label:has-text("UF") ~ input.text-input, label:has-text("UF") + input, label:has-text("UF") ~ select.select-input, label:has-text("UF") + select'
       valor_from_dataset: "empresa.uf"
       timeout: 5000
     - tipo: fill

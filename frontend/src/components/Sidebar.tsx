@@ -233,11 +233,13 @@ const SIDEBAR_SECTIONS: MenuSection[] = [
     icon: <Settings size={18} />,
     label: "Configuracoes",
     items: [
-      // F01-05: tornar claro que sao configuracoes de uso, nao cadastros estruturais
-      { id: "empresa", icon: <Building size={16} />, label: "Dados da Empresa (visao integrada)", page: "empresa" },
-      { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio (visao integrada)", page: "portfolio" },
-      { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes (notif/score/tema)", page: "parametros" },
-      { id: "selecionar-empresa", icon: <Building size={16} />, label: "Selecionar Empresa Ativa", page: "selecionar-empresa" },
+      // F01-05: labels CURTOS pra preservar compatibilidade com tutoriais existentes
+      // que usam selector text-is("Empresa") / text-is("Portfolio") etc.
+      // A clarificação fica em tooltip (atributo title).
+      { id: "empresa", icon: <Building size={16} />, label: "Empresa", page: "empresa" },
+      { id: "portfolio", icon: <Briefcase size={16} />, label: "Portfolio", page: "portfolio" },
+      { id: "parametros", icon: <Sliders size={16} />, label: "Parametrizacoes", page: "parametros" },
+      { id: "selecionar-empresa", icon: <Building size={16} />, label: "Selecionar Empresa", page: "selecionar-empresa" },
     ]
   }
 ];
