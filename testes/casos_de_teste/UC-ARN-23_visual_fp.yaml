@@ -1,0 +1,8 @@
+uc_id: UC-ARN-23
+variacao: fp
+trilha: visual
+descricao: 'Responsavel: submenu, validade, doc outorga'
+passos:
+- id: passo_00_navegar_crud_responsaveis
+- id: passo_01_clicar_novo
+- id: passo_02_validar_3_novos_campos

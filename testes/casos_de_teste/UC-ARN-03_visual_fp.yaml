@@ -1,0 +1,13 @@
+uc_id: UC-ARN-03
+variacao: fp
+trilha: visual
+descricao: Vincular empresa-usuario sem re-login
+passos:
+- id: passo_00_pegar_lista_inicial
+- id: passo_01_associar_empresa
+  asserts_rede:
+  - url_contem: /api/admin/associar-empresa
+    metodo: POST
+    status_in:
+    - 200
+    - 201

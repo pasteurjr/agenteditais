@@ -1,0 +1,7 @@
+uc_id: UC-ARN-11
+variacao: fp
+trilha: visual
+descricao: Upload em Massa Portfolio por IA
+passos:
+- id: passo_00_navegar_portfolio
+- id: passo_01_validar_upload_lote

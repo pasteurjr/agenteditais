@@ -1,0 +1,6 @@
+uc_id: UC-ARN-18
+variacao: fp
+trilha: visual
+descricao: Botao atualizar individual passa ID da certidao
+passos:
+- id: passo_00_inspecionar_handler

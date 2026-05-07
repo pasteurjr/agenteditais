@@ -1,0 +1,6 @@
+uc_id: UC-ARN-20
+variacao: fp
+trilha: visual
+descricao: Validade do PDF prevalece sobre user
+passos:
+- id: passo_00_revisar_codigo

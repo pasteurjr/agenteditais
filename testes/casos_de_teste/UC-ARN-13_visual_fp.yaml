@@ -1,0 +1,7 @@
+uc_id: UC-ARN-13
+variacao: fp
+trilha: visual
+descricao: Upload em massa documentos IA
+passos:
+- id: passo_00_navegar_empresa
+- id: passo_01_validar_upload_lote

@@ -1,0 +1,6 @@
+uc_id: UC-ARN-22
+variacao: fp
+trilha: visual
+descricao: CRF FGTS persiste arquivo_path
+passos:
+- id: passo_00_revisar_codigo

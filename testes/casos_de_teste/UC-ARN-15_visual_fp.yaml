@@ -1,0 +1,6 @@
+uc_id: UC-ARN-15
+variacao: fp
+trilha: visual
+descricao: Filtro fontes-certidoes por UF da empresa
+passos:
+- id: passo_00_listar_fontes

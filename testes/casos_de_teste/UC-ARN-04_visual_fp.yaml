@@ -1,0 +1,7 @@
+uc_id: UC-ARN-04
+variacao: fp
+trilha: visual
+descricao: CNPJ readonly apos empresa salva
+passos:
+- id: passo_00_navegar_empresa
+- id: passo_01_verificar_cnpj_readonly

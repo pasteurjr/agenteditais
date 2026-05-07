@@ -1,0 +1,18 @@
+uc_id: UC-ARN-25
+trilha: visual
+ciclo_id_default: arnaldo-correcoes-v1
+
+# UC gerado a partir de docs/SPEC_UCS_ARNALDO.yaml
+# Relacionado a: F03-03-e2e
+# Empresa do ciclo (criada por UC-ARN-01) ja deve existir quando este UC roda.
+
+usuario:
+  email: "{{EMAIL_PRINCIPAL}}"
+  senha: "{{SENHA_PRINCIPAL}}"
+
+# Dataset minimo: a maior parte dos asserts ja inclui placeholders inline.
+# Adicione campos especificos abaixo se este UC precisar:
+empresa:
+  cnpj: "{{CNPJ_UNICO}}"
+  razao_social: "DEMO ARN {{SUFIXO_CICLO}} Ltda"
+  uf: "SP"

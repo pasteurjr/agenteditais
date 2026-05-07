@@ -1,0 +1,11 @@
+uc_id: UC-ARN-25
+variacao: fp
+trilha: visual
+descricao: 'E2E: upload IA + aceite + log auditoria'
+passos:
+- id: passo_00_e2e_aceite
+  asserts_rede:
+  - url_contem: /api/auditoria/aceite-ia
+    metodo: POST
+    status_in:
+    - 200

@@ -1,0 +1,6 @@
+uc_id: UC-ARN-12
+variacao: fp
+trilha: visual
+descricao: Badge 'Vencido' vs 'Falta envio'
+passos:
+- id: passo_00_validar_logica_4_status

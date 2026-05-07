@@ -1,0 +1,6 @@
+uc_id: UC-ARN-06
+variacao: fp
+trilha: visual
+descricao: Documentos vem do upload IA do cadastro
+passos:
+- id: passo_00_validar_componente_upload_documentos

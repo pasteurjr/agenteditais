@@ -1,0 +1,9 @@
+uc_id: UC-ARN-02
+variacao: fp
+trilha: visual
+descricao: Inscricao Estadual obrigatoria
+passos:
+- id: passo_00_navegar_crud_empresas
+  asserts_dom:
+  - selector: h1:has-text("Empresas"), h2:has-text("Empresas")
+- id: passo_01_validar_label_required

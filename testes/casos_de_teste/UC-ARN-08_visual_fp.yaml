@@ -1,0 +1,7 @@
+uc_id: UC-ARN-08
+variacao: fp
+trilha: visual
+descricao: Sidebar persiste preferencia em localStorage
+passos:
+- id: passo_00_expandir_cadastros
+- id: passo_01_verificar_localstorage

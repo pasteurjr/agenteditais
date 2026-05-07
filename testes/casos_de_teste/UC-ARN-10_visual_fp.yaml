@@ -1,0 +1,6 @@
+uc_id: UC-ARN-10
+variacao: fp
+trilha: visual
+descricao: Cursor pointer global em elementos clicaveis
+passos:
+- id: passo_00_validar_cursor_pointer

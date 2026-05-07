@@ -1,0 +1,6 @@
+uc_id: UC-ARN-05
+variacao: fp
+trilha: visual
+descricao: Sidebar Configuracoes mantem labels curtos
+passos:
+- id: passo_00_validar_labels

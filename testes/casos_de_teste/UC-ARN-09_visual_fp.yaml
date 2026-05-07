@@ -1,0 +1,6 @@
+uc_id: UC-ARN-09
+variacao: fp
+trilha: visual
+descricao: Tutorial V7 explica ordem F02->F13->F02
+passos:
+- id: passo_00_validar_doc_v7_existe

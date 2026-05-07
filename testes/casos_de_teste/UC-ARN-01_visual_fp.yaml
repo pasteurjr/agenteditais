@@ -1,0 +1,15 @@
+uc_id: UC-ARN-01
+variacao: fp
+trilha: visual
+descricao: Cadastro de empresa via upload IA + aceite humano
+passos:
+- id: passo_00_login
+  asserts_rede:
+  - url_contem: /api/auth/login
+    metodo: POST
+    status_in:
+    - 200
+- id: passo_01_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Empresa"), h1:has-text("Dados da Empresa")
+- id: passo_02_validar_componente_upload_lote_ia

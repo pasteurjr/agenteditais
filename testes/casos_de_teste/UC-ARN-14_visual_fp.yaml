@@ -1,0 +1,11 @@
+uc_id: UC-ARN-14
+variacao: fp
+trilha: visual
+descricao: Aceite IA + log auditoria
+passos:
+- id: passo_00_chamar_endpoint
+  asserts_rede:
+  - url_contem: /api/auditoria/aceite-ia
+    metodo: POST
+    status_in:
+    - 200

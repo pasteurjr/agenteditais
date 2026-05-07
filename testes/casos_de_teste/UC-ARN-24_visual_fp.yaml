@@ -1,0 +1,8 @@
+uc_id: UC-ARN-24
+variacao: fp
+trilha: visual
+descricao: UNIQUE area/classe + erro amigavel
+passos:
+- id: passo_00_criar_area_1
+- id: passo_01_criar_area_duplicada
+- id: passo_02_cleanup

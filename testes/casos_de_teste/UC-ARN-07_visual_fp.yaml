@@ -1,0 +1,8 @@
+uc_id: UC-ARN-07
+variacao: fp
+trilha: visual
+descricao: 'Endereco estruturado: 4 campos novos'
+passos:
+- id: passo_00_navegar_empresa
+- id: passo_01_verificar_4_campos
+- id: passo_02_verificar_dados_no_banco
