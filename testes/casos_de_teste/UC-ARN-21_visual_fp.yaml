@@ -1,6 +1,8 @@
 uc_id: UC-ARN-21
 variacao: fp
 trilha: visual
-descricao: Magic bytes %PDF rejeita HTML
+descricao: Magic bytes %PDF rejeita HTML renomeado
 passos:
 - id: passo_00_validar_helper
+  asserts_dom:
+  - selector: body

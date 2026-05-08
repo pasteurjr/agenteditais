@@ -17,7 +17,7 @@ relacionado_a: "F01-06"
 ## Descrição
 
 Apos UploadLoteIA contexto=cadastro_empresa, valida que documentos
-classificados aparecem em empresa-documentos.
+classificados aparecem em empresa-documentos. Confirma com data-testid.
 
 
 ## Pré-condições
@@ -30,7 +30,7 @@ classificados aparecem em empresa-documentos.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F01-06 esta aplicada
+- UploadLoteIA documentos com testid OU heading especifico de documentos
 
 ## Resultado esperado
 

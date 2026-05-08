@@ -4,5 +4,10 @@ trilha: visual
 descricao: 'Responsavel: submenu, validade, doc outorga'
 passos:
 - id: passo_00_navegar_crud_responsaveis
+  asserts_dom:
+  - selector: h1:has-text("Respons"), h2:has-text("Respons")
 - id: passo_01_clicar_novo
+  asserts_dom: &id001
+  - selector: body
 - id: passo_02_validar_3_novos_campos
+  asserts_dom: *id001

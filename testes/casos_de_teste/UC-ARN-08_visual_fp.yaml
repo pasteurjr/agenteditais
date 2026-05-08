@@ -4,4 +4,7 @@ trilha: visual
 descricao: Sidebar persiste preferencia em localStorage
 passos:
 - id: passo_00_expandir_cadastros
+  asserts_dom: &id001
+  - selector: body
 - id: passo_01_verificar_localstorage
+  asserts_dom: *id001

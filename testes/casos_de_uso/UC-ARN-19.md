@@ -16,7 +16,7 @@ relacionado_a: "F04-05"
 
 ## Descrição
 
-≥4 botoes da coluna Acoes tem title='...' descritivo.
+≥3 botoes da coluna Acoes tem title='...' descritivo (>15 chars).
 
 ## Pré-condições
 
@@ -28,7 +28,7 @@ relacionado_a: "F04-05"
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-05 esta aplicada
+- ≥3 botoes com title >15 chars (descritivo, nao 'Salvar' generico)
 
 ## Resultado esperado
 

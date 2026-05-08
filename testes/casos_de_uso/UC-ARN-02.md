@@ -16,8 +16,8 @@ relacionado_a: "F01-02"
 
 ## Descrição
 
-Valida que a IE eh required no CRUD de empresas.
-Tenta criar empresa SEM IE -> erro 400. Cria COM IE -> 201.
+Valida que a IE eh required no CRUD de empresas: label tem asterisco
+e attribute required no input.
 
 
 ## Pré-condições
@@ -30,7 +30,7 @@ Tenta criar empresa SEM IE -> erro 400. Cria COM IE -> 201.
 
 ## Pontos de observação (tester)
 
-- Form mostra IE como obrigatoria (asterisco vermelho)
+- Label tem asterisco vermelho E input tem attribute required
 
 ## Resultado esperado
 

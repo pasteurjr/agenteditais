@@ -58,7 +58,7 @@ def importar():
         if not ct:
             ct = CasoDeTeste(
                 id=_uuid(), caso_de_uso_id=uc.id, ct_id=CT_ID,
-                descricao="Magic bytes %PDF rejeita HTML",
+                descricao="Magic bytes %PDF rejeita HTML renomeado",
                 tipo="Positivo", categoria="Cenário",
                 trilha_sugerida="visual", variacao_tutorial="fp", ativo=1,
             )

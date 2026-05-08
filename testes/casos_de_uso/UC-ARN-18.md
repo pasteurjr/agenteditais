@@ -16,7 +16,8 @@ relacionado_a: "F04-04"
 
 ## Descrição
 
-Inspeciona codigo do EmpresaPage e confirma que onClick passa [c.id] em vez de chamar geral.
+Confirma comportamento real: ao clicar botao de UMA certidao, requisicao
+de busca-stream eh feita com certidao_ids especifico (nao geral).
 
 
 ## Pré-condições
@@ -29,7 +30,7 @@ Inspeciona codigo do EmpresaPage e confirma que onClick passa [c.id] em vez de c
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-04 esta aplicada
+- Existe botao de atualizar UMA certidao com handler React
 
 ## Resultado esperado
 

@@ -28,7 +28,7 @@ EmpresaPage > tabela certidoes tem coluna Fonte com badge Ativa/Inativa.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-03 esta aplicada
+- Tabela certidoes tem coluna Fonte OU badge Ativa/Inativa visivel
 
 ## Resultado esperado
 

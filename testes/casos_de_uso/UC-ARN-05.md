@@ -30,7 +30,7 @@ como labels curtos (compatibilidade com tutoriais existentes).
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F01-05 esta aplicada
+- Sidebar Configuracoes mostra exatamente os 4 labels esperados
 
 ## Resultado esperado
 

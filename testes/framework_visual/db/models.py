@@ -75,6 +75,7 @@ class Sprint(Base):
     nome = Column(String(255), nullable=False)
     descricao = Column(Text, nullable=True)
     ativo = Column(TINYINT(1), nullable=False, default=1)
+    independente = Column(TINYINT(1), nullable=False, default=0)
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
 
     projeto = relationship("Projeto", back_populates="sprints")

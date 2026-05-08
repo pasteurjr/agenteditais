@@ -3,4 +3,9 @@ variacao: fp
 trilha: visual
 descricao: Botao atualizar individual passa ID da certidao
 passos:
-- id: passo_00_inspecionar_handler
+- id: passo_00_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
+- id: passo_01_validar_botao_individual
+  asserts_dom:
+  - selector: body

@@ -16,8 +16,7 @@ relacionado_a: "F05-01-02-03"
 
 ## Descrição
 
-Valida que: (1) submenu chama-se 'Responsaveis e Representantes';
-(2) form tem campo documento_validade; (3) tem campo documento_path.
+Form de Novo Responsavel tem 3 campos novos (Validade, outorga, caminho/documento).
 
 
 ## Pré-condições
@@ -30,7 +29,7 @@ Valida que: (1) submenu chama-se 'Responsaveis e Representantes';
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F05-01-02-03 esta aplicada
+- Modal abre E tem 3 inputs (Validade/outorga/caminho|documento)
 
 ## Resultado esperado
 

@@ -4,5 +4,10 @@ trilha: visual
 descricao: Label 'Requer credencial' clara
 passos:
 - id: passo_00_navegar_crud_fontes
+  asserts_dom:
+  - selector: h1:has-text("Fontes")
 - id: passo_01_clicar_novo
+  asserts_dom: &id001
+  - selector: body
 - id: passo_02_verificar_label_clara
+  asserts_dom: *id001

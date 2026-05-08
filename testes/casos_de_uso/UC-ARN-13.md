@@ -28,7 +28,7 @@ UploadLoteIA contexto=documentos em EmpresaPage.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F03-02 esta aplicada
+- UploadLoteIA documentos com testid OU heading especifico de documentos
 
 ## Resultado esperado
 

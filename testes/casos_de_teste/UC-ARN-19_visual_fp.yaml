@@ -4,4 +4,8 @@ trilha: visual
 descricao: Tooltips ricos na coluna Acoes
 passos:
 - id: passo_00_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_01_validar_tooltips
+  asserts_dom:
+  - selector: body

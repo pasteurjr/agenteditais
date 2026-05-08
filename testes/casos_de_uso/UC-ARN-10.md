@@ -16,7 +16,7 @@ relacionado_a: "F02-02"
 
 ## Descrição
 
-Confirma via getComputedStyle que botoes/links nao-disabled tem cursor:pointer.
+Confirma via getComputedStyle que ≥3 botoes nao-disabled tem cursor:pointer.
 
 
 ## Pré-condições
@@ -29,7 +29,7 @@ Confirma via getComputedStyle que botoes/links nao-disabled tem cursor:pointer.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F02-02 esta aplicada
+- ≥3 botoes nao-disabled tem cursor:pointer (sem qualquer outro valor)
 
 ## Resultado esperado
 

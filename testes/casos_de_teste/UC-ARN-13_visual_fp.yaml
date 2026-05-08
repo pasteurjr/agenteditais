@@ -4,4 +4,8 @@ trilha: visual
 descricao: Upload em massa documentos IA
 passos:
 - id: passo_00_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_01_validar_upload_lote
+  asserts_dom:
+  - selector: body

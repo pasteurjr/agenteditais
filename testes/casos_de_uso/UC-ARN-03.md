@@ -30,7 +30,8 @@ a lista 'minhasEmpresasList' do AuthContext atualiza sem precisar logout/login.
 
 ## Pontos de observação (tester)
 
-- Lista de empresas vinculadas atualiza sem re-login
+- Endpoint /api/admin/associar-empresa existe (nao 404)
+- Lista de empresas vinculadas existe no AuthContext
 
 ## Resultado esperado
 

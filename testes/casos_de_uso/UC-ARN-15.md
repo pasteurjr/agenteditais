@@ -17,6 +17,7 @@ relacionado_a: "F04-01"
 ## Descrição
 
 Empresa SP nao deve ver fontes UF=MG/PR/RS no listar fontes-certidoes.
+Confirma que a API faz o filtro server-side.
 
 
 ## Pré-condições
@@ -29,7 +30,7 @@ Empresa SP nao deve ver fontes UF=MG/PR/RS no listar fontes-certidoes.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-01 esta aplicada
+- API retorna apenas federais + UF da propria empresa
 
 ## Resultado esperado
 

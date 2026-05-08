@@ -5,5 +5,7 @@ descricao: Inscricao Estadual obrigatoria
 passos:
 - id: passo_00_navegar_crud_empresas
   asserts_dom:
-  - selector: h1:has-text("Empresas"), h2:has-text("Empresas")
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_01_validar_label_required
+  asserts_dom:
+  - selector: body

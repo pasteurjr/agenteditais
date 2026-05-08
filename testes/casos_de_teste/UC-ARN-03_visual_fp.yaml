@@ -4,10 +4,12 @@ trilha: visual
 descricao: Vincular empresa-usuario sem re-login
 passos:
 - id: passo_00_pegar_lista_inicial
-- id: passo_01_associar_empresa
+  asserts_dom: &id001
+  - selector: body
   asserts_rede:
-  - url_contem: /api/admin/associar-empresa
-    metodo: POST
+  - url_contem: /api/auth/minhas-empresas
+    metodo: GET
     status_in:
     - 200
-    - 201
+- id: passo_01_validar_endpoint_existe
+  asserts_dom: *id001

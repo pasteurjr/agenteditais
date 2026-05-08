@@ -11,5 +11,7 @@ passos:
     - 200
 - id: passo_01_navegar_empresa
   asserts_dom:
-  - selector: h1:has-text("Empresa"), h1:has-text("Dados da Empresa")
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_02_validar_componente_upload_lote_ia
+  asserts_dom:
+  - selector: body

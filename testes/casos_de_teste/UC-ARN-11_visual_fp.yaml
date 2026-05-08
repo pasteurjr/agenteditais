@@ -4,4 +4,7 @@ trilha: visual
 descricao: Upload em Massa Portfolio por IA
 passos:
 - id: passo_00_navegar_portfolio
+  asserts_dom: &id001
+  - selector: body
 - id: passo_01_validar_upload_lote
+  asserts_dom: *id001

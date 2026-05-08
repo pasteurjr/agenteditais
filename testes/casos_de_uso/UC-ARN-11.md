@@ -28,7 +28,7 @@ UploadLoteIA contexto=portfolio plugado em PortfolioPage.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F02-03 esta aplicada
+- UploadLoteIA portfolio com testid OU heading especifico de portfolio
 
 ## Resultado esperado
 

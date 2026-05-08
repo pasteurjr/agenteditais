@@ -16,7 +16,9 @@ relacionado_a: "F04-08"
 
 ## Descrição
 
-Backend sempre salva path quando scraper retorna PDF, independente do status.
+Backend sempre salva path quando scraper retorna PDF. Valida via
+consulta a certidoes existentes que tenham path nao-NULL.
+
 
 ## Pré-condições
 
@@ -28,7 +30,7 @@ Backend sempre salva path quando scraper retorna PDF, independente do status.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-08 esta aplicada
+- Pelo menos 1 certidao tem path_arquivo nao-NULL
 
 ## Resultado esperado
 

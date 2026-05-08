@@ -4,5 +4,14 @@ trilha: visual
 descricao: 'Endereco estruturado: 4 campos novos'
 passos:
 - id: passo_00_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_01_verificar_4_campos
+  asserts_dom:
+  - selector: body
 - id: passo_02_verificar_dados_no_banco
+  asserts_rede:
+  - url_contem: /api/auth/user
+    metodo: GET
+    status_in:
+    - 200

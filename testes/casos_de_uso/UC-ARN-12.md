@@ -16,7 +16,9 @@ relacionado_a: "F03-01"
 
 ## Descrição
 
-Logica de calcDocStatus distingue 4 status.
+Logica de calcDocStatus distingue 4 status. Testa exatamente 4 cenarios
+(vencido, vence, ok, falta) e confirma todos retornam corretos.
+
 
 ## Pré-condições
 
@@ -28,7 +30,7 @@ Logica de calcDocStatus distingue 4 status.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F03-01 esta aplicada
+- Logica calcDocStatus retorna 4 status diferentes nos 4 cenarios
 
 ## Resultado esperado
 

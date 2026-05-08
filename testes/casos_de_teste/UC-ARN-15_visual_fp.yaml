@@ -4,3 +4,10 @@ trilha: visual
 descricao: Filtro fontes-certidoes por UF da empresa
 passos:
 - id: passo_00_listar_fontes
+  asserts_dom:
+  - selector: body
+  asserts_rede:
+  - url_contem: /api/crud/fontes-certidoes
+    metodo: GET
+    status_in:
+    - 200

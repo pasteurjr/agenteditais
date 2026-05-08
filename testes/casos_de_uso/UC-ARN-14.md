@@ -16,7 +16,9 @@ relacionado_a: "F03-03"
 
 ## Descrição
 
-POST /api/auditoria/aceite-ia com auth + tabela auditoria_aceite_ia recebe linha.
+POST /api/auditoria/aceite-ia retorna 200 com id; tabela auditoria_aceite_ia
+recebe linha; GET subsequente confirma persistencia.
+
 
 ## Pré-condições
 
@@ -28,7 +30,7 @@ POST /api/auditoria/aceite-ia com auth + tabela auditoria_aceite_ia recebe linha
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F03-03 esta aplicada
+- Endpoint retorna 200 com UUID valido
 
 ## Resultado esperado
 

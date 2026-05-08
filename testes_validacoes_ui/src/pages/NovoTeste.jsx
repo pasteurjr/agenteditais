@@ -22,7 +22,7 @@ export default function NovoTeste() {
 
   const sprintObj = sprints.find(s => s.id === sprintId)
   const sprintNumero = sprintObj?.numero || 0
-  const requerBase = sprintNumero > 1
+  const requerBase = sprintNumero > 1 && !sprintObj?.independente
 
   useEffect(() => {
     api.projetos().then(setProjetos).catch(e => setErro(e.message))
@@ -39,11 +39,11 @@ export default function NovoTeste() {
     setTestesBaseDisponiveis([]); setTesteBaseId('')
     if (!sprintId) return
     api.sprintUcsResumo(sprintId).then(d => setUcs(d.ucs)).catch(e => setErro(e.message))
-    // Se Sprint > 1, carrega lista de testes base candidatos (Sprint < N, estado=concluido)
-    if (sprintNumero > 1) {
+    // Se Sprint > 1 e nao independente, carrega lista de testes base candidatos (Sprint < N, estado=concluido)
+    if (sprintNumero > 1 && !sprintObj?.independente) {
       api.testesCandidatosBase(sprintId).then(setTestesBaseDisponiveis).catch(e => setErro(e.message))
     }
-  }, [sprintId, sprintNumero])
+  }, [sprintId, sprintNumero, sprintObj?.independente])
 
   const ucsExecutaveis = ucs.filter(uc => uc.executavel)
   const ucsNaoExecutaveis = ucs.filter(uc => !uc.executavel)

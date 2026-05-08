@@ -4,3 +4,8 @@ trilha: visual
 descricao: Documentos vem do upload IA do cadastro
 passos:
 - id: passo_00_validar_componente_upload_documentos
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
+- id: passo_01_validar_componente_renderiza
+  asserts_dom:
+  - selector: body

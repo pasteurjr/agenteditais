@@ -17,7 +17,7 @@ relacionado_a: "F01-07"
 ## Descrição
 
 Valida que EmpresaPage tem campos Logradouro/Numero/Complemento/Bairro
-separados, e que CEP popula automaticamente via ViaCEP.
+como inputs separados, e que SQL/API confirma colunas no banco.
 
 
 ## Pré-condições
@@ -30,7 +30,8 @@ separados, e que CEP popula automaticamente via ViaCEP.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F01-07 esta aplicada
+- 4 inputs (nao apenas labels) presentes no DOM
+- API retorna colunas endereco_numero/complemento/bairro no JSON
 
 ## Resultado esperado
 

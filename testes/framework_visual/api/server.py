@@ -531,7 +531,7 @@ def api_sprints(projeto_id):
     db = get_db()
     try:
         rows = db.query(Sprint).filter_by(projeto_id=projeto_id, ativo=1).order_by(Sprint.numero).all()
-        return jsonify([{"id": s.id, "numero": s.numero, "nome": s.nome} for s in rows])
+        return jsonify([{"id": s.id, "numero": s.numero, "nome": s.nome, "independente": bool(getattr(s, "independente", 0))} for s in rows])
     finally:
         db.close()
 
@@ -734,8 +734,9 @@ def api_teste_criar():
             return jsonify({"error": "sprint invalida"}), 400
 
         # Validacao: Sprint > 1 obriga teste_base_id de Sprint anterior CONCLUIDO
+        # ... a menos que a Sprint seja marcada como `independente` (ex: Sprint 10 Correcoes Arnaldo)
         teste_base = None
-        if sprint.numero > 1:
+        if sprint.numero > 1 and not getattr(sprint, "independente", 0):
             if not teste_base_id:
                 return jsonify({
                     "error": f"Sprint {sprint.numero} requer teste_base_id (teste de Sprint < {sprint.numero} ja concluido).",
@@ -886,13 +887,23 @@ def api_teste_detalhe(teste_id):
 
 
 def _is_pid_alive(pid):
+    """True so se PID existe E nao eh zombie (defunct).
+    os.kill(pid,0) sozinho retorna OK pra zombies — bloqueia UI ate o pai dar wait()."""
     if not pid:
         return False
     try:
         os.kill(pid, 0)
-        return True
     except (OSError, ProcessLookupError):
         return False
+    # /proc/<pid>/status tem 'State: Z (zombie)' pra defunct
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith("State:"):
+                    return "Z" not in line.split(":", 1)[1]
+    except (FileNotFoundError, PermissionError):
+        return False
+    return True
 
 
 def _gc_zumbis(db):

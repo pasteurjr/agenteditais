@@ -1,6 +1,6 @@
 ---
 uc_id: UC-ARN-21
-nome: "Magic bytes %PDF rejeita HTML"
+nome: "Magic bytes %PDF rejeita HTML renomeado"
 sprint: "Sprint 10"
 versao_uc: "1.0"
 doc_origem: "docs/SPEC_UCS_ARNALDO.yaml"
@@ -8,7 +8,7 @@ gerado_em: "2026-05-07"
 relacionado_a: "F04-07"
 ---
 
-# UC-ARN-21 — Magic bytes %PDF rejeita HTML
+# UC-ARN-21 — Magic bytes %PDF rejeita HTML renomeado
 
 > **Origem:** observação **F04-07** do `docs/Observações tutorialsprint1-3 V6.docx` (Arnaldo).
 > **Esta correção foi implementada em** `commit fadb984` (06/05/2026).
@@ -16,7 +16,9 @@ relacionado_a: "F04-07"
 
 ## Descrição
 
-Upload de arquivo nao-PDF retorna 400 com magic_bytes_invalidos.
+Upload de arquivo nao-PDF (HTML com extensao .pdf) deve retornar 400
+com erro indicando bytes invalidos.
+
 
 ## Pré-condições
 
@@ -28,7 +30,7 @@ Upload de arquivo nao-PDF retorna 400 com magic_bytes_invalidos.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-07 esta aplicada
+- HTML disfarcado de PDF rejeitado com mensagem mencionando PDF/bytes/formato
 
 ## Resultado esperado
 

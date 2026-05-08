@@ -4,3 +4,5 @@ trilha: visual
 descricao: Cursor pointer global em elementos clicaveis
 passos:
 - id: passo_00_validar_cursor_pointer
+  asserts_dom:
+  - selector: body

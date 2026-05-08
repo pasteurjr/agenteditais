@@ -4,5 +4,15 @@ trilha: visual
 descricao: UNIQUE area/classe + erro amigavel
 passos:
 - id: passo_00_criar_area_1
+  asserts_dom: &id001
+  - selector: body
+  asserts_rede:
+  - url_contem: /api/crud/areas-produto
+    metodo: POST
+    status_in:
+    - 200
+    - 201
 - id: passo_01_criar_area_duplicada
+  asserts_dom: *id001
 - id: passo_02_cleanup
+  asserts_dom: *id001

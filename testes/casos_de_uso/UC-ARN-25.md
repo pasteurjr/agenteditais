@@ -16,7 +16,7 @@ relacionado_a: "F03-03-e2e"
 
 ## Descrição
 
-Smoke E2E: aceite-ia endpoint funcional + tabela existe + auth ok.
+E2E completo do aceite-ia: endpoint funcional + retorna id + payload completo aceito.
 
 
 ## Pré-condições
@@ -29,7 +29,7 @@ Smoke E2E: aceite-ia endpoint funcional + tabela existe + auth ok.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F03-03-e2e esta aplicada
+- Endpoint aceite 200 + UUID valido + payload completo (contexto, recurso_id, dados_*)
 
 ## Resultado esperado
 

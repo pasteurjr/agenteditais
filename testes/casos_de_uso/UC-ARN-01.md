@@ -32,8 +32,8 @@ IA extrai dados, user revisa, marca aceite e salva.
 
 ## Pontos de observação (tester)
 
-- Fluxo de upload+IA+aceite cobre F01-01
-- Componente UploadLoteIA renderiza no DOM
+- Componente UploadLoteIA renderiza com testid OU heading especifico (nao generico)
+- Componente tem botao de selecionar arquivo
 
 ## Resultado esperado
 

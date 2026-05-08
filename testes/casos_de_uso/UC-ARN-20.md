@@ -16,7 +16,9 @@ relacionado_a: "F04-06"
 
 ## Descrição
 
-Endpoint upload de certidao retorna divergencia_validade quando data user difere da IA.
+Endpoint upload de certidao retorna divergencia_validade quando data
+digitada pelo user difere da data extraida do PDF (IA).
+
 
 ## Pré-condições
 
@@ -28,7 +30,7 @@ Endpoint upload de certidao retorna divergencia_validade quando data user difere
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-06 esta aplicada
+- Endpoint /api/empresa-certidoes/upload existe (nao 404)
 
 ## Resultado esperado
 

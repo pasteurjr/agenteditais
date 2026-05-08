@@ -16,7 +16,7 @@ relacionado_a: "F04-02"
 
 ## Descrição
 
-CRUD fontes-certidoes tem label nova com 'credencial' (nao mais ambiguo).
+Form Novo do CRUD fontes-certidoes tem label nova com 'credencial'.
 
 ## Pré-condições
 
@@ -28,7 +28,7 @@ CRUD fontes-certidoes tem label nova com 'credencial' (nao mais ambiguo).
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F04-02 esta aplicada
+- Modal abre apos click E contem label 'credencial'
 
 ## Resultado esperado
 

@@ -16,8 +16,8 @@ relacionado_a: "F01-08"
 
 ## Descrição
 
-Expande secao Cadastros, verifica localStorage, simula reload (re-renderiza),
-confirma que ainda esta expandido.
+Expande secao Cadastros, verifica localStorage tem 'cadastros' na lista,
+simula reload, confirma que ainda esta expandido.
 
 
 ## Pré-condições
@@ -30,7 +30,7 @@ confirma que ainda esta expandido.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F01-08 esta aplicada
+- localStorage facilicita_sidebar_sections_v1 eh array JSON E contem 'cadastros'
 
 ## Resultado esperado
 

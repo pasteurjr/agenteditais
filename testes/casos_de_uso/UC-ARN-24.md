@@ -17,7 +17,7 @@ relacionado_a: "F13-01"
 ## Descrição
 
 POST /api/crud/areas-produto duas vezes com mesmo nome -> 2a retorna 409
-com mensagem "Ja existe uma Area com este nome".
+com mensagem amigavel. Cleanup ao final.
 
 
 ## Pré-condições
@@ -30,7 +30,7 @@ com mensagem "Ja existe uma Area com este nome".
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F13-01 esta aplicada
+- 1a chamada cria com sucesso, 2a retorna 409 com mensagem mencionando 'area' ou 'existe'
 
 ## Resultado esperado
 

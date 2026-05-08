@@ -3,4 +3,9 @@ variacao: fp
 trilha: visual
 descricao: CRF FGTS persiste arquivo_path
 passos:
-- id: passo_00_revisar_codigo
+- id: passo_00_validar_persistencia
+  asserts_rede:
+  - url_contem: /api/crud/empresa-certidoes
+    metodo: GET
+    status_in:
+    - 200

@@ -124,24 +124,54 @@ def gerar_caso_de_teste(uc):
 
 
 def gerar_tutorial(uc):
-    """testes/tutoriais_visual/UC-ARN-NN_fp.md (estrutura YAML em blocos)"""
+    """testes/tutoriais_visual/UC-ARN-NN_fp.md (estrutura YAML em blocos).
+
+    Cada passo emite no MD:
+      ## Titulo
+      > **Validando obs Arnaldo F0X-NN**
+      [descricao_passo: o que aconteceu/o que o tester ve]
+      **Observe criticamente:**
+      - ponto 1
+      - ponto 2
+      ```yaml ... ```
+    """
     p = DIR_TUT / f"{uc['id']}_fp.md"
     blocos = []
     for passo in uc["passos"]:
         # Cada acao no SPEC pode ser dict (1 acao) ou ja vir como sequencia
         acao = passo["acao"]
         if "tipo" not in acao and "sequencia" not in acao:
-            # Por seguranca, embrulha
             acao = {"tipo": "evaluate", "valor_literal": "() => 'no-op'"}
 
-        # YAML do passo
+        # YAML do passo (acao + ref)
         passo_yaml = {
             "id": passo["id"],
             "acao": acao,
             "validacao_ref": f"testes/casos_de_teste/{uc['id']}_visual_fp.yaml#{passo['id']}",
         }
+
+        # Texto descritivo: deixa claro qual obs Arnaldo esta sendo validada
+        descricao_passo = passo.get("descricao_passo", "").strip()
+        bloco_obs = f"> **Validando observação Arnaldo {uc['obs']}** — {uc['titulo']}\n"
+
+        # Pontos de observacao critica do tester
+        pontos = passo.get("pontos_observacao", [])
+        bloco_pontos = ""
+        if pontos:
+            bloco_pontos = "\n**Observe criticamente:**\n" + "\n".join(f"- {pt}" for pt in pontos) + "\n"
+
+        # Dados pre-condicoes (uma vez no primeiro passo)
+        bloco_dados = ""
+        if passo == uc["passos"][0]:
+            dados_pre = uc.get("dados_pre_condicoes", [])
+            if dados_pre:
+                bloco_dados = "\n**Dados/pré-condições:**\n" + "\n".join(f"- {d}" for d in dados_pre) + "\n"
+
         bloco = f"""## {passo['titulo']}
 
+{bloco_obs}
+{descricao_passo}
+{bloco_dados}{bloco_pontos}
 ```yaml
 {yaml.dump(passo_yaml, sort_keys=False, allow_unicode=True, default_flow_style=False).strip()}
 ```

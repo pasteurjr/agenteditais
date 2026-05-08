@@ -17,6 +17,7 @@ relacionado_a: "F01-04"
 ## Descrição
 
 Cria empresa, recarrega EmpresaPage e verifica que input CNPJ esta disabled.
+Falha se input estiver editavel quando empresa ja existe.
 
 
 ## Pré-condições
@@ -29,7 +30,7 @@ Cria empresa, recarrega EmpresaPage e verifica que input CNPJ esta disabled.
 
 ## Pontos de observação (tester)
 
-- CNPJ desabilitado quando empresa ja salva
+- CNPJ desabilitado quando empresa ja salva (cruzado: confirma empresa existe E input.disabled)
 
 ## Resultado esperado
 

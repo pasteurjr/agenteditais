@@ -4,4 +4,11 @@ trilha: visual
 descricao: CNPJ readonly apos empresa salva
 passos:
 - id: passo_00_navegar_empresa
+  asserts_dom:
+  - selector: h1:has-text("Dados da Empresa")
 - id: passo_01_verificar_cnpj_readonly
+  asserts_rede:
+  - url_contem: /api/auth/user
+    metodo: GET
+    status_in:
+    - 200

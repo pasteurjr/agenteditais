@@ -16,7 +16,8 @@ relacionado_a: "F02-01"
 
 ## Descrição
 
-Valida que tutorialsprint1-2 V7.md contem a nota explicativa.
+Valida que docs/tutorialsprint1-2 V7.md existe E contem nota explicativa
+sobre a ordem dos UCs.
 
 
 ## Pré-condições
@@ -29,7 +30,7 @@ Valida que tutorialsprint1-2 V7.md contem a nota explicativa.
 
 ## Pontos de observação (tester)
 
-- Confirma que a correção F02-01 esta aplicada
+- Doc V7 acessivel via HTTP E contem nota sobre ordem F02->F13
 
 ## Resultado esperado
 

@@ -3,4 +3,6 @@ variacao: fp
 trilha: visual
 descricao: Validade do PDF prevalece sobre user
 passos:
-- id: passo_00_revisar_codigo
+- id: passo_00_validar_endpoint_existe
+  asserts_dom:
+  - selector: body
