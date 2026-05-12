@@ -520,7 +520,12 @@ def api_projetos():
     db = get_db()
     try:
         rows = db.query(Projeto).filter_by(ativo=1).order_by(Projeto.nome).all()
-        return jsonify([{"id": p.id, "nome": p.nome, "descricao": p.descricao} for p in rows])
+        return jsonify([{
+            "id": p.id, "nome": p.nome, "descricao": p.descricao,
+            "app_base_url": p.app_base_url,
+            "app_backend_url": p.app_backend_url,
+            "app_login_email": p.app_login_email,
+        } for p in rows])
     finally:
         db.close()
 
@@ -968,20 +973,44 @@ def api_teste_iniciar(teste_id):
                 return jsonify({"ok": False, "msg": f"rodada {run_atual.numero} ja concluida sem CTs pendentes. Use /adicionar-ucs ou /reiniciar."}), 409
             run_atual.estado = "pausado"
 
-        # Checagem global: painel :9876 e unico por maquina, so 1 teste pode estar rodando
+        # Checagem global: painel :9876 e unico por maquina, so 1 teste pode estar rodando.
+        # Auto-cancela testes orfaos parados (>30min sem atividade) pra nao bloquear novos starts.
+        from datetime import datetime, timedelta
+        AGORA = datetime.now()
+        LIMITE_PAUSADO = timedelta(minutes=30)
         outro = (
             db.query(Teste)
             .filter(Teste.id != t.id, Teste.pid_executor.isnot(None))
             .all()
         )
         for o in outro:
-            if _is_pid_alive(o.pid_executor):
-                return jsonify({
-                    "ok": False,
-                    "msg": f"Ja ha outro teste rodando: '{o.titulo}' (PID {o.pid_executor}). Pause/cancele antes de iniciar este.",
-                    "outro_teste_id": o.id,
-                    "outro_titulo": o.titulo,
-                }), 409
+            if not _is_pid_alive(o.pid_executor):
+                continue
+            # Forca cancelamento se cliente pediu (?force=1) OU se ta parado ha muito tempo
+            force = (request.args.get("force") == "1") or ((request.get_json(silent=True) or {}).get("force"))
+            ultima_atv = o.atualizado_em or o.iniciado_em or o.criado_em
+            tempo_parado = AGORA - ultima_atv if ultima_atv else timedelta(0)
+            if force or tempo_parado > LIMITE_PAUSADO:
+                try:
+                    os.kill(o.pid_executor, 9)
+                except (OSError, ProcessLookupError):
+                    pass
+                o.pid_executor = None
+                o.estado = "cancelado"
+                db.commit()
+                print(f"[api] auto-cancel: teste '{o.titulo}' (PID antigo, parado {tempo_parado})")
+                continue
+            return jsonify({
+                "ok": False,
+                "msg": (
+                    f"Ja ha outro teste rodando: '{o.titulo}' (PID {o.pid_executor}, "
+                    f"parado ha {int(tempo_parado.total_seconds()//60)}min). "
+                    "Cancele-o ou re-tente com force=1 pra encerrar o anterior automaticamente."
+                ),
+                "outro_teste_id": o.id,
+                "outro_titulo": o.titulo,
+                "pode_forcar": True,
+            }), 409
 
         # Pre-flight: se algum CT do teste tem acao upload_arquivo, exige pasta_documentos_teste
         precisa_pasta = _teste_precisa_pasta_documentos(db, t)
@@ -1044,16 +1073,32 @@ def api_teste_iniciar(teste_id):
             motivo = "ja tem aprovados" if ja_tem_aprovados else "herda de teste base"
             print(f"[api] rodada {run_atual.numero} {motivo} — passa --auto-login")
         log = open(f"/tmp/executor_{teste_id}.log", "w")
-        # APP_BASE_URL: passa hostname pelo qual cliente acessou (X-Forwarded-Host).
-        # Faz o Playwright (executor_sprint1) navegar pra http://<host>:5180 em vez de
-        # localhost:5180 — Arnaldo de fora ve screenshots/elementos com URL externa.
+        # APP_BASE_URL: lê config do projeto (Facilicita=:5180, Conexus=:5176, etc).
+        # Para Facilicita (que tem proxy externo via no-ip), troca 'localhost' pelo
+        # X-Forwarded-Host. Para Conexus (sem proxy externo), mantém localhost.
+        # Heurística: se projeto.nome == 'Facilicita.IA' E cliente externo, substitui.
         _host_header = request.headers.get("X-Forwarded-Host") or request.host or "localhost"
         _app_host = _host_header.split(":")[0]
+        _projeto = db.query(Projeto).filter_by(id=t.projeto_id).first()
+        _app_url_base = (_projeto.app_base_url if _projeto and _projeto.app_base_url
+                         else "http://localhost:5180")  # fallback compat
+        # Apenas Facilicita.IA tem proxy externo configurado. Outros projetos (Conexus etc)
+        # rodam apenas em localhost — preservar.
+        if (_projeto and _projeto.nome == "Facilicita.IA"
+                and _app_host not in ("localhost", "127.0.0.1")
+                and "localhost" in _app_url_base):
+            _app_url_base = _app_url_base.replace("localhost", _app_host).replace("127.0.0.1", _app_host)
         _exec_env = {
             **os.environ,
             "DISPLAY": os.environ.get("DISPLAY", ":0"),
-            "APP_BASE_URL": f"http://{_app_host}:5180",
+            "APP_BASE_URL": _app_url_base,
         }
+        # Login default por projeto (override se Sprint herda ou usa outro user sintetico)
+        if _projeto and _projeto.app_login_email:
+            _exec_env["APP_LOGIN_EMAIL"] = _projeto.app_login_email
+        if _projeto and _projeto.app_login_senha:
+            _exec_env["APP_LOGIN_SENHA"] = _projeto.app_login_senha
+        print(f"[api] projeto={_projeto.nome if _projeto else '?'} APP_BASE_URL={_app_url_base}")
         proc = subprocess.Popen(
             cmd, cwd=str(_PROJECT),
             stdout=log, stderr=subprocess.STDOUT,
