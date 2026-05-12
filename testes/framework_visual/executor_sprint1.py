@@ -67,6 +67,9 @@ DELAY_POR_TECLA_DEFAULT = _cfg.getint("visual", "delay_por_tecla_ms", fallback=5
 PAUSA_ENTRE_ACOES_DEFAULT = _cfg.getint("visual", "pausa_entre_acoes_ms", fallback=300)
 EMAIL_DEFAULT = _cfg.get("login", "email", fallback="valida4@valida.com.br")
 SENHA_DEFAULT = _cfg.get("login", "senha", fallback="123456")
+# Override por env (server.py passa baseado em projetos.app_login_email/senha)
+EMAIL_DEFAULT = os.environ.get("APP_LOGIN_EMAIL", EMAIL_DEFAULT)
+SENHA_DEFAULT = os.environ.get("APP_LOGIN_SENHA", SENHA_DEFAULT)
 
 
 # ============================================================
@@ -610,7 +613,8 @@ def main():
         print(f"[exec] Subindo browser (slow_mo={args.slow_mo}, delay_tecla={args.delay_tecla}, pausa={args.pausa})")
         print(f"[exec] APP_BASE_URL = {app_base_url}")
         with sync_playwright() as p:
-            browser: Browser = p.chromium.launch(headless=False, slow_mo=args.slow_mo)
+            _headless = os.environ.get("EXECUTOR_HEADLESS", "true").lower() == "true"
+            browser: Browser = p.chromium.launch(headless=_headless, slow_mo=args.slow_mo)
             context = browser.new_context(
                 base_url=app_base_url,
                 viewport={"width": 1600, "height": 1000},
