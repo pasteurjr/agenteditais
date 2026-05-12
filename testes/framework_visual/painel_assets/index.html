@@ -131,6 +131,7 @@
     width: 100%;
     border: 2px solid #2a3f5f;
     border-radius: 4px;
+    cursor: zoom-in;
   }
   .screenshots .label {
     font-size: 9pt;
@@ -138,6 +139,44 @@
     text-align: center;
     margin-bottom: 0.3em;
   }
+  /* Lightbox auto-open do screenshot DEPOIS */
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lightbox.show { display: flex; flex-direction: column; }
+  .lightbox img {
+    max-width: 96vw;
+    max-height: 82vh;
+    object-fit: contain;
+    border: 2px solid #4caf50;
+    border-radius: 4px;
+  }
+  .lightbox-caption {
+    color: #aaa;
+    font-size: 10pt;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+  .lightbox-close {
+    background: #e53935;
+    color: #fff;
+    border: 2px solid #fff;
+    padding: 14px 36px;
+    font-size: 13pt;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  }
+  .lightbox-close:hover { background: #c62828; }
   .veredito {
     display: inline-block;
     padding: 0.3em 0.8em;
@@ -257,6 +296,67 @@
   </section>
 </main>
 
+<!-- Lightbox que abre automaticamente quando um novo screenshot DEPOIS for carregado -->
+<div id="lightbox" class="lightbox" role="dialog" aria-modal="true">
+  <img id="lightbox-img" src="" alt="screenshot depois ampliado">
+  <div class="lightbox-caption" id="lightbox-caption">Tela DEPOIS — clique fora ou pressione Esc para fechar</div>
+  <button class="lightbox-close" type="button" id="lightbox-close">✕ FECHAR</button>
+</div>
+
 <script src="/controle.js"></script>
+<script>
+  // Auto-abre lightbox quando o screenshot DEPOIS muda (= passo terminou)
+  (function () {
+    const imgDepois = document.getElementById('img-depois');
+    const imgAntes = document.getElementById('img-antes');
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxCaption = document.getElementById('lightbox-caption');
+    const closeBtn = document.getElementById('lightbox-close');
+
+    let lastSrcDepois = '';
+
+    function openLightbox(src, label) {
+      if (!src) return;
+      lightboxImg.src = src;
+      lightboxCaption.textContent = `Tela ${label} ampliada — clique fora ou pressione Esc para fechar`;
+      lightbox.classList.add('show');
+    }
+    function closeLightbox() {
+      lightbox.classList.remove('show');
+    }
+
+    // Fecha: botão, click fora da imagem, ou tecla Esc
+    closeBtn.addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+
+    // Click em qualquer screenshot abre o lightbox manualmente
+    imgAntes.addEventListener('click', () => openLightbox(imgAntes.src, 'ANTES'));
+    imgDepois.addEventListener('click', () => openLightbox(imgDepois.src, 'DEPOIS'));
+
+    // Observer: sempre que img-depois receber src novo (= passo concluído), abre auto
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'src') {
+          const novo = imgDepois.getAttribute('src') || '';
+          if (novo && novo !== lastSrcDepois) {
+            lastSrcDepois = novo;
+            // Espera o img carregar antes de abrir (evita flicker)
+            const probe = new Image();
+            probe.onload = () => openLightbox(novo, 'DEPOIS');
+            probe.onerror = () => { /* ignora */ };
+            probe.src = novo;
+          }
+        }
+      }
+    });
+    observer.observe(imgDepois, { attributes: true, attributeFilter: ['src'] });
+  })();
+</script>
 </body>
 </html>
