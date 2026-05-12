@@ -569,10 +569,14 @@ def main():
         # Carrega contexto do ciclo da rodada (cada rodada tem seu proprio ciclo_id)
         ciclo_contexto = _carregar_ciclo_contexto(run.ciclo_id or teste.ciclo_id or args.ciclo) or {}
 
-        # Injeta pasta_documentos_teste do user (usado por valor_from_pasta_docs em uploads)
-        if teste.user and teste.user.pasta_documentos_teste:
-            ciclo_contexto["pasta_documentos_teste"] = teste.user.pasta_documentos_teste
-            print(f"[exec] pasta_documentos_teste = {teste.user.pasta_documentos_teste}")
+        # Path fixo da pasta de documentos sintéticos no servidor (mesma p/ todos os users).
+        # Override via env PASTA_DOCS_TESTE se rodar em outra máquina.
+        _pasta_docs_fixa = os.environ.get(
+            "PASTA_DOCS_TESTE",
+            "/home/pasteurjr/Documentos/documentos_sintetizados",
+        )
+        ciclo_contexto["pasta_documentos_teste"] = _pasta_docs_fixa
+        print(f"[exec] pasta_documentos_teste = {_pasta_docs_fixa}")
 
         # base_url do app testado: configuravel via env APP_BASE_URL
         # Quando Arnaldo acessa de fora (pasteurjr.servehttp.com:5181), o executor precisa

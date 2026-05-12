@@ -1012,23 +1012,20 @@ def api_teste_iniciar(teste_id):
                 "pode_forcar": True,
             }), 409
 
-        # Pre-flight: se algum CT do teste tem acao upload_arquivo, exige pasta_documentos_teste
+        # Pre-flight: se algum CT do teste tem acao upload_arquivo, valida que a pasta
+        # fixa do servidor (PASTA_DOCS_TESTE no env, default /home/pasteurjr/Documentos/...)
+        # existe e tem a estrutura sprintN/ esperada.
         precisa_pasta = _teste_precisa_pasta_documentos(db, t)
         if precisa_pasta:
-            user = db.query(User).filter_by(id=t.user_id).first()
-            if not user or not user.pasta_documentos_teste:
-                return jsonify({
-                    "ok": False,
-                    "msg": "Este teste tem CTs com upload de arquivo. Configure a pasta de documentos em Configuracoes (botao ⚙ Config) antes de iniciar.",
-                    "exige_configuracao": True,
-                }), 409
-            # Valida que a pasta ainda eh acessivel
-            valido, det = _validar_pasta_documentos(user.pasta_documentos_teste)
+            pasta_fixa = os.environ.get(
+                "PASTA_DOCS_TESTE",
+                "/home/pasteurjr/Documentos/documentos_sintetizados",
+            )
+            valido, det = _validar_pasta_documentos(pasta_fixa)
             if not valido:
                 return jsonify({
                     "ok": False,
-                    "msg": f"Pasta de documentos invalida: {det.get('erro')}. Reconfigure em ⚙ Config.",
-                    "exige_configuracao": True,
+                    "msg": f"Pasta fixa do servidor invalida ({pasta_fixa}): {det.get('erro')}. Contate o admin do servidor.",
                     "detalhes": det,
                 }), 409
 
