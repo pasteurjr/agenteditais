@@ -286,12 +286,21 @@
           body{margin:0;background:#1a1a2e;color:#fff;font-family:Inter,sans-serif;
                display:flex;flex-direction:column;align-items:center;padding:12px}
           .label{color:#aaa;font-size:11pt;margin-bottom:8px}
-          img{max-width:99vw;max-height:92vh;object-fit:contain;
+          img{max-width:99vw;max-height:82vh;object-fit:contain;
               border:2px solid #4caf50;border-radius:4px}
+          .btn-fechar{
+            position:fixed;bottom:18px;right:18px;
+            background:#e53935;color:#fff;border:2px solid #fff;
+            padding:14px 36px;font-size:13pt;font-weight:700;
+            border-radius:6px;cursor:pointer;
+            box-shadow:0 4px 16px rgba(0,0,0,0.6);font-family:inherit
+          }
+          .btn-fechar:hover{background:#c62828}
         </style></head>
         <body>
           <div class="label">Tela ${label} — atualizada em ${new Date().toLocaleTimeString()}</div>
           <img src="${src}" alt="${label}">
+          <button class="btn-fechar" type="button" onclick="window.close()">✕ FECHAR</button>
         </body></html>`;
       w.document.open();
       w.document.write(html);
