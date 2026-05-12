@@ -12,11 +12,10 @@ export default function Topbar({ title, breadcrumb }) {
         {breadcrumb && <span style={{marginRight:'1em', color:'#aaa'}}>{breadcrumb}</span>}
         Olá, <strong>{user?.name || user?.email}</strong>
         {user?.administrador && <span className="badge-admin">ADMIN</span>}
-        {/* Botão Config oculto: pasta de documentos agora é fixa no servidor (env PASTA_DOCS_TESTE).
-            Admin pode acessar a tela direto via /configuracoes se precisar diagnosticar. */}
-        {user?.administrador && (
-          <button onClick={() => nav('/configuracoes')} className="secondary btn-sm" style={{marginLeft:'1em', opacity:0.5}} title="Apenas admin">⚙ Config</button>
-        )}
+        {/* Botão Config completamente oculto: pasta de documentos agora é fixa no servidor
+            (env PASTA_DOCS_TESTE, default /home/pasteurjr/Documentos/documentos_sintetizados).
+            A rota /configuracoes continua existindo no App.jsx — admin acessa direto pela URL
+            se precisar diagnosticar. */}
         <button onClick={onLogout} className="secondary btn-sm" style={{marginLeft:'0.5em'}}>Logout</button>
       </div>
     </header>
