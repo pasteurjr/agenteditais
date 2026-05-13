@@ -1,0 +1,164 @@
+empresa:
+  cnpj: '{{CNPJ_UNICO}}'
+  razao_social: DEMO {{SUFIXO_CICLO}} Servicos Ltda
+  nome_fantasia: DEMO {{SUFIXO_CICLO}} Servicos
+  email: contato+{{SUFIXO_CICLO}}@demo.com.br
+  cidade: Sao Paulo
+  uf: SP
+  cep: 01000-000
+  endereco: Avenida das Indústrias
+  endereco_numero: '1500'
+  endereco_complemento: Sala 203
+  bairro: Vila Industrial
+  telefone: (11) 4002-8922
+  website: https://meditest{{SUFIXO_CICLO}}.com.br
+  inscricao_estadual: 123.456.789.012
+  inscricao_municipal: 987.654.321
+  porte: Me
+  regime_tributario: Simples
+  facebook: https://facebook.com/meditest
+  instagram: https://instagram.com/meditest
+  linkedin: https://linkedin.com/company/meditest
+contatos:
+  email_valido: atendimento+{{SUFIXO_CICLO}}@demo.com.br
+  email_extra: comercial+{{SUFIXO_CICLO}}@demo.com.br
+  telefone_valido: (11) 4999-1234
+  telefone_extra: (11) 98765-4321
+usuario:
+  email: '{{EMAIL_PRINCIPAL}}'
+  senha: '{{SENHA_PRINCIPAL}}'
+doc1_tipo_nome: Contrato Social
+doc1_arquivo: sprint1/UC-F03/contrato_social.pdf
+doc1_validade: ''
+doc2_tipo_nome: CRF - Certificado de Regularidade do FGTS
+doc2_arquivo: sprint1/UC-F03/fgts.pdf
+doc2_validade: '2026-12-31'
+doc3_tipo_nome: Alvará de Funcionamento
+doc3_arquivo: sprint1/UC-F03/alvara.pdf
+doc3_validade: '2025-12-31'
+variacao: fp
+descricao: 'Configurar Alertas de Prazo.
+
+  Predecessores: [infra]
+
+  Sprint 5 (Followup, Atas, Execucao, Contratado X Realizado, CRM), V7 dos casos de
+  uso canonicos.
+
+  Mesma empresa/user herdados das Sprints 1-4 via teste_base_id.
+
+  '
+resp1_tipo_value: representante_legal
+resp1_tipo_label: Representante Legal
+resp1_nome: Marcos Antonio Ferreira
+resp1_cargo: Diretor Executivo
+resp1_cpf: 123.456.789-09
+resp1_email: diretor+{{SUFIXO_CICLO}}@demo.com.br
+resp1_telefone: (11) 98765-4321
+resp2_tipo_value: preposto
+resp2_tipo_label: Preposto
+resp2_nome: Carla Regina Souza
+resp2_cargo: Gerente de Licitacoes
+resp2_cpf: 987.654.321-00
+resp2_email: preposto+{{SUFIXO_CICLO}}@demo.com.br
+resp2_telefone: (11) 3456-7891
+resp3_tipo_value: tecnico
+resp3_tipo_label: Responsavel Tecnico
+resp3_nome: Dr. Paulo Roberto Menezes
+resp3_cargo: Engenheiro Biomedico
+resp3_cpf: 456.789.123-77
+resp3_email: tecnico+{{SUFIXO_CICLO}}@demo.com.br
+resp3_telefone: (11) 3456-7892
+tipo_documento_value: manual
+tipo_documento_label: Manual Tecnico
+arquivo_pasta_relativo: sprint1/UC-F07/manual_tecnico.pdf
+nome_produto: Monitor Multiparametrico de Sinais Vitais
+area_value: ''
+classe_value: ''
+subclasse_value: ''
+novo_nome: Monitor MultiParam Pro Edicao Visual
+novo_fabricante: Quantica MedTech
+novo_modelo: QM-MP-2026
+novo_codigo: SKU-QMMP-2026
+novo_ncm: 9018.19.90
+nova_descricao: Monitor multiparametrico atualizado via UC-F08 (FP)
+hierarquia:
+  areas:
+  - nome: Equipamentos Médico-Hospitalares
+  - nome: Diagnóstico in Vitro e Laboratório
+  classes:
+  - nome: Monitoração
+    area_nome: Equipamentos Médico-Hospitalares
+  - nome: Reagentes Bioquímicos
+    area_nome: Diagnóstico in Vitro e Laboratório
+  - nome: Reagentes e Kits Diagnósticos
+    area_nome: Diagnóstico in Vitro e Laboratório
+  subclasses:
+  - nome: Monitor Multiparamétrico
+    classe_nome: Monitoração
+    ncm: 9018.19.90
+  - nome: Reagente para Glicose
+    classe_nome: Reagentes Bioquímicos
+    ncm: 3822.19.90
+  - nome: Kit de Hematologia
+    classe_nome: Reagentes e Kits Diagnósticos
+    ncm: 3822.19.90
+area_1_nome: Equipamentos Médico-Hospitalares
+area_2_nome: Diagnóstico in Vitro e Laboratório
+classe_1_nome: Monitoração
+classe_1_area: Equipamentos Médico-Hospitalares
+classe_2_nome: Reagentes Bioquímicos
+classe_2_area: Diagnóstico in Vitro e Laboratório
+classe_3_nome: Reagentes e Kits Diagnósticos
+classe_3_area: Diagnóstico in Vitro e Laboratório
+subclasse_1_nome: Monitor Multiparamétrico
+subclasse_1_area: Equipamentos Médico-Hospitalares
+subclasse_1_classe: Monitoração
+subclasse_1_ncm: 9018.19.90
+subclasse_2_nome: Reagente para Glicose
+subclasse_2_area: Diagnóstico in Vitro e Laboratório
+subclasse_2_classe: Reagentes Bioquímicos
+subclasse_2_ncm: 3822.19.90
+subclasse_3_nome: Kit de Hematologia
+subclasse_3_area: Diagnóstico in Vitro e Laboratório
+subclasse_3_classe: Reagentes e Kits Diagnósticos
+subclasse_3_ncm: 3822.19.90
+peso_tecnico: '0.30'
+peso_documental: '0.15'
+peso_complexidade: '0.15'
+peso_juridico: '0.20'
+peso_logistico: '0.10'
+peso_comercial: '0.10'
+limiar_final_go: '70'
+limiar_final_nogo: '40'
+limiar_tecnico_go: '60'
+limiar_tecnico_nogo: '30'
+limiar_juridico_go: '60'
+limiar_juridico_nogo: '30'
+prazo_maximo: '30'
+frequencia: semanal
+tam: '5000000'
+sam: '2000000'
+som: '500000'
+markup: '30'
+custos_fixos: '15000'
+frete_base: '500'
+palavras_chave: microscopio, centrifuga, autoclave, monitor multiparametrico
+ncms: 9018.19.90, 3822.19.90
+email_notif: alertas+{{SUFIXO_CICLO}}@demo.com.br
+notif_email: true
+notif_sistema: true
+notif_sms: false
+frequencia_resumo_value: diario
+tema: escuro
+idioma_value: pt-BR
+fuso_value: America/Sao_Paulo
+termo: monitor multiparametrico
+fonte: PNCP
+modalidade: Pregão Eletrônico
+score: Score Hibrido
+nota: 'UC-FU02: regras D-30/D-15/D-5 com canais (email/whatsapp/sistema)'
+markup_pct: '30'
+preco_base_esperado: R$ 130,00
+preco: 130,00
+qtd: '10'
+valor_total: R$ 1.300,00

@@ -59,6 +59,11 @@ class Projeto(Base):
     descricao = Column(Text, nullable=True)
     ativo = Column(TINYINT(1), nullable=False, default=1)
     criado_em = Column(DateTime, nullable=False, default=datetime.now)
+    # URLs do app testado (usadas pelo executor pra apontar Playwright pro app correto)
+    app_base_url = Column(String(255), nullable=True)
+    app_backend_url = Column(String(255), nullable=True)
+    app_login_email = Column(String(255), nullable=True)
+    app_login_senha = Column(String(255), nullable=True)
 
     sprints = relationship("Sprint", back_populates="projeto", cascade="all, delete-orphan")
 
