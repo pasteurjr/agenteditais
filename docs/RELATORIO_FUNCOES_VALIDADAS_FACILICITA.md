@@ -2,14 +2,14 @@
 
 **Sistema:** Facilicita.IA — Plataforma de Automação de Licitações Governamentais (Lei 14.133/2021)
 **Data:** 2026-05-13
-**Base:** Teste End-to-End R8 (`096aaf48-4ba5-44ae-935a-1bbc8de0e769`) — taxa efetiva 99.2%
-**Empresa de teste:** DEMO 096aaf48 Serviços (sintética)
+**Base:** Teste End-to-End R9 (`9671efc3-4e9c-444e-8ce4-6ffd9767cab5`) — taxa efetiva 100% sem REPROVADO
+**Empresa de teste:** DEMO 9671efc3 Serviços (sintética)
 
 ---
 
 ## Sobre este documento
 
-Este relatório demonstra 12 funções essenciais do Facilicita.IA executando durante o teste automatizado end-to-end de 13/05/2026 — rodada R8. Diferente de versões anteriores deste relatório, **todas as funções foram exercitadas via navegação real da interface**, não por chamadas REST diretas. Cada tela mostrada foi capturada em tempo real pelo navegador Playwright no servidor, em uma sessão contínua percorrendo o ciclo completo de uma licitação.
+Este relatório demonstra 12 funções essenciais do Facilicita.IA executando durante o teste automatizado end-to-end de 13/05/2026 — rodada R9. Diferente de versões anteriores deste relatório, **todas as funções foram exercitadas via navegação real da interface**, não por chamadas REST diretas. Cada tela mostrada foi capturada em tempo real pelo navegador Playwright no servidor, em uma sessão contínua percorrendo o ciclo completo de uma licitação.
 
 ---
 
@@ -23,7 +23,7 @@ Este relatório demonstra 12 funções essenciais do Facilicita.IA executando du
 
 **Tela capturada — formulário preenchido com dados reais:**
 
-![Cadastro Empresa](screenshots_global_e2e_v2/CT-GLOBAL-FP_s1_f01_passo_03_preencher_dados_basicos_crud_after.png)
+![Cadastro Empresa](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s1_f01_passo_03_preencher_dados_basicos_crud_after.png)
 
 A tela "Novo Empresas" mostra o formulário completamente preenchido com dados da empresa sintética: CNPJ, Razão Social, Inscrição Estadual, Regime Tributário "Simples", Porte "Me", endereço estruturado (Avenida das Indústrias, 1500, Sala 203, Vila Industrial, São Paulo/SP), telefone e e-mail. Botão **Salvar** ativo.
 
@@ -41,7 +41,7 @@ A tela "Novo Empresas" mostra o formulário completamente preenchido com dados d
 
 **Tela capturada — vínculo criado e listado:**
 
-![Associar Empresa Usuário](screenshots_global_e2e_v2/CT-GLOBAL-FP_s1_f01_passo_04b_vincular_empresa_ao_user_after.png)
+![Associar Empresa Usuário](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s1_f01_passo_04b_vincular_empresa_ao_user_after.png)
 
 Tela "Associar Empresa / Usuário" com mensagem verde **"Vínculo criado e lista de empresas atualizada — sem precisar relogar!"** e tabela **Vínculos Existentes** mostrando o usuário associado com papel **operador**.
 
@@ -59,7 +59,7 @@ Tela "Associar Empresa / Usuário" com mensagem verde **"Vínculo criado e lista
 
 **Tela capturada — módulo Subclasses do Portfolio:**
 
-![Subclasses](screenshots_global_e2e_v2/CT-GLOBAL-FP_s1_f13_passo_07_navegar_subclasses_after.png)
+![Subclasses](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s1_f13_passo_07_navegar_subclasses_after.png)
 
 Menu lateral expandido (Cadastros → Portfolio → Areas / Classes / Subclasses), tela **"Subclasses de Produto"** ativa com filtros por Área e Classe.
 
@@ -77,7 +77,7 @@ Menu lateral expandido (Cadastros → Portfolio → Areas / Classes / Subclasses
 
 **Tela capturada — produto cadastrado com 24 specs extraídas:**
 
-![Cadastrar Produto IA](screenshots_global_e2e_v2/CT-GLOBAL-FP_s1_f07_passo_03_verificar_produto_na_grade_after.png)
+![Cadastrar Produto IA](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s1_f07_passo_03_verificar_produto_na_grade_after.png)
 
 Card **"Produto Cadastrado com Sucesso!"** com dados extraídos pela IA: Nome Comercial **Monitor Multiparâmetro Pro**, Fabricante Fabbrica Industrial S/A, Código GEN-2024-PRO, Categoria equipamento, Registro ANVISA 80100456192, Classe de Risco II. **24 Especificações Técnicas extraídas** listadas individualmente: Tela LCD 7" cores, RAM, Dimensões, Peso, Frequência, Consumo, Temperatura operação, etc.
 
@@ -95,7 +95,7 @@ Card **"Produto Cadastrado com Sucesso!"** com dados extraídos pela IA: Nome Co
 
 **Tela capturada — produto persistido com 24 specs detalhadas:**
 
-![Especificações Técnicas](screenshots_global_e2e_v2/CT-GLOBAL-FP_s1_f08_passo_03_validar_mascara_subclasse_after.png)
+![Especificações Técnicas](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s1_f08_passo_03_validar_mascara_subclasse_after.png)
 
 Mesmo produto, após persistência completa, com as **24 especificações listadas individualmente**: cada uma com nome (Tela, Bateria, Frequência, Consumo, Dimensões, Peso, etc) e valor. Botões Editar, Excluir, Upload, Buscar ANVISA disponíveis.
 
@@ -113,7 +113,7 @@ Mesmo produto, após persistência completa, com as **24 especificações listad
 
 **Tela capturada — busca executada com 10 editais retornados:**
 
-![Captação com Score](screenshots_global_e2e_v2/CT-GLOBAL-FP_s2_cv01_passo_03_validar_grade_resultados_after.png)
+![Captação com Score](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s2_cv01_passo_03_validar_grade_resultados_after.png)
 
 Tela **"Captação de Editais"** com atalhos de prazo (Próximos 2/5/7/10/20 dias), filtros configurados (termo `monitor multiparametrico`, UF Todas, Fonte **PNCP**, Modalidade **Pregão Eletrônico**, Score Híbrido) e **Resultados (10 editais encontrados)** em tabela com Município/UF/Objeto/Valor/Score. Primeiras linhas: MUNICIPIO DE NOVA-PA, MUNICIPIO DE VERE, etc.
 
@@ -129,7 +129,7 @@ Tela **"Captação de Editais"** com atalhos de prazo (Próximos 2/5/7/10/20 dia
 
 **Tela capturada — painel lateral de salvamento com estratégia:**
 
-![Salvar Edital](screenshots_global_e2e_v2/CT-GLOBAL-FP_s2_cv03_passo_01_clicar_salvar_alvo_after.png)
+![Salvar Edital](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s2_cv03_passo_01_clicar_salvar_alvo_after.png)
 
 Painel lateral aberto com **Definir Estratégia** (Estratégica / Defensiva / Acompanhamento / Aprendizado), Expiração de Etiqueta 7d, etiquetas (Tem Anexos, Pago Já Anteriormente, Disputa Direta), botões **Salvar Estratégia**, **Editar Validade**, **Listar PDF**, **Calcular Score**, **Anexo IA**, **+ Editar Monitoramento**.
 
@@ -145,7 +145,7 @@ Painel lateral aberto com **Definir Estratégia** (Estratégica / Defensiva / Ac
 
 **Tela capturada — score 40 + itens reais importados:**
 
-![Validação do Edital](screenshots_global_e2e_v2/CT-GLOBAL-FP_s2_cv09_passo_03_validar_itens_importados_after.png)
+![Validação do Edital](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s2_cv09_passo_03_validar_itens_importados_after.png)
 
 Tela "Validação de Editais" com edital MUNICIPIO DE VERE aberto, score **40** em badge amarelo, abas Aderência/Lotes/Documentos/Riscos/Mercado/Estratégia. **Aba Lotes** mostrando **Itens do Edital (2)**: Monitor Multiparamétrico (R$ 13.875,17) e Cadeira Odontológica (R$ 17.218,75). Descrições técnicas completas.
 
@@ -166,7 +166,7 @@ Tela "Validação de Editais" com edital MUNICIPIO DE VERE aberto, score **40** 
 
 **Tela capturada — lotes criados na Precificação (passo `p02_00_garantir_lote_expandido`):**
 
-![Precificação Lotes](screenshots_global_e2e_v2/CT-GLOBAL-FP_s3_p02_passo_00_garantir_lote_expandido_after.png)
+![Precificação Lotes](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s3_p02_passo_00_garantir_lote_expandido_after.png)
 
 Tela **Precificação** com edital **0000031/2026 — MUNICIPIO DE VERE** selecionado no dropdown, 4 abas (Lotes / Custos e Preços / Lances / Estratégia / Histórico). **Lotes (2)** criados em status `rascunho`:
 - **Lote 1** — Lote 01 — Equipamentos Médicos e Odontológicos — **R$ 24.737,92**
@@ -174,7 +174,7 @@ Tela **Precificação** com edital **0000031/2026 — MUNICIPIO DE VERE** seleci
 
 **Tela complementar — aba Custos e Preços (vinculação item ↔ produto):**
 
-![Precificação Custos](screenshots_global_e2e_v2/CT-GLOBAL-FP_s3_p04_passo_01_atualizar_custos_after.png)
+![Precificação Custos](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s3_p04_passo_01_atualizar_custos_after.png)
 
 Aba **Custos e Preços** ativa com seção **"Selecionar Item-Produto"** e dropdown "Selecione item-produto..." + mensagem orientativa "Nenhum vínculo item-produto encontrado. Vá à aba Lotes e clique no ícone para vincular produtos."
 
@@ -190,7 +190,7 @@ Aba **Custos e Preços** ativa com seção **"Selecionar Item-Produto"** e dropd
 
 **Tela capturada — tela completa de Geração de Propostas:**
 
-![Geração Proposta](screenshots_global_e2e_v2/CT-GLOBAL-FP_s3_r01_passo_01_simular_ia_after.png)
+![Geração Proposta](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s3_r01_passo_01_simular_ia_after.png)
 
 Tela **"Geração de Propostas — Criar e gerenciar propostas técnicas"** com:
 - Botões superiores: **Nova Proposta** + **Upload Proposta Externa**
@@ -210,7 +210,7 @@ Tela **"Geração de Propostas — Criar e gerenciar propostas técnicas"** com:
 
 **Tela capturada — aba Riscos com Pipeline carregado:**
 
-![Validação Legal](screenshots_global_e2e_v2/CT-GLOBAL-FP_s4_i01_passo_01_validar_legalmente_after.png)
+![Validação Legal](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s4_i01_passo_01_validar_legalmente_after.png)
 
 Tela "Validação de Editais" com edital MUNICIPIO DE VERE aberto, score 40, **aba Riscos ativa**:
 - **Pipeline de Riscos** carregado com badges (modalidade do edital identificada, prazo de pagamento, sinais de mercado)
@@ -228,7 +228,7 @@ Tela "Validação de Editais" com edital MUNICIPIO DE VERE aberto, score 40, **a
 
 **Tela capturada — módulo Impugnações e Esclarecimentos:**
 
-![Impugnação e Esclarecimentos](screenshots_global_e2e_v2/CT-GLOBAL-FP_s4_i02_passo_01_sugerir_after.png)
+![Impugnação e Esclarecimentos](screenshots_global_e2e_FINAL_R9/CT-GLOBAL-FP_s4_i02_passo_01_sugerir_after.png)
 
 Tela **"Impugnações e Esclarecimentos — Validação legal, petições e controle de prazos (UC-I01 a UC-I05)"** com:
 - 3 abas: **Validação Legal**, **Petições**, **Prazos**
@@ -261,13 +261,16 @@ Tela **"Impugnações e Esclarecimentos — Validação legal, petições e cont
 
 ---
 
-## Resultado do teste R8
+## Resultado do teste R9
 
 - **Total de passos:** 129
-- **APROVADO:** 92
-- **REPROVADO:** 1 (passo de salvamento de empresa — exceção pontual, demais 4 sub-fluxos UC-F01 todos APROVADO)
+- **APROVADO:** 93
+- **REPROVADO:** **0** ✅
 - **INCONCLUSIVO:** 36 (passos de navegação/setup sem asserts críticos — considerados "passou")
-- **Taxa efetiva:** **99.2%** (128/129)
+- **Taxa efetiva:** **100%** (129/129)
+
+> Comparativo: R7 = 99.2% (1 REPROVADO), R8 = 99.2% (1 REPROVADO de timing), **R9 = 100% sem REPROVADO** após corrigir o assert de timing do passo `s1_f01_passo_04_salvar_no_crud` (adicionado `wait 2500ms` após o click Salvar + assert DOM "botão Novo visível" complementando o assert de rede).
+
 
 ---
 
@@ -289,4 +292,4 @@ Para contexto técnico completo (jornada de 8 rodadas até atingir taxa estável
 
 ---
 
-**Documento gerado em 2026-05-13 a partir do teste R8 (`096aaf48-4ba5-44ae-935a-1bbc8de0e769`). Dados sintéticos sem PII real.**
+**Documento gerado em 2026-05-13 a partir do teste R9 (`9671efc3-4e9c-444e-8ce4-6ffd9767cab5`). Dados sintéticos sem PII real.**

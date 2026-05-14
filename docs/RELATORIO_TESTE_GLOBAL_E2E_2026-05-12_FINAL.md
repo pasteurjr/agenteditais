@@ -3,7 +3,7 @@
 **Sistema:** Facilicita.IA — Automação de Licitações Governamentais (Lei 14.133/2021)
 **Sprint testada:** Sprint 99 — Global — Fluxo End-to-End
 **Data:** 2026-05-13
-**Última rodada:** R7 (`6e880c2c-b830-4b31-a1fd-483c263832ac`) — versão FINAL
+**Última rodada:** R9 (`9671efc3-4e9c-444e-8ce4-6ffd9767cab5`) — **100% sem REPROVADO** ✅
 **Total de passos:** 129
 
 ---
@@ -13,13 +13,14 @@
 | Veredito | Quantidade | % |
 |---|---:|---:|
 | ✅ APROVADO | 93 | 72.1% |
-| ❌ REPROVADO | 1 | 0.8% |
-| ⚠ INCONCLUSIVO | 35 | 27.1% |
+| ❌ REPROVADO | **0** | **0.0%** |
+| ⚠ INCONCLUSIVO | 36 | 27.9% |
 | **TOTAL** | **129** | **100.0%** |
 
-### ✅ Taxa efetiva: **99.2%** (128 de 129 passos)
+### ✅ Taxa efetiva: **100%** (129 de 129 passos — zero REPROVADO)
 
-**Tempo total:** ~22 minutos · 10.4s por passo médio
+**Tempo total:** ~29 minutos · 13.5s por passo médio
+**Empresa de teste:** DEMO 9671efc3 Serviços (sintética, CNPJ válido gerado por ciclo)
 
 ## 2. Distribuição por Sprint
 
@@ -44,6 +45,8 @@
 | R5 | 127 | 90 | 5 | 32 | 96.1% | Encadeamento: CV07 (navegar /validacao) + CV09 (importar items) |
 | R6 | 127 | 92 | 3 | 32 | 97.6% | **+5 fontes globais SP/RJ/PR no banco** |
 | **R7** | **129** | **93** | **1** | **35** | **99.2%** | **Navegação ValidacaoPage→Documentos tab + Precificacao via sidebar** |
+| **R8** | 129 | 92 | 1 | 36 | 99.2% | Sprint 3-4 reescrita pra navegar UI (P02, P04, P05, R01, I01, I02) em vez de chamar REST |
+| **R9 ✅** | **129** | **93** | **0** | **36** | **100%** | **Wait 2500ms + assert DOM no passo Salvar empresa — elimina último falso negativo de timing** |
 
 ### 3.1 Correções R6 → R7 (que levaram a 99.2%)
 
