@@ -484,7 +484,7 @@ JSON:"""
 
     try:
         print(f"[TOOLS] Chamando IA para extrair info do produto...")
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500, model_override="deepseek-chat")
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=500, temperature=0, model_override="deepseek-chat")
         print(f"[TOOLS] Resposta da IA: {resposta[:300]}")
 
         # Extrair JSON da resposta
@@ -527,7 +527,7 @@ Retorne APENAS um array JSON. Exemplo:
 [{{"nome":"Produto A","fabricante":"X","modelo":"M1","categoria":"equipamento"}}]
 Se houver um unico produto, retorne array com 1 elemento. JSON:"""
     try:
-        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=4000, model_override="deepseek-chat")
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=4000, temperature=0, model_override="deepseek-chat")
         itens = _extrair_json_array(resposta)
         out = []
         vistos = set()

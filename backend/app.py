@@ -484,6 +484,7 @@ def detectar_intencao_ia(message: str, tem_arquivo: bool = False) -> dict:
         resposta = call_deepseek(
             [{"role": "user", "content": prompt}],
             max_tokens=150,
+            temperature=0,  # obs 7 validador V8: classificação determinística
             model_override="deepseek-chat"  # Rápido para classificação
         )
 
@@ -2153,6 +2154,27 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
     buscar_pncp = fonte_lower is None or 'pncp' in fonte_lower
     buscar_bec = fonte_lower is None or fonte_lower in ('bec', 'bec-sp', 'bec sp')
     buscar_comprasnet = fonte_lower is None or fonte_lower in ('comprasnet',)
+
+    # obs 30b validador V8: em busca geral, respeitar fontes DESATIVADAS
+    # (FonteEdital.ativo=False) — fonte desativada na UI não é consultada.
+    if fonte_lower is None:
+        try:
+            _dbf = get_db()
+            _inativas = {
+                (f.nome or '').lower().strip()
+                for f in _dbf.query(FonteEdital).filter(FonteEdital.ativo == False).all()
+            }
+            _dbf.close()
+            if any('pncp' in n for n in _inativas):
+                buscar_pncp = False
+            if any(n in ('bec', 'bec-sp', 'bec sp') for n in _inativas):
+                buscar_bec = False
+            if any(n == 'comprasnet' for n in _inativas):
+                buscar_comprasnet = False
+            if _inativas:
+                print(f"[BUSCA-MULTI] Fontes desativadas ignoradas: {_inativas}")
+        except Exception as _e:
+            print(f"[BUSCA-MULTI] erro lendo fontes ativas: {_e}")
 
     # Scraper: apenas quando busca geral ou fonte sem API própria
     if fonte_lower is None:
@@ -9878,14 +9900,14 @@ def buscar_editais_rest():
                                 res = f.result()
                                 extras = res.get("editais", [])
                                 if extras:
-                                    # Filtrar: objeto deve ter pelo menos 1 palavra do termo original
-                                    filtered = []
-                                    for e in extras:
-                                        obj_norm = _norm_termo(e.get("objeto", ""))
-                                        if any(w in obj_norm for w in termo_words):
-                                            filtered.append(e)
-                                    editais.extend(filtered)
-                                    print(f"[BUSCA] Termo extra '{futures[f]}': {len(filtered)}/{len(extras)} editais após filtro")
+                                    # obs 25 validador V8: termos CATMAT/semânticos
+                                    # AMPLIAM o leque de oportunidades. Não
+                                    # re-filtrar pelo termo digitado — o score de
+                                    # aderência (calculado adiante) classifica e o
+                                    # usuário avalia. O sistema não deve excluir
+                                    # oportunidades a priori.
+                                    editais.extend(extras)
+                                    print(f"[BUSCA] Termo extra '{futures[f]}': +{len(extras)} editais (sem re-filtro, score decide)")
                             except Exception:
                                 pass
 
