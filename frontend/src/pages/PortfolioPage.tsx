@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 import { Card, DataTable, ActionButton, FilterBar, Modal, FormField, TextInput, SelectInput, ScoreBar, StatusBadge, UploadLoteIA } from "../components/common";
 import type { Column } from "../components/common";
-import { getProdutos, getProduto, getProdutoCompletude, reprocessarMetadados, sendMessage, sendMessageWithFile, createSession } from "../api/client";
-import type { Produto, ProdutoEspecificacao, CompletudeResult } from "../api/client";
+import { getProdutos, getProduto, getProdutoCompletude, getProdutosCompletudeBatch, buscarWebEstruturado, reprocessarMetadados, sendMessage, sendMessageWithFile, createSession } from "../api/client";
+import type { Produto, ProdutoEspecificacao, CompletudeResult, BuscaWebResposta } from "../api/client";
 import { crudList, crudCreate, crudUpdate, crudDelete } from "../api/crud";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -144,6 +144,10 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [anvisaNomeProduto, setAnvisaNomeProduto] = useState("");
   const [buscaNomeProduto, setBuscaNomeProduto] = useState("");
   const [buscaFabricante, setBuscaFabricante] = useState("");
+  // obs 13 validador V8: resultados estruturados da busca web p/ o usuario escolher
+  const [buscaWebLoading, setBuscaWebLoading] = useState(false);
+  const [buscaWebResultados, setBuscaWebResultados] = useState<BuscaWebResposta | null>(null);
+  const [buscaWebSelecionados, setBuscaWebSelecionados] = useState<Set<string>>(new Set());
 
   // === SELECAO MULTIPLA & CLASSIFICACAO EM LOTE ===
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -159,6 +163,9 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [mascaraLoading, setMascaraLoading] = useState(false);
   const [mascaraLoteLoading, setMascaraLoteLoading] = useState(false);
   const [filtroSemClasse, setFiltroSemClasse] = useState(false);
+  // obs 15/16 validador V8: farol + filtro de completude na grade
+  const [completudeMap, setCompletudeMap] = useState<Record<string, number>>({});
+  const [filtroCompletude, setFiltroCompletude] = useState(""); // "", "verde", "amarelo", "vermelho"
 
   // Carregar produtos reais do backend
   const fetchProdutos = useCallback(async () => {
@@ -178,6 +185,18 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   useEffect(() => {
     fetchProdutos();
   }, [fetchProdutos]);
+
+  // obs 15/16: carrega completude de todos os produtos (farol na grade)
+  const carregarCompletude = useCallback(async () => {
+    try {
+      setCompletudeMap(await getProdutosCompletudeBatch());
+    } catch {
+      /* silencioso: grade funciona sem farol se endpoint falhar */
+    }
+  }, []);
+  useEffect(() => {
+    if (produtos.length > 0) carregarCompletude();
+  }, [produtos.length, carregarCompletude]);
 
   // Carregar hierarquia Area → Classe → Subclasse do backend
   useEffect(() => {
@@ -254,6 +273,13 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
     }
     // Filtro "Sem Classe"
     if (filtroSemClasse && p.subclasse_id) return false;
+    // obs 16: filtro por faixa de completude
+    if (filtroCompletude) {
+      const pct = completudeMap[p.id];
+      if (pct == null) return false;
+      const faixa = pct >= 90 ? "verde" : pct >= 50 ? "amarelo" : "vermelho";
+      if (faixa !== filtroCompletude) return false;
+    }
     // Filtro por subclasse
     if (filtroSubclasse && p.subclasse_id !== filtroSubclasse) return false;
     // Filtro por classe (via subclasse do produto)
@@ -575,30 +601,57 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   };
 
   // Busca Web — chama API direto e mostra resposta inline
+  // obs 13 validador V8: busca estruturada, mostra resultados p/ o usuario
+  // escolher — NAO cadastra automaticamente.
   const handleBuscaWebConfirm = async () => {
     if (!buscaNomeProduto) return;
-    // obs 13 validador V8: NAO cadastrar automaticamente. Pedir apenas para
-    // LISTAR fontes/manuais encontrados; o usuario decide o que incorporar
-    // (enviando a URL no chat). Antes o prompt dizia "e cadastre", induzindo
-    // cadastro automatico — contra o que o validador pediu.
-    const msg = buscaFabricante
-      ? `Busque na web o manual e as fontes do produto ${buscaNomeProduto} do fabricante ${buscaFabricante}. Liste os links e documentos encontrados para eu escolher — NAO cadastre nada automaticamente.`
-      : `Busque na web o manual e as fontes do produto ${buscaNomeProduto}. Liste os links e documentos encontrados para eu escolher — NAO cadastre nada automaticamente.`;
+    setBuscaWebLoading(true);
+    setBuscaWebResultados(null);
+    setBuscaWebSelecionados(new Set());
+    try {
+      const r = await buscarWebEstruturado(buscaNomeProduto, buscaFabricante);
+      setBuscaWebResultados(r);
+    } catch (err) {
+      console.error("[BuscaWeb] Erro:", err);
+      setBuscaWebResultados({ termo: buscaNomeProduto, pdfs: [], outros: [], total: 0 });
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca web"}`);
+    } finally {
+      setBuscaWebLoading(false);
+    }
+  };
+
+  const toggleBuscaWebItem = (link: string) => {
+    setBuscaWebSelecionados(prev => {
+      const n = new Set(prev);
+      if (n.has(link)) n.delete(link); else n.add(link);
+      return n;
+    });
+  };
+
+  // Incorpora SOMENTE os itens marcados pelo usuario (envia URLs ao chat
+  // para download+cadastro — acao explicita, nao automatica).
+  const handleIncorporarSelecionados = async () => {
+    const urls = Array.from(buscaWebSelecionados);
+    if (urls.length === 0) return;
     setShowBuscaWebModal(false);
-    setProcessingMessage("Buscando na web...");
+    setBuscaWebResultados(null);
+    setProcessingMessage(`Incorporando ${urls.length} documento(s) selecionado(s)...`);
     setIaResponse(null);
     try {
       const session = await createSession("busca-web");
-      const resp = await sendMessage(session.session_id, msg);
+      for (const url of urls) {
+        await sendMessage(session.session_id, `Baixe o arquivo da URL: ${url} e cadastre o produto`);
+      }
       setProcessingMessage(null);
-      setIaResponse(resp.response || "Busca web concluida. Revise os resultados acima e envie a URL desejada no chat para incorporar.");
+      setIaResponse(`✓ ${urls.length} documento(s) processado(s). Verifique os produtos na grade.`);
       setBuscaNomeProduto("");
       setBuscaFabricante("");
+      setBuscaWebSelecionados(new Set());
       fetchProdutos();
     } catch (err) {
-      console.error("[BuscaWeb] Erro:", err);
+      console.error("[BuscaWeb] Erro incorporar:", err);
       setProcessingMessage(null);
-      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha na busca web"}`);
+      setIaResponse(`Erro: ${err instanceof Error ? err.message : "Falha ao incorporar"}`);
     }
   };
 
@@ -858,7 +911,17 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
           <button title="Editar" onClick={(e) => { e.stopPropagation(); handleEditarAbrir(p); }}><Edit2 size={18} /></button>
           <button title="Aplicar Mascara" onClick={(e) => { e.stopPropagation(); handleAplicarMascara(p.id); }} style={{ color: "#8b5cf6" }}><Layers size={18} /></button>
           <button title="Reprocessar IA" onClick={(e) => { e.stopPropagation(); handleReprocessar(p); }}><RefreshCw size={18} /></button>
-          <button title="Verificar Completude" onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }}><Search size={18} /></button>
+          {(() => {
+            // obs 15 validador V8: farol de completude na lupa
+            const pct = completudeMap[p.id];
+            const cor = pct == null ? undefined : pct >= 90 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+            const tit = pct == null ? "Verificar Completude" : `Completude: ${pct}% — clique para detalhes`;
+            return (
+              <button title={tit} onClick={(e) => { e.stopPropagation(); handleVerificarCompletude(p); }} style={cor ? { color: cor } : undefined}>
+                <Search size={18} />
+              </button>
+            );
+          })()}
           <button title="Excluir" className="danger" onClick={(e) => { e.stopPropagation(); handleExcluir(p); }}><Trash2 size={18} /></button>
         </div>
       ),
@@ -1027,6 +1090,23 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                   fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
                   color: filtroSemClasse ? "#b45309" : "var(--text-secondary)", whiteSpace: "nowrap",
                 }}>Sem Classe</label>
+              </div>
+              {/* obs 16 validador V8: filtro por nivel de completude */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label htmlFor="filtroCompletude" style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                  Completude:
+                </label>
+                <select
+                  id="filtroCompletude"
+                  value={filtroCompletude}
+                  onChange={(e) => setFiltroCompletude(e.target.value)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <option value="">Todas</option>
+                  <option value="verde">🟢 Completo (≥90%)</option>
+                  <option value="amarelo">🟡 Parcial (50-89%)</option>
+                  <option value="vermelho">🔴 Incompleto (&lt;50%)</option>
+                </select>
               </div>
             </div>
 
@@ -1969,27 +2049,64 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
         </FormField>
       </Modal>
 
-      {/* === MODAL BUSCA WEB === */}
+      {/* === MODAL BUSCA WEB (obs 13: usuario escolhe o que incorporar) === */}
       <Modal
         isOpen={showBuscaWebModal}
-        onClose={() => { setShowBuscaWebModal(false); setBuscaNomeProduto(""); setBuscaFabricante(""); }}
+        onClose={() => { setShowBuscaWebModal(false); setBuscaNomeProduto(""); setBuscaFabricante(""); setBuscaWebResultados(null); setBuscaWebSelecionados(new Set()); }}
         title="Buscar Produto na Web"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setShowBuscaWebModal(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleBuscaWebConfirm} disabled={!buscaNomeProduto}>
-              <Globe size={14} /> Buscar via IA
-            </button>
+            <button className="btn btn-secondary" onClick={() => { setShowBuscaWebModal(false); setBuscaWebResultados(null); }}>Cancelar</button>
+            {!buscaWebResultados ? (
+              <button className="btn btn-primary" onClick={handleBuscaWebConfirm} disabled={!buscaNomeProduto || buscaWebLoading}>
+                <Globe size={14} /> {buscaWebLoading ? "Buscando..." : "Buscar"}
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={handleIncorporarSelecionados} disabled={buscaWebSelecionados.size === 0}>
+                Incorporar selecionados ({buscaWebSelecionados.size})
+              </button>
+            )}
           </>
         }
       >
-        <p className="modal-info">A IA busca informacoes do produto na web e cadastra automaticamente.</p>
-        <FormField label="Nome do Produto" required>
-          <TextInput value={buscaNomeProduto} onChange={setBuscaNomeProduto} placeholder="Ex: Microscopio Optico Olympus CX23" />
-        </FormField>
-        <FormField label="Fabricante (opcional)">
-          <TextInput value={buscaFabricante} onChange={setBuscaFabricante} placeholder="Ex: Olympus" />
-        </FormField>
+        {!buscaWebResultados ? (
+          <>
+            <p className="modal-info">A busca traz os documentos/manuais encontrados na web. <strong>Nada e cadastrado automaticamente</strong> — voce escolhe o que incorporar.</p>
+            <FormField label="Nome do Produto" required>
+              <TextInput value={buscaNomeProduto} onChange={setBuscaNomeProduto} placeholder="Ex: Microscopio Optico Olympus CX23" />
+            </FormField>
+            <FormField label="Fabricante (opcional)">
+              <TextInput value={buscaFabricante} onChange={setBuscaFabricante} placeholder="Ex: Olympus" />
+            </FormField>
+          </>
+        ) : (
+          <>
+            <p className="modal-info">
+              {buscaWebResultados.total} resultado(s) para <strong>{buscaWebResultados.termo}</strong>. Marque os documentos a incorporar.
+            </p>
+            {[...buscaWebResultados.pdfs, ...buscaWebResultados.outros].length === 0 && (
+              <div className="no-specs"><AlertCircle size={16} /><span>Nenhum resultado encontrado. Tente refinar o nome/fabricante.</span></div>
+            )}
+            <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+              {[...buscaWebResultados.pdfs.map(p => ({ ...p, _pdf: true })), ...buscaWebResultados.outros.map(p => ({ ...p, _pdf: false }))].map((r) => (
+                <label key={r.link} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: 10, border: "1px solid var(--border-primary)", borderRadius: 8, cursor: "pointer", background: buscaWebSelecionados.has(r.link) ? "var(--bg-secondary)" : undefined }}>
+                  <input type="checkbox" checked={buscaWebSelecionados.has(r.link)} onChange={() => toggleBuscaWebItem(r.link)} style={{ marginTop: 3, cursor: "pointer" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>
+                      {r._pdf && <span className="ia-badge" style={{ fontSize: 10, marginRight: 6 }}>PDF</span>}
+                      {r.titulo || r.link}
+                    </div>
+                    {r.descricao && <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: 2 }}>{r.descricao.slice(0, 160)}</div>}
+                    <div style={{ fontSize: "0.72rem", color: "var(--accent-primary)", marginTop: 2, wordBreak: "break-all" }}>{r.link}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <button className="btn btn-secondary" style={{ marginTop: 10 }} onClick={() => { setBuscaWebResultados(null); setBuscaWebSelecionados(new Set()); }}>
+              ← Nova busca
+            </button>
+          </>
+        )}
       </Modal>
 
       {/* === MODAL CLASSIFICAR SELECIONADOS === */}

@@ -331,6 +331,43 @@ export async function getProdutoCompletude(produtoId: string): Promise<Completud
   return res.json();
 }
 
+// obs 15/16 validador V8: farol+filtro de completude na grade
+export async function getProdutosCompletudeBatch(): Promise<Record<string, number>> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/produtos/completude-batch`, { headers });
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) throw new Error("Erro ao carregar completude");
+  const data = await res.json();
+  return data.completude || {};
+}
+
+// obs 13 validador V8: busca web estruturada (usuário escolhe o que incorporar)
+export interface BuscaWebResultado {
+  titulo: string;
+  link: string;
+  descricao?: string;
+}
+export interface BuscaWebResposta {
+  termo: string;
+  pdfs: BuscaWebResultado[];
+  outros: BuscaWebResultado[];
+  total: number;
+}
+export async function buscarWebEstruturado(nome: string, fabricante?: string): Promise<BuscaWebResposta> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/produtos/buscar-web`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ nome, fabricante: fabricante || "" }),
+  });
+  if (res.status === 401) throw new Error("Não autenticado");
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error || "Erro na busca web");
+  }
+  return res.json();
+}
+
 // =============================================================================
 // Editais
 // =============================================================================

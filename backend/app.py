@@ -8478,6 +8478,54 @@ def get_produto_completude(produto_id):
     return jsonify(resultado)
 
 
+@app.route("/api/produtos/completude-batch", methods=["GET"])
+@require_auth
+def get_produtos_completude_batch():
+    """obs 15/16 validador V8: farol+filtro de completude na grade.
+    Retorna {produto_id: percentual_geral} para todos os produtos da empresa."""
+    from tools import tool_verificar_completude_produto
+    user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
+    db = get_db()
+    try:
+        ids = [p.id for p in db.query(Produto).filter(Produto.empresa_id == empresa_id).all()]
+    finally:
+        db.close()
+    out = {}
+    for pid in ids:
+        try:
+            r = tool_verificar_completude_produto(produto_id=pid, user_id=user_id)
+            if r.get("success"):
+                out[pid] = r.get("completude", {}).get("percentual_geral", 0)
+        except Exception as e:
+            print(f"[COMPLETUDE-BATCH] erro {pid}: {e}")
+    return jsonify({"completude": out})
+
+
+@app.route("/api/produtos/buscar-web", methods=["POST"])
+@require_auth
+def buscar_web_estruturado():
+    """obs 13 validador V8: retorna resultados ESTRUTURADOS da busca web para
+    o usuario escolher o que incorporar — NAO cadastra nada automaticamente."""
+    from tools import tool_web_search
+    user_id = get_current_user_id()
+    data = request.get_json(silent=True) or {}
+    nome = (data.get("nome") or "").strip()
+    fabricante = (data.get("fabricante") or "").strip()
+    if not nome:
+        return jsonify({"error": "Informe o nome do produto"}), 400
+    termo = f"manual datasheet {nome} {fabricante}".strip()
+    resultado = tool_web_search(termo, user_id)
+    if not resultado.get("success"):
+        return jsonify({"error": resultado.get("error", "Falha na busca")}), 502
+    return jsonify({
+        "termo": termo,
+        "pdfs": resultado.get("resultados_pdf", []),
+        "outros": resultado.get("outros_resultados", []),
+        "total": resultado.get("total_resultados", 0),
+    })
+
+
 # =============================================================================
 # Editais Routes
 # =============================================================================
