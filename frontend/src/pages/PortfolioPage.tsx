@@ -81,6 +81,13 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [reprocessandoMeta, setReprocessandoMeta] = useState(false);
   const [showMetadados, setShowMetadados] = useState(false);
+  // UC-F12 V8 — edicao manual de metadados de captacao
+  const [editingMetadados, setEditingMetadados] = useState(false);
+  const [editCatmat, setEditCatmat] = useState<string>("");
+  const [editCatser, setEditCatser] = useState<string>("");
+  const [editTermos, setEditTermos] = useState<string>("");
+  const [savingMetadados, setSavingMetadados] = useState(false);
+  const [metadadosMsg, setMetadadosMsg] = useState<string | null>(null);
   const detalheRef = useRef<HTMLDivElement>(null);
 
   // === CADASTRO POR IA (upload) ===
@@ -334,6 +341,47 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       console.error("Erro ao reprocessar metadados:", err);
     } finally {
       setReprocessandoMeta(false);
+    }
+  };
+
+  // UC-F12 V8 — abre modo de edicao copiando valores atuais para os inputs
+  const handleAbrirEdicaoMetadados = () => {
+    const d = selectedProdutoFull;
+    if (!d) return;
+    setEditCatmat((d.catmat_codigos || []).join(", "));
+    setEditCatser((d.catser_codigos || []).join(", "));
+    setEditTermos((d.termos_busca || []).join(", "));
+    setMetadadosMsg(null);
+    setEditingMetadados(true);
+  };
+
+  const handleCancelarEdicaoMetadados = () => {
+    setEditingMetadados(false);
+    setMetadadosMsg(null);
+  };
+
+  // UC-F12 V8 — salva metadados manualmente via PUT /api/crud/produtos/<id>
+  const handleSalvarMetadados = async (produtoId: string) => {
+    setSavingMetadados(true);
+    setMetadadosMsg(null);
+    try {
+      const splitCsv = (s: string) => s.split(",").map(t => t.trim()).filter(t => t.length > 0);
+      const payload = {
+        catmat_codigos: splitCsv(editCatmat),
+        catser_codigos: splitCsv(editCatser),
+        termos_busca: splitCsv(editTermos),
+      };
+      await crudUpdate("produtos", produtoId, payload);
+      const updated = await getProduto(produtoId);
+      setSelectedProdutoFull(updated);
+      setEditingMetadados(false);
+      setMetadadosMsg("✓ Metadados salvos com sucesso");
+      setTimeout(() => setMetadadosMsg(null), 3000);
+    } catch (err: unknown) {
+      console.error("Erro ao salvar metadados:", err);
+      setMetadadosMsg(`✗ Erro: ${err instanceof Error ? err.message : "Falha ao salvar"}`);
+    } finally {
+      setSavingMetadados(false);
     }
   };
 
@@ -1085,21 +1133,60 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                       </h4>
                       {showMetadados && (
                         <div className="metadados-content" style={{ marginTop: 8 }}>
+                          {/* UC-F12 V8 — toggle modo edicao */}
+                          {!editingMetadados ? (
+                            <div style={{ marginBottom: 10 }}>
+                              <button
+                                onClick={handleAbrirEdicaoMetadados}
+                                style={{
+                                  padding: "4px 12px", fontSize: 11,
+                                  background: "#0f3460", color: "#fff", border: "1px solid #1e4a72",
+                                  borderRadius: 4, cursor: "pointer"
+                                }}
+                              >
+                                ✏ Editar metadados manualmente
+                              </button>
+                              <span style={{ marginLeft: 10, fontSize: 11, color: "#777" }}>
+                                ou clique &quot;Reprocessar Metadados&quot; abaixo para regenerar via IA
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ marginBottom: 10, padding: 8, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, fontSize: 11, color: "#5d4037" }}>
+                              <strong>Modo edição manual</strong> — separe múltiplos valores por vírgula. Salvar substitui os valores da IA.
+                            </div>
+                          )}
+                          {metadadosMsg && (
+                            <div style={{ marginBottom: 10, padding: 6, fontSize: 12,
+                              background: metadadosMsg.startsWith("✓") ? "#e8f5e9" : "#ffebee",
+                              color: metadadosMsg.startsWith("✓") ? "#2e7d32" : "#c62828",
+                              borderRadius: 4 }}>{metadadosMsg}</div>
+                          )}
+
                           {/* CATMAT */}
                           <div className="info-group">
                             <label>Codigos CATMAT</label>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                              {(detalhe.catmat_codigos && detalhe.catmat_codigos.length > 0)
-                                ? detalhe.catmat_codigos.map((c: string, i: number) => (
-                                    <span key={i} className="ia-badge" style={{ fontSize: 11 }} title={detalhe.catmat_descricoes?.[i] || ""}>{c}</span>
-                                  ))
-                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATMAT</span>
-                              }
-                            </div>
+                            {editingMetadados ? (
+                              <input
+                                type="text"
+                                value={editCatmat}
+                                onChange={(e) => setEditCatmat(e.target.value)}
+                                placeholder="ex: 495268, 495269"
+                                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid #ccc", borderRadius: 4 }}
+                              />
+                            ) : (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {(detalhe.catmat_codigos && detalhe.catmat_codigos.length > 0)
+                                  ? detalhe.catmat_codigos.map((c: string, i: number) => (
+                                      <span key={i} className="ia-badge" style={{ fontSize: 11 }} title={detalhe.catmat_descricoes?.[i] || ""}>{c}</span>
+                                    ))
+                                  : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATMAT</span>
+                                }
+                              </div>
+                            )}
                           </div>
 
-                          {/* Descrições CATMAT */}
-                          {detalhe.catmat_descricoes && detalhe.catmat_descricoes.length > 0 && (
+                          {/* Descrições CATMAT (sempre read-only — descrições vêm da API SIASG) */}
+                          {!editingMetadados && detalhe.catmat_descricoes && detalhe.catmat_descricoes.length > 0 && (
                             <div className="info-group" style={{ marginTop: 8 }}>
                               <label>Descricoes CATMAT</label>
                               <div style={{ fontSize: 12, color: "#666" }}>
@@ -1113,31 +1200,79 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                           {/* CATSER */}
                           <div className="info-group" style={{ marginTop: 8 }}>
                             <label>Codigos CATSER</label>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                              {(detalhe.catser_codigos && detalhe.catser_codigos.length > 0)
-                                ? detalhe.catser_codigos.map((c: string, i: number) => (
-                                    <span key={i} className="ia-badge" style={{ fontSize: 11 }}>{c}</span>
-                                  ))
-                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATSER</span>
-                              }
-                            </div>
+                            {editingMetadados ? (
+                              <input
+                                type="text"
+                                value={editCatser}
+                                onChange={(e) => setEditCatser(e.target.value)}
+                                placeholder="ex: 27502, 27510"
+                                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid #ccc", borderRadius: 4 }}
+                              />
+                            ) : (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {(detalhe.catser_codigos && detalhe.catser_codigos.length > 0)
+                                  ? detalhe.catser_codigos.map((c: string, i: number) => (
+                                      <span key={i} className="ia-badge" style={{ fontSize: 11 }}>{c}</span>
+                                    ))
+                                  : <span style={{ color: "#999", fontSize: 12 }}>Nenhum codigo CATSER</span>
+                                }
+                              </div>
+                            )}
                           </div>
 
                           {/* Termos de Busca */}
                           <div className="info-group" style={{ marginTop: 8 }}>
                             <label>Termos de Busca Semanticos</label>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                              {(detalhe.termos_busca && detalhe.termos_busca.length > 0)
-                                ? detalhe.termos_busca.map((t: string, i: number) => (
-                                    <span key={i} style={{
-                                      background: "#e8f5e9", color: "#2e7d32", padding: "2px 8px",
-                                      borderRadius: 12, fontSize: 11, border: "1px solid #c8e6c9"
-                                    }}>{t}</span>
-                                  ))
-                                : <span style={{ color: "#999", fontSize: 12 }}>Nenhum termo gerado</span>
-                              }
-                            </div>
+                            {editingMetadados ? (
+                              <input
+                                type="text"
+                                value={editTermos}
+                                onChange={(e) => setEditTermos(e.target.value)}
+                                placeholder="ex: hemograma, hematologia, CBC"
+                                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid #ccc", borderRadius: 4 }}
+                              />
+                            ) : (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {(detalhe.termos_busca && detalhe.termos_busca.length > 0)
+                                  ? detalhe.termos_busca.map((t: string, i: number) => (
+                                      <span key={i} style={{
+                                        background: "#e8f5e9", color: "#2e7d32", padding: "2px 8px",
+                                        borderRadius: 12, fontSize: 11, border: "1px solid #c8e6c9"
+                                      }}>{t}</span>
+                                    ))
+                                  : <span style={{ color: "#999", fontSize: 12 }}>Nenhum termo gerado</span>
+                                }
+                              </div>
+                            )}
                           </div>
+
+                          {/* UC-F12 V8 — botoes Salvar/Cancelar quando em edicao */}
+                          {editingMetadados && (
+                            <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                              <button
+                                onClick={() => handleSalvarMetadados(detalhe.id)}
+                                disabled={savingMetadados}
+                                style={{
+                                  padding: "6px 16px", fontSize: 12,
+                                  background: "#2e7d32", color: "#fff", border: "none",
+                                  borderRadius: 4, cursor: savingMetadados ? "not-allowed" : "pointer", opacity: savingMetadados ? 0.6 : 1
+                                }}
+                              >
+                                {savingMetadados ? "Salvando..." : "✓ Salvar metadados"}
+                              </button>
+                              <button
+                                onClick={handleCancelarEdicaoMetadados}
+                                disabled={savingMetadados}
+                                style={{
+                                  padding: "6px 16px", fontSize: 12,
+                                  background: "#fff", color: "#666", border: "1px solid #ccc",
+                                  borderRadius: 4, cursor: "pointer"
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          )}
 
                           {/* Última atualização */}
                           <div className="info-group" style={{ marginTop: 8 }}>
