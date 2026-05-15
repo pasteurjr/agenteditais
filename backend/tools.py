@@ -507,6 +507,51 @@ JSON:"""
     return {"nome": "Produto", "fabricante": None, "modelo": None, "categoria": "equipamento"}
 
 
+def _extrair_lista_produtos(texto: str) -> List[Dict[str, Any]]:
+    """
+    Para NF / plano de contas (obs 5/8 validador V8): extrai a LISTA de
+    produtos do documento, nao apenas o primeiro. Retorna [] se nao
+    identificar multiplos itens (caller faz fallback mono-produto).
+    """
+    prompt = f"""O texto abaixo foi extraido de uma nota fiscal ou plano de contas (ERP).
+Liste TODOS os produtos/itens distintos presentes. Para cada item identifique:
+- nome (descricao do produto)
+- fabricante (se houver, senao null)
+- modelo (se houver, senao null)
+- categoria: equipamento, reagente, insumo_hospitalar, insumo_laboratorial, informatica, redes, mobiliario, eletronico ou outro
+
+TEXTO:
+{texto[:15000]}
+
+Retorne APENAS um array JSON. Exemplo:
+[{{"nome":"Produto A","fabricante":"X","modelo":"M1","categoria":"equipamento"}}]
+Se houver um unico produto, retorne array com 1 elemento. JSON:"""
+    try:
+        resposta = call_deepseek([{"role": "user", "content": prompt}], max_tokens=4000, model_override="deepseek-chat")
+        itens = _extrair_json_array(resposta)
+        out = []
+        vistos = set()
+        for it in itens or []:
+            nome = (it.get("nome") or "").strip()
+            if not nome or nome.lower() in ("produto", "produtos", "n/a"):
+                continue
+            chave = nome.lower()
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            cat = it.get("categoria") or "equipamento"
+            out.append({
+                "nome": nome,
+                "fabricante": it.get("fabricante"),
+                "modelo": it.get("modelo"),
+                "categoria": cat,
+            })
+        return out
+    except Exception as e:
+        print(f"[TOOLS] _extrair_lista_produtos erro: {e}")
+        return []
+
+
 # ==================== TOOLS ====================
 
 def tool_web_search(query: str, user_id: str, num_results: int = 10) -> Dict[str, Any]:
@@ -1057,6 +1102,58 @@ def _extrair_texto_por_paginas(filepath: str) -> List[Dict[str, Any]]:
     return paginas
 
 
+def _extrair_texto_de_arquivo(filepath: str) -> List[Dict[str, Any]]:
+    """
+    Extrai texto de PDF, CSV, XLSX/XLS ou DOCX (obs 4 validador V8: antes so
+    PDF; CSV/XLSX davam erro mesmo com o accept prometendo esses formatos).
+    Retorna a mesma estrutura de _extrair_texto_por_paginas (lista de
+    {pagina, texto, chars}) para reaproveitar todo o pipeline a jusante.
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == ".pdf":
+        return _extrair_texto_por_paginas(filepath)
+
+    if ext in (".csv", ".xlsx", ".xls"):
+        import pandas as _pd
+        try:
+            if ext == ".csv":
+                # tenta separadores comuns de ERP brasileiro
+                try:
+                    df = _pd.read_csv(filepath, sep=None, engine="python", dtype=str)
+                except Exception:
+                    df = _pd.read_csv(filepath, sep=";", dtype=str)
+            else:
+                df = _pd.read_excel(filepath, dtype=str)
+        except Exception as e:
+            print(f"[TOOLS] Erro lendo planilha {ext}: {e}")
+            return []
+        df = df.fillna("")
+        # Cada linha = um "registro"; texto tabular legivel pela IA
+        cabecalho = " | ".join(str(c) for c in df.columns)
+        linhas = []
+        for _, row in df.iterrows():
+            linhas.append(" | ".join(str(v) for v in row.values))
+        texto = cabecalho + "\n" + "\n".join(linhas)
+        return [{"pagina": 1, "texto": texto, "chars": len(texto), "linhas_tabela": len(df)}]
+
+    if ext in (".docx", ".doc"):
+        try:
+            import docx as _docx
+            d = _docx.Document(filepath)
+            partes = [p.text for p in d.paragraphs if p.text.strip()]
+            for tbl in d.tables:
+                for r in tbl.rows:
+                    partes.append(" | ".join(c.text.strip() for c in r.cells))
+            texto = "\n".join(partes)
+            return [{"pagina": 1, "texto": texto, "chars": len(texto)}]
+        except Exception as e:
+            print(f"[TOOLS] Erro lendo {ext}: {e}")
+            return []
+
+    print(f"[TOOLS] Formato nao suportado: {ext}")
+    return []
+
+
 def _encontrar_paginas_specs(paginas: List[Dict[str, Any]]) -> str:
     """
     Busca inteligentemente as páginas que contêm especificações técnicas.
@@ -1164,15 +1261,77 @@ def tool_processar_upload(filepath: str, user_id: str, empresa_id: str = None, n
     """
     db = get_db()
     try:
-        # 1. Extrair texto do PDF página por página
-        print(f"[TOOLS] Extraindo texto do PDF: {filepath}")
-        paginas = _extrair_texto_por_paginas(filepath)
+        # 1. Extrair texto do arquivo (PDF/CSV/XLSX/DOCX — obs 4 validador V8)
+        print(f"[TOOLS] Extraindo texto de: {filepath}")
+        paginas = _extrair_texto_de_arquivo(filepath)
         texto_completo = "\n".join([p["texto"] for p in paginas])
 
         if not texto_completo.strip():
-            return {"success": False, "error": "Não foi possível extrair texto do PDF"}
+            _ext = os.path.splitext(filepath)[1].lower()
+            return {"success": False, "error": f"Não foi possível extrair texto do arquivo ({_ext or 'sem extensão'}). Formatos suportados: PDF, CSV, XLSX, XLS, DOCX."}
 
-        print(f"[TOOLS] PDF: {len(paginas)} páginas, {len(texto_completo)} caracteres")
+        print(f"[TOOLS] Arquivo: {len(paginas)} bloco(s), {len(texto_completo)} caracteres")
+
+        # === MULTI-ITEM (obs 5/8 validador V8): NF / plano de contas com varios
+        # produtos devem gerar N cadastros, nao so o primeiro. So entra nesse
+        # modo quando o usuario NAO forcou um nome_produto especifico e o
+        # documento aparenta ser multi-item (tabela com >1 linha OU nome de
+        # arquivo sugere nota fiscal / plano de contas). PDF de manual unico
+        # segue o fluxo mono-produto original intacto. ===
+        _fname = os.path.basename(filepath).lower()
+        _linhas_tab = sum(int(p.get("linhas_tabela") or 0) for p in paginas)
+        _sugere_multi = (_linhas_tab > 1) or any(
+            k in _fname for k in ("nota", "nfe", "nfs", "nf_", "plano", "conta", "erp", "cadastro")
+        )
+        if (not nome_produto or not nome_produto.strip()) and _sugere_multi:
+            lista = _extrair_lista_produtos(texto_completo)
+            if len(lista) > 1:
+                print(f"[TOOLS] Multi-item detectado: {len(lista)} produtos no documento")
+                criados, pulados = [], []
+                # nomes ja existentes p/ dedupe (normalizado)
+                import unicodedata as _ud2
+                def _nz(t):
+                    return ' '.join(_ud2.normalize('NFKD', (t or '').lower()).encode('ASCII', 'ignore').decode('ASCII').split())
+                existentes = { _nz(p.nome) for p in db.query(Produto).filter(Produto.empresa_id == empresa_id).all() }
+                for item in lista:
+                    nz = _nz(item["nome"])
+                    if nz in existentes:
+                        pulados.append({"nome": item["nome"], "motivo": "ja cadastrado"})
+                        continue
+                    cat = item.get("categoria") or "equipamento"
+                    if cat not in ('equipamento','reagente','insumo_hospitalar','insumo_laboratorial',
+                                   'informatica','redes','mobiliario','eletronico','outro'):
+                        cat = "equipamento"
+                    prod = Produto(
+                        user_id=user_id, empresa_id=empresa_id,
+                        nome=item["nome"], categoria=cat,
+                        fabricante=item.get("fabricante"), modelo=item.get("modelo"),
+                    )
+                    db.add(prod)
+                    db.flush()
+                    existentes.add(nz)
+                    criados.append({"id": prod.id, "nome": prod.nome})
+                    # metadados em background por produto
+                    try:
+                        import threading as _th
+                        _pid = prod.id
+                        _th.Thread(target=lambda pid=_pid: processar_metadados_produto(pid),
+                                   daemon=True, name=f"metadados-{_pid}").start()
+                    except Exception as _e:
+                        print(f"[TOOLS] bg metadados multi {_e}")
+                db.commit()
+                print(f"[TOOLS] Multi-item: {len(criados)} criados, {len(pulados)} pulados")
+                return {
+                    "success": True,
+                    "multi_item": True,
+                    "total_documento": len(lista),
+                    "produtos_criados": len(criados),
+                    "produtos_pulados": len(pulados),
+                    "criados": criados,
+                    "pulados": pulados,
+                    "nome": f"{len(criados)} produtos importados",
+                }
+            # len(lista) <= 1: cai no fluxo mono-produto abaixo
 
         # 2. Se não tem nome do produto, extrair automaticamente via IA
         if not nome_produto or nome_produto.strip() == "":

@@ -88,6 +88,12 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const [editTermos, setEditTermos] = useState<string>("");
   const [savingMetadados, setSavingMetadados] = useState(false);
   const [metadadosMsg, setMetadadosMsg] = useState<string | null>(null);
+  // obs 12 validador V8 — adicionar especificacao manual ao produto cadastrado
+  const [novaSpecNome, setNovaSpecNome] = useState("");
+  const [novaSpecValor, setNovaSpecValor] = useState("");
+  const [novaSpecUnidade, setNovaSpecUnidade] = useState("");
+  const [salvandoSpec, setSalvandoSpec] = useState(false);
+  const [specMsg, setSpecMsg] = useState<string | null>(null);
   const detalheRef = useRef<HTMLDivElement>(null);
 
   // === CADASTRO POR IA (upload) ===
@@ -384,6 +390,36 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       setMetadadosMsg(`✗ Erro: ${err instanceof Error ? err.message : "Falha ao salvar"}`);
     } finally {
       setSavingMetadados(false);
+    }
+  };
+
+  // obs 12 validador V8 — cria especificacao manual no produto ja cadastrado
+  const handleAdicionarSpec = async (produtoId: string) => {
+    const nome = novaSpecNome.trim();
+    const valor = novaSpecValor.trim();
+    if (!nome || !valor) {
+      setSpecMsg("✗ Informe nome e valor da especificacao");
+      return;
+    }
+    setSalvandoSpec(true);
+    setSpecMsg(null);
+    try {
+      await crudCreate("produtos-especificacoes", {
+        produto_id: produtoId,
+        nome_especificacao: nome,
+        valor,
+        unidade: novaSpecUnidade.trim() || null,
+      });
+      const updated = await getProduto(produtoId);
+      setSelectedProdutoFull(updated);
+      setNovaSpecNome(""); setNovaSpecValor(""); setNovaSpecUnidade("");
+      setSpecMsg("✓ Especificacao adicionada");
+      setTimeout(() => setSpecMsg(null), 3000);
+    } catch (err: unknown) {
+      console.error("Erro ao adicionar especificacao:", err);
+      setSpecMsg(`✗ Erro: ${err instanceof Error ? err.message : "Falha ao adicionar"}`);
+    } finally {
+      setSalvandoSpec(false);
     }
   };
 
@@ -1124,9 +1160,46 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                     {(!detalhe.especificacoes || detalhe.especificacoes.length === 0) && (
                       <div className="no-specs">
                         <AlertCircle size={16} />
-                        <span>Nenhuma especificacao extraida. Use "Reprocessar IA" para extrair.</span>
+                        <span>Nenhuma especificacao extraida. Use "Reprocessar IA" para extrair ou adicione manualmente abaixo.</span>
                       </div>
                     )}
+
+                    {/* obs 12 validador V8 — adicionar especificacao manual ao produto */}
+                    <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border-primary)", borderRadius: 8 }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>
+                        Adicionar especificacao manualmente
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                        <div style={{ flex: 2, minWidth: 160 }}>
+                          <FormField label="Especificacao">
+                            <TextInput value={novaSpecNome} onChange={setNovaSpecNome} placeholder="Ex: Tensao de operacao" />
+                          </FormField>
+                        </div>
+                        <div style={{ flex: 2, minWidth: 140 }}>
+                          <FormField label="Valor">
+                            <TextInput value={novaSpecValor} onChange={setNovaSpecValor} placeholder="Ex: 100-240" />
+                          </FormField>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 90 }}>
+                          <FormField label="Unidade">
+                            <TextInput value={novaSpecUnidade} onChange={setNovaSpecUnidade} placeholder="V" />
+                          </FormField>
+                        </div>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleAdicionarSpec(detalhe.id)}
+                          disabled={salvandoSpec || !novaSpecNome.trim() || !novaSpecValor.trim()}
+                          style={{ marginBottom: 2 }}
+                        >
+                          {salvandoSpec ? "Salvando..." : "+ Adicionar"}
+                        </button>
+                      </div>
+                      {specMsg && (
+                        <div style={{ marginTop: 6, fontSize: "0.8rem", color: specMsg.startsWith("✓") ? "#22c55e" : "#ef4444" }}>
+                          {specMsg}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Metadados de Captação */}
                     <div className="metadados-captacao">
