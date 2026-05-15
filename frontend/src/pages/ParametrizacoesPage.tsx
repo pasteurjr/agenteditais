@@ -580,9 +580,16 @@ export function ParametrizacoesPage(_props: PageProps) {
         setTodoBrasil(estados.length === 27);
         setPrazoMaximo(p.prazo_maximo != null ? String(p.prazo_maximo) : "");
         setFrequenciaMaxima(p.frequencia_maxima || "semanal");
-        setTam(p.tam != null ? String(p.tam) : "");
-        setSam(p.sam != null ? String(p.sam) : "");
-        setSom(p.som != null ? String(p.som) : "");
+        // obs 28: backend manda number; exibir mascarado pt-BR
+        const numToMask = (n: unknown): string => {
+          if (n == null || n === "" || Number(n) === 0) return "";
+          const num = Number(n);
+          if (isNaN(num)) return "";
+          return num.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        };
+        setTam(numToMask(p.tam));
+        setSam(numToMask(p.sam));
+        setSom(numToMask(p.som));
         // RF-014: Custos e Margens
         setMarkupPadrao(p.markup_padrao != null ? String(p.markup_padrao) : "");
         setCustosFixos(p.custos_fixos != null ? String(p.custos_fixos) : "");
@@ -736,10 +743,11 @@ export function ParametrizacoesPage(_props: PageProps) {
   };
 
   const handleSalvarMercado = async () => {
+    // obs 28: campos mascarados pt-BR -> converter para number no transito
     await saveParamScore({
-      tam: tam || "0",
-      sam: sam || "0",
-      som: som || "0",
+      tam: toMoney(tam),
+      sam: toMoney(sam),
+      som: toMoney(som),
     });
   };
 
@@ -750,6 +758,24 @@ export function ParametrizacoesPage(_props: PageProps) {
     const cleaned = v.replace(/\./g, '').replace(',', '.');
     const n = Number(cleaned);
     return isNaN(n) ? 0 : n;
+  };
+
+  // obs 28 validador V8: mascara monetaria pt-BR enquanto digita.
+  // Mantem so digitos + uma virgula decimal; agrupa milhar com ponto.
+  // Entrada (usuario): "1234567" -> exibicao: "1.234.567"; "1234,5" -> "1.234,5".
+  // Trânsito: usar toMoney(...) no save converte de volta para number.
+  const maskMoedaInput = (v: string): string => {
+    if (!v) return "";
+    let s = v.replace(/[^\d,]/g, "");
+    const firstComma = s.indexOf(",");
+    if (firstComma !== -1) {
+      // mantem apenas a primeira virgula
+      s = s.slice(0, firstComma + 1) + s.slice(firstComma + 1).replace(/,/g, "");
+    }
+    const [intPart, decPart] = s.split(",");
+    const intFmt = (intPart || "").replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    if (s.indexOf(",") === -1) return intFmt;
+    return `${intFmt || "0"},${(decPart || "").slice(0, 2)}`;
   };
   const handleSalvarCustos = async () => {
     await saveParamScore({
@@ -1060,13 +1086,13 @@ export function ParametrizacoesPage(_props: PageProps) {
                     <Card title="Mercado (TAM/SAM/SOM)">
                       <div className="form-grid form-grid-3">
                         <FormField label="TAM (Mercado Total)" hint="Editais/ano">
-                          <TextInput value={tam} onChange={(v) => setTam(v)} prefix="R$" />
+                          <TextInput value={tam} onChange={(v) => setTam(maskMoedaInput(v))} prefix="R$" placeholder="Ex: 1.500.000,00" />
                         </FormField>
                         <FormField label="SAM (Mercado Alcancavel)">
-                          <TextInput value={sam} onChange={(v) => setSam(v)} prefix="R$" />
+                          <TextInput value={sam} onChange={(v) => setSam(maskMoedaInput(v))} prefix="R$" placeholder="Ex: 800.000,00" />
                         </FormField>
                         <FormField label="SOM (Mercado Objetivo)">
-                          <TextInput value={som} onChange={(v) => setSom(v)} prefix="R$" />
+                          <TextInput value={som} onChange={(v) => setSom(maskMoedaInput(v))} prefix="R$" placeholder="Ex: 250.000,00" />
                         </FormField>
                       </div>
                       <div className="form-actions" style={{ marginTop: "12px" }}>

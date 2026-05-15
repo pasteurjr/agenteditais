@@ -541,9 +541,13 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   // Busca Web — chama API direto e mostra resposta inline
   const handleBuscaWebConfirm = async () => {
     if (!buscaNomeProduto) return;
+    // obs 13 validador V8: NAO cadastrar automaticamente. Pedir apenas para
+    // LISTAR fontes/manuais encontrados; o usuario decide o que incorporar
+    // (enviando a URL no chat). Antes o prompt dizia "e cadastre", induzindo
+    // cadastro automatico — contra o que o validador pediu.
     const msg = buscaFabricante
-      ? `Busque o manual do produto ${buscaNomeProduto} do fabricante ${buscaFabricante} na web e cadastre`
-      : `Busque o manual do produto ${buscaNomeProduto} na web e cadastre`;
+      ? `Busque na web o manual e as fontes do produto ${buscaNomeProduto} do fabricante ${buscaFabricante}. Liste os links e documentos encontrados para eu escolher — NAO cadastre nada automaticamente.`
+      : `Busque na web o manual e as fontes do produto ${buscaNomeProduto}. Liste os links e documentos encontrados para eu escolher — NAO cadastre nada automaticamente.`;
     setShowBuscaWebModal(false);
     setProcessingMessage("Buscando na web...");
     setIaResponse(null);
@@ -551,7 +555,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       const session = await createSession("busca-web");
       const resp = await sendMessage(session.session_id, msg);
       setProcessingMessage(null);
-      setIaResponse(resp.response || "Busca web concluida.");
+      setIaResponse(resp.response || "Busca web concluida. Revise os resultados acima e envie a URL desejada no chat para incorporar.");
       setBuscaNomeProduto("");
       setBuscaFabricante("");
       fetchProdutos();
