@@ -1330,10 +1330,16 @@ def crud_create(table_slug):
         # Background: processar metadados (CATMAT + termos) para produtos
         if table_slug == "produtos":
             try:
-                from concurrent.futures import ThreadPoolExecutor
+                import threading
                 from tools import processar_metadados_produto
-                _bg = ThreadPoolExecutor(max_workers=1)
-                _bg.submit(processar_metadados_produto, instance.id)
+                _pid = instance.id
+                def _run_metadados_bg(pid=_pid):
+                    try:
+                        processar_metadados_produto(pid)
+                        print(f"[CRUD] Metadados background concluido para {pid}")
+                    except Exception as ex:
+                        print(f"[CRUD] Erro no thread metadados {pid}: {ex}")
+                threading.Thread(target=_run_metadados_bg, daemon=True, name=f"metadados-{_pid}").start()
             except Exception as e:
                 print(f"[CRUD] Erro ao iniciar metadados background: {e}")
 

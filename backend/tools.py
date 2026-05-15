@@ -1371,9 +1371,15 @@ def tool_processar_upload(filepath: str, user_id: str, empresa_id: str = None, n
 
         # Background: buscar CATMAT e gerar termos de busca semânticos
         try:
-            from concurrent.futures import ThreadPoolExecutor
-            _bg = ThreadPoolExecutor(max_workers=1)
-            _bg.submit(processar_metadados_produto, produto.id)
+            import threading
+            _pid_meta = produto.id
+            def _run_metadados_bg(pid=_pid_meta):
+                try:
+                    processar_metadados_produto(pid)
+                    print(f"[TOOLS] Metadados background concluido para {pid}")
+                except Exception as ex:
+                    print(f"[TOOLS] Erro no thread metadados {pid}: {ex}")
+            threading.Thread(target=_run_metadados_bg, daemon=True, name=f"metadados-{_pid_meta}").start()
             print(f"[TOOLS] Metadados em background para produto {produto.id}")
         except Exception as e:
             print(f"[TOOLS] Erro ao iniciar metadados background: {e}")
