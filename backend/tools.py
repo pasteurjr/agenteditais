@@ -1128,17 +1128,20 @@ def _extrair_specs_em_chunks(texto_completo: str, produto_id: str, db, campos_ma
 
                     # Evitar duplicatas
                     if not any((s.get('nome_especificacao') or s.get('nome')) == nome_spec for s in specs_totais):
-                        spec_obj = ProdutoEspecificacao(
-                            produto_id=produto_id,
-                            nome_especificacao=nome_spec,
-                            valor=spec.get('valor', 'N/A'),
-                            unidade=spec.get('unidade'),
-                            valor_numerico=spec.get('valor_numerico'),
-                            operador=spec.get('operador'),
-                            valor_min=spec.get('valor_min'),
-                            valor_max=spec.get('valor_max')
-                        )
-                        db.add(spec_obj)
+                        # db=None: modo "extrair sem persistir" (usado pelo merge
+                        # do reprocessar, obs 10) — apenas retorna os dicts.
+                        if db is not None:
+                            spec_obj = ProdutoEspecificacao(
+                                produto_id=produto_id,
+                                nome_especificacao=nome_spec,
+                                valor=spec.get('valor', 'N/A'),
+                                unidade=spec.get('unidade'),
+                                valor_numerico=spec.get('valor_numerico'),
+                                operador=spec.get('operador'),
+                                valor_min=spec.get('valor_min'),
+                                valor_max=spec.get('valor_max')
+                            )
+                            db.add(spec_obj)
                         # Normalizar o spec para usar nome_especificacao
                         spec['nome_especificacao'] = nome_spec
                         specs_totais.append(spec)
@@ -1500,23 +1503,66 @@ def tool_reprocessar_produto(produto_id: str, user_id: str, empresa_id: str = No
         else:
             return {"success": False, "error": "Nenhum texto disponível para reprocessar"}
 
-        # Limpar specs antigas
-        db.query(ProdutoEspecificacao).filter(
+        # MERGE (obs 10 validador V8): NAO apagar specs existentes — reprocessar
+        # deve COMPLEMENTAR. Specs cadastradas manualmente (UC-F08) ou extraidas
+        # antes sao preservadas; specs com mesmo nome sao atualizadas; novas sao
+        # adicionadas. Antes o codigo fazia DELETE incondicional e destruia tudo.
+        specs_antigas = db.query(ProdutoEspecificacao).filter(
             ProdutoEspecificacao.produto_id == produto_id
-        ).delete()
+        ).all()
+        idx_antigas = { (s.nome_especificacao or "").strip().lower(): s for s in specs_antigas }
 
-        # Extrair novas specs
-        print(f"[TOOLS] Reprocessando specs ({len(texto_specs)} chars)")
-        specs_salvas = _extrair_specs_em_chunks(texto_specs, produto_id, db)
+        # Extrai novas specs SEM persistir (db None evita db.add interno)
+        print(f"[TOOLS] Reprocessando specs ({len(texto_specs)} chars) — modo merge")
+        specs_extraidas = _extrair_specs_em_chunks(texto_specs, produto_id, db=None)
+
+        atualizadas = 0
+        adicionadas = 0
+        for spec in specs_extraidas:
+            nome_spec = (spec.get('nome_especificacao') or spec.get('nome') or 'N/A')
+            chave = nome_spec.strip().lower()
+            existente = idx_antigas.get(chave)
+            if existente is not None:
+                # Atualiza valor/unidade da spec ja existente (preserva o registro)
+                existente.valor = spec.get('valor', existente.valor)
+                if spec.get('unidade') is not None:
+                    existente.unidade = spec.get('unidade')
+                if spec.get('valor_numerico') is not None:
+                    existente.valor_numerico = spec.get('valor_numerico')
+                if spec.get('operador') is not None:
+                    existente.operador = spec.get('operador')
+                if spec.get('valor_min') is not None:
+                    existente.valor_min = spec.get('valor_min')
+                if spec.get('valor_max') is not None:
+                    existente.valor_max = spec.get('valor_max')
+                atualizadas += 1
+            else:
+                db.add(ProdutoEspecificacao(
+                    produto_id=produto_id,
+                    nome_especificacao=nome_spec,
+                    valor=spec.get('valor', 'N/A'),
+                    unidade=spec.get('unidade'),
+                    valor_numerico=spec.get('valor_numerico'),
+                    operador=spec.get('operador'),
+                    valor_min=spec.get('valor_min'),
+                    valor_max=spec.get('valor_max'),
+                ))
+                idx_antigas[chave] = True  # evita duplicar se repetir no mesmo lote
+                adicionadas += 1
 
         db.commit()
+        print(f"[TOOLS] Merge specs: {adicionadas} novas, {atualizadas} atualizadas, "
+              f"{len(specs_antigas)} preservadas (nenhuma apagada)")
 
         return {
             "success": True,
             "produto_id": produto_id,
             "produto_nome": produto.nome,
-            "specs_extraidas": len(specs_salvas),
-            "specs": specs_salvas[:20]
+            "specs_extraidas": len(specs_extraidas),
+            "specs_adicionadas": adicionadas,
+            "specs_atualizadas": atualizadas,
+            "specs_preservadas": len(specs_antigas),
+            "specs": specs_extraidas[:20]
         }
     except Exception as e:
         db.rollback()
@@ -6848,7 +6894,10 @@ def tool_verificar_completude_produto(produto_id: str = None, nome_produto: str 
         pct_basicos = round((basicos_preenchidos / len(campos_basicos)) * 100)
 
         mascara_preenchidos = sum(1 for c in mascara_check if c["preenchido"])
-        pct_mascara = round((mascara_preenchidos / len(mascara_check)) * 100) if mascara_check else 100
+        # Sem mascara (produto sem subclasse ou subclasse sem campos_mascara):
+        # especificacoes nao sao avaliaveis -> None (UI mostra "N/A"), nao 100% falso.
+        mascara_avaliavel = bool(mascara_check)
+        pct_mascara = round((mascara_preenchidos / len(mascara_check)) * 100) if mascara_avaliavel else None
 
         total = len(campos_basicos) + len(mascara_check)
         total_ok = basicos_preenchidos + mascara_preenchidos
@@ -6894,6 +6943,7 @@ def tool_verificar_completude_produto(produto_id: str = None, nome_produto: str 
                 "percentual_geral": pct_geral,
                 "percentual_basicos": pct_basicos,
                 "percentual_mascara": pct_mascara,
+                "mascara_avaliavel": mascara_avaliavel,
                 "status": status,
             },
             "recomendacoes": recomendacoes,

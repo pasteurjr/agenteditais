@@ -229,19 +229,21 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
   const filteredProdutos = produtos.filter((p) => {
     // Filtro por texto
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
+      // Normaliza acento+caixa: "cirurgico" casa "Cirúrgico" (obs 2 validador V8)
+      const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const term = norm(searchTerm);
       const classeIdDoProduto = p.subclasse_id ? subclasseToClasseMap[p.subclasse_id] : "";
       const areaIdDoProduto = classeIdDoProduto ? classeToAreaMap[classeIdDoProduto] : "";
       const subclasseNome = p.subclasse_id ? (subclasseNomeMap[p.subclasse_id] || "") : "";
       const classeNome = classeIdDoProduto ? (classeNomeMap[classeIdDoProduto] || "") : "";
       const areaNome = areaIdDoProduto ? (areaNomeMap[areaIdDoProduto] || "") : "";
-      const match = p.nome.toLowerCase().includes(term) ||
-        (p.fabricante || "").toLowerCase().includes(term) ||
-        (p.modelo || "").toLowerCase().includes(term) ||
-        (p.descricao || "").toLowerCase().includes(term) ||
-        subclasseNome.includes(term) ||
-        classeNome.includes(term) ||
-        areaNome.includes(term);
+      const match = norm(p.nome).includes(term) ||
+        norm(p.fabricante || "").includes(term) ||
+        norm(p.modelo || "").includes(term) ||
+        norm(p.descricao || "").includes(term) ||
+        norm(subclasseNome).includes(term) ||
+        norm(classeNome).includes(term) ||
+        norm(areaNome).includes(term);
       if (!match) return false;
     }
     // Filtro "Sem Classe"
@@ -420,6 +422,7 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
       codigo_interno: produto.codigo_interno || "",
       ncm: produto.ncm || "",
       descricao: produto.descricao || "",
+      categoria: produto.categoria || "",
     });
 
     // Resolver hierarquia: subclasse → classe → área
@@ -1656,9 +1659,15 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
                 <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Dados Basicos</div>
               </div>
               <div style={{ textAlign: "center", padding: 12, borderRadius: 8, background: "var(--bg-secondary)" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_mascara >= 90 ? "#22c55e" : completudeResult.completude.percentual_mascara >= 70 ? "#f59e0b" : completudeResult.completude.percentual_mascara >= 40 ? "#fb923c" : "#ef4444" }}>
-                  {completudeResult.completude.percentual_mascara}%
-                </div>
+                {completudeResult.completude.percentual_mascara == null ? (
+                  <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--text-secondary)" }} title="Produto sem subclasse ou subclasse sem mascara de campos — especificacoes nao avaliaveis">
+                    N/A
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "1.6rem", fontWeight: 700, color: completudeResult.completude.percentual_mascara >= 90 ? "#22c55e" : completudeResult.completude.percentual_mascara >= 70 ? "#f59e0b" : completudeResult.completude.percentual_mascara >= 40 ? "#fb923c" : "#ef4444" }}>
+                    {completudeResult.completude.percentual_mascara}%
+                  </div>
+                )}
                 <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Especificacoes</div>
               </div>
             </div>
@@ -1768,6 +1777,23 @@ export function PortfolioPage({ onSendToChat }: PortfolioPageProps) {
               </FormField>
               <FormField label="Descricao">
                 <TextInput value={editForm.descricao || ""} onChange={(v) => setEditForm(f => ({ ...f, descricao: v }))} placeholder="Descricao do produto" />
+              </FormField>
+              <FormField label="Categoria" hint="Definida automaticamente pela IA no cadastro; pode ser corrigida aqui.">
+                <SelectInput
+                  value={editForm.categoria || ""}
+                  onChange={(v) => setEditForm(f => ({ ...f, categoria: v }))}
+                  options={[
+                    { value: "equipamento", label: "Equipamento" },
+                    { value: "reagente", label: "Reagente" },
+                    { value: "insumo_hospitalar", label: "Insumo Hospitalar" },
+                    { value: "insumo_laboratorial", label: "Insumo Laboratorial" },
+                    { value: "informatica", label: "Informatica" },
+                    { value: "redes", label: "Redes" },
+                    { value: "mobiliario", label: "Mobiliario" },
+                    { value: "eletronico", label: "Eletronico" },
+                    { value: "outro", label: "Outro" },
+                  ]}
+                />
               </FormField>
             </div>
 

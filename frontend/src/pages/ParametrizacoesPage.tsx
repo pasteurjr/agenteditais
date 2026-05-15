@@ -9,7 +9,7 @@ interface Fonte {
   nome: string;
   tipo: "api" | "scraper";
   url: string;
-  ativa: boolean;
+  ativo: boolean;
 }
 
 interface ClasseProdutoAPI {
@@ -271,7 +271,7 @@ export function ParametrizacoesPage(_props: PageProps) {
         nome: String(f.nome ?? ""),
         tipo: (f.tipo as "api" | "scraper") || "api",
         url: String(f.url ?? ""),
-        ativa: Boolean(f.ativa ?? true),
+        ativo: Boolean(f.ativo ?? true),
       })));
     } catch (err) {
       setErrorFontes(err instanceof Error ? err.message : "Erro ao carregar fontes");
@@ -635,8 +635,8 @@ export function ParametrizacoesPage(_props: PageProps) {
     const fonte = fontes.find(f => f.id === id);
     if (!fonte) return;
     try {
-      await crudUpdate("fontes-editais", id, { ativa: !fonte.ativa });
-      setFontes(fontes.map(f => f.id === id ? { ...f, ativa: !f.ativa } : f));
+      await crudUpdate("fontes-editais", id, { ativo: !fonte.ativo });
+      setFontes(fontes.map(f => f.id === id ? { ...f, ativo: !f.ativo } : f));
     } catch (err) {
       setErrorFontes(err instanceof Error ? err.message : "Erro ao atualizar fonte");
     }
@@ -694,7 +694,15 @@ export function ParametrizacoesPage(_props: PageProps) {
   };
 
   const toggleEstado = (uf: string) => {
-    if (todoBrasil) return;
+    // obs 27 validador V8: permitir desmarcar UF individual mesmo apos
+    // "Atuar em todo o Brasil" — sai do modo todoBrasil mantendo as demais.
+    if (todoBrasil) {
+      setTodoBrasil(false);
+      const todasMenos = new Set(ESTADOS_BR.map(e => e.uf));
+      todasMenos.delete(uf);
+      setEstadosSelecionados(todasMenos);
+      return;
+    }
     setEstadosSelecionados(prev => {
       const newSet = new Set(prev);
       if (newSet.has(uf)) {
@@ -1009,10 +1017,9 @@ export function ParametrizacoesPage(_props: PageProps) {
                           {ESTADOS_BR.map((estado) => (
                             <button
                               key={estado.uf}
-                              className={`estado-btn ${estadosSelecionados.has(estado.uf) ? "selected" : ""} ${todoBrasil ? "disabled" : ""}`}
+                              className={`estado-btn ${(todoBrasil || estadosSelecionados.has(estado.uf)) ? "selected" : ""}`}
                               onClick={() => toggleEstado(estado.uf)}
-                              title={estado.nome}
-                              disabled={todoBrasil}
+                              title={todoBrasil ? `${estado.nome} — clique para excluir este estado` : estado.nome}
                             >
                               {estado.uf}
                             </button>
@@ -1150,15 +1157,15 @@ export function ParametrizacoesPage(_props: PageProps) {
                                 <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{f.tipo.toUpperCase()}</span>
                               </div>
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span className={`status-badge ${f.ativa ? "status-badge-success" : "status-badge-neutral"}`} style={{ fontSize: 11 }}>
-                                  {f.ativa ? "Ativa" : "Inativa"}
+                                <span className={`status-badge ${f.ativo ? "status-badge-success" : "status-badge-neutral"}`} style={{ fontSize: 11 }}>
+                                  {f.ativo ? "Ativa" : "Inativa"}
                                 </span>
                                 <button
-                                  title={f.ativa ? "Desativar" : "Ativar"}
+                                  title={f.ativo ? "Desativar" : "Ativar"}
                                   onClick={() => handleToggleFonte(f.id)}
                                   style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: 4 }}
                                 >
-                                  {f.ativa ? <Pause size={14} /> : <Play size={14} />}
+                                  {f.ativo ? <Pause size={14} /> : <Play size={14} />}
                                 </button>
                               </div>
                             </div>

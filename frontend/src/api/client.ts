@@ -308,7 +308,7 @@ export interface CompletudeResult {
   subclasse_nome: string | null;
   campos_basicos: { campo: string; preenchido: boolean; valor: string }[];
   mascara_check: { campo: string; preenchido: boolean; valor: string; unidade?: string }[];
-  completude: { percentual_geral: number; percentual_basicos: number; percentual_mascara: number; status: string };
+  completude: { percentual_geral: number; percentual_basicos: number; percentual_mascara: number | null; mascara_avaliavel?: boolean; status: string };
   recomendacoes: string[];
 }
 

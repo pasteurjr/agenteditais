@@ -5759,6 +5759,13 @@ body {
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
+  /* obs 27 validador V8: fonte branca sempre, para leitura em qualquer tema */
+  color: #fff;
+}
+
+.estado-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
 }
 
 .estado-btn:hover {
