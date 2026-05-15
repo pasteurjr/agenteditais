@@ -3316,16 +3316,25 @@ def _buscar_catmat_produto(produto_id: str, db=None) -> Dict:
         pdms_match = []
         for grupo_id in GRUPOS_RELEVANTES:
             try:
-                resp = requests.get(
-                    f"{CATMAT_BASE}/modulo-material/3_consultarPdmMaterial",
-                    params={"codigoGrupo": grupo_id, "tamanhoPagina": 500},
-                    timeout=15
-                )
-                if resp.status_code != 200:
-                    print(f"[CATMAT] Grupo {grupo_id}: HTTP {resp.status_code}")
-                    continue
-                data = resp.json()
-                pdms = data.get("resultado", [])
+                pdms = []
+                pagina = 1
+                while True:
+                    resp = requests.get(
+                        f"{CATMAT_BASE}/modulo-material/3_consultarPdmMaterial",
+                        params={"codigoGrupo": grupo_id, "tamanhoPagina": 500, "pagina": pagina},
+                        timeout=15
+                    )
+                    if resp.status_code != 200:
+                        print(f"[CATMAT] Grupo {grupo_id} pag {pagina}: HTTP {resp.status_code}")
+                        break
+                    data = resp.json()
+                    pagina_pdms = data.get("resultado", [])
+                    pdms.extend(pagina_pdms)
+                    # API SIASG nao garante ordem estavel: ler TODAS as paginas
+                    # garante resultado deterministico (Grupo 66 tem 1155 PDMs em 3 paginas)
+                    if data.get("paginasRestantes", 0) <= 0 or not pagina_pdms or pagina >= 10:
+                        break
+                    pagina += 1
                 for pdm in pdms:
                     pdm_nome = (pdm.get("nomePdm") or "").lower()
                     if not pdm_nome:
