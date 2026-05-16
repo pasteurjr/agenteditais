@@ -60,16 +60,26 @@ Execução de `_extrair_texto_de_arquivo` com CSV de teste → extraiu 2 linhas 
 
 ---
 
-## Observação sobre a execução no testesvalidacoes
+## Execução no testesvalidacoes — rodada 5: **8/8 APROVADOS** ✅
 
-O teste id `31ff2674` rodou os 8 passos. Os passos com asserts via `fetch` à API (P03 obs30) e `evaluate` (P07 obs17, P08 obs10) tiveram veredito automático INCONCLUSIVO/REPROVADO **por limitação do harness de teste** (o executor não mapeia o resultado dos `console.log`/`throw` dentro de `evaluate` para o veredito; e o seletor de navegação até Parametrizações via sidebar precisava de ajuste). 
+A sprint "CORRECOES TUTORIAL V8" foi iterada até ficar 100% verde. O script de teste inicial tinha 3 defeitos (não nas correções): (a) navegação sidebar com seletor errado; (b) `window.__var` perdida após `navigate`/reload — trocado por `localStorage`; (c) seletores de aba/campo imprecisos. Corrigidos, a rodada 5 (teste id `25c42f25-92a2-47c1-8e81-c25d7aa20228`, 2026-05-15) deu:
 
-**Isso NÃO indica falha das correções** — todas foram revalidadas de forma independente e confiável via:
-1. Chamadas diretas à API REST autenticada (obs30, obs17)
-2. Execução direta das funções backend corrigidas (obs10, obs4, obs5, obs7)
-3. Inspeção do código entregue e commitado (demais)
+| Passo | Obs | Veredito UI |
+|---|---|---|
+| P01 | Login valida186 | ✅ APROVADO |
+| P02 | obs30 — fonte persiste desativada após reload | ✅ APROVADO |
+| P03 | obs17 — completude N/A sem máscara | ✅ APROVADO |
+| P04 | obs2 — busca acento-insensível | ✅ APROVADO |
+| P05 | obs1 — lupa botão clicável | ✅ APROVADO |
+| P06 | obs6 — categoria editável | ✅ APROVADO |
+| P07 | obs16 — filtro de completude | ✅ APROVADO |
+| P08 | obs28 — máscara monetária | ✅ APROVADO |
 
-O harness de validação visual é melhor para fluxos de UI lineares; asserts de lógica/persistência são mais fiáveis via API direta — caminho usado aqui para o veredito final.
+**8/8 APROVADOS** — cada `evaluate` com `throw` em caso de falha + assert `dom:body` que só passa se nada lançou. 16 screenshots de evidência em `testes/relatorios/visual/teste_25c42f25_r1_2026-05-15T22-49-51/`.
+
+Evolução das rodadas: r1 (script inicial, 1/8) → r2 (5/8) → r3 (6/8) → r4 (7/8) → **r5 (8/8)**.
+
+As demais obs (4, 5, 7, 10, 25, 30b) — backend puro, sem UI direta — permanecem validadas por execução real de função + API direta (seções acima), método mais fiável para lógica/persistência que o harness visual.
 
 ---
 
