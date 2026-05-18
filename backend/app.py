@@ -9833,6 +9833,11 @@ def buscar_editais_rest():
 
         editais = resultado_busca.get("editais", [])
 
+        # empresa_id necessário para o enriquecimento por termos CATMAT abaixo.
+        # BUG (obs25): era definido só MAIS ABAIXO; aqui dava NameError engolido
+        # pelo try/except, fazendo o enriquecimento CATMAT nunca rodar.
+        empresa_id = get_current_empresa_id()
+
         # Buscas paralelas extras com termos CATMAT/semânticos dos produtos
         if tipo_score != "nenhum":
             try:
