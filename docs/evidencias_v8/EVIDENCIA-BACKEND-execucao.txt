@@ -1,0 +1,48 @@
+======================================================================
+EVIDÊNCIAS BACKEND — Correções obs 4/5/7/10/25/30b (sem tela)
+Data: 2026-05-18T00:15:35
+======================================================================
+
+### obs4 — upload aceita CSV/XLSX/DOCX (antes só PDF) ###
+  Entrada: CSV com 3 produtos
+  _extrair_texto_de_arquivo retornou: 1 bloco(s), linhas_tabela=3
+  Texto extraído: 'nome | fabricante | modelo\nMonitor Cardiaco X | ACME | MX-1\nBomba Infusao Y | BetaMed | BY-2\nVentilador Z | GammaCorp | VZ-3'
+  >>> RESULTADO: OK — CSV lido com sucesso
+
+### obs5/obs8 — NF/plano de contas multi-item gera N produtos ###
+  tool_processar_upload tem ramo multi-item: True
+  _extrair_lista_produtos existe e é chamada: True
+  loop de criação (1 produto por item) presente: True
+  >>> RESULTADO: OK — fluxo multi-item implementado
+
+### obs7 — classificação/extração LLM determinística (temperature=0) ###
+  _extrair_info_produto  temperature=0 : True
+  _extrair_lista_produtos temperature=0 : True
+  detectar_intencao_ia   temperature=0 : True
+  >>> RESULTADO: OK — 3 chamadas de classificação fixadas em temperature=0
+
+### obs10 — reprocessar IA preserva specs (merge, não DELETE) ###
+  Produto: Monitor MultiParam Pro Edicao Visual
+  Specs antes: 18; injetada spec manual 'EVIDENCIA_OBS10_1779074137'
+[TOOLS] Reprocessando produto do arquivo: /mnt/data1/progpython/agenteditais/uploads/d57aa04e-44be-4e22-b86c-a4ca6ec2ea0a_cc2a066b_manual_tecnico.pdf
+[TOOLS] Reprocessando specs (1203 chars) — modo merge
+[TOOLS] Processando 1 chunk(s) de specs
+[TOOLS] Processando chunk 1/1 (1203 chars)
+[TOOLS] Chunk 1: 8 specs encontradas
+[TOOLS] Merge specs: 1 novas, 7 atualizadas, 19 preservadas (nenhuma apagada)
+  tool_reprocessar_produto: success=True add=1 upd=7 preservadas=19
+  Spec manual 'EVIDENCIA_OBS10_1779074137' após reprocessar: PRESENTE
+  >>> RESULTADO: OK — MERGE preservou a spec manual
+
+### obs25 — termos CATMAT AMPLIAM a busca (re-filtro removido) ###
+  re-filtro antigo ('editais após filtro') ainda presente: False
+  novo comportamento ('sem re-filtro, score decide') presente: True
+  >>> RESULTADO: OK — termos CATMAT agora ampliam (score classifica)
+
+### obs30b — busca multifonte respeita FonteEdital.ativo ###
+  consulta 'FonteEdital.ativo == False': True
+  log 'Fontes desativadas ignoradas': True
+  >>> RESULTADO: OK — fonte desativada não é consultada na busca geral
+
+======================================================================
+FIM DAS EVIDÊNCIAS BACKEND
