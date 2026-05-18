@@ -2165,11 +2165,13 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
                 for f in _dbf.query(FonteEdital).filter(FonteEdital.ativo == False).all()
             }
             _dbf.close()
+            # nome no banco pode ter texto extra (ex.: "ComprasNet (Portal de
+            # Compras do Governo Federal)"); usar substring, nao igualdade.
             if any('pncp' in n for n in _inativas):
                 buscar_pncp = False
-            if any(n in ('bec', 'bec-sp', 'bec sp') for n in _inativas):
+            if any('bec' in n for n in _inativas):
                 buscar_bec = False
-            if any(n == 'comprasnet' for n in _inativas):
+            if any('comprasnet' in n for n in _inativas):
                 buscar_comprasnet = False
             if _inativas:
                 print(f"[BUSCA-MULTI] Fontes desativadas ignoradas: {_inativas}")
