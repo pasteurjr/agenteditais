@@ -1,0 +1,3 @@
+[BUSCA-MULTI] Fontes desativadas ignoradas: {'portal bec-sp'}
+[BUSCA] Buscas extras com 5 termos CATMAT/semânticos: ['monitor multiparametros', 'MONITOR MULTIPARÂMETRO, TIPO: CONFIGURADO/MODULAR', 'Monitor Multiparâmetro', 'monitor multiparametrico', 'Monitor de Sinais Vitais']
+[BUSCA] Total após dedup: 65 editais

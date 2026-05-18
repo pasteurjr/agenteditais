@@ -8,6 +8,20 @@
 
 ---
 
+## ⚠️ Verificação de comportamento — 3 bugs reais encontrados e corrigidos
+
+Após a primeira rodada de correções, foi feita uma **verificação de comportamento ponta-a-ponta** (não apenas inspeção de código). Isso revelou **3 defeitos reais** que a inspeção de código não pegava — as correções "pareciam certas" no código mas não funcionavam de fato. Todos corrigidos e re-validados:
+
+| # | Defeito encontrado | Como foi pego | Fix | Prova |
+|---|---|---|---|---|
+| 1 | **obs 5/8**: multi-item reportava "5 criados" mas **0 persistiam** no banco — a thread de metadados era disparada antes do `db.commit()` e corrompia a transação | Teste real: subir CSV de 5 itens e contar produtos no banco | commit `7c11045` (commit antes das threads) | CSV 5 itens → **5 produtos persistidos**, delta empresa +5 |
+| 2 | **obs 30b**: fonte desativada **continuava sendo consultada** — comparação `== 'comprasnet'` nunca casava porque o nome real é "ComprasNet (Portal de Compras do Governo Federal)" | Teste HTTP: desativar ComprasNet e olhar o log da busca | commit `672e5f1` (match por substring) | Log: `Fontes desativadas ignoradas: {'comprasnet (portal...)'}` |
+| 3 | **obs 25**: enriquecimento por termos CATMAT **nunca rodava** — `empresa_id` usado ~90 linhas antes de ser definido → `NameError` engolido pelo `try/except` | Teste HTTP: busca com score e produtos com termos, log vazio | commit `f51942f` (definir `empresa_id` antes) | Log: `Buscas extras com 5 termos CATMAT` → busca **20 → 65 editais** |
+
+**Conclusão:** a exigência de provar o comportamento (e não confiar na leitura do código) foi decisiva — sem ela, 3 das correções teriam ido para o validador **sem funcionar de verdade**, apesar do código parecer correto.
+
+---
+
 ## Como ler este relatório
 
 Para **cada solicitação do Arnaldo** mostramos 3 coisas:
@@ -223,11 +237,11 @@ Inserimos uma spec "sentinela" manualmente, rodamos o reprocessamento, e a spec 
 | obs 1 | Lupa clicável na busca | ✅ Corrigido | Tela P02 |
 | obs 2 | Busca exige acento | ✅ Corrigido | Tela P02 |
 | obs 3 | Máscara NCM no upload | ✅ Esclarecido | Tutorial V9 |
-| obs 4 | CSV/Excel não lidos | ✅ Corrigido | Execução backend |
-| obs 5/8 | NF multi-item só 1º | ✅ Corrigido | Execução backend |
+| obs 4 | CSV/Excel não lidos | ✅ Corrigido | Execução real (CSV lido) |
+| obs 5/8 | NF multi-item só 1º | ✅ Corrigido + **bug real** | HTTP/execução: 5 itens → 5 produtos persistidos (fix `7c11045`) |
 | obs 6 | Categoria não editável | ✅ Corrigido | Tela P03 |
-| obs 7 | Upload não determinístico | ✅ Corrigido | Execução backend |
-| obs 10 | Reprocessar apaga specs | ✅ Corrigido | Execução backend (sentinela) |
+| obs 7 | Upload não determinístico | ✅ Corrigido | Execução real: 5 runs idênticos |
+| obs 10 | Reprocessar apaga specs | ✅ Corrigido | Execução real (sentinela preservada) |
 | obs 11 | Reprocessar busca externa | ✅ Esclarecido | Tutorial V9 |
 | obs 12 | Sem add spec manual | ✅ Corrigido | Código + obs10 |
 | obs 13 | Busca web cadastra sozinha | ✅ Corrigido | Código (endpoint+modal) |
@@ -236,10 +250,10 @@ Inserimos uma spec "sentinela" manualmente, rodamos o reprocessamento, e a spec 
 | obs 16 | Filtro de completude | ✅ Corrigido | Tela P05 |
 | obs 17 | Completude 100% falsa | ✅ Corrigido | Tela P04 |
 | obs 23/24 | Metadados não editáveis | ✅ Corrigido | Código (commit 6f8f64f) |
-| obs 25 | CATMAT exclui editais | ✅ Corrigido | Execução backend |
+| obs 25 | CATMAT exclui editais | ✅ Corrigido + **bug real** | HTTP: busca 20 → 65 editais, sem re-filtro (fix `f51942f`) |
 | obs 26 | UF fonte/desmarcar | ✅ Corrigido | Código (CSS+lógica) |
 | obs 27/28 | Máscara monetária | ✅ Corrigido | Tela P08 |
-| obs 29/30 | ComprasNet reativa | ✅ Corrigido | Telas P06+P07 + backend |
+| obs 29/30 | ComprasNet reativa | ✅ Corrigido + **bug real** | Telas P06+P07 + HTTP log (fix `672e5f1`) |
 
 **Validação automatizada:** sprint 102 "CORRECOES TUTORIAL V8", teste `dd00bed3`, **8/8 passos APROVADOS** (P01 login, P02 obs1+2, P03 obs6, P04 obs17, P05 obs16, P06 obs30, P07 persistência obs30, P08 obs28).
 
