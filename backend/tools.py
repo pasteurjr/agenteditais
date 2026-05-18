@@ -1311,15 +1311,20 @@ def tool_processar_upload(filepath: str, user_id: str, empresa_id: str = None, n
                     db.flush()
                     existentes.add(nz)
                     criados.append({"id": prod.id, "nome": prod.nome})
-                    # metadados em background por produto
+                # COMMIT antes de disparar background: a thread de metadados
+                # abre sessao propria e so enxerga o produto se ja persistido.
+                # Disparar antes do commit perdia os inserts (produtos nao
+                # persistiam apesar de "criados" no log).
+                db.commit()
+                # Metadados em background SO apos commit (produtos ja no banco)
+                for _c in criados:
                     try:
                         import threading as _th
-                        _pid = prod.id
+                        _pid = _c["id"]
                         _th.Thread(target=lambda pid=_pid: processar_metadados_produto(pid),
                                    daemon=True, name=f"metadados-{_pid}").start()
                     except Exception as _e:
                         print(f"[TOOLS] bg metadados multi {_e}")
-                db.commit()
                 print(f"[TOOLS] Multi-item: {len(criados)} criados, {len(pulados)} pulados")
                 return {
                     "success": True,
