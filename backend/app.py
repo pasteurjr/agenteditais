@@ -2534,8 +2534,12 @@ def _buscar_editais_multifonte(termo: str, user_id: str, uf: str = None,
         editais = [e for e in editais if orig_lower in inferir_origem_orgao(e.get('orgao', ''), e.get('orgao_tipo', '')).lower()]
         print(f"[BUSCA-MULTI] Filtro origem='{origem}': {editais_pre} → {len(editais)}")
 
+    # CV01-4 (Arnaldo Sprint 2 V8): sempre devolver success=True quando a busca
+    # rodou ate o fim (mesmo com 0 resultados). Antes, lista vazia virava
+    # success=False -> frontend lancava erro generico "Busca sem resultados"
+    # ao inves de mostrar empty-state. Erros reais sobem como "erros".
     return {
-        "success": len(editais) > 0,
+        "success": True,
         "termo": termo,
         "fontes_consultadas": fontes_consultadas,
         "total_resultados": len(editais),
@@ -8887,6 +8891,10 @@ def listar_lotes_edital(edital_id):
     """Lista lotes do edital. Se não existem, retorna lista vazia."""
     from models import Lote, LoteItem, EditalItem
     user_id = get_current_user_id()
+    # CV09-12c (Arnaldo Sprint 2 V8): empresa_id era usado MAS NUNCA definido,
+    # gerando NameError -> 500 -> frontend setava setLotesEdital([]) e o
+    # validador via "0 lotes ao voltar" mesmo apos commit do extrair_lotes.
+    empresa_id = get_current_empresa_id()
     db = get_db()
     try:
         lotes = db.query(Lote).filter(
@@ -9673,6 +9681,24 @@ def _salvar_edital_temp_para_score(edital_data, user_id, empresa_id):
         db.commit()
         edital_id = str(novo.id)
         print(f"[SCORE_PROFUNDO] Edital salvo: {numero} -> {edital_id}")
+
+        # CV13-9 (Arnaldo Sprint 2 V8): se vier com dados PNCP, agendar
+        # auto-download do PDF em background. Antes, 85% dos editais
+        # entravam por esse caminho e ficavam sem texto extraido.
+        if novo.cnpj_orgao and novo.ano_compra and novo.seq_compra:
+            try:
+                import threading
+                from tools import download_pdf_edital_bg
+                _eid = edital_id
+                _uid = user_id
+                threading.Thread(
+                    target=lambda: download_pdf_edital_bg(_eid, _uid),
+                    daemon=True,
+                    name=f"pdf-edital-{_eid}"
+                ).start()
+            except Exception as ex:
+                print(f"[CV13-9] Erro ao agendar download PDF: {ex}")
+
         return edital_id
     except Exception as e:
         db.rollback()
@@ -10178,6 +10204,7 @@ def calcular_scores_validacao_rest(edital_id):
     Body (opcional): {"produto_id": "<uuid>"}
     """
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.json or {}
     produto_id = data.get("produto_id")
 
@@ -10185,6 +10212,7 @@ def calcular_scores_validacao_rest(edital_id):
         resultado = tool_calcular_scores_validacao(
             edital_id=edital_id,
             user_id=user_id,
+            empresa_id=empresa_id,
             produto_id=produto_id
         )
         return jsonify(resultado)
@@ -12232,11 +12260,18 @@ def analisar_mercado_edital(edital_id):
         # === Análise IA ===
         analise_ia_texto = ""
         try:
+            # CV12-7 (Arnaldo Sprint 2 V8): antes a IA recebia so o tipo de orgao
+            # ("baseado em federal/estadual/municipal") e inventava o veredito —
+            # respondia "risco baixo" mesmo quando a aba Reputacao mostrava
+            # "Alto" em vermelho. Agora passamos o valor JA CALCULADO
+            # (reputacao['risco_pagamento']) e mandamos a IA RESPEITAR — nao
+            # recalcular nem contradizer.
             prompt_mercado = f"""Analise o perfil deste órgão contratante para licitações:
 
 ÓRGÃO: {nome_orgao}
 CNPJ: {cnpj_orgao or 'N/A'}
 UF: {uf_orgao}
+ESFERA: {reputacao['esfera']}
 
 DADOS DO PNCP:
 - Total de compras encontradas: {len(compras)}
@@ -12249,9 +12284,14 @@ HISTÓRICO INTERNO DO SISTEMA:
 - Editais deste órgão no sistema: {hist_interno.get('total', 0)}
 - Decisões GO: {hist_interno.get('go', 0)} | NO-GO: {hist_interno.get('nogo', 0)}
 
+VALORES JÁ CALCULADOS PELO SISTEMA (use-os como verdade absoluta — não recalcule, não contradiga):
+- Risco de pagamento: **{reputacao['risco_pagamento']}** (já derivado da esfera {reputacao['esfera']})
+- Volume de contratações: **{reputacao['volume']}**
+- Modalidade principal: **{reputacao['modalidade_principal']}**
+
 Gere uma análise concisa (3-5 frases) sobre:
-1. Perfil do órgão (volume, tipo de compras, porte)
-2. Risco de pagamento (baseado no tipo de órgão — federal/estadual/municipal)
+1. Perfil do órgão (volume, tipo de compras, porte) — coerente com os valores acima
+2. Risco de pagamento — **OBRIGATÓRIO repetir "{reputacao['risco_pagamento']}"** e explicar por que (não invente outro valor)
 3. Oportunidades (recorrência, volume, segmento)
 4. Recomendação (vale a pena investir neste órgão?)
 
