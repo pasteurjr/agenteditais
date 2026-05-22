@@ -34,7 +34,7 @@ from models import (
     ContratoAditivo, ContratoDesignacao, AtividadeFiscal, ARPSaldo, SolicitacaoCarona,
     AlertaVencimentoRegra,
     # SPRINT 5 V3 — Empenhos, CRM Pipeline
-    Empenho, EmpenhoItem, EmpenhoFatura, CRMParametrizacao, EditalDecisao, CRMAgendaItem,
+    Empenho, EmpenhoItem, EmpenhoFatura, CRMParametrizacao, EditalDecisao, ValidacaoDecisao, CRMAgendaItem,
     # SPRINT 6 — SMTP / Email
     ConfiguracaoSMTP, EmailTemplate, EmailQueue,
     # SPRINT 7 — Mercado / Analytics / Aprendizado
@@ -858,6 +858,16 @@ CRUD_TABLES = {
         "label": "Decisões sobre Editais",
         "required": ["edital_id", "tipo"],
     },
+    # CV08-8/10 (Arnaldo Sprint 2 V8): decisao GO/NO-GO da tela de Validacao
+    "validacao_decisoes": {
+        "model": ValidacaoDecisao,
+        "empresa_scoped": True,
+        "parent_fk": "edital_id",
+        "parent_model": Edital,
+        "search_fields": ["edital_numero", "decisao", "motivo", "justificativa"],
+        "label": "Decisões de Validação",
+        "required": ["edital_id", "decisao"],
+    },
     "crm-agenda-items": {
         "model": CRMAgendaItem,
         "empresa_scoped": True,
@@ -953,13 +963,27 @@ def _set_column_value(instance, col_name, value, model_class):
                 setattr(instance, attr_name, bool(value))
         elif "DATETIME" in col_type:
             if isinstance(value, str):
-                # Try ISO format
-                for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                    try:
-                        setattr(instance, attr_name, datetime.strptime(value, fmt))
-                        break
-                    except ValueError:
-                        continue
+                parsed = None
+                # 1) ISO 8601 completo (inclui o que o JS toISOString() gera:
+                #    "2026-05-22T02:25:30.123Z" — com milissegundos e 'Z').
+                #    datetime.strptime nao cobre fracao+Z, entao usamos fromisoformat.
+                try:
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    # normaliza para naive (coluna DATETIME sem timezone)
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.replace(tzinfo=None)
+                except ValueError:
+                    parsed = None
+                # 2) fallback: formatos explicitos
+                if parsed is None:
+                    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                        try:
+                            parsed = datetime.strptime(value, fmt)
+                            break
+                        except ValueError:
+                            continue
+                if parsed is not None:
+                    setattr(instance, attr_name, parsed)
             else:
                 setattr(instance, attr_name, value)
         elif "DATE" in col_type and "DATETIME" not in col_type:
@@ -1342,6 +1366,29 @@ def crud_create(table_slug):
                 threading.Thread(target=_run_metadados_bg, daemon=True, name=f"metadados-{_pid}").start()
             except Exception as e:
                 print(f"[CRUD] Erro ao iniciar metadados background: {e}")
+
+        # CV13-9 (Arnaldo Sprint 2 V8): auto-baixar PDF do edital quando salvo
+        # com dados PNCP. Antes, 85% dos editais entravam sem PDF e a IA do
+        # UC-CV13 nao tinha texto para responder Q&A / requisitos / classificar.
+        if table_slug == "editais":
+            try:
+                cnpj = getattr(instance, "cnpj_orgao", None)
+                ano = getattr(instance, "ano_compra", None)
+                seq = getattr(instance, "seq_compra", None)
+                if cnpj and ano and seq:
+                    import threading
+                    from tools import download_pdf_edital_bg
+                    _eid = instance.id
+                    _uid = user_id
+                    def _run_pdf_bg(eid=_eid, uid=_uid):
+                        try:
+                            download_pdf_edital_bg(eid, uid)
+                        except Exception as ex:
+                            print(f"[CRUD] Erro no thread pdf-edital {eid}: {ex}")
+                    threading.Thread(target=_run_pdf_bg, daemon=True, name=f"pdf-edital-{_eid}").start()
+                    print(f"[CRUD] Auto-download PDF agendado para edital {_eid}")
+            except Exception as e:
+                print(f"[CRUD] Erro ao iniciar download PDF background: {e}")
 
         result = instance.to_dict()
         # Add password info for users

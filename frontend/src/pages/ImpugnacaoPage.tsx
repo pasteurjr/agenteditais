@@ -183,8 +183,10 @@ export function ImpugnacaoPage(props?: PageProps) {
   const loadPeticoes = async () => {
     try {
       const data = await crudList("recursos");
-      if (Array.isArray(data)) {
-        setPeticoes(data.map((r: Record<string, unknown>) => ({
+      // crudList pode retornar array puro OU envelope paginado {items,total,...}
+      const lista = Array.isArray(data) ? data : (data?.items || []);
+      {
+        setPeticoes(lista.map((r: Record<string, unknown>) => ({
           id: String(r.id),
           edital_id: String(r.edital_id || ""),
           edital_numero: String(r.edital_numero || r.edital_id || ""),
