@@ -299,6 +299,32 @@ export function ImpugnacaoPage(props?: PageProps) {
 
   // ── Peticoes handlers ──
 
+  const handleGerarComIA = async () => {
+    if (!peticaoEditalId) return;
+    setPeticoesSaving(true);
+    try {
+      const token = localStorage.getItem("editais_ia_access_token");
+      const resp = await fetch(`/api/editais/${peticaoEditalId}/sugerir-peticao`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: peticaoTipo, template_id: peticaoTemplateId || null }),
+      });
+      const data = await resp.json();
+      if (data?.success) {
+        // backend ja criou registro Impugnacao com texto; pega o texto pra mostrar
+        const texto = data.texto || data.texto_minuta || data.conteudo || "";
+        if (texto) setPeticaoConteudo(texto);
+        loadPeticoes();
+      } else if (data?.error) {
+        console.error("IA peticao:", data.error);
+      }
+    } catch (e) {
+      console.error("Erro IA peticao:", e);
+    } finally {
+      setPeticoesSaving(false);
+    }
+  };
+
   const handleNovaPeticao = async () => {
     if (!peticaoEditalId) return;
     setPeticoesSaving(true);
@@ -709,6 +735,9 @@ export function ImpugnacaoPage(props?: PageProps) {
                     footer={
                       <>
                         <button className="btn btn-secondary" onClick={() => setShowNovaPeticaoModal(false)}>Cancelar</button>
+                        <button className="btn btn-info" onClick={handleGerarComIA} disabled={!peticaoEditalId || peticoesSaving} title="Gera a peça com IA usando a inconsistencias detectadas na analise legal">
+                          {peticoesSaving ? <Loader2 size={14} className="spin" /> : <Lightbulb size={14} />} Gerar com IA
+                        </button>
                         <button className="btn btn-primary" onClick={handleNovaPeticao} disabled={!peticaoEditalId || peticoesSaving}>
                           {peticoesSaving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />} Criar
                         </button>

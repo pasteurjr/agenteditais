@@ -36,6 +36,33 @@ from models import (
 from llm import call_deepseek
 from config import UPLOAD_FOLDER, PNCP_BASE_URL, BEC_API_BASE_URL, BEC_CACHE_TTL_HOURS, COMPRASNET_API_URL, COMPRASNET_TIMEOUT
 
+# === Cliente PNCP via Playwright (bypassa F5 Bot Defense em pncp.gov.br) ===
+# Mantém helper de fallback p/ requests caso Playwright não esteja disponível.
+try:
+    from pncp_playwright_client import pncp_search as _pncp_search_pw
+    _PNCP_PW_OK = True
+except Exception as _e:
+    _PNCP_PW_OK = False
+    print(f"[PNCP] Playwright client indisponível ({_e}); usando requests (provavelmente bloqueado).")
+
+
+def _pncp_search_fetch(termo, pagina, tam_pagina=50, ordenacao="-data"):
+    """Wrapper único: tenta Playwright; se falhar, cai p/ requests legacy."""
+    if _PNCP_PW_OK:
+        try:
+            return _pncp_search_pw(q=termo, tipos_documento="edital",
+                                    tam_pagina=tam_pagina, pagina=pagina, ordenacao=ordenacao)
+        except Exception as e:
+            print(f"[PNCP] Playwright falhou ({e}); tentando requests.")
+    SEARCH_URL = "https://pncp.gov.br/api/search/"
+    resp = requests.get(SEARCH_URL,
+                        params={"q": termo, "tipos_documento": "edital",
+                                "tam_pagina": tam_pagina, "pagina": pagina, "ordenacao": ordenacao},
+                        timeout=20, headers={"Accept": "application/json"})
+    if resp.status_code != 200:
+        return {"items": [], "total": 0, "_http_status": resp.status_code}
+    return resp.json()
+
 
 # ==================== BUSCA WEB GENÉRICA ====================
 
@@ -810,23 +837,14 @@ def tool_buscar_links_editais(termo: str, user_id: str = None) -> Dict[str, Any]
         termo_norm = _sem_acento(termo.lower())
         palavras_termo = [p for p in termo_norm.split() if len(p) > 2]
 
-        # Buscar via Search API do PNCP (busca textual no servidor)
-        SEARCH_URL = "https://pncp.gov.br/api/search/"
+        # Buscar via Search API do PNCP (Playwright -> bypassa F5; fallback requests)
         all_items = []
-
         for pagina in range(1, 5):  # Até 4 páginas (200 itens)
-            params = {
-                "q": termo,
-                "tipos_documento": "edital",
-                "tam_pagina": 50,
-                "pagina": pagina,
-                "ordenacao": "-data",
-            }
-            resp = requests.get(SEARCH_URL, params=params, timeout=20,
-                                headers={"Accept": "application/json"})
-            if resp.status_code != 200:
+            try:
+                data = _pncp_search_fetch(termo, pagina=pagina, tam_pagina=50)
+            except Exception as e:
+                print(f"[LINKS] PNCP erro pag {pagina}: {e}")
                 break
-            data = resp.json()
             items = data.get("items", [])
             if not items:
                 break
@@ -2090,27 +2108,13 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str, empresa_id: 
 
                 print(f"[TOOLS] Buscando PNCP Search API + detalhes: q='{termo}', janela={janela}d")
 
-                # ===== PASSO 1: Search API (rápido, ~5s) =====
-                SEARCH_URL = "https://pncp.gov.br/api/search/"
+                # ===== PASSO 1: Search API via Playwright (bypassa F5 Bot Defense) =====
                 MAX_PAGINAS = 10
                 all_items = []
 
                 for pagina in range(1, MAX_PAGINAS + 1):
                     try:
-                        params = {
-                            "q": termo,
-                            "tipos_documento": "edital",
-                            "tam_pagina": 50,
-                            "pagina": pagina,
-                            "ordenacao": "-data",
-                        }
-                        resp = requests.get(SEARCH_URL, params=params, timeout=20,
-                                            headers={"Accept": "application/json"})
-                        if resp.status_code != 200:
-                            print(f"[TOOLS] Search API erro HTTP {resp.status_code} na página {pagina}")
-                            break
-
-                        data = resp.json()
+                        data = _pncp_search_fetch(termo, pagina=pagina, tam_pagina=50)
                         items = data.get("items", [])
                         total = data.get("total", 0)
 
@@ -2183,12 +2187,31 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str, empresa_id: 
                         if not incluir_encerrados:
                             continue
 
+                    # CV11-4 (Arnaldo Sprint 2 V8): excluir editais cuja data de abertura
+                    # ja passou — sao licitacoes vencidas que poluiam o radar.
+                    data_ab_str = item.get('data_inicio_vigencia', '') or item.get('data_abertura_proposta', '')
+                    if data_ab_str and not incluir_encerrados:
+                        try:
+                            dt_ab = datetime.fromisoformat(str(data_ab_str).replace('Z', '')[:19])
+                            if dt_ab < hoje:
+                                editais_encerrados += 1
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+
                     editais_em_aberto += 1
 
                     # Extrair dados
                     orgao_nome = item.get('orgao_nome', 'N/A')
                     cnpj = (item.get('orgao_cnpj', '') or '').replace('.', '').replace('/', '').replace('-', '')
                     uf_item = item.get('uf', '')
+                    # CV01-2b (Arnaldo Sprint 2 V8): aplicar filtro UF — o parametro
+                    # `uf` chegava ate aqui mas nao era usado, retornando editais
+                    # de qualquer estado mesmo quando o usuario filtrou (ex.: PR).
+                    if uf:
+                        ufs_alvo = [u.strip().upper() for u in (uf if isinstance(uf, list) else str(uf).split(',')) if u.strip()]
+                        if ufs_alvo and (uf_item or '').upper() not in ufs_alvo:
+                            continue
                     cidade = item.get('municipio_nome', '')
                     ano = item.get('ano')
                     seq = item.get('numero_sequencial')
@@ -2236,7 +2259,20 @@ def tool_buscar_editais_fonte(fonte: str, termo: str, user_id: str, empresa_id: 
 
                     titulo_raw = item.get('title', '') or ''
                     numero_match = re.search(r'n[ºo°]\s*(.+)', titulo_raw, re.IGNORECASE)
-                    numero_edital = numero_match.group(1).strip() if numero_match else (item.get('numero') or titulo_raw or 'N/A')
+                    if numero_match:
+                        numero_edital = numero_match.group(1).strip()
+                    elif item.get('numero'):
+                        numero_edital = item.get('numero')
+                    else:
+                        # CV02-11 (Arnaldo Sprint 2 V8): nao usar titulo_raw como numero
+                        # quando ele repete o orgao (ex.: "Pregão da Prefeitura de X"); melhor
+                        # devolver "N/A" e deixar o usuario perceber dados faltantes.
+                        titulo_norm = titulo_raw.lower().strip()
+                        orgao_norm = (orgao_nome or '').lower().strip()
+                        if titulo_norm and orgao_norm and orgao_norm in titulo_norm:
+                            numero_edital = 'N/A'
+                        else:
+                            numero_edital = titulo_raw or 'N/A'
 
                     edital_data = {
                         "numero": numero_edital,
@@ -4128,6 +4164,18 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
 
             print(f"[TOOLS] Scoring {len(relevant)} editais em {total_batches} batches ({BATCH_SIZE}/batch, {MAX_WORKERS} workers)")
 
+            # CV02-12 (Arnaldo Sprint 2 V8): set normalizado de nomes/modelos reais
+            # do portfolio, usado para vetar alucinacoes da IA (ex.: "GEN-2024-PRO").
+            import unicodedata as _ucv12
+            def _norm_prod(s):
+                return _ucv12.normalize('NFKD', (s or '').lower()).encode('ascii','ignore').decode('ascii').strip()
+            portfolio_nomes_norm = set()
+            for _p in produtos_data:
+                if _p.get('nome'):
+                    portfolio_nomes_norm.add(_norm_prod(_p['nome']))
+                if _p.get('modelo'):
+                    portfolio_nomes_norm.add(_norm_prod(_p['modelo']))
+
             t_score = time.time()
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 future_to_batch = {}
@@ -4150,12 +4198,22 @@ def tool_calcular_score_aderencia(editais: List[Dict], user_id: str, empresa_id:
                                 edital['justificativa'] = s.get('justificativa', '')
                                 # Converter produto_principal para formato esperado pelo frontend
                                 prod_nome = s.get('produto_principal', '')
-                                if prod_nome:
+                                # CV02-12: validar que o nome devolvido bate com o portfolio
+                                # real — IA inventava SKUs (ex.: "GEN-2024-PRO") que nao
+                                # existiam, induzindo o validador a erro.
+                                prod_nome_norm = _norm_prod(prod_nome)
+                                prod_valido = bool(prod_nome) and (
+                                    prod_nome_norm in portfolio_nomes_norm or
+                                    any(prod_nome_norm in pn or pn in prod_nome_norm for pn in portfolio_nomes_norm if len(pn) > 4)
+                                )
+                                if prod_nome and prod_valido:
                                     edital['produtos_aderentes'] = [{
                                         "produto_nome": prod_nome,
                                         "aderencia": s.get('score_tecnico', 0)
                                     }]
                                 else:
+                                    if prod_nome and not prod_valido:
+                                        print(f"[TOOLS] CV02-12: descartando produto alucinado '{prod_nome}' (nao bate com portfolio)")
                                     edital['produtos_aderentes'] = []
                                 print(f"[TOOLS] Score {edital.get('numero')}: {edital['score_tecnico']}% - {edital['recomendacao']}")
                             else:
@@ -6887,58 +6945,131 @@ def tool_recomendar_preco(termo: str, edital_id: int = None, user_id: str = None
 
 def tool_classificar_edital(edital_id: int = None, texto_edital: str = None, user_id: str = None) -> Dict[str, Any]:
     """
-    Classifica um edital em categorias (comodato, venda, aluguel, etc).
+    Classifica um edital em categorias mutuamente exclusivas.
 
-    Args:
-        edital_id: ID do edital no banco
-        texto_edital: Texto/objeto do edital para classificar
-        user_id: ID do usuário
+    CV13-10 (Arnaldo Sprint 2 V8): antes retornava 'aluguel_simples + comodato +
+    aluguel_reagentes + venda' tudo junto porque as listas compartilhavam keywords
+    genericas ('locacao', 'aluguel', 'equipamento'). Agora:
 
-    Returns:
-        Dict com categoria identificada e confiança
+    1. Le tambem o texto completo do PDF (EditalDocumento.texto_extraido) — antes
+       so olhava objeto+numero (~200 chars).
+    2. Usa frases compostas como sinais fortes (vencem keywords soltas).
+    3. Aplica regras hierarquicas de desempate: comodato > aluguel_reagentes >
+       aluguel_simples > venda > consumo_* (do mais especifico ao mais generico).
+    4. Threshold de confianca minimo — se nenhum sinal forte, devolve 'outros'.
+    5. Retorna `categorias_secundarias` (com score > 30% da principal) para
+       transparencia, mas a UI mostra so a principal.
     """
-    from database import SessionLocal
-    from models import Edital
+    from models import get_db, Edital, EditalDocumento
+    import re as _re
 
-    # Categorias e suas keywords
-    CATEGORIAS = {
-        "comodato": ["comodato", "cessão", "cessao", "empréstimo", "emprestimo", "sem ônus", "sem onus"],
-        "aluguel_reagentes": ["locação", "locacao", "aluguel", "reagentes", "com fornecimento"],
-        "aluguel_simples": ["locação", "locacao", "aluguel", "equipamento"],
-        "venda": ["aquisição", "aquisicao", "compra", "venda", "aquisicao de"],
-        "consumo_reagentes": ["reagentes", "kits", "testes", "consumíveis", "consumiveis"],
-        "insumos_hospitalares": ["material hospitalar", "insumos hospitalares", "descartáveis"],
-        "insumos_laboratoriais": ["material laboratorial", "insumos laboratoriais", "vidraria"]
+    # Sinais FORTES (frases compostas) — peso 5 cada.
+    SINAIS_FORTES = {
+        "comodato": [
+            "em comodato", "regime de comodato", "cessao de uso",
+            "cessão de uso", "contrato de comodato", "sem onus", "sem ônus",
+        ],
+        "aluguel_reagentes": [
+            "locacao de equipamento com fornecimento", "locação de equipamento com fornecimento",
+            "aluguel de equipamento com fornecimento de reagentes",
+            "fornecimento de reagentes e cessao", "fornecimento de reagentes e cessão",
+            "kit reagente", "kits reagentes",
+            "com fornecimento de reagentes", "com fornecimento dos reagentes",
+            "fornecimento dos insumos e reagentes",
+        ],
+        "aluguel_simples": [
+            "locacao de equipamento", "locação de equipamento",
+            "aluguel de equipamento", "locacao de aparelho", "locação de aparelho",
+        ],
+        "venda": [
+            "aquisicao de equipamento", "aquisição de equipamento",
+            "aquisicao de bens", "aquisição de bens",
+            "compra de equipamento", "fornecimento de equipamento",
+        ],
+        "consumo_reagentes": [
+            "reagentes laboratoriais", "kits para diagnostico", "kits para diagnóstico",
+            "tiras reagentes", "consumo de reagentes",
+        ],
+        "insumos_hospitalares": [
+            "material medico hospitalar", "material médico hospitalar",
+            "insumos hospitalares", "material descartavel hospitalar",
+            "material descartável hospitalar",
+        ],
+        "insumos_laboratoriais": [
+            "material laboratorial", "insumos laboratoriais",
+            "vidraria de laboratorio", "vidraria de laboratório",
+        ],
     }
 
+    # Sinais FRACOS (keywords soltas) — peso 1. So contam quando nao ha sinal forte
+    # ou no desempate dentro de categorias proximas.
+    SINAIS_FRACOS = {
+        "comodato": ["comodato", "cessao", "cessão"],
+        "aluguel_reagentes": [],  # depende dos compostos pra nao confundir com aluguel_simples
+        "aluguel_simples": ["locacao", "locação", "aluguel"],
+        "venda": ["aquisicao", "aquisição", "compra"],
+        "consumo_reagentes": ["reagentes", "kits", "testes"],
+        "insumos_hospitalares": ["descartaveis", "descartáveis"],
+        "insumos_laboratoriais": ["vidraria"],
+    }
+
+    # Hierarquia de desempate (mais especifico vence em caso de empate de score).
+    # CV13-10: ordem de desempate quando os scores empatam. "consumo_reagentes"
+    # vem antes de "venda" porque "aquisicao de reagentes" eh quase sempre
+    # consumo, nao compra de bem permanente.
+    PRIORIDADE = [
+        "comodato", "aluguel_reagentes", "aluguel_simples",
+        "consumo_reagentes", "insumos_hospitalares", "insumos_laboratoriais",
+        "venda",
+    ]
+
+    # === Coleta de texto ===
     texto = ""
     edital_info = None
 
-    # Obter texto do edital
     if edital_id:
-        db = SessionLocal()
+        db = get_db()
         try:
             edital = db.query(Edital).filter(Edital.id == edital_id).first()
             if edital:
-                texto = f"{edital.objeto or ''} {edital.numero or ''}"
                 edital_info = {"id": edital.id, "numero": edital.numero, "objeto": edital.objeto}
+                # 1) objeto + numero (sempre disponivel)
+                texto = f"{edital.objeto or ''} {edital.numero or ''}"
+                # 2) CV13-10 + CV13-9: ler tambem texto extraido do PDF se houver
+                doc = db.query(EditalDocumento).filter(
+                    EditalDocumento.edital_id == edital.id,
+                    EditalDocumento.tipo == 'edital_principal',
+                    EditalDocumento.texto_extraido != None,
+                ).first()
+                if doc and doc.texto_extraido:
+                    # Limitar a 30k chars pra nao explodir tempo de regex
+                    texto += " " + doc.texto_extraido[:30000]
         finally:
             db.close()
 
     if texto_edital:
         texto = texto_edital
 
-    if not texto:
+    if not texto.strip():
         return {"success": False, "error": "Nenhum texto de edital fornecido"}
 
     texto_lower = texto.lower()
+    # Normalizar espacos para casar frases compostas mesmo com quebra de linha
+    texto_norm = _re.sub(r"\s+", " ", texto_lower)
 
-    # Classificar por keywords
+    # === Scoring ===
     scores = {}
-    for categoria, keywords in CATEGORIAS.items():
-        score = sum(1 for kw in keywords if kw in texto_lower)
-        if score > 0:
-            scores[categoria] = score
+    for cat in SINAIS_FORTES.keys():
+        s = 0
+        for frase in SINAIS_FORTES[cat]:
+            if frase in texto_norm:
+                s += 5
+        for kw in SINAIS_FRACOS.get(cat, []):
+            # Word boundary pra nao casar substring (ex: 'venda' dentro de 'revenda')
+            if _re.search(rf"\b{_re.escape(kw)}\b", texto_norm):
+                s += 1
+        if s > 0:
+            scores[cat] = s
 
     if not scores:
         return {
@@ -6946,21 +7077,61 @@ def tool_classificar_edital(edital_id: int = None, texto_edital: str = None, use
             "edital": edital_info,
             "categoria": "outros",
             "confianca": 0,
-            "justificativa": "Não foi possível identificar categoria específica"
+            "categorias_secundarias": [],
+            "justificativa": "Nenhum sinal forte ou fraco identificado no texto.",
         }
 
-    # Categoria com maior score
-    categoria_principal = max(scores.items(), key=lambda x: x[1])
-    total_matches = sum(scores.values())
-    confianca = (categoria_principal[1] / len(CATEGORIAS[categoria_principal[0]])) * 100
+    # === Desempate hierarquico ===
+    # CV13-10: regras de DOMINANCIA — categoria mais especifica sequestra a mais
+    # generica quando ambas tem sinal FORTE (>=5). Senao, aluguel_simples vence
+    # aluguel_reagentes por causa do +1 dos sinais fracos genericos.
+    DOMINANCIA = [
+        ("aluguel_reagentes", "aluguel_simples"),  # se reagentes tem sinal forte, vence simples
+        ("comodato", "aluguel_simples"),           # comodato eh especifico, simples eh generico
+        ("comodato", "venda"),                     # comodato vence venda quando coexistem
+        ("consumo_reagentes", "venda"),            # consumo eh subset de venda
+    ]
+    for especifica, generica in DOMINANCIA:
+        if especifica in scores and generica in scores and scores[especifica] >= 5:
+            # Anular o ganho fraco da generica para nao competir
+            scores[generica] = min(scores[generica], scores[especifica] - 1)
+
+    score_max = max(scores.values())
+    empatados = [c for c, s in scores.items() if s == score_max]
+    if len(empatados) > 1:
+        categoria_principal = min(empatados, key=lambda c: PRIORIDADE.index(c) if c in PRIORIDADE else 999)
+    else:
+        categoria_principal = empatados[0]
+
+    # === Confianca ===
+    # Sinal forte (>= 5) = alta confianca. So sinais fracos = baixa.
+    s_principal = scores[categoria_principal]
+    if s_principal >= 5:
+        confianca = min(60 + s_principal * 4, 100)
+    else:
+        confianca = min(s_principal * 15, 50)
+
+    # === Secundarias (apenas as com score >= 30% da principal) ===
+    threshold = s_principal * 0.3
+    secundarias = [
+        {"categoria": c, "score": s}
+        for c, s in sorted(scores.items(), key=lambda x: -x[1])
+        if c != categoria_principal and s >= threshold
+    ]
 
     return {
         "success": True,
         "edital": edital_info,
-        "categoria": categoria_principal[0],
-        "confianca": round(min(confianca, 100), 1),
+        "categoria": categoria_principal,
+        "confianca": round(confianca, 1),
+        "score": s_principal,
         "todas_categorias": scores,
-        "justificativa": f"Identificadas {categoria_principal[1]} palavras-chave da categoria '{categoria_principal[0]}'"
+        "categorias_secundarias": secundarias,
+        "justificativa": (
+            f"Categoria '{categoria_principal}' identificada com score {s_principal} "
+            f"(sinais fortes valem 5, fracos valem 1). Confianca {round(confianca,1)}%."
+            + (f" Secundarias: {', '.join(s['categoria'] for s in secundarias)}." if secundarias else "")
+        ),
     }
 
 
@@ -10917,8 +11088,7 @@ def tool_gerar_peticao_impugnacao(edital_id: str, user_id: str, empresa_id: str 
         # Se não foram fornecidas inconsistências, buscar da última validação legal
         if not inconsistencias:
             validacao = db.query(ValidacaoLegal).filter(
-                ValidacaoLegal.edital_id == edital_id,
-                ValidacaoLegal.empresa_id == empresa_id
+                ValidacaoLegal.edital_id == edital_id
             ).order_by(ValidacaoLegal.created_at.desc()).first()
             if validacao and validacao.inconsistencias_json:
                 try:
@@ -10982,12 +11152,18 @@ A petição deve conter:
 6. **DO PEDIDO** — solicitação específica (alteração do edital, suspensão, esclarecimento)
 7. **FECHO** — local, data e assinatura
 
-Use linguagem jurídica formal. Cite artigos de lei e jurisprudência pertinentes.
-Formate em Markdown."""
+DIRETRIZES DE PROFUNDIDADE (obrigatorias):
+- Escreva no minimo 2500 palavras com argumentacao densa e fundamentada.
+- Cite artigos especificos da Lei 14.133/2021 (mencione numero do art./inciso/alinea).
+- Cite acordaos do TCU (numero/ano) e da jurisprudencia do STJ quando relevante.
+- Mencione principios da Administracao Publica: legalidade, isonomia, competitividade, vinculacao ao instrumento convocatorio.
+- Cada inconsistencia detalhada deve ter: descricao, base legal violada, citacao do trecho do edital, impacto na competicao e pedido de correcao especifico.
+- Use linguagem juridica formal e tecnica precisa. Sem placeholders. Sem "[Nome]" — use os dados ja fornecidos.
+- Formate em Markdown com cabecalhos de secao."""
 
         texto_peticao = call_deepseek(
             [{"role": "user", "content": prompt_peticao}],
-            max_tokens=6000,
+            max_tokens=12000,
             model_override="deepseek-chat"
         )
 
@@ -11254,12 +11430,20 @@ O laudo DEVE conter as seguintes seções:
 5. **DO PEDIDO** — requerimento específico
 6. **FECHO** — local, data e assinatura
 
-Use linguagem jurídica formal e técnica precisa. Formate em Markdown.
+DIRETRIZES DE PROFUNDIDADE (obrigatorias):
+- Escreva no minimo 3500 palavras, com argumentacao densa nas secoes JURIDICA e TECNICA.
+- Cite artigos especificos da Lei 14.133/2021 (numero do art./inciso) e Lei 8.666/1993 quando aplicavel.
+- Cite acordaos do TCU (numero/ano), Sumulas (TCU, STJ, STF) e decisoes da Justica Federal.
+- Mencione expressamente principios: legalidade, isonomia, competitividade, eficiencia, vinculacao ao instrumento convocatorio, motivacao, publicidade, julgamento objetivo.
+- Inclua precedentes administrativos especificos e doutrina (Marcal Justen Filho, Joel de Menezes Niebuhr, Carlos Pinto Coelho Motta).
+- A SECAO TECNICA deve incluir comparativo objetivo dos requisitos do edital com a especificacao do produto/servico, com normas tecnicas (ABNT NBR, ANVISA RDC) quando cabivel.
+- Sem placeholders. Sem "[inserir]". Use dados reais ja fornecidos.
+- Use linguagem juridica formal e tecnica precisa. Formate em Markdown.
 Separe claramente a seção JURÍDICA da seção TÉCNICA com delimitadores."""
 
         resposta_ia = call_deepseek(
             [{"role": "user", "content": prompt_laudo}],
-            max_tokens=8000,
+            max_tokens=14000,
             model_override="deepseek-chat"
         )
 
@@ -12736,4 +12920,109 @@ e score_depois é a estimativa após normalização."""
 
 
 TOOLS_MAP["aplicar_mascara_descricao"] = tool_aplicar_mascara_descricao
+
+
+# =============================================================================
+# CV13-9 (Arnaldo Sprint 2 V8) — auto-download de PDF do edital em background
+# =============================================================================
+def download_pdf_edital_bg(edital_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Roda em thread daemon: busca arquivos no PNCP, baixa o PDF principal,
+    extrai texto com PyPDF2 e salva em EditalDocumento.texto_extraido.
+
+    Idempotente: se ja existe EditalDocumento com tipo='edital_principal'
+    para esse edital, nao faz nada. Engole exceptions (background nao
+    pode derrubar o request).
+    """
+    from datetime import datetime as _dt
+    db = get_db()
+    try:
+        edital = db.query(Edital).filter(Edital.id == edital_id).first()
+        if not edital:
+            return {"success": False, "error": "edital_nao_encontrado"}
+
+        # Idempotencia: ja tem doc principal?
+        ja_tem = db.query(EditalDocumento).filter(
+            EditalDocumento.edital_id == edital_id,
+            EditalDocumento.tipo == 'edital_principal'
+        ).first()
+        if ja_tem and ja_tem.texto_extraido and len(ja_tem.texto_extraido) > 500:
+            print(f"[CV13-9] Edital {edital.numero} ja tem PDF baixado (skip)")
+            return {"success": True, "skipped": True}
+
+        # Precisa de cnpj/ano/seq do PNCP
+        if not (edital.cnpj_orgao and edital.ano_compra and edital.seq_compra):
+            return {"success": False, "error": "sem_dados_pncp"}
+
+        print(f"[CV13-9] Auto-download iniciado: edital={edital.numero} cnpj={edital.cnpj_orgao}")
+
+        arquivos_result = tool_buscar_arquivos_edital_pncp(
+            cnpj=edital.cnpj_orgao, ano=edital.ano_compra, seq=edital.seq_compra
+        )
+        if not arquivos_result.get('success') or not arquivos_result.get('arquivos'):
+            print(f"[CV13-9] Sem arquivos no PNCP para {edital.numero}")
+            return {"success": False, "error": "sem_arquivos_pncp"}
+
+        arquivo_edital = arquivos_result.get('arquivo_edital') or arquivos_result['arquivos'][0]
+        download_result = tool_baixar_pdf_pncp(
+            cnpj=edital.cnpj_orgao,
+            ano=edital.ano_compra,
+            seq=edital.seq_compra,
+            sequencial_arquivo=arquivo_edital['sequencial'],
+            user_id=user_id,
+            edital_id=edital.id
+        )
+        if not download_result.get('success'):
+            print(f"[CV13-9] Falha no download: {download_result.get('error')}")
+            return download_result
+
+        filepath = download_result['filepath']
+        filename = download_result['filename']
+
+        # Extrair texto. PDF pode estar dentro de ZIP — reusar helper de app.py
+        # nao eh trivial aqui (importacao circular). Usamos PyPDF2 direto;
+        # se vier ZIP, o usuario pode pedir reextract manual via /api/editais/<id>/pdf.
+        texto_extraido = ""
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(filepath)
+            for page in reader.pages:
+                try:
+                    texto_extraido += page.extract_text() or ""
+                except Exception:
+                    pass
+        except Exception as ex:
+            print(f"[CV13-9] Erro PyPDF2 ({filename}): {ex}")
+            # Mesmo sem texto, registra o doc para nao re-tentar download.
+
+        novo_doc = EditalDocumento(
+            id=str(uuid.uuid4()),
+            edital_id=edital.id,
+            tipo='edital_principal',
+            nome_arquivo=filename,
+            path_arquivo=filepath,
+            texto_extraido=texto_extraido[:100000] if texto_extraido else None,
+            processado=bool(texto_extraido),
+            created_at=_dt.now()
+        )
+        db.add(novo_doc)
+
+        # Atualizar referencias no edital
+        edital.pdf_path = filepath
+        edital.pdf_url = download_result.get('url') or edital.pdf_url
+        edital.pdf_titulo = arquivo_edital.get('titulo')
+
+        db.commit()
+        print(f"[CV13-9] OK {edital.numero}: {len(texto_extraido):,} chars salvos")
+        return {"success": True, "chars": len(texto_extraido)}
+
+    except Exception as e:
+        db.rollback()
+        print(f"[CV13-9] Erro inesperado: {type(e).__name__}: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+TOOLS_MAP["download_pdf_edital_bg"] = download_pdf_edital_bg
 

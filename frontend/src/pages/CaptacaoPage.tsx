@@ -409,6 +409,24 @@ export function CaptacaoPage(props?: PageProps) {
   const [relatorioMD, setRelatorioMD] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // CV01-6 (Arnaldo Sprint 2 V8): avisos por fonte (BEC indisponivel, NCM ignorado, etc)
+  const [errosFontes, setErrosFontes] = useState<string[] | null>(null);
+
+  // CV01-3 (Arnaldo Sprint 2 V8): limpar todos os filtros
+  const handleLimparFiltros = () => {
+    setTermoBusca("");
+    setNcm("");
+    setUf("todas");
+    setFonte("todas");
+    setModalidadeFiltro("todos");
+    setClassificacaoTipo("todos");
+    setClassificacaoOrigem("todos");
+    setTipoScore("nenhum");
+    setIncluirEncerrados(false);
+    setResultados([]);
+    setErro(null);
+    setErrosFontes(null);
+  };
   const [painelEdital, setPainelEdital] = useState<EditalBusca | null>(null);
   const [intencaoLocal, setIntencaoLocal] = useState("estrategico");
   const [margemLocal, setMargemLocal] = useState(15);
@@ -523,13 +541,22 @@ export function CaptacaoPage(props?: PageProps) {
       try {
         const res = await crudList("fontes-editais", { limit: 50 });
         const items = res.items as Record<string, unknown>[];
-        // Deduplicar por nome (lowercase) e só ativas
+        // CV01-1 (Arnaldo Sprint 2 V8): deduplicar tambem variantes (PNCP /
+        // PNCP Portal / PNCP - Portal Nacional) colapsando para a familia.
         const vistos = new Set<string>();
         const opcoes: { value: string; label: string }[] = [];
+        const familia = (n: string) => {
+          const x = n.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+          if (x.includes("pncp")) return "pncp";
+          if (x.includes("comprasnet") || x.includes("compras gov") || x.includes("compras.gov")) return "comprasnet";
+          if (x.includes("bec")) return "bec";
+          if (x.includes("licitacoes-e") || x.includes("licitacoese") || x.includes("bb licit")) return "licitacoes-e";
+          return x;
+        };
         for (const f of items) {
           if (!f.ativo) continue;
           const nome = String(f.nome ?? "").trim();
-          const chave = nome.toLowerCase();
+          const chave = familia(nome);
           if (chave && !vistos.has(chave)) {
             vistos.add(chave);
             opcoes.push({ value: String(f.id), label: nome });
@@ -1009,10 +1036,14 @@ export function CaptacaoPage(props?: PageProps) {
     }
     setLoading(true);
     setErro(null);
+    setErrosFontes(null);
     try {
       const token = localStorage.getItem("editais_ia_access_token");
+      // CV01-2a (Arnaldo Sprint 2 V8): NCM nao eh filtro estruturado no backend.
+      // Antes era concatenado no termo ('foo NCM 90230000') e zerava a busca
+      // porque o PNCP search nao indexa NCM no texto. Agora apenas avisamos.
       if (ncm.trim()) {
-        termoBusca += " NCM " + ncm.trim();
+        setErrosFontes(prev => ([...(prev || []), `Filtro NCM "${ncm.trim()}" foi ignorado (ainda nao suportado pelo PNCP search). Refine seu termo se quiser limitar resultados.`]));
       }
       const params = new URLSearchParams({
         termo: termoBusca,
@@ -1039,10 +1070,15 @@ export function CaptacaoPage(props?: PageProps) {
         throw new Error((err as Record<string, string>).error || "Erro ao buscar editais");
       }
 
-      const data = await res.json() as { success: boolean; editais?: Record<string, unknown>[]; error?: string };
+      const data = await res.json() as { success: boolean; editais?: Record<string, unknown>[]; error?: string; erros?: string[] | null; total_resultados?: number };
 
       if (!data.success) {
-        throw new Error(data.error || "Busca sem resultados");
+        throw new Error(data.error || "Erro ao buscar editais");
+      }
+
+      // CV01-6 (Arnaldo Sprint 2 V8): expor avisos de fontes indisponiveis para o usuario
+      if (data.erros && data.erros.length > 0) {
+        setErrosFontes(prev => ([...(prev || []), ...data.erros!]));
       }
 
       const editais = (data.editais ?? []).map(e => normalizarEditalDaBusca(e, estadosAtuacao));
@@ -1287,20 +1323,37 @@ export function CaptacaoPage(props?: PageProps) {
     }
   };
 
+  // CV03-13 (Arnaldo Sprint 2 V8): salvar em LOTE agora atualiza o badge
+  // 'salvo' de cada item (antes so o handler individual fazia setResultados;
+  // o lote só dava alert e os boxes seguiam oferecendo salvar de novo).
+  const _setSalvoLocal = (mapaIds: Record<string, string>) => {
+    if (!mapaIds || Object.keys(mapaIds).length === 0) return;
+    setResultados(prev => prev.map(e => mapaIds[e.id] ? { ...e, editalSalvoId: mapaIds[e.id] } : e));
+    if (painelEdital && mapaIds[painelEdital.id]) {
+      setPainelEdital(prev => prev ? { ...prev, editalSalvoId: mapaIds[prev.id] } : prev);
+    }
+  };
+
   const handleSalvarTodos = async () => {
     const naoSalvos = resultados.filter(e => !e.editalSalvoId);
+    const mapa: Record<string, string> = {};
     for (const edital of naoSalvos) {
-      await salvarEditalNoBanco(edital);
+      const id = await salvarEditalNoBanco(edital);
+      if (id) mapa[edital.id] = id;
     }
-    alert(naoSalvos.length > 0 ? `${naoSalvos.length} edital(is) salvo(s)` : "Todos os editais ja estao salvos");
+    _setSalvoLocal(mapa);
+    alert(Object.keys(mapa).length > 0 ? `${Object.keys(mapa).length} edital(is) salvo(s)` : "Todos os editais ja estao salvos");
   };
 
   const handleSalvarRecomendados = async () => {
     const recomendados = resultados.filter(e => e.score >= 70 && !e.editalSalvoId);
+    const mapa: Record<string, string> = {};
     for (const edital of recomendados) {
-      await salvarEditalNoBanco(edital);
+      const id = await salvarEditalNoBanco(edital);
+      if (id) mapa[edital.id] = id;
     }
-    alert(recomendados.length > 0 ? `${recomendados.length} edital(is) recomendado(s) salvo(s)` : "Todos os recomendados ja estao salvos");
+    _setSalvoLocal(mapa);
+    alert(Object.keys(mapa).length > 0 ? `${Object.keys(mapa).length} edital(is) recomendado(s) salvo(s)` : "Todos os recomendados ja estao salvos");
   };
 
   // T15: Persistir intenção estratégica e margem
@@ -1351,20 +1404,22 @@ export function CaptacaoPage(props?: PageProps) {
         } catch { /* ignorar erro de busca */ }
       }
 
+      // CV04-15 (Arnaldo Sprint 2 V8): persistir tambem intencaoEstrategica e
+      // margemExpectativa no estado, p/ que ao REABRIR o painel sem recarregar
+      // os valores recem-salvos apareçam (antes so 'aparecia' após sair/voltar).
+      const _patch = { estrategiaId: undefined as string | undefined, editalSalvoId: editalId ?? undefined,
+                        intencaoEstrategica: intencaoLocal, margemExpectativa: margemLocal };
       if (estrategiaId) {
         await crudUpdate("estrategias-editais", estrategiaId, payload);
-        setResultados(prev => prev.map(e =>
-          e.id === painelEdital.id ? { ...e, estrategiaId, editalSalvoId: editalId ?? undefined } : e
-        ));
-        setPainelEdital(prev => prev ? { ...prev, estrategiaId, editalSalvoId: editalId ?? undefined } : prev);
+        _patch.estrategiaId = estrategiaId;
       } else {
         const criada = await crudCreate("estrategias-editais", payload);
-        const novoId = String(criada.id ?? "");
-        setResultados(prev => prev.map(e =>
-          e.id === painelEdital.id ? { ...e, estrategiaId: novoId, editalSalvoId: editalId ?? undefined } : e
-        ));
-        setPainelEdital(prev => prev ? { ...prev, estrategiaId: novoId, editalSalvoId: editalId ?? undefined } : prev);
+        _patch.estrategiaId = String(criada.id ?? "");
       }
+      setResultados(prev => prev.map(e =>
+        e.id === painelEdital.id ? { ...e, ..._patch } : e
+      ));
+      setPainelEdital(prev => prev ? { ...prev, ..._patch } : prev);
       setEstrategiaSalva(true);
       setTimeout(() => setEstrategiaSalva(false), 3000);
     } catch (e) {
@@ -2281,7 +2336,7 @@ function baixarMD() {
             />
           </div>
 
-          <div style={{ marginTop: "16px", display: "flex", justifyContent: "center" }}>
+          <div style={{ marginTop: "16px", display: "flex", justifyContent: "center", gap: "8px" }}>
             <ActionButton
               icon={<Search size={16} />}
               label="Buscar Editais"
@@ -2289,11 +2344,35 @@ function baixarMD() {
               onClick={handleBuscar}
               loading={loading}
             />
+            {/* CV01-3 (Arnaldo Sprint 2 V8): botao Limpar filtros */}
+            <ActionButton
+              label="Limpar filtros"
+              variant="neutral"
+              onClick={handleLimparFiltros}
+            />
           </div>
 
           {erro && (
             <div className="alert alert-error" style={{ marginTop: "12px" }}>
               {erro}
+            </div>
+          )}
+
+          {/* CV01-6 + CV01-2a (Arnaldo Sprint 2 V8): avisos de fontes/filtros */}
+          {errosFontes && errosFontes.length > 0 && (
+            <div className="alert" style={{ marginTop: "12px", background: "#1e293b", border: "1px solid #475569", color: "#fbbf24", padding: "10px 12px", borderRadius: "6px" }}>
+              <strong style={{ display: "block", marginBottom: "4px", fontSize: "12px" }}>⚠ Avisos da busca:</strong>
+              <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "12px", lineHeight: 1.5 }}>
+                {errosFontes.map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {/* CV01-4: empty-state explicito quando a busca rodou mas zero resultados */}
+          {!loading && !erro && resultados.length === 0 && termo && (
+            <div className="alert" style={{ marginTop: "12px", background: "#0f172a", border: "1px solid #334155", color: "#94a3b8", padding: "12px", borderRadius: "6px", textAlign: "center" }}>
+              <strong style={{ display: "block", marginBottom: "4px" }}>Nenhum edital encontrado</strong>
+              <span style={{ fontSize: "12px" }}>Tente relaxar os filtros (UF, modalidade, score) ou usar um termo mais geral.</span>
             </div>
           )}
         </Card>
@@ -2321,11 +2400,15 @@ function baixarMD() {
                     <ActionButton
                       label="Salvar Selecionados"
                       onClick={async () => {
+                        // CV03-13 (Arnaldo Sprint 2 V8): atualiza badge dos selecionados
                         const selecionados = resultados.filter(e => e.selected && !e.editalSalvoId);
+                        const mapa: Record<string, string> = {};
                         for (const edital of selecionados) {
-                          await salvarEditalNoBanco(edital);
+                          const id = await salvarEditalNoBanco(edital);
+                          if (id) mapa[edital.id] = id;
                         }
-                        alert(selecionados.length > 0 ? `${selecionados.length} edital(is) salvo(s)` : "Todos os selecionados ja estao salvos");
+                        _setSalvoLocal(mapa);
+                        alert(Object.keys(mapa).length > 0 ? `${Object.keys(mapa).length} edital(is) salvo(s)` : "Todos os selecionados ja estao salvos");
                       }}
                       variant="primary"
                     />
@@ -2900,7 +2983,10 @@ function baixarMD() {
                       value={String(novoMonScoreMin)}
                       onChange={(v) => setNovoMonScoreMin(Number(v))}
                       options={[
+                        // CV06-1/2 (Arnaldo Sprint 2 V8): adicionadas opcoes 30% e 40%
                         { value: "0", label: "Todos (sem filtro)" },
+                        { value: "30", label: "30% ou mais" },
+                        { value: "40", label: "40% ou mais" },
                         { value: "50", label: "50% ou mais" },
                         { value: "60", label: "60% ou mais" },
                         { value: "70", label: "70% ou mais" },
@@ -3023,9 +3109,44 @@ function baixarMD() {
                           <Pause size={12} />
                           {m.ativo ? "Pausar" : "Retomar"}
                         </button>
+                        {/* CV06-3 (Arnaldo Sprint 2 V8): botao Editar — permite renomear
+                            o termo de busca do monitoramento sem precisar recriar. */}
+                        <button
+                          title="Editar termo do monitoramento"
+                          onClick={async () => {
+                            const atual = m.termo || m.nome || "";
+                            const novo = window.prompt("Editar termo do monitoramento:", atual);
+                            if (novo == null) return;
+                            const limpo = novo.trim();
+                            if (!limpo || limpo === atual) return;
+                            try {
+                              await crudUpdate("monitoramentos", m.id, { termo: limpo, nome: limpo });
+                              await carregarMonitoramentos();
+                            } catch {
+                              alert("Erro ao editar monitoramento");
+                            }
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            fontSize: "11px",
+                            border: "1px solid #334155",
+                            borderRadius: "4px",
+                            backgroundColor: "transparent",
+                            color: "#60a5fa",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          Editar
+                        </button>
                         <button
                           title="Excluir monitoramento"
                           onClick={async () => {
+                            // CV06-4 (Arnaldo Sprint 2 V8): pedir confirmacao antes
+                            // de excluir (padronizar com exclusao de lote que ja tem).
+                            if (!window.confirm(`Excluir o monitoramento "${m.nome || m.termo || m.id}"? Esta acao nao pode ser desfeita.`)) return;
                             try {
                               await crudDelete("monitoramentos", m.id);
                               await carregarMonitoramentos();
@@ -3066,7 +3187,9 @@ function baixarMD() {
               </>
             )}
             <div style={{ marginTop: "12px" }}>
-              <ActionButton label="Atualizar" onClick={carregarMonitoramentos} />
+              {/* CV06-3 (Arnaldo Sprint 2 V8): rotulo "Recarregar lista" deixa claro
+                  que nao executa novo crawl — so atualiza a UI a partir do banco. */}
+              <ActionButton label="Recarregar lista" onClick={carregarMonitoramentos} />
             </div>
           </div>
         </Card>

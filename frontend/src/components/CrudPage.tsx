@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from "react";
-import { Search, Plus, Save, Trash2, X, Database, ChevronLeft, Eye, EyeOff, Building } from "lucide-react";
+import { Search, Plus, Save, Trash2, X, Database, ChevronLeft, Eye, EyeOff, Building, Pencil } from "lucide-react";
 import { crudList, crudGet, crudCreate, crudUpdate, crudDelete, getCrudSchema } from "../api/crud";
 import type { CrudColumnSchema } from "../api/crud";
 import { useAuth } from "../contexts/AuthContext";
@@ -464,7 +464,7 @@ export function CrudPage({ config }: CrudPageProps) {
 
   // ─── Render field input ───────────────────────────────────────────────────
 
-  const renderField = (field: FieldConfig) => {
+  const renderField = (field: FieldConfig, inputId?: string) => {
     if (field.hidden) return null;
     const value = formData[field.name] ?? "";
 
@@ -476,6 +476,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "select":
         return (
           <select
+            id={inputId}
             className="select-input"
             value={String(value)}
             onChange={(e) => updateField(field.name, e.target.value)}
@@ -490,6 +491,7 @@ export function CrudPage({ config }: CrudPageProps) {
         return (
           <label className="checkbox-wrapper">
             <input
+              id={inputId}
               type="checkbox"
               checked={Boolean(value)}
               onChange={(e) => updateField(field.name, e.target.checked)}
@@ -500,6 +502,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "textarea":
         return (
           <textarea
+            id={inputId}
             className="textarea-input"
             value={String(value)}
             onChange={(e) => updateField(field.name, e.target.value)}
@@ -510,6 +513,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "json":
         return (
           <textarea
+            id={inputId}
             className="textarea-input"
             value={typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
             onChange={(e) => {
@@ -526,6 +530,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "date":
         return (
           <input
+            id={inputId}
             type="date"
             className="text-input"
             value={String(value).slice(0, 10)}
@@ -535,6 +540,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "datetime":
         return (
           <input
+            id={inputId}
             type="datetime-local"
             className="text-input"
             value={String(value).slice(0, 16)}
@@ -544,6 +550,7 @@ export function CrudPage({ config }: CrudPageProps) {
       case "readonly":
         return (
           <input
+            id={inputId}
             type="text"
             className="text-input"
             value={String(value)}
@@ -559,6 +566,7 @@ export function CrudPage({ config }: CrudPageProps) {
           <div className="password-field-group">
             <div className="password-input-wrapper">
               <input
+                id={inputId}
                 type={isVisible ? "text" : "password"}
                 className="text-input"
                 value={String(value)}
@@ -604,6 +612,7 @@ export function CrudPage({ config }: CrudPageProps) {
         const options = fkOptions[field.name] || [];
         return (
           <select
+            id={inputId}
             className="select-input"
             value={String(value || "")}
             onChange={(e) => updateField(field.name, e.target.value || null)}
@@ -618,6 +627,7 @@ export function CrudPage({ config }: CrudPageProps) {
       default:
         return (
           <input
+            id={inputId}
             type={field.type === "decimal" ? "number" : field.type}
             className="text-input"
             value={String(value)}
@@ -754,7 +764,7 @@ export function CrudPage({ config }: CrudPageProps) {
               </button>
             )}
           </div>
-          <button className="action-button action-button-primary" onClick={handleNew}>
+          <button className="action-button action-button-primary" onClick={handleNew} data-testid="crud-btn-novo">
             <Plus size={16} />
             <span>Novo</span>
           </button>
@@ -774,19 +784,20 @@ export function CrudPage({ config }: CrudPageProps) {
                     {tableFields.map((f) => (
                       <th key={f.name}>{f.label}</th>
                     ))}
+                    <th style={{ width: 80, textAlign: "center" }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={tableFields.length} className="data-table-loading">
+                      <td colSpan={tableFields.length + 1} className="data-table-loading">
                         <div className="loading-spinner small" />
                         Carregando...
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={tableFields.length} className="data-table-empty">
+                      <td colSpan={tableFields.length + 1} className="data-table-empty">
                         Nenhum registro encontrado
                       </td>
                     </tr>
@@ -796,10 +807,24 @@ export function CrudPage({ config }: CrudPageProps) {
                         key={String(item.id)}
                         className={`clickable ${selectedId === String(item.id) ? "selected" : ""}`}
                         onClick={() => handleSelectItem(item)}
+                        data-testid={`crud-row-${item.id}`}
                       >
                         {tableFields.map((f) => (
                           <td key={f.name}>{getDisplayValue(item, f)}</td>
                         ))}
+                        <td style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="action-button action-button-icon"
+                            onClick={() => handleSelectItem(item)}
+                            title="Editar"
+                            aria-label={`Editar ${item.nome || item.id}`}
+                            data-testid={`crud-btn-editar-${item.id}`}
+                            style={{ padding: "4px 8px" }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -876,18 +901,22 @@ export function CrudPage({ config }: CrudPageProps) {
                     />
                   </div>
                 )}
-                {formFields.filter((f) => !f.hidden).map((field) => (
+                {formFields.filter((f) => !f.hidden).map((field) => {
+                  const inputId = `crud-field-${field.name}`;
+                  return (
                   <div
                     key={field.name}
                     className={`form-field ${field.width === "full" ? "form-field-full" : ""}`}
+                    data-testid={`crud-field-${field.name}`}
                   >
-                    <label className="form-field-label">
+                    <label className="form-field-label" htmlFor={inputId}>
                       {field.label}
                       {field.required && <span className="form-field-required">*</span>}
                     </label>
-                    {renderField(field)}
+                    {renderField(field, inputId)}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

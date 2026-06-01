@@ -11,8 +11,12 @@ ciclo_id_default: piloto-ucf16
 #  - fontes_editais (17 seed) GLOBAL ja existe
 #  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
 
-palavras_chave: "microscopio, centrifuga, autoclave, monitor multiparametrico"
-ncms: "9018.19.90, 3822.19.90"
+# V2 — valores do tutorial V8 (linhas 2463-2497): 10 palavras-chave + 5 NCMs.
+palavras_chave: "reagente hematologia, kit diagnostico, reagente bioquimico, controle qualidade laboratorio, glicose enzimatica, hemograma completo, kit elisa, reagente pcr, kit sorologia, medio lote reagente"
+ncms: "9018.19.90, 9019.20.10, 9018.90.99, 9402.90.20, 9018.50.90"
+
+# Fonte global a desativar (e depois reativar). Banco tem duplicidade conhecida.
+fonte_desativar: "ComprasNet"
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

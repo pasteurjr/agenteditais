@@ -14187,6 +14187,7 @@ def sugerir_peticao_edital(edital_id):
     """UC-I02: Sugere petição de impugnação ou esclarecimento."""
     from tools import tool_gerar_peticao_impugnacao
     user_id = get_current_user_id()
+    empresa_id = get_current_empresa_id()
     data = request.get_json(silent=True) or {}
     inconsistencias = data.get("inconsistencias")
     template_id = data.get("template_id")
@@ -14195,6 +14196,7 @@ def sugerir_peticao_edital(edital_id):
     resultado = tool_gerar_peticao_impugnacao(
         edital_id=edital_id,
         user_id=user_id,
+        empresa_id=empresa_id,
         inconsistencias=inconsistencias,
         template_id=template_id,
         tipo=tipo,

@@ -7,6 +7,10 @@ descricao: |
 # Numero ficticio (a IA pode nao achar — aceita qualquer resposta)
 anvisa_registro: "80149420001"
 
+# V2 — Busca Web de produto similar (POST /api/produtos/buscar-web)
+busca_web_nome: "Monitor Multiparametro Nihon Kohden BSM-3000"
+busca_web_fabricante: "Nihon Kohden"
+
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"

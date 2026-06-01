@@ -4329,6 +4329,8 @@ body {
   color: var(--text-primary);
   font-size: 14px;
   transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .text-input:focus,
@@ -4346,6 +4348,10 @@ body {
 .textarea-input {
   resize: vertical;
   min-height: 80px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  line-height: 1.55;
 }
 
 .checkbox-inline,

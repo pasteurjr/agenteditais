@@ -9,13 +9,14 @@ ciclo_id_default: piloto-ucf17
 #  - parametros_score empresa-scoped (criado pelo F14 OU via ensureParamScore)
 #  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
 
-email_notif: "alertas+{{SUFIXO_CICLO}}@demo.com.br"
+# V2 — valores do tutorial V8 (linhas 2578-2629): 3 canais ativos, Semanal, tema Claro.
+email_notif: "licitacoes@biohosp.com.br"
 notif_email: true
 notif_sistema: true
-notif_sms: false  # SMS opcional
-frequencia_resumo_value: "diario"
+notif_sms: true   # V8: SMS tambem ATIVO (3 canais)
+frequencia_resumo_value: "semanal"
 
-tema: "escuro"
+tema: "claro"
 idioma_value: "pt-BR"
 fuso_value: "America/Sao_Paulo"
 

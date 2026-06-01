@@ -2086,9 +2086,11 @@ class Recurso(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
             "edital_id": self.edital_id,
             "tipo": self.tipo,
             "motivo": self.motivo,
+            "texto_minuta": self.texto_minuta,
             "fundamentacao_legal": self.fundamentacao_legal,
             "data_protocolo": self.data_protocolo.isoformat() if self.data_protocolo else None,
             "prazo_limite": self.prazo_limite.isoformat() if self.prazo_limite else None,
@@ -2326,6 +2328,54 @@ class CRMParametrizacao(Base):
             "valor": self.valor,
             "ordem": self.ordem,
             "ativo": self.ativo,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ValidacaoDecisao(Base):
+    """Decisão GO/NO-GO/Em Avaliação da tela de Validação (UC-CV08).
+
+    CV08-8/10 (Arnaldo Sprint 2 V8): frontend chamava /api/crud/validacao_decisoes
+    mas o model NAO EXISTIA — POSTs caiam em 404 e ao reabrir a tela a decisao
+    estava perdida. Este model + registro em crud_routes resolve.
+    """
+    __tablename__ = 'validacao_decisoes'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    edital_id = Column(String(36), ForeignKey('editais.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    empresa_id = Column(String(36), ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True)
+
+    edital_numero = Column(String(120), nullable=True)
+    decisao = Column(String(40), nullable=False)  # GO | Em Avaliação | NO-GO
+    status = Column(String(40), nullable=True)
+    motivo = Column(String(80), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    intencao_estrategica = Column(String(40), nullable=True)
+    margem_expectativa = Column(DECIMAL(10, 4), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    edital = relationship("Edital", backref="validacao_decisoes")
+
+    __table_args__ = (
+        UniqueConstraint('edital_id', 'empresa_id', name='uq_validacao_decisoes_edital_empresa'),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "edital_id": self.edital_id,
+            "user_id": self.user_id,
+            "empresa_id": self.empresa_id,
+            "edital_numero": self.edital_numero,
+            "decisao": self.decisao,
+            "status": self.status,
+            "motivo": self.motivo,
+            "justificativa": self.justificativa,
+            "intencao_estrategica": self.intencao_estrategica,
+            "margem_expectativa": float(self.margem_expectativa) if self.margem_expectativa is not None else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -3290,6 +3340,10 @@ class RecursoDetalhado(Base):
     user = relationship("User", backref="recursos_detalhados")
 
     def to_dict(self):
+        juridico = self.texto_juridico or ""
+        tecnico = self.texto_tecnico or ""
+        # alias texto_minuta consolida juridico+tecnico para o front (que le esse campo)
+        texto_minuta = (juridico + ("\n\n" + tecnico if tecnico else "")) if juridico else tecnico
         return {
             "id": self.id,
             "edital_id": self.edital_id,
@@ -3298,8 +3352,9 @@ class RecursoDetalhado(Base):
             "tipo": self.tipo,
             "subtipo": self.subtipo,
             "status": self.status,
-            "texto_juridico": self.texto_juridico,
-            "texto_tecnico": self.texto_tecnico,
+            "texto_juridico": juridico,
+            "texto_tecnico": tecnico,
+            "texto_minuta": texto_minuta,
             "inconsistencias_json": self.inconsistencias_json,
             "motivacoes_json": self.motivacoes_json,
             "empresa_alvo": self.empresa_alvo,

@@ -5,6 +5,7 @@ descricao: |
   Buscar editais por termo + Fonte=PNCP + Score Hibrido.
   Predecessores: Sprint 1 + UC-F14/F15/F16
   Sprint 2 PROFUNDA — asserts validando EFEITO REAL.
+  V2: 5 buscas distintas (paridade Tutorial V8).
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
@@ -14,3 +15,26 @@ termo: "monitor multiparametrico"
 fonte: "PNCP"
 modalidade: "Pregão Eletrônico"
 score: "Score Hibrido"
+
+# V2 — parametros das 5 buscas do Tutorial V8
+busca1:
+  termo: "monitor multiparametrico"
+  score: "Score Hibrido"
+busca2:
+  termo: "oximetro de pulso"
+  ncm: "9018.19.90"
+  uf: "SP"
+  score: "Score Hibrido"
+busca3:
+  termo: "equipamento medico hospitalar"
+  uf: "SP"
+  limite: 5
+  score: "Score Hibrido"
+busca4:
+  termo: "monitoracao paciente"
+  uf: "MG"
+  score: "Sem Score"
+busca5:
+  termo: "monitor sinais vitais"
+  encerrados: true
+  score: "Score Rapido"

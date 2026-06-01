@@ -12,6 +12,13 @@ tipo_documento_label: "Manual Tecnico"
 # Path relativo dentro de pasta_documentos_teste
 arquivo_pasta_relativo: "sprint1/UC-F07/manual_tecnico.pdf"
 
+# V2 — importacao em lote via Plano de Contas (ERP)
+tipo_plano_contas_value: "plano_contas"
+tipo_plano_contas_label: "Plano de Contas (ERP)"
+arquivo_lote_relativo: "sprint1/UC-F07/plano_contas_exemplo.csv"
+# CSV contem 15 itens — importacao deve cadastrar mais de 1 produto novo
+lote_min_novos: 1
+
 # Nome opcional do produto (a IA pode extrair do PDF mesmo sem este campo)
 nome_produto: "Monitor Multiparametrico de Sinais Vitais"
 

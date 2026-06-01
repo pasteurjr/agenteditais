@@ -12,3 +12,18 @@ usuario:
 
 intencao: "Defensivo"
 margem: "30"
+
+# V2 — 3 estrategias distintas (paridade Tutorial V8 UC-CV04)
+estrategias_v2:
+  - tipo: "Estrategico"
+    margem: "20"
+    varia_produto: false
+    varia_regiao: false
+  - tipo: "Acompanhamento"
+    margem: "15"
+    varia_produto: true
+    varia_regiao: true
+  - tipo: "Aprendizado"
+    margem: "5"
+    varia_produto: false
+    varia_regiao: false

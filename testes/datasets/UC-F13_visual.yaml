@@ -59,6 +59,12 @@ subclasse_3_area: "Diagnóstico in Vitro e Laboratório"
 subclasse_3_classe: "Reagentes e Kits Diagnósticos"
 subclasse_3_ncm: "3822.19.90"
 
+# V2 delta: 2a subclasse de Equipamentos/Monitoracao com mascara propria (V8 Passo 4.4)
+subclasse_ox_nome: "Oxímetro de Pulso"
+subclasse_ox_area: "Equipamentos Médico-Hospitalares"
+subclasse_ox_classe: "Monitoração"
+subclasse_ox_ncm: "9018.19.90"
+
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"

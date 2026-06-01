@@ -10,4 +10,14 @@ usuario:
   email: "{{EMAIL_PRINCIPAL}}"
   senha: "{{SENHA_PRINCIPAL}}"
 
-nota: "CV08 scores 6 dimensoes + GO/NO-GO"
+decisao_go:
+  decisao: "Participar (GO)"
+  motivo: "Boa aderencia tecnica"
+  detalhes: "Kit Sysmex XN atende todos os parametros do edital. Empresa possui AFE vigente e documentacao fiscal completa."
+
+decisao_em_avaliacao:
+  decisao: "Acompanhar (Em Avaliacao)"
+  motivo: "Pendencia documental"
+  detalhes: "Necessario atualizar atestado de capacidade tecnica antes de participar. Demais criterios atendem."
+
+nota: "CV08 V2: scores 6 dimensoes + decisao GO (1o edital) + decisao Em Avaliacao (2o edital)"

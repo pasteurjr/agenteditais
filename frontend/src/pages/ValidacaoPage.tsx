@@ -265,6 +265,9 @@ export function ValidacaoPage(props?: PageProps) {
   const [showPerguntaModal, setShowPerguntaModal] = useState(false);
   const [pergunta, setPergunta] = useState("");
   const [resposta, setResposta] = useState("");
+  // CV13-11 (Arnaldo Sprint 2 V8): manter historico de Q&A da sessao
+  // (cada nova pergunta era sobrescrevendo a anterior — perdia contexto).
+  const [historicoQA, setHistoricoQA] = useState<Array<{ pergunta: string; resposta: string; ts: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [resumoLoading, setResumoLoading] = useState(false);
   const [showJustificativa, setShowJustificativa] = useState(false);
@@ -324,11 +327,32 @@ export function ValidacaoPage(props?: PageProps) {
 
   // UF da empresa (carregada dinamicamente)
   const [empresaUf, setEmpresaUf] = useState("--");
+  // CV10-3 (Arnaldo Sprint 2 V8): guardamos o empresa_id real para o endpoint
+  // /api/empresa-certidoes/buscar-stream — antes mandavamos edital.id por engano
+  // e a busca nunca achava a empresa.
+  const [empresaId, setEmpresaId] = useState<string>("");
 
-  // Carregar UF da empresa ao montar
+  // Carregar UF + ID da empresa ATUAL (do JWT, nao a primeira do banco).
+  // CV10-3 fix v2: crudList("empresas") nao eh empresa_scoped — devolvia a
+  // primeira empresa do banco em vez da empresa atual do usuario. Agora usa
+  // /api/auth/minhas-empresas que filtra por JWT.
   useEffect(() => {
     (async () => {
       try {
+        const token = localStorage.getItem("editais_ia_access_token");
+        const res = await fetch("/api/auth/minhas-empresas", {
+          headers: { Authorization: token ? `Bearer ${token}` : "" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const empresas = (data.empresas || data.vinculadas || []) as Record<string, unknown>[];
+          if (empresas.length > 0) {
+            const empresa = empresas[0];
+            const id = String(empresa.id || "");
+            if (id) setEmpresaId(id);
+          }
+        }
+        // UF: ainda tenta crudList (tanto faz qual empresa)
         const resultado = await crudList("empresas", { limit: 1 });
         const items = resultado.items || [];
         if (items.length > 0) {
@@ -337,7 +361,7 @@ export function ValidacaoPage(props?: PageProps) {
           if (uf) setEmpresaUf(uf);
         }
       } catch {
-        // Silent fail — mantém "--"
+        // Silent fail
       }
     })();
   }, []);
@@ -528,10 +552,13 @@ export function ValidacaoPage(props?: PageProps) {
     })();
   }, [selectedEdital?.id, selectedEdital?.orgao]);
 
+  // CV07-5/6 (Arnaldo Sprint 2 V8): busca de editais salvos acento-insensivel,
+  // mesmo padrao ja aplicado em PortfolioPage (obs2). Antes "oximetro" sem
+  // acento NAO achava "Oxímetro" com acento.
+  const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const filteredEditais = editais.filter((e) => {
-    const matchSearch = e.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.orgao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.objeto.toLowerCase().includes(searchTerm.toLowerCase());
+    const t = norm(searchTerm);
+    const matchSearch = !t || norm(e.numero).includes(t) || norm(e.orgao).includes(t) || norm(e.objeto).includes(t);
     const matchStatus = statusFilter === "todos" || e.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -573,26 +600,41 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
     }
   };
 
+  // CV13-11 (Arnaldo Sprint 2 V8): helper unico para chamar IA e empilhar no historicoQA.
+  // Todos os botoes da aba IA (Pergunta livre, Requisitos Tecnicos, Classificar Edital)
+  // passam por aqui — antes cada um sobrescrevia `resposta`, perdendo o anterior.
+  const _enviarParaIA = async (perguntaTxt: string, messageFull: string): Promise<string> => {
+    const token = localStorage.getItem("editais_ia_access_token");
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: messageFull, session_id: await getOrCreateSession() }),
+      });
+      if (!res.ok) throw new Error("Erro ao chamar IA");
+      const data = await res.json();
+      const r = data.response || "Sem resposta da IA.";
+      setResposta(r);
+      setHistoricoQA(prev => [{ pergunta: perguntaTxt, resposta: r, ts: Date.now() }, ...prev].slice(0, 50));
+      return r;
+    } catch {
+      const r = "Não foi possível obter resposta da IA. Tente novamente.";
+      setResposta(r);
+      setHistoricoQA(prev => [{ pergunta: perguntaTxt, resposta: r, ts: Date.now() }, ...prev].slice(0, 50));
+      return r;
+    }
+  };
+
   // T20: Perguntar à IA sobre o edital via /api/chat
   const handlePerguntarEdital = async () => {
     if (!selectedEdital || !pergunta) return;
     setLoading(true);
     setResposta("");
     try {
-      const token = localStorage.getItem("editais_ia_access_token");
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          message: `Sobre o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao}: ${pergunta}`,
-          session_id: await getOrCreateSession(),
-        }),
-      });
-      if (!res.ok) throw new Error("Erro ao chamar IA");
-      const data = await res.json();
-      setResposta(data.response || "Sem resposta da IA.");
-    } catch {
-      setResposta("Não foi possível obter resposta da IA. Tente novamente.");
+      await _enviarParaIA(
+        pergunta,
+        `Sobre o edital ${selectedEdital.numero} do órgão ${selectedEdital.orgao}: ${pergunta}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -923,6 +965,38 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
         </div>
       )}
 
+      {/* CV04-14 (Arnaldo Sprint 2 V8): Estrategia tambem na Validacao
+          (antes so existia no painel da Captacao, obrigando voltar e refazer
+          a busca para alterar intencao/margem de um edital salvo). */}
+      <div className="section-block">
+        <h4><TrendingUp size={16} /> Estratégia</h4>
+        <div className="form-grid form-grid-2">
+          <FormField label="Intenção Estratégica">
+            <SelectInput
+              value={edital.intencaoEstrategica || "acompanhamento"}
+              onChange={(v) => handleIntencaoChange(v)}
+              options={[
+                { value: "estrategico",     label: "Estratégico (priorizar)" },
+                { value: "defensivo",       label: "Defensivo (proteger conta)" },
+                { value: "acompanhamento",  label: "Acompanhamento (monitorar)" },
+                { value: "aprendizado",     label: "Aprendizado (estudar)" },
+              ]}
+            />
+          </FormField>
+          <FormField label="Margem Expectativa (%)">
+            <TextInput
+              type="number"
+              value={String(edital.margemExpectativa ?? 0)}
+              onChange={(v) => handleMargemChange(Number(v) || 0)}
+              placeholder="ex: 20"
+            />
+          </FormField>
+        </div>
+        <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+          A intenção é salva automaticamente quando ha decisão registrada. A margem é refletida no próximo cálculo de proposta.
+        </p>
+      </div>
+
       {/* Decisão GO/NO-GO */}
       <div className="section-block">
         <h4><ClipboardCheck size={16} /> Decisão</h4>
@@ -941,6 +1015,8 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                   options={[
                     { value: "preco_competitivo", label: "Preco competitivo" },
                     { value: "portfolio_aderente", label: "Portfolio aderente" },
+                    // CV08-7 (Arnaldo Sprint 2 V8): adicionada opcao "Boa aderencia tecnica"
+                    { value: "aderencia_tecnica", label: "Boa aderencia tecnica" },
                     { value: "margem_insuficiente", label: "Margem insuficiente" },
                     { value: "falta_documentacao", label: "Falta documentacao" },
                     { value: "concorrente_forte", label: "Concorrente muito forte" },
@@ -1125,7 +1201,10 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                     <span style={{ fontSize: "14px", fontWeight: 600, color: "#e2e8f0" }}>
                       Lote {String(lote.numero_lote).padStart(2, "0")}
                     </span>
-                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>— {lote.nome}</span>
+                    {/* CV09-13 (Arnaldo Sprint 2 V8): remover prefixo "Lote NN —"
+                        que vem repetido no campo nome (backend grava "Lote 01 — X"
+                        e o frontend ja prefixa "Lote NN —", duplicando). */}
+                    <span style={{ fontSize: "13px", color: "#94a3b8" }}>— {(lote.nome || "").replace(/^\s*Lote\s*\d+\s*[—-]\s*/i, "")}</span>
                     {lote.especialidade && (
                       <span style={{
                         fontSize: "11px", padding: "2px 8px", borderRadius: "4px",
@@ -1145,6 +1224,24 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
                       </span>
                     )}
                     <StatusBadge status={lote.status === "rascunho" ? "warning" : lote.status === "configurado" ? "info" : "success"} label={lote.status} />
+                    {/* CV09-12b (Arnaldo Sprint 2 V8): botao Editar renomeia o lote */}
+                    <button
+                      title="Renomear lote"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa", padding: "2px", fontSize: "11px" }}
+                      onClick={async (ev) => {
+                        ev.stopPropagation();
+                        const atual = (lote.nome || "").replace(/^\s*Lote\s*\d+\s*[—-]\s*/i, "");
+                        const novo = window.prompt(`Novo nome para Lote ${lote.numero_lote}:`, atual);
+                        if (novo == null) return;
+                        const limpo = novo.trim();
+                        if (!limpo || limpo === atual) return;
+                        try {
+                          const { crudUpdate } = await import("../api/crud");
+                          const atualizado = await crudUpdate("lotes", lote.id, { nome: limpo });
+                          setLotesEdital(prev => prev.map(l => l.id === lote.id ? { ...l, nome: String(atualizado.nome || limpo) } : l));
+                        } catch { alert("Erro ao renomear lote."); }
+                      }}
+                    >Editar</button>
                     <button
                       title="Excluir lote"
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: "2px" }}
@@ -1404,6 +1501,14 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
           label="Verificar Certidões"
           variant="neutral"
           onClick={async () => {
+            // CV10-3 (Arnaldo Sprint 2 V8): antes passavamos `edital.id` como
+            // `empresa_id` — typo grave; o endpoint nao achava a empresa e a
+            // busca virava no-op silencioso, mantendo todos os mesmos status
+            // "exigido" da fase anterior. Agora usamos o empresa_id real.
+            if (!empresaId) {
+              alert("Empresa nao identificada. Recarregue a pagina.");
+              return;
+            }
             try {
               const token = localStorage.getItem("editais_ia_access_token");
               const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -1411,17 +1516,19 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
               const res = await fetch("/api/empresa-certidoes/buscar-stream", {
                 method: "POST",
                 headers,
-                body: JSON.stringify({ empresa_id: edital.id }),
+                body: JSON.stringify({ empresa_id: empresaId }),
               });
               if (res.ok) {
                 alert("Certidões verificadas. Recarregando dados...");
-                // Recarregar documentação
                 const docRes = await fetch(`/api/editais/${edital.id}/documentacao-necessaria`, { headers });
                 if (docRes.ok) {
                   const docData = await docRes.json();
                   setDocsNecessaria(docData.documentos || []);
                   setDocsNecessariaFonte(docData.fonte || "padrao_licitacao");
                 }
+              } else {
+                const err = await res.json().catch(() => ({}));
+                alert(`Erro ao verificar certidões: ${(err as Record<string,string>).error || res.statusText}`);
               }
             } catch { alert("Erro ao verificar certidões."); }
           }}
@@ -2046,25 +2153,16 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
             variant="neutral"
             loading={loading}
             onClick={async () => {
+              // CV13-11: passa pelo helper unico para empilhar no historicoQA
               setLoading(true);
               setResposta("");
               setPergunta("Quais são os requisitos técnicos?");
               try {
-                const token = localStorage.getItem("editais_ia_access_token");
-                const res = await fetch("/api/chat", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                  body: JSON.stringify({
-                    message: `Sobre o edital ${edital.numero} do órgão ${edital.orgao}: Quais são os requisitos técnicos deste edital? Liste cada requisito técnico exigido.`,
-                    session_id: await getOrCreateSession(),
-                  }),
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setResposta(data.response || "Sem resposta.");
-                }
-              } catch { setResposta("Erro ao buscar requisitos técnicos."); }
-              finally { setLoading(false); }
+                await _enviarParaIA(
+                  "Quais são os requisitos técnicos?",
+                  `Sobre o edital ${edital.numero} do órgão ${edital.orgao}: Quais são os requisitos técnicos deste edital? Liste cada requisito técnico exigido.`,
+                );
+              } finally { setLoading(false); }
             }}
           />
           <ActionButton
@@ -2073,29 +2171,57 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
             variant="neutral"
             loading={loading}
             onClick={async () => {
+              // CV13-11: passa pelo helper unico para empilhar no historicoQA
               setLoading(true);
               setResposta("");
               setPergunta("Classificar edital");
               try {
-                const token = localStorage.getItem("editais_ia_access_token");
-                const res = await fetch("/api/chat", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                  body: JSON.stringify({
-                    message: `Classifique este edital: ${edital.objeto}. Informe a categoria (comodato, venda, aluguel, consumo, serviço) e justifique.`,
-                    session_id: await getOrCreateSession(),
-                  }),
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setResposta(data.response || "Sem resposta.");
-                }
-              } catch { setResposta("Erro ao classificar edital."); }
-              finally { setLoading(false); }
+                await _enviarParaIA(
+                  "Classificar edital",
+                  `Classifique este edital: ${edital.objeto}. Informe a categoria (comodato, venda, aluguel, consumo, serviço) e justifique.`,
+                );
+              } finally { setLoading(false); }
             }}
           />
         </div>
       </div>
+
+      {/* CV13-11 (Arnaldo Sprint 2 V8): Historico de Q&A da sessao.
+          Antes, cada nova pergunta/Requisitos/Classificar sobrescrevia `resposta`
+          (slot unico) e o validador "perdia" as anteriores. Agora todas ficam
+          empilhadas aqui, mais recente no topo. */}
+      {historicoQA.length > 0 && (
+        <div className="section-block">
+          <h4 style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span><MessageSquare size={16} /> Histórico desta sessão ({historicoQA.length})</span>
+            <button
+              onClick={() => setHistoricoQA([])}
+              style={{ fontSize: "11px", padding: "2px 10px", background: "transparent", color: "#94a3b8", border: "1px solid #334155", borderRadius: "4px", cursor: "pointer" }}
+              title="Limpar histórico desta sessão"
+            >Limpar</button>
+          </h4>
+          <div style={{ maxHeight: "320px", overflowY: "auto", paddingRight: "4px" }}>
+            {historicoQA.map((qa, i) => (
+              <div key={qa.ts} style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "6px", padding: "10px 12px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#cbd5e1", marginBottom: "6px" }}>
+                  <strong style={{ color: "#60a5fa" }}>P{historicoQA.length - i}:</strong> {qa.pergunta}
+                </div>
+                <div
+                  style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.6 }}
+                  dangerouslySetInnerHTML={{ __html: qa.resposta
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/^### (.+)$/gm, '<h5 style="color:#60a5fa;margin:6px 0 3px;font-size:13px;">$1</h5>')
+                    .replace(/^## (.+)$/gm, '<h4 style="color:#818cf8;margin:8px 0 4px;font-size:14px;">$1</h4>')
+                    .replace(/^- (.+)$/gm, '<div style="padding:1px 0 1px 10px;">• $1</div>')
+                    .replace(/\n\n/g, '<br/><br/>')
+                    .replace(/\n/g, '<br/>')
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -2171,6 +2297,13 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
               setVencedoresAtas(null);
               setConcorrentesLista(null);
               setMercadoData(null);
+              // CV08-9 (Arnaldo Sprint 2 V8): resetar estado de justificativa/decisao
+              // p/ NAO vazar Motivo/Detalhes do edital anterior ao trocar.
+              setShowJustificativa(false);
+              setJustificativaMotivo("");
+              setJustificativaTexto("");
+              setPendingDecisao(null);
+              setDecisaoSalva(false);
               setSelectedEdital(edital);
             }}
             selectedId={selectedEdital?.id}
@@ -2236,7 +2369,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
       {/* Modal Pergunta */}
       <Modal
         isOpen={showPerguntaModal}
-        onClose={() => { setShowPerguntaModal(false); setPergunta(""); setResposta(""); }}
+        onClose={() => { setShowPerguntaModal(false); setPergunta(""); setResposta(""); /* CV13-11: NAO limpar historicoQA aqui — preservar entre aberturas */ }}
         title={`Perguntar ao Edital ${selectedEdital?.numero}`}
         size="large"
       >
@@ -2255,6 +2388,21 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
               .replace(/\n\n/g, '<br/><br/>')
               .replace(/\n/g, '<br/>')
             }} />
+          </div>
+        )}
+        {/* CV13-11 (Arnaldo Sprint 2 V8): historico de Q&A da sessao */}
+        {historicoQA.length > 1 && (
+          <div style={{ marginTop: "16px", borderTop: "1px solid #334155", paddingTop: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <strong style={{ fontSize: "13px", color: "#94a3b8" }}>Historico desta sessao ({historicoQA.length})</strong>
+              <button onClick={() => setHistoricoQA([])} style={{ fontSize: "11px", padding: "2px 8px", background: "transparent", color: "#94a3b8", border: "1px solid #334155", borderRadius: "4px", cursor: "pointer" }}>Limpar</button>
+            </div>
+            {historicoQA.slice(1).map((qa, i) => (
+              <div key={qa.ts} style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "6px", padding: "8px 10px", marginBottom: "6px" }}>
+                <div style={{ fontSize: "12px", color: "#cbd5e1", marginBottom: "4px" }}><strong>P{historicoQA.length - i - 1}:</strong> {qa.pergunta}</div>
+                <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5 }}>{qa.resposta.length > 280 ? qa.resposta.slice(0, 280) + "..." : qa.resposta}</div>
+              </div>
+            ))}
           </div>
         )}
       </Modal>

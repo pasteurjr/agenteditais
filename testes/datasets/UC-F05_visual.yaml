@@ -2,44 +2,41 @@ uc_id: UC-F05
 trilha: visual
 ciclo_id_default: piloto-ucf05
 
-# UC-F05 — Gerir responsaveis da empresa
-# Cadastra 3 responsaveis via Modal "Adicionar Responsavel" na EmpresaPage:
-#  1. Representante Legal: Marcos Antonio Ferreira
-#  2. Preposto: Carla Regina Souza
-#  3. Responsavel Tecnico: Dr. Paulo Roberto Menezes
+# UC-F05 V2 — Gerir responsaveis (paridade Tutorial V8, linhas 999-1139)
+# V8 cadastra APENAS 2 responsaveis (sem Preposto), cada um com 3 campos NOVOS V8:
+#  1. Representante Legal: Mariana Andrade Silveira (com mandato/outorga/url)
+#  2. Responsavel Tecnico: Eng. Carlos Henrique Tavares (mandato vazio, outorga preenchida)
 #
-# Pre-condicoes de DADOS:
-#  - empresa criada (UC-F01) e vinculada (UC-F18)
-#  - valida<N> selecionou empresa ativa (UC-F01 passo 04c)
-#  - empresa_responsaveis comeca vazia (escopo da empresa)
+# Os 3 campos novos (F05-02 + F05-03):
+#  - validade_mandato (data)
+#  - documento_outorga (descricao texto)
+#  - url_documento (caminho/URL do PDF)
 #
-# IMPORTANTE: O frontend usa value internos (representante_legal, preposto, tecnico)
-# mas exibe labels (Representante Legal, Preposto, Responsavel Tecnico).
-# select_visual no executor faz match parcial em label OU value.
+# O frontend usa value internos (representante_legal, tecnico) e exibe labels.
+# Validacao: confirma que os 3 campos novos EXISTEM no form + dados persistem.
+# Tambem valida que o sistema NAO obriga Preposto (lista final = 2).
 
 resp1_tipo_value: "representante_legal"
 resp1_tipo_label: "Representante Legal"
-resp1_nome: "Marcos Antonio Ferreira"
-resp1_cargo: "Diretor Executivo"
-resp1_cpf: "123.456.789-09"
-resp1_email: "diretor+{{SUFIXO_CICLO}}@demo.com.br"
-resp1_telefone: "(11) 98765-4321"
+resp1_nome: "Mariana Andrade Silveira"
+resp1_cargo: "Sócia-Diretora"
+resp1_cpf: "845.612.339-58"
+resp1_email: "mariana.silveira+{{SUFIXO_CICLO}}@demo.com.br"
+resp1_telefone: "(31) 99654-7821"
+resp1_validade_mandato: "2027-12-15"
+resp1_documento_outorga: "Procuração ad judicia et extra — Contrato Social cláusula 5ª, data 03/02/2026"
+resp1_url_documento: "docs/documentos_sintetizados/procuracao-mariana-2026.pdf"
 
-resp2_tipo_value: "preposto"
-resp2_tipo_label: "Preposto"
-resp2_nome: "Carla Regina Souza"
-resp2_cargo: "Gerente de Licitacoes"
-resp2_cpf: "987.654.321-00"
-resp2_email: "preposto+{{SUFIXO_CICLO}}@demo.com.br"
-resp2_telefone: "(11) 3456-7891"
-
-resp3_tipo_value: "tecnico"
-resp3_tipo_label: "Responsavel Tecnico"
-resp3_nome: "Dr. Paulo Roberto Menezes"
-resp3_cargo: "Engenheiro Biomedico"
-resp3_cpf: "456.789.123-77"
-resp3_email: "tecnico+{{SUFIXO_CICLO}}@demo.com.br"
-resp3_telefone: "(11) 3456-7892"
+resp2_tipo_value: "tecnico"
+resp2_tipo_label: "Responsavel Tecnico"
+resp2_nome: "Eng. Carlos Henrique Tavares"
+resp2_cargo: "Engenheiro Biomédico Responsável"
+resp2_cpf: "627.483.501-90"
+resp2_email: "carlos.tavares+{{SUFIXO_CICLO}}@demo.com.br"
+resp2_telefone: "(31) 99654-7821"
+resp2_validade_mandato: ""  # vazio — Resp. Tecnico nao tem mandato (valida campo aceita vazio)
+resp2_documento_outorga: "CRM nº 12.345/MG — registro técnico em vigor"
+resp2_url_documento: ""  # vazio — opcional
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

@@ -12,16 +12,27 @@ ciclo_id_default: piloto-ucf15
 #  - modalidades_licitacao (7 seed) GLOBAL ja existe
 #  - F01+F18 como predecessores (registrados em 30/04/2026 19h)
 
-prazo_maximo: "30"
-frequencia: "semanal"
+# V2 — valores do tutorial V8 (linhas 2314-2362). Bio-Hosp atua em TODO O BRASIL.
+prazo_maximo: "15"
+frequencia: "quinzenal"
 
-tam: "5000000"
-sam: "2000000"
-som: "500000"
+# Valores grandes (bilhoes/milhoes) — TextInput mascarado pt-BR aceita
+tam: "8500000000"
+sam: "1700000000"
+som: "95000000"
 
-markup: "30"
-custos_fixos: "15000"
-frete_base: "500"
+markup: "35"
+custos_fixos: "67000"
+frete_base: "320"
+
+# Abrangencia geografica: marcar "Atuar em todo o Brasil" (27 estados)
+todo_brasil: true
+
+# Modalidades de licitacao desejadas (V8 Passo 6)
+modalidades:
+  - "Pregão Eletrônico"
+  - "Dispensa de Licitação"
+  - "Inexigibilidade"
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

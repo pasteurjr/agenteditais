@@ -2,7 +2,15 @@ uc_id: UC-F12
 trilha: visual
 variacao: fp
 descricao: |
-  Reprocessar metadados de captacao do produto via IA. DeepSeek processa.
+  Reprocessar metadados de captacao do produto via IA + edicao manual de CATMAT/termos (V8).
+
+# V2 — edicao manual de metadados (paridade Tutorial V8)
+catmat_codigos: "256, 258"
+termos_busca:
+  - "reagente glicose"
+  - "kit glicose"
+  - "kit bioquimico"
+  - "reagente laboratorio"
 
 usuario:
   email: "{{EMAIL_PRINCIPAL}}"

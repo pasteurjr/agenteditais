@@ -13,14 +13,16 @@ ciclo_id_default: piloto-ucf14
 #  - empresa criada (UC-F01) e vinculada (UC-F18) e selecionada como ativa
 #    (predecessores ja registrados no banco testesvalidacoes em 30/04/2026 19h)
 
-# Pesos (devem somar 1.00)
+# V2 — Subcenario A (invalido, soma 1.05) e Subcenario B (corrigido, soma 1.00)
+# conforme tutorial V8 (linhas 2165-2208).
 peso_tecnico: "0.30"
-peso_documental: "0.15"
-peso_complexidade: "0.15"
+peso_documental: "0.25"
 peso_juridico: "0.20"
 peso_logistico: "0.10"
 peso_comercial: "0.10"
-# Total: 1.00 -> indicator deve ficar verde
+# Complexidade: 0.10 deixa a soma em 1.05 (BLOQUEAR); 0.05 corrige para 1.00.
+peso_complexidade_invalido: "0.10"   # soma = 1.05 -> sistema deve rejeitar
+peso_complexidade_valido: "0.05"     # soma = 1.00 -> sistema deve aceitar
 
 # Limiares Score Final
 limiar_final_go: "70"
