@@ -719,7 +719,7 @@ export function ProducaoPage(_props?: PageProps) {
 
       {/* Modals */}
       {showContratoModal && (
-        <Modal title="Novo Contrato" onClose={() => setShowContratoModal(false)}>
+        <Modal isOpen={showContratoModal} title="Novo Contrato" onClose={() => setShowContratoModal(false)}>
           <FormField label="Número do Contrato"><TextInput value={formContrato.numero_contrato} onChange={v => setFormContrato(p => ({ ...p, numero_contrato: v }))} placeholder="CT-2026/001" /></FormField>
           <FormField label="Órgão"><TextInput value={formContrato.orgao} onChange={v => setFormContrato(p => ({ ...p, orgao: v }))} /></FormField>
           <FormField label="Objeto"><TextArea value={formContrato.objeto} onChange={v => setFormContrato(p => ({ ...p, objeto: v }))} /></FormField>
@@ -733,7 +733,7 @@ export function ProducaoPage(_props?: PageProps) {
         </Modal>
       )}
       {showEntregaModal && (
-        <Modal title="Nova Entrega" onClose={() => setShowEntregaModal(false)}>
+        <Modal isOpen={showEntregaModal} title="Nova Entrega" onClose={() => setShowEntregaModal(false)}>
           <FormField label="Descrição"><TextInput value={formEntrega.descricao} onChange={v => setFormEntrega(p => ({ ...p, descricao: v }))} /></FormField>
           <FormField label="Quantidade"><TextInput value={formEntrega.quantidade} onChange={v => setFormEntrega(p => ({ ...p, quantidade: v }))} /></FormField>
           <FormField label="Valor Unitário"><TextInput value={formEntrega.valor_unitario} onChange={v => setFormEntrega(p => ({ ...p, valor_unitario: v }))} /></FormField>
@@ -747,7 +747,7 @@ export function ProducaoPage(_props?: PageProps) {
         </Modal>
       )}
       {showAditivoModal && (
-        <Modal title="Novo Aditivo" onClose={() => setShowAditivoModal(false)}>
+        <Modal isOpen={showAditivoModal} title="Novo Aditivo" onClose={() => setShowAditivoModal(false)}>
           <FormField label="Tipo"><SelectInput value={formAditivo.tipo} onChange={v => setFormAditivo(p => ({ ...p, tipo: v }))} options={[{ value: "acrescimo", label: "Acréscimo" }, { value: "supressao", label: "Supressão" }, { value: "prazo", label: "Prazo" }, { value: "escopo", label: "Escopo" }]} /></FormField>
           <FormField label="Valor do Aditivo"><TextInput value={formAditivo.valor_aditivo} onChange={v => setFormAditivo(p => ({ ...p, valor_aditivo: v }))} placeholder="0.00" /></FormField>
           <FormField label="Justificativa"><TextArea value={formAditivo.justificativa} onChange={v => setFormAditivo(p => ({ ...p, justificativa: v }))} /></FormField>
@@ -759,7 +759,7 @@ export function ProducaoPage(_props?: PageProps) {
         </Modal>
       )}
       {showEmpenhoModal && (
-        <Modal title="Novo Empenho" onClose={() => setShowEmpenhoModal(false)}>
+        <Modal isOpen={showEmpenhoModal} title="Novo Empenho" onClose={() => setShowEmpenhoModal(false)}>
           <FormField label="Número do Empenho"><TextInput value={formEmpenho.numero_empenho} onChange={v => setFormEmpenho(p => ({ ...p, numero_empenho: v }))} placeholder="2026NE000123" /></FormField>
           <FormField label="Tipo"><SelectInput value={formEmpenho.tipo} onChange={v => setFormEmpenho(p => ({ ...p, tipo: v }))} options={[{ value: "ordinario", label: "Ordinário" }, { value: "estimativo", label: "Estimativo" }, { value: "global", label: "Global" }]} /></FormField>
           <FormField label="Valor Empenhado"><TextInput value={formEmpenho.valor_empenhado} onChange={v => setFormEmpenho(p => ({ ...p, valor_empenhado: v }))} placeholder="0.00" /></FormField>
@@ -774,7 +774,7 @@ export function ProducaoPage(_props?: PageProps) {
         </Modal>
       )}
       {showDesignacaoModal && (
-        <Modal title="Nova Designação" onClose={() => setShowDesignacaoModal(false)}>
+        <Modal isOpen={showDesignacaoModal} title="Nova Designação" onClose={() => setShowDesignacaoModal(false)}>
           <FormField label="Tipo"><SelectInput value={formDesignacao.tipo} onChange={v => setFormDesignacao(p => ({ ...p, tipo: v }))} options={[{ value: "gestor", label: "Gestor" }, { value: "fiscal_tecnico", label: "Fiscal Técnico" }, { value: "fiscal_administrativo", label: "Fiscal Administrativo" }]} /></FormField>
           <FormField label="Nome"><TextInput value={formDesignacao.nome} onChange={v => setFormDesignacao(p => ({ ...p, nome: v }))} /></FormField>
           <FormField label="Cargo"><TextInput value={formDesignacao.cargo} onChange={v => setFormDesignacao(p => ({ ...p, cargo: v }))} /></FormField>

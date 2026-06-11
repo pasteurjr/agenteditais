@@ -580,7 +580,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: mensagem, session_id: await getOrCreateSession() }),
+        body: JSON.stringify({ message: mensagem, session_id: await getOrCreateSession(), edital_id: selectedEdital?.id || null }),
       });
       if (!res.ok) throw new Error("Erro ao chamar IA");
       const data = await res.json();
@@ -609,7 +609,7 @@ Destaque: prazo de entrega, garantia, requisitos técnicos principais e pontos d
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: messageFull, session_id: await getOrCreateSession() }),
+        body: JSON.stringify({ message: messageFull, session_id: await getOrCreateSession(), edital_id: selectedEdital?.id || null }),
       });
       if (!res.ok) throw new Error("Erro ao chamar IA");
       const data = await res.json();

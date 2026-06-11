@@ -440,7 +440,7 @@ export function RecursosPage(props?: PageProps) {
     try {
       await crudUpdate("recursos-detalhados", selectedLaudo.id, {
         texto_minuta: selectedLaudo.conteudo,
-        status: "protocolado",
+        status: "enviado",
       });
       loadLaudos();
       setSelectedLaudo(null);
@@ -486,10 +486,10 @@ export function RecursosPage(props?: PageProps) {
   const handleRegistrarSubmissao = async () => {
     if (!submissaoLaudo || !submissaoProtocolo.trim()) return;
     try {
-      const token = localStorage.getItem("editais_ia_access_token");
+      const protocoloNota = `\n\n---\nPROTOCOLO: ${submissaoProtocolo} | Submetido em: ${new Date().toLocaleString("pt-BR")}`;
       await crudUpdate("recursos-detalhados", submissaoLaudo.id, {
-        status: "protocolado",
-        observacoes: `Protocolo: ${submissaoProtocolo} | Submetido em: ${new Date().toLocaleString("pt-BR")}`,
+        status: "enviado",
+        texto_minuta: `${submissaoLaudo.conteudo || ""}${protocoloNota}`,
       });
       setSubmissaoStatus("submetido");
       loadLaudos();
@@ -552,10 +552,13 @@ export function RecursosPage(props?: PageProps) {
             return <span className="status-badge status-badge-neutral"><Edit3 size={12} /> Rascunho</span>;
           case "revisao":
             return <span className="status-badge status-badge-warning"><Eye size={12} /> Revisao</span>;
+          case "enviado":
           case "protocolado":
             return <span className="status-badge status-badge-info"><Send size={12} /> Protocolado</span>;
+          case "aceito":
           case "deferido":
             return <span className="status-badge status-badge-success"><CheckCircle size={12} /> Deferido</span>;
+          case "rejeitado":
           case "indeferido":
             return <span className="status-badge status-badge-error"><XCircle size={12} /> Indeferido</span>;
           default:

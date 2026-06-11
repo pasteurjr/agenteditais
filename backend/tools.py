@@ -1633,6 +1633,9 @@ def tool_extrair_especificacoes(texto: str, produto_id: str, user_id: str, empre
         except json.JSONDecodeError:
             pass
 
+        if not specs_salvas:
+            return {"success": False, "produto_id": produto_id, "specs_extraidas": 0,
+                    "error": "Nenhuma especificacao foi extraida do texto (IA retornou vazio ou formato invalido)."}
         return {
             "success": True,
             "produto_id": produto_id,
@@ -2928,6 +2931,10 @@ REQUISITOS EXTRAÍDOS (JSON):
         except json.JSONDecodeError:
             pass
 
+        if not requisitos_salvos:
+            return {"success": False, "edital_id": edital_id,
+                    "categoria": getattr(edital, 'categoria', None), "requisitos_extraidos": 0,
+                    "error": "Nenhum requisito foi extraido do edital (IA retornou vazio ou formato invalido)."}
         return {
             "success": True,
             "edital_id": edital_id,
@@ -5226,7 +5233,7 @@ def tool_salvar_editais_selecionados(editais: List[Dict], user_id: str, empresa_
         db.commit()
 
         return {
-            "success": True,
+            "success": len(salvos) > 0,
             "salvos": salvos,
             "duplicados": duplicados,
             "erros": erros,
@@ -5512,6 +5519,7 @@ def tool_registrar_resultado(message: str, user_id: str, empresa_id: str = None,
         preco_hist = PrecoHistorico(
             edital_id=edital.id,
             user_id=user_id,
+            empresa_id=empresa_id,
             preco_referencia=edital.valor_referencia,
             preco_vencedor=dados.get("preco_vencedor"),
             nosso_preco=dados.get("nosso_preco"),
@@ -5793,6 +5801,7 @@ def tool_extrair_ata_pdf(texto_pdf: str, user_id: str, empresa_id: str = None, d
                     preco_hist = PrecoHistorico(
                         edital_id=edital.id,
                         user_id=user_id,
+                        empresa_id=empresa_id,
                         preco_referencia=edital.valor_referencia,
                         preco_vencedor=item["preco_vencedor"],
                         empresa_vencedora=item["vencedor"],
@@ -7713,6 +7722,7 @@ def tool_configurar_monitoramento(user_id: str, empresa_id: str = None, termo: s
         # Criar monitoramento
         monitoramento = Monitoramento(
             user_id=user_id,
+            empresa_id=empresa_id,
             termo=termo.lower(),
             fontes=fontes or ["pncp"],
             ufs=ufs,
@@ -8088,6 +8098,16 @@ Retorne APENAS um JSON válido:
 
                 db.commit()
 
+        # Honesto: se o usuario pediu p/ atualizar um edital especifico mas ele nao foi
+        # encontrado, as datas foram extraidas porem NAO gravadas.
+        pediu_update = bool(edital_numero or dados.get("numero"))
+        if pediu_update and not edital:
+            return {
+                "success": False,
+                "datas_extraidas": dados,
+                "edital_atualizado": None,
+                "error": "Datas extraidas, porem o edital informado nao foi encontrado — nada foi gravado."
+            }
         return {
             "success": True,
             "datas_extraidas": dados,
@@ -11637,6 +11657,7 @@ def tool_registrar_resultado_api(data, user_id, empresa_id=None, db=None):
 
             contrato = Contrato(
                 user_id=user_id,
+                empresa_id=empresa_id,
                 edital_id=edital.id,
                 numero_contrato=numero_contrato,
                 orgao=edital.orgao if hasattr(edital, 'orgao') else '',
@@ -11656,40 +11677,44 @@ def tool_registrar_resultado_api(data, user_id, empresa_id=None, db=None):
             if valor_final:
                 preco = PrecoHistorico(
                     user_id=user_id,
+                    empresa_id=empresa_id,
                     edital_id=edital.id,
-                    valor=float(valor_final),
-                    fonte='manual',
-                    descricao=f"Resultado licitação - Vitória {edital.numero if hasattr(edital, 'numero') else ''}",
+                    nosso_preco=float(valor_final),
+                    preco_vencedor=float(valor_final),
+                    resultado='vitoria',
                 )
                 db.add(preco)
 
         elif tipo == 'derrota':
             edital.status = 'perdido'
             if vencedor:
+                # Concorrente só tem campos: nome, cnpj, razao_social, segmentos,
+                # editais_participados, editais_ganhos, preco_medio, taxa_vitoria, observacoes.
+                # (não tem user_id/edital_id/valor_proposta/resultado — passar esses quebrava o registro)
                 concorrente = Concorrente(
-                    user_id=user_id,
-                    edital_id=edital.id,
                     nome=vencedor,
-                    valor_proposta=float(valor_final) if valor_final else None,
-                    resultado='vencedor',
-                    observacoes=f"Motivo derrota: {motivo_derrota}",
+                    editais_participados=1,
+                    editais_ganhos=1,
+                    preco_medio=float(valor_final) if valor_final else None,
+                    observacoes=f"Venceu {edital.numero if hasattr(edital,'numero') else ''} - Motivo da nossa derrota: {motivo_derrota}",
                 )
                 db.add(concorrente)
             if valor_final:
                 preco = PrecoHistorico(
                     user_id=user_id,
+                    empresa_id=empresa_id,
                     edital_id=edital.id,
-                    valor=float(valor_final),
-                    fonte='manual',
-                    descricao=f"Resultado licitação - Derrota {edital.numero if hasattr(edital, 'numero') else ''} - Vencedor: {vencedor}",
+                    preco_vencedor=float(valor_final),
+                    empresa_vencedora=vencedor,
+                    resultado='derrota',
                 )
                 db.add(preco)
 
         elif tipo == 'cancelado':
             edital.status = 'cancelado'
 
-        if observacoes:
-            edital.observacoes = (edital.observacoes or '') + f"\n[Resultado] {observacoes}"
+        # Edital não possui coluna 'observacoes'; a observação do resultado é
+        # persistida no Concorrente/PrecoHistorico. (linha antiga quebrava o commit)
 
         db.commit()
         return {

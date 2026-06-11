@@ -520,11 +520,16 @@ export function PrecificacaoPage(props?: PageProps) {
       // Buscar vínculo existente (no state OU no banco)
       let existente = vinculos.find(v => (v as Record<string,unknown>).edital_item_id === selecaoItemId);
       if (!existente) {
-        // Tentar buscar no banco (pode existir mas não estar no state filtrado)
+        // Tentar buscar no banco (pode existir mas não estar no state filtrado).
+        // FIX: o crudList NAO serializa o filtro `edital_item_id` (so q/parent_id/limit/offset),
+        // entao a query volta com TODOS os vinculos da empresa. Precisamos filtrar o item
+        // correto no resultado — antes pegava dbItems[0] (qualquer vinculo) e fazia UPDATE
+        // no registro errado, sobrescrevendo o vinculo de outro item.
         try {
-          const dbRes = await crudList("edital-item-produto", { edital_item_id: selecaoItemId, limit: 1 });
+          const dbRes = await crudList("edital-item-produto", { limit: 500 });
           const dbItems = (dbRes.items || []) as unknown as Vinculo[];
-          if (dbItems.length > 0) existente = dbItems[0];
+          const match = dbItems.find(v => (v as Record<string,unknown>).edital_item_id === selecaoItemId);
+          if (match) existente = match;
         } catch { /* ignore */ }
       }
       if (existente) {
@@ -654,7 +659,7 @@ export function PrecificacaoPage(props?: PageProps) {
     setLoading(true);
     try {
       await _fetchPrecif(`/api/precificacao/${vinculoId}/preco-base`, {
-        modo: modoPrecoBase === "markup" ? "custo_markup" : "manual",
+        modo: modoPrecoBase === "markup" ? "markup" : "manual",  // FIX: backend aceita 'markup', nao 'custo_markup'
         markup_percentual: modoPrecoBase === "markup" && markup ? parseFloat(markup) : null,
         preco_base: modoPrecoBase !== "markup" && precoBaseManual ? parseFloat(precoBaseManual) : null,
       });

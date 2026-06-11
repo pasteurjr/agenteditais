@@ -602,7 +602,7 @@ export function CRMPage(_props?: PageProps) {
       </TabPanel>
 
       {showDecisaoModal && (
-        <Modal title="Nova Decisão" onClose={() => setShowDecisaoModal(false)}>
+        <Modal isOpen={showDecisaoModal} title="Nova Decisão" onClose={() => setShowDecisaoModal(false)}>
           <FormField label="ID do Edital"><TextInput value={formDecisao.edital_id} onChange={v => setFormDecisao(p => ({ ...p, edital_id: v }))} /></FormField>
           <FormField label="Tipo"><SelectInput value={formDecisao.tipo} onChange={v => setFormDecisao(p => ({ ...p, tipo: v }))} options={[
             { value: "nao_participacao", label: "Não Participação" },

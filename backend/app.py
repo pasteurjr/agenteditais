@@ -1471,6 +1471,8 @@ def chat():
     data = request.json or {}
     session_id = data.get("session_id")
     message = data.get("message", "").strip()
+    # CV13: edital_id do painel aberto (contexto da tela) — IA responde sobre ESTE edital
+    edital_id_contexto = data.get("edital_id") or None
     user_id = get_current_user_id()
     empresa_id = get_current_empresa_id()
 
@@ -1623,7 +1625,7 @@ def chat():
         # SPRINT 2: ALERTAS E AUTOMAÇÃO
         # =============================================================================
         elif action_type == "configurar_alertas":
-            response_text = processar_configurar_alertas(message, user_id)
+            response_text = processar_configurar_alertas(message, user_id, empresa_id)
 
         elif action_type == "listar_alertas":
             response_text = processar_listar_alertas(message, user_id)
@@ -1635,7 +1637,7 @@ def chat():
             response_text = processar_calendario_editais(message, user_id)
 
         elif action_type == "configurar_monitoramento":
-            response_text = processar_configurar_monitoramento(message, user_id)
+            response_text = processar_configurar_monitoramento(message, user_id, empresa_id)
 
         elif action_type == "listar_monitoramentos":
             response_text = processar_listar_monitoramentos(message, user_id)
@@ -1662,7 +1664,7 @@ def chat():
             response_text, resultado = processar_resumir_edital(message, user_id, intencao_resultado)
 
         elif action_type == "perguntar_edital":
-            response_text, resultado = processar_perguntar_edital(message, user_id, intencao_resultado)
+            response_text, resultado = processar_perguntar_edital(message, user_id, intencao_resultado, edital_id_contexto)
 
         elif action_type == "baixar_pdf_edital":
             response_text, resultado = processar_baixar_pdf_edital(message, user_id, intencao_resultado)
@@ -5968,7 +5970,7 @@ Se deseja atualizar, use: "Atualize o edital {dados['numero']} com..." """, None
 # PROCESSADORES SPRINT 2: ALERTAS E AUTOMAÇÃO
 # =============================================================================
 
-def processar_configurar_alertas(message: str, user_id: str):
+def processar_configurar_alertas(message: str, user_id: str, empresa_id: str = None):
     """Processa configuração de alertas de prazo para editais."""
     import re
     from tools import tool_configurar_alertas
@@ -6019,6 +6021,7 @@ def processar_configurar_alertas(message: str, user_id: str):
 
     resultado = tool_configurar_alertas(
         user_id=user_id,
+        empresa_id=empresa_id,
         edital_numero=edital_numero,
         tempos_minutos=tempos_minutos,
         tipo=tipo,
@@ -6027,18 +6030,19 @@ def processar_configurar_alertas(message: str, user_id: str):
 
     if resultado.get("success"):
         alertas = resultado.get("alertas_criados", [])
-        msg_resp = f"✅ **Alertas configurados para {edital_numero}**\n\n"
 
         if alertas:
+            msg_resp = f"✅ **Alertas configurados para {edital_numero}**\n\n"
             msg_resp += "📋 **Alertas agendados:**\n"
             for a in alertas:
                 msg_resp += f"- ⏰ {a['tempo_antes']} antes → {a['data_disparo']}\n"
+            msg_resp += f"\n🔔 **Canais:** Email: {'✅' if canais['email'] else '❌'} | Push: {'✅' if canais['push'] else '❌'}"
+            return msg_resp
         else:
-            msg_resp += "ℹ️ Os alertas foram configurados com os tempos padrão.\n"
-
-        msg_resp += f"\n🔔 **Canais:** Email: {'✅' if canais['email'] else '❌'} | Push: {'✅' if canais['push'] else '❌'}"
-
-        return msg_resp
+            # Honesto: nenhum alerta NOVO agendado (prazos ja passaram ou alertas ja existiam).
+            return (f"⚠️ **Nenhum alerta novo agendado para {edital_numero}.**\n\n"
+                    f"Os prazos do evento de '{tipo}' já passaram ou os alertas já existiam — "
+                    f"não há disparos futuros a programar. Verifique se a data do edital está atualizada.")
     else:
         return f"❌ {resultado.get('error', 'Erro ao configurar alertas')}"
 
@@ -6227,7 +6231,7 @@ def processar_calendario_editais(message: str, user_id: str):
         return f"❌ {resultado.get('error', 'Erro ao carregar calendário')}"
 
 
-def processar_configurar_monitoramento(message: str, user_id: str):
+def processar_configurar_monitoramento(message: str, user_id: str, empresa_id: str = None):
     """Processa configuração de monitoramento automático de editais."""
     import re
     from tools import tool_configurar_monitoramento
@@ -6287,6 +6291,7 @@ def processar_configurar_monitoramento(message: str, user_id: str):
 
     resultado = tool_configurar_monitoramento(
         user_id=user_id,
+        empresa_id=empresa_id,
         termo=termo,
         fontes=fontes,
         ufs=ufs if ufs else None,
@@ -6502,7 +6507,9 @@ def processar_extrair_datas_edital(message: str, user_id: str, texto_pdf: str = 
     )
 
     if resultado.get("success"):
-        datas = resultado.get("datas", {})
+        datas = resultado.get("datas", {}) or resultado.get("datas_extraidas", {})
+        if not datas or not any(datas.get(k) for k in ("data_abertura","horario_abertura","data_limite_propostas","data_limite_impugnacao","data_recursos")):
+            return f"⚠️ Não consegui extrair nenhuma data deste edital. Verifique se o PDF contém as datas no formato esperado."
         msg_resp = "📅 **Datas Extraídas do Edital**\n\n"
 
         if datas.get("data_abertura"):
@@ -6682,7 +6689,7 @@ Formate a resposta em Markdown com emojis para facilitar a leitura."""
         db.close()
 
 
-def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: dict = None):
+def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: dict = None, edital_id_contexto: str = None):
     """
     Processa ação: Responder dúvidas sobre um edital específico.
 
@@ -6692,6 +6699,9 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
     3. Se tiver PDF, lê e responde
     4. Se não tiver PDF, pede para o usuário fazer upload
 
+    CV13: quando edital_id_contexto vem da tela (painel aberto), responde SOBRE
+    esse edital diretamente, sem depender do numero escrito na pergunta.
+
     Returns: (response_text, resultado_dict)
     """
     empresa_id = get_current_empresa_id()
@@ -6700,7 +6710,15 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
     db = get_db()
 
     try:
-        # Extrair número do edital da mensagem
+        # CV13: prioridade ao edital em foco na tela (id do painel aberto).
+        edital = None
+        if edital_id_contexto:
+            edital = db.query(Edital).filter(
+                Edital.id == edital_id_contexto,
+                Edital.empresa_id == empresa_id
+            ).first()
+
+        # Extrair número do edital da mensagem (fallback quando nao ha edital em foco)
         edital_numero = None
         if intencao_resultado and intencao_resultado.get("edital"):
             edital_numero = intencao_resultado.get("edital")
@@ -6710,7 +6728,7 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
             if padrao:
                 edital_numero = padrao.group(1)
 
-        if not edital_numero:
+        if not edital and not edital_numero:
             return (
                 "## ❌ Número do Edital Não Informado\n\n"
                 "Por favor, informe o número do edital sobre o qual deseja perguntar.\n\n"
@@ -6721,11 +6739,12 @@ def processar_perguntar_edital(message: str, user_id: str, intencao_resultado: d
                 {"error": "Número do edital não informado"}
             )
 
-        # Buscar edital no banco
-        edital = db.query(Edital).filter(
-            Edital.empresa_id == empresa_id,
-            Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
-        ).first()
+        # Buscar edital no banco (somente se nao veio do contexto da tela)
+        if not edital:
+            edital = db.query(Edital).filter(
+                Edital.empresa_id == empresa_id,
+                Edital.numero.ilike(f"%{edital_numero.replace('-', '%').replace('/', '%')}%")
+            ).first()
 
         if not edital:
             return (
@@ -14729,11 +14748,16 @@ def api_atas_minhas():
     db = get_db()
     try:
         user_id = get_current_user_id()
-        empresa_id = get_current_empresa_id()
-        atas = db.query(AtaConsultada).filter_by(empresa_id=empresa_id).order_by(AtaConsultada.created_at.desc()).all()
-        now = datetime.now()
+        # AtaConsultada não possui coluna empresa_id; o vínculo é por user_id.
+        atas = db.query(AtaConsultada).filter_by(user_id=user_id).order_by(AtaConsultada.created_at.desc()).all()
+        hoje = datetime.now().date()
+        def _venc_futura(d):
+            if not d:
+                return False
+            dd = d.date() if hasattr(d, "date") else d
+            return dd > hoje
         total = len(atas)
-        vigentes = sum(1 for a in atas if a.data_vigencia_fim and a.data_vigencia_fim > now)
+        vigentes = sum(1 for a in atas if _venc_futura(a.data_vigencia_fim))
         vencidas = total - vigentes
         return jsonify({
             "stats": {"total": total, "vigentes": vigentes, "vencidas": vencidas},
@@ -15963,7 +15987,8 @@ def api_ata_saldos(ata_id):
         user_id = get_current_user_id()
         empresa_id = get_current_empresa_id()
         if request.method == 'GET':
-            saldos = db.query(ARPSaldo).filter_by(ata_id=ata_id, empresa_id=empresa_id).all()
+            # ARPSaldo não possui coluna empresa_id; filtra por ata_id (já isolado por user via ata).
+            saldos = db.query(ARPSaldo).filter_by(ata_id=ata_id).all()
             return jsonify([s.to_dict() for s in saldos])
 
         data = request.get_json()

@@ -278,7 +278,7 @@ export function FollowupPage(_props?: PageProps) {
       </TabPanel>
 
       {showModal && selectedEdital && (
-        <Modal title={`Registrar Resultado — ${selectedEdital.numero}`} onClose={() => { setShowModal(false); resetForm(); }}>
+        <Modal isOpen={showModal} title={`Registrar Resultado — ${selectedEdital.numero}`} onClose={() => { setShowModal(false); resetForm(); }}>
           <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
             {(["vitoria", "derrota", "cancelado"] as const).map(t => (
               <label key={t} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
